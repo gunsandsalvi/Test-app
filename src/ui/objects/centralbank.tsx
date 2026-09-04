@@ -46,7 +46,7 @@ export const centralbank = defineObject<Region>({
     const book = Object.values(cb?.sovereignHoldingsByBond ?? {}).reduce((a, v) => a + (Number(v) || 0), 0);
     const policy = tapeSeries(world, `region:${ref.id}:policy`).values;
     const banks = world.state.companies.filter((c) => c.region === ref.id && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet);
-    const atWindow = banks.filter((b) => (b.bankBalanceSheet!.srfBorrowingUSD ?? 0) > 1e6);
+    const atWindow = banks.filter((b) => (b.bankBalanceSheet!.srfBorrowingLocal ?? 0) > 1e6);
     const reserves = r.bankingSector?.centralBankReservesUSD ?? 0;
     return (
       <>

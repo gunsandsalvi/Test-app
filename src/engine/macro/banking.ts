@@ -88,23 +88,23 @@ export function bankCashBufferRatioOf(bank: { management?: import('../../domain/
 export const BASEL_MIN_LEVERAGE_RATIO = 0.03;
 
 /** Unweighted total assets — the leverage ratio's denominator. */
-export function bankTotalAssetsUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
+export function bankTotalAssetsUSD(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
   // G3a: the desks' inventory is an asset the bank OWNS and finances, and a cash security
   // consumes the leverage ratio one-for-one. Before the desks had owners it consumed nothing,
   // which is precisely what let a book with no capital behind it absorb any imbalance.
-  return loanBooksOf(sheet, facilityBookUSD) + sovUSD
-    + Math.max(0, cashUSD) + (sheet.repoLentUSD ?? 0)
+  return loanBooksOf(sheet, facilityBookLocal) + sovUSD
+    + Math.max(0, cashLocal) + (sheet.repoLentLocal ?? 0)
     // CAL: a coupon earned and not yet paid is an asset the bank holds against the treasury.
-    + (sheet.sovereignAccruedCouponUSD ?? 0)
+    + (sheet.sovereignAccruedCouponLocal ?? 0)
     + dealerDeskGrossUSD(sheet.dealerDeskInventory)
     // HF1: a margin loan to a fund consumes the leverage ratio like any other loan.
-    + (sheet.primeBrokerageLoansUSD ?? 0);
+    + (sheet.primeBrokerageLoansLocal ?? 0);
 }
 
 /** How much balance sheet the bank's equity still supports under the leverage floor. */
-export function leverageHeadroomUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
-  return Math.max(0, sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsUSD(sheet, cashUSD, facilityBookUSD));
+export function leverageHeadroomUSD(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
+  return Math.max(0, sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsUSD(sheet, cashLocal, facilityBookLocal));
 }
 
 /**
@@ -129,8 +129,8 @@ export const LIQUIDITY_COVERAGE_RATIO = 1.0;
 
 /** Funding that runs in a stress month, weighted by how fast each kind of it runs. */
 export function stressedOutflowUSD(sheet: BankingSector, lines: DepositLines): number {
-  const wholesaleUSD = lines.corporateUSD + lines.institutionalUSD + lines.smeUSD + (sheet.clientMarginUSD ?? 0);
-  return Math.max(0, lines.householdUSD) * RETAIL_DEPOSIT_RUNOFF_RATE
+  const wholesaleUSD = lines.corporateLocal + lines.institutionalLocal + lines.smeLocal + (sheet.clientMarginLocal ?? 0);
+  return Math.max(0, lines.householdLocal) * RETAIL_DEPOSIT_RUNOFF_RATE
     + Math.max(0, wholesaleUSD) * WHOLESALE_FUNDING_RUNOFF_RATE;
 }
 
@@ -140,9 +140,9 @@ export function stressedOutflowUSD(sheet: BankingSector, lines: DepositLines): n
  * which is the reserves-versus-bonds substitution S2 found to be load-bearing (§7.10), now
  * acting on the size of the book rather than on a scaling factor.
  */
-export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector, cashUSD: number, lines: DepositLines): number {
+export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector, cashLocal: number, lines: DepositLines): number {
   const requiredHqlaUSD = stressedOutflowUSD(sheet, lines) * LIQUIDITY_COVERAGE_RATIO;
-  return Math.max(0, requiredHqlaUSD - Math.max(0, cashUSD));
+  return Math.max(0, requiredHqlaUSD - Math.max(0, cashLocal));
 }
 
 /**
@@ -167,10 +167,10 @@ export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector, cashUSD: 
  * securities book is bounded by what it can FINANCE, and a funding market is what makes that
  * bound real rather than notional.
  */
-export function sovereignBookCapacityUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
+export function sovereignBookCapacityUSD(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
-  return Math.max(0, sovUSD) + leverageHeadroomUSD(sheet, cashUSD, facilityBookUSD);
+  return Math.max(0, sovUSD) + leverageHeadroomUSD(sheet, cashLocal, facilityBookLocal);
 }
 
 /**
@@ -213,7 +213,7 @@ export function evolveBankingSector(
   loanBooks: { businessLoanUSD: number; consumerLoanUSD: number },
   /** §5-WIRES A3.6c: the bank's reserves, its account read by the caller (a region's: the sum
    *  of its named banks' accounts) — the sheet carries no line. */
-  cashUSD: number,
+  cashLocal: number,
   /** §5-WIRES A3.6c-ii: the bank's deposit lines, read off the ledger by the caller. */
   deposits: DepositLines,
   estimatedHouseholdIncomeUSD: number,
@@ -280,15 +280,15 @@ export function evolveBankingSector(
   traceLabel?: string
 ): { sheet: BankingSector; householdLineUSD: number } {
   // ---- The ledger. Every mutation below is a named flow posting to both of its sides. ----
-  let equityUSD = prevBanking.bankEquityUSD;
-  let depositsUSD = deposits.householdUSD;
+  let equityUSD = prevBanking.bankEquityLocal;
+  let depositsLocal = deposits.householdLocal;
   // G2/HH3: both credit books are ITEMIZED on the named banks and only the lending passes move
   // them; §5-WIRES D: this aggregate reads them as the caller's sum over those rows.
   const businessLoanUSD = loanBooks.businessLoanUSD;
   const consumerLoanUSD = loanBooks.consumerLoanUSD;
   // The securities book is owned by the clearing stages (07c/07f/11) and passes through here
   // untouched — a stage may only rewrite the instruments it cleared.
-  const sovereignUSD = prevBanking.sovereignBondHoldingsUSD;
+  const sovereignUSD = prevBanking.sovereignBondHoldingsLocal;
 
   // ---- 1. Secured funding that comes due this week (REPO1). Borrowed principal returns to the
   // lender with the interest its own contract promised; lent principal returns to this bank the
@@ -299,10 +299,10 @@ export function evolveBankingSector(
   // are not zero, and everything downstream — the funding residual, the leverage ratio, the
   // identity — has to see them. The repo session overwrites all three from the region's book.
   const survivingSecuredUSD = Math.max(0,
-    (prevBanking.repoBorrowedUSD ?? 0) + (prevBanking.srfBorrowingUSD ?? 0) - maturingRepoBorrowPrincipalUSD);
-  const survivingSrfUSD = Math.min(survivingSecuredUSD, Math.max(0, prevBanking.srfBorrowingUSD ?? 0));
+    (prevBanking.repoBorrowedLocal ?? 0) + (prevBanking.srfBorrowingLocal ?? 0) - maturingRepoBorrowPrincipalUSD);
+  const survivingSrfUSD = Math.min(survivingSecuredUSD, Math.max(0, prevBanking.srfBorrowingLocal ?? 0));
   const survivingRepoBorrowedUSD = survivingSecuredUSD - survivingSrfUSD;
-  const survivingRepoLentUSD = Math.max(0, (prevBanking.repoLentUSD ?? 0) - maturingRepoLendPrincipalUSD);
+  const survivingRepoLentUSD = Math.max(0, (prevBanking.repoLentLocal ?? 0) - maturingRepoLendPrincipalUSD);
   // CASH: the P&L is this bank's own and is booked here; the MONEY moves through the settlement
   // layer, posted by the repo session as instructions between the two named counterparties. The
   // cash legs used to be taken here and credited to the lender in another stage — two direct
@@ -332,7 +332,7 @@ export function evolveBankingSector(
   // §5-CLOSE: the central bank's loan (the lender of last resort at the funding close) pays its
   // interest as a PAYMENT to the central bank, posted by 02b; it is counted here only as the
   // cost it is in the margin statistic. Nothing below moves cash for it.
-  const wholesaleUSD = prevBanking.centralBankLoanUSD ?? 0;
+  const wholesaleUSD = prevBanking.centralBankLoanLocal ?? 0;
   const wholesaleInterestUSD = (wholesaleUSD * (policyRate + Math.max(0, ownWholesaleSpreadBps) / 10000)) / 52;
 
   // SETL2: corporate balances ARE funding now — company payments settle through bank books, so
@@ -340,12 +340,12 @@ export function evolveBankingSector(
   // And funding costs money: what a corporate treasurer is owed is not a chosen number, because
   // this model already simulates the alternative it would take — sweeping to the money fund the
   // moment the bank underpays — so the rate a corporate balance commands is the fund's own yield.
-  const corporateDepositsUSD = deposits.corporateUSD;
+  const corporateDepositsLocal = deposits.corporateLocal;
   const corporateDepositRateAnnual = Math.max(0, competingMmfYieldAnnual);
   // §5-CLOSE C4: PAID, not written — 02b posts it as BANK → COMPANY to each positive-balance
   // depositor pro rata, so the treasurer who earns it is credited and this bank's reserves and
   // equity leave through settlement. Here it is only the cost it is in the margin statistic.
-  const corporateDepositInterestUSD = (corporateDepositsUSD * corporateDepositRateAnnual) / 52;
+  const corporateDepositInterestUSD = (corporateDepositsLocal * corporateDepositRateAnnual) / 52;
 
   // ---- 3. Lending: loans create deposits, repayment destroys them — the actual mechanism
   // (both sides of the sheet move together; reserves do not move at origination). Sizes are
@@ -395,7 +395,7 @@ export function evolveBankingSector(
     : 0;
   const stressedUSD = stressedOutflowUSD(prevBanking, deposits) * LIQUIDITY_COVERAGE_RATIO;
   const liquidityShortfallShare = stressedUSD > 0
-    ? Math.max(0, Math.min(1, (stressedUSD - Math.max(0, cashUSD)) / stressedUSD))
+    ? Math.max(0, Math.min(1, (stressedUSD - Math.max(0, cashLocal)) / stressedUSD))
     : 0;
   const contestedShare = Math.max(0, Math.min(1, Math.max(fundingPressure, liquidityShortfallShare)));
   const depositRate = alternativeCostAnnual * contestedShare;
@@ -408,7 +408,7 @@ export function evolveBankingSector(
   // §5-CLOSE C4: interest on reserves is PAID by the central bank — 02b posts it as
   // CENTRAL_BANK → BANK, the reserves it creates are the central bank's expense, and the
   // remittance to the treasury is already net of it (central-bank.ts). Nothing here writes it.
-  const reservesInterestUSD = (Math.max(0, cashUSD) * policyRate) / 52;
+  const reservesInterestUSD = (Math.max(0, cashLocal) * policyRate) / 52;
   const weeklyInterestIncomeUSD = reservesInterestUSD
     + itemizedLoanInterestWeeklyUSD + householdLoanInterestWeeklyUSD + sovereignCouponWeeklyUSD
     + settlementPaidInterestWeeklyUSD;
@@ -427,10 +427,10 @@ export function evolveBankingSector(
   // paid it — the second money engine the audit's M1 row measured.) The itemized business
   // slice is zero by construction: every business loan is a facility or an SME pool and both
   // pay through settlement; the parameter survives as the measure it always was.
-  depositsUSD -= householdLoanInterestWeeklyUSD;
+  depositsLocal -= householdLoanInterestWeeklyUSD;
   equityUSD += householdLoanInterestWeeklyUSD;
-  const weeklyDepositInterestUSD = (depositsUSD * depositRate) / 52;
-  depositsUSD += weeklyDepositInterestUSD;
+  const weeklyDepositInterestUSD = (depositsLocal * depositRate) / 52;
+  depositsLocal += weeklyDepositInterestUSD;
   equityUSD -= weeklyDepositInterestUSD;
 
   // ---- 5. Loan losses: a write-down, not a cash event — the asset shrinks and equity absorbs
@@ -456,7 +456,7 @@ export function evolveBankingSector(
   const riskWeightedAssetsUSD = businessLoanUSD * 1.0 + consumerRwaUSD + sovereignUSD * 0.0;
   const priorCapitalRatio = prevBanking.bankCapitalRatio;
   const targetPayoutRatio = priorCapitalRatio > 0.14 ? 0.90 : priorCapitalRatio < 0.11 ? 0.05 : 0.40;
-  const distributableCashUSD = () => Math.max(0, cashUSD - depositsUSD * MIN_CASH_BUFFER_RATIO);
+  const distributableCashUSD = () => Math.max(0, cashLocal - depositsLocal * MIN_CASH_BUFFER_RATIO);
   // §5-CLOSE C4: DECIDED here, PAID by the register. The amount is reported on the sheet and
   // 02b hands it to the paying agent (`payHoldersCash`), which settles it pro rata to the
   // holders of record as a payment from this bank — reserves and equity leave at settlement,
@@ -472,20 +472,20 @@ export function evolveBankingSector(
   // ---- 7. Statistics — readings of the ledger, never drivers of it. The NIM damping factor
   // that clamped loan yields whenever the margin exceeded 5% is deleted (a clamp on a price,
   // rule 6): if the margin is wrong, its inputs are wrong, and those are G2's to make real. ----
-  const totalAssetsUSD = businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD + survivingRepoLentUSD;
+  const totalAssetsUSD = businessLoanUSD + consumerLoanUSD + sovereignUSD + cashLocal + survivingRepoLentUSD;
   const netInterestMarginPct = totalAssetsUSD > 0
     ? ((weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD - corporateDepositInterestUSD) * 52) / totalAssetsUSD
     : 0.025;
   if (traceLabel && process.env.NIM_TRACE === '1') {
     console.log(`  [nim] ${traceLabel} NIM ${(netInterestMarginPct * 100).toFixed(2)}%`
-      + ` | income/wk: reserves ${((Math.max(0, cashUSD) * policyRate) / 52 / 1e6).toFixed(1)}M`
+      + ` | income/wk: reserves ${((Math.max(0, cashLocal) * policyRate) / 52 / 1e6).toFixed(1)}M`
       + ` loans ${(itemizedLoanInterestWeeklyUSD / 1e6).toFixed(1)}M hh ${(householdLoanInterestWeeklyUSD / 1e6).toFixed(1)}M`
       + ` coupons ${(sovereignCouponWeeklyUSD / 1e6).toFixed(1)}M settled ${(settlementPaidInterestWeeklyUSD / 1e6).toFixed(1)}M`
       + ` | cost/wk: deposits ${(weeklyDepositInterestUSD / 1e6).toFixed(1)}M@${(depositRate * 100).toFixed(2)}%`
       + ` wholesale ${(wholesaleInterestUSD / 1e6).toFixed(1)}M corpDep ${(corporateDepositInterestUSD / 1e6).toFixed(1)}M`
-      + ` | stocks: cash ${(cashUSD / 1e9).toFixed(2)}B bizLoans ${(businessLoanUSD / 1e9).toFixed(2)}B`
-      + ` hhLoans ${(consumerLoanUSD / 1e9).toFixed(2)}B hhDep ${(depositsUSD / 1e9).toFixed(2)}B`
-      + ` corpDep ${(corporateDepositsUSD / 1e9).toFixed(2)}B wholesale ${(wholesaleUSD / 1e9).toFixed(2)}B`
+      + ` | stocks: cash ${(cashLocal / 1e9).toFixed(2)}B bizLoans ${(businessLoanUSD / 1e9).toFixed(2)}B`
+      + ` hhLoans ${(consumerLoanUSD / 1e9).toFixed(2)}B hhDep ${(depositsLocal / 1e9).toFixed(2)}B`
+      + ` corpDep ${(corporateDepositsLocal / 1e9).toFixed(2)}B wholesale ${(wholesaleUSD / 1e9).toFixed(2)}B`
       + ` | policy ${(policyRate * 100).toFixed(2)}%`);
   }
   const newBankCapitalRatio = riskWeightedAssetsUSD > 0 ? equityUSD / riskWeightedAssetsUSD : 0.13;
@@ -494,14 +494,14 @@ export function evolveBankingSector(
 
   // PUB2: the phantom 1e12 reserves scalar and its stance drift are gone. Reserves are this
   // bank's own cash, which is what the central bank's balance sheet counts as its liability.
-  const newCentralBankReservesUSD = Math.max(0, cashUSD);
+  const newCentralBankReservesUSD = Math.max(0, cashLocal);
   // G2 slice 5: M2 is a DERIVED SUM of the real money that exists — this bank's household and
   // corporate deposits, plus the money-fund shares its region's holders own (02b adds those
   // once per region). The `deposits + centralBankReserves x 0.1` formula is deleted: it added
   // a tenth of a phantom 1e12 scalar to a real number and called the total a money stock, so
   // M2 moved when nothing in the economy did. Money-stock changes now decompose exactly into
   // real deposit flows and net origination, which is the check G2 asked for.
-  const newMoneySupplyM2USD = depositsUSD + deposits.corporateUSD;
+  const newMoneySupplyM2USD = depositsLocal + deposits.corporateLocal;
 
   const sheet: BankingSector = {
     // HH: a reported FLOW, not a balance-sheet line — what this bank actually paid its household
@@ -513,8 +513,8 @@ export function evolveBankingSector(
     reservesInterestWeeklyUSD: Math.round(reservesInterestUSD),
     corporateDepositInterestWeeklyUSD: Math.round(corporateDepositInterestUSD),
     dividendWeeklyUSD: Math.round(dividendWeeklyUSD),
-    sovereignBondHoldingsUSD: Math.round(sovereignUSD),
-    bankEquityUSD: Math.round(equityUSD),
+    sovereignBondHoldingsLocal: Math.round(sovereignUSD),
+    bankEquityLocal: Math.round(equityUSD),
     bankCapitalRatio: Number(newBankCapitalRatio.toFixed(4)),
     netInterestMarginPct: Number(netInterestMarginPct.toFixed(4)),
     // G2: reported from the REAL book by bank-lending.ts after its write-offs; carried here.
@@ -527,17 +527,17 @@ export function evolveBankingSector(
     // position is final — all of them in the repo session, the standing facility included, since
     // a window draw is a contract with the central bank as the named lender. These four are then
     // DERIVED from the region's book. What came due settled in step 1 above.
-    srfBorrowingUSD: survivingSrfUSD,
-    onRrpLendingUSD: 0,
-    repoLentUSD: survivingRepoLentUSD,
-    repoBorrowedUSD: survivingRepoBorrowedUSD,
+    srfBorrowingLocal: survivingSrfUSD,
+    onRrpLendingLocal: 0,
+    repoLentLocal: survivingRepoLentUSD,
+    repoBorrowedLocal: survivingRepoBorrowedUSD,
     repoEncumberedCollateralUSD: prevBanking.repoEncumberedCollateralUSD ?? 0,
     // G3a: the desks' inventory persists across weeks; only real fills move it, in the stages
     // that own it. This return rebuilds the sheet from a fixed field list, so leaving it out
     // deleted every desk's book every week with no cash leg.
     dealerDeskInventory: prevBanking.dealerDeskInventory,
     // HF1: the margin book is owned by the prime-brokerage stage; carried through untouched.
-    primeBrokerageLoansUSD: prevBanking.primeBrokerageLoansUSD ?? 0,
+    primeBrokerageLoansLocal: prevBanking.primeBrokerageLoansLocal ?? 0,
     // G2: the itemized book and the corporate-deposit view are owned by the G2 stages
     // (bank-lending.ts / 02b); carried through evolution untouched.
     businessLoans: prevBanking.businessLoans || [],
@@ -549,8 +549,8 @@ export function evolveBankingSector(
     // This return rebuilds the sheet from a FIXED FIELD LIST, so anything not named here is
     // silently dropped — two lines vanished every week until the identity caught it (804
     // violations). Same trap stage 08 documents; carried explicitly.
-    centralBankLoanUSD: prevBanking.centralBankLoanUSD ?? 0,
-    clientMarginUSD: prevBanking.clientMarginUSD ?? 0,
+    centralBankLoanLocal: prevBanking.centralBankLoanLocal ?? 0,
+    clientMarginLocal: prevBanking.clientMarginLocal ?? 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
     // G3c: the rate this bank actually decided to pay, published so nothing else has to
@@ -559,12 +559,12 @@ export function evolveBankingSector(
     corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],
     sovereignBondHoldingsByBond: prevBanking.sovereignBondHoldingsByBond || {},
     // CAL: carried, never written here — the calendar owns this balance on both books.
-    sovereignAccruedCouponUSD: prevBanking.sovereignAccruedCouponUSD ?? 0,
+    sovereignAccruedCouponLocal: prevBanking.sovereignAccruedCouponLocal ?? 0,
     sovBondDealerInventory: prevBanking.sovBondDealerInventory || [],
     loanDealerInventory: prevBanking.loanDealerInventory || [],
   };
   // §5-WIRES A3.6c-iii: the household line after this evolution's two flows (the loan interest
   // debited, the deposit interest credited), TO THE DOLLAR — the stated rounding the field carried.
   // 02b posts the household sector's row at this bank from it and the lending pass's flows.
-  return { sheet, householdLineUSD: Math.round(depositsUSD) };
+  return { sheet, householdLineUSD: Math.round(depositsLocal) };
 }

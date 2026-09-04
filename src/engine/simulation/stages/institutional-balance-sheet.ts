@@ -63,12 +63,12 @@ import { materializeGovLadder } from '../../../engine2/tranches';
 /**
  * An entity's real purchasing capacity right now, across all asset classes.
  *
- * WS6's overnight repo lending (`repoLentUSD`) is deliberately NOT counted: the cash is
+ * WS6's overnight repo lending (`repoLentLocal`) is deliberately NOT counted: the cash is
  * genuinely out the door for the week — a bank is funding its book with it — and counting a
  * receivable as spendable would let the entity buy securities with money it had already lent.
  * It is part of the BOOK (markInstitutionalBooks), never of the budget.
  */
-export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashUSD: number, totalAssetsUSD: number, unsettledUSD = 0): number {
+export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashLocal: number, totalAssetsUSD: number, unsettledUSD = 0): number {
   // HF1: what its prime broker will actually lend it this week, less what it has already drawn.
   // Negative when the line has been CUT below the draw — which makes the fund a net seller in
   // this week's auctions, at whatever they clear, which is what a margin call is.
@@ -88,7 +88,7 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, cashUS
   // committed, so the five books cannot each spend the same balance. The clearing legs are
   // payment instructions now (stages/book-settlement.ts) and the cash moves at the settlement
   // pass, so the unsettled position is where a commitment lives until then.
-  const investableCashUSD = Math.max(0, cashUSD + unsettledUSD - sleeveTargetUSD);
+  const investableCashUSD = Math.max(0, cashLocal + unsettledUSD - sleeveTargetUSD);
   return investableCashUSD + allowanceUSD;
 }
 
@@ -172,7 +172,7 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
 export function institutionBookUSD(v2: V2World, entityId: string): number {
   let holdingsUSD = 0;
   const H = v2.holdings;
-  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r];
+  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) holdingsUSD += H.qtyLocal[r];
   return holdingsUSD;
 }
 

@@ -100,7 +100,7 @@ export function probeSteadyState(s: GameState): Record<string, number> {
   let ppe = 0;
   let mothballed = 0;
   for (const c of s.companies) {
-    const g = Number(c.grossPPEUSD) || 0;
+    const g = Number(c.grossPPELocal) || 0;
     ppe += g;
     mothballed += g * (Number(c.mothballedPpeShare) || 0);
   }

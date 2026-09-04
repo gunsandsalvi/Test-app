@@ -309,10 +309,10 @@ export function depositLinesAt(
 ): DepositLines {
   const money = bankMoneyOf(companies, bankTicker);
   return {
-    householdUSD: householdDepositsAt(v2, bankTicker, money),
-    corporateUSD: corporateDepositsAt(v2, companies, bankTicker),
-    institutionalUSD: institutionalDepositsAt(v2, entities, bankTicker),
-    smeUSD: smeDepositsAt(v2, bankTicker, money),
+    householdLocal: householdDepositsAt(v2, bankTicker, money),
+    corporateLocal: corporateDepositsAt(v2, companies, bankTicker),
+    institutionalLocal: institutionalDepositsAt(v2, entities, bankTicker),
+    smeLocal: smeDepositsAt(v2, bankTicker, money),
   };
 }
 /** The lines in the week: the pass's own holders. */

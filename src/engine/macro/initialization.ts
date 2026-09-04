@@ -388,7 +388,7 @@ function buildRegion(regionId: RegionId): Region {
   const totalGovDebtUSD = estimatedNominalGdpUSD * DEBT_TO_GDP_PCT;
   const govDebtTranches: GovDebtTranche[] = GOV_DEBT_TENOR_WEIGHTS.map(({ tenorYears, tenorWeeks, weight }) => ({
     id: govBondTrancheId(regionId, tenorYears, 'INIT'),
-    principalUSD: Math.round((totalGovDebtUSD * weight)),
+    principalLocal: Math.round((totalGovDebtUSD * weight)),
     couponRate: Number(calculateNelsonSiegelZeroRate(tenorYears, yieldCurveParams).toFixed(4)),
     // §3.13-SOV: the two dates are ONE span, so they are rounded ONCE. Rounding each end
     // separately made an odd tenor a week longer than it claimed — a 13-week bill seeded at
@@ -482,8 +482,8 @@ function buildRegion(regionId: RegionId): Region {
   // stated loan-to-GDP ratios survive only where the seed SIZES something off them
   // (`seedLoanBookUSD`: a bank's opening revenue, the consumer scalar the HH3 migration replaced).
   const bankingSector = {
-    sovereignBondHoldingsUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp)),
-    bankEquityUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.bankEquityToGdp)),
+    sovereignBondHoldingsLocal: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp)),
+    bankEquityLocal: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.bankEquityToGdp)),
     bankCapitalRatio: BANK_CAPITAL_RATIO,
     netInterestMarginPct,
     loanLossProvisionRateAnnualPct: LOAN_LOSS_PROVISION_RATE,
@@ -491,16 +491,16 @@ function buildRegion(regionId: RegionId): Region {
     centralBankReservesUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.centralBankReservesToGdp)),
     moneySupplyM2USD: 0,
     itemizedHoldings: [],
-    srfBorrowingUSD: 0,
-    onRrpLendingUSD: 0,
+    srfBorrowingLocal: 0,
+    onRrpLendingLocal: 0,
     corpBondDealerInventory: [],
     sovereignBondHoldingsByBond: {},
     sovBondDealerInventory: [],
     loanDealerInventory: [],
     // WS6: overnight positions are struck weekly and mature at the next session, so a cold
     // start opens with an empty book — the same shape the weekly engine produces (§7.4).
-    repoLentUSD: 0,
-    repoBorrowedUSD: 0,
+    repoLentLocal: 0,
+    repoBorrowedLocal: 0,
     repoEncumberedCollateralUSD: 0,
     businessLoans: [],
     householdLoans: [],
@@ -515,7 +515,7 @@ function buildRegion(regionId: RegionId): Region {
     corpBondHoldingsUSD: 0,
     sovBondHoldingsUSD: 0,
     equityHoldingsUSD: 0,
-    cashUSD: Math.round((estimatedNominalGdpUSD * INSTITUTIONAL_SECTOR_RATIOS.cashToGdp)),
+    cashLocal: Math.round((estimatedNominalGdpUSD * INSTITUTIONAL_SECTOR_RATIOS.cashToGdp)),
     sectorEquityUSD: Math.round((estimatedNominalGdpUSD * INSTITUTIONAL_SECTOR_RATIOS.sectorEquityToGdp)),
     investmentIncomeMarginPct: INSTITUTIONAL_SECTOR_RATIOS.investmentIncomeMargin,
     itemizedHoldings: [],
@@ -525,7 +525,7 @@ function buildRegion(regionId: RegionId): Region {
   const creditCardDebtUSD = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.creditCardToIncome));
   const otherConsumerLoanDebtUSD = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.otherConsumerLoanToIncome));
   const mortgageDebtUSD = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.mortgageToIncome));
-  const depositsUSD = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.depositsToIncome));
+  const depositsLocal = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.depositsToIncome));
   const equityHoldingsUSD = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.equityHoldingsToIncome));
   const householdDebtToIncomeRatio = Number(((mortgageDebtUSD + creditCardDebtUSD + otherConsumerLoanDebtUSD) / Math.max(1, estimatedHouseholdIncomeUSD)).toFixed(3));
 
@@ -623,7 +623,7 @@ function buildRegion(regionId: RegionId): Region {
       // §3.13-SOV row 3: the central bank's book names the BONDS it holds. It used to name
       // groups, so its position could be summed and never asked "which bond".
       sovereignHoldingsByBond: govDebtTranches.reduce((acc, t) => {
-        acc[t.id] = (acc[t.id] ?? 0) + t.principalUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
+        acc[t.id] = (acc[t.id] ?? 0) + t.principalLocal * CENTRAL_BANK_SOVEREIGN_SHARE;
         return acc;
       }, {} as Record<string, number>),
       // §5-WIRES A3.5: the treasury's account opens at its operating balance — stashed here,
@@ -678,7 +678,7 @@ function buildRegion(regionId: RegionId): Region {
       creditCardDebtUSD,
       otherConsumerLoanDebtUSD,
       netWorthUSD: 0,
-    }, depositsUSD),
+    }, depositsLocal),
     dotPlot1Y: policyRate,
     dotPlot2Y: neutralRate,
     historicalPolicyRates: generate52WeekHistory(policyRate, 0.008, 0.001),

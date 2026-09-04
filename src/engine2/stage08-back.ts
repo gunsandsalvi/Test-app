@@ -147,15 +147,15 @@ interface CapitalBlockOut {
   rndExpenseUSD: number;
   occupationMixDrift: NonNullable<Company['occupationMixDrift']>;
   capexUSD: number;
-  grossPPEUSD: number;
-  accumulatedDepreciationUSD: number;
+  grossPPELocal: number;
+  accumulatedDepreciationLocal: number;
   weeklyDepreciationUSD: number;
   payoutPressure: number;
   /** §7.317 step 1.3 — the block's comp writes, returned as data; the caller applies them at
    *  the original write points (the future post pass). All-or-none per the seeding rule. */
   learningWrites?: { cumulativeUnits: number; multiplier: number; growthAnnual: number };
   retirementWrites: { idleStreakWeeks: number; mothballedPpeShare: number; mothballedStreakWeeks: number };
-  scrapWrites?: { grossPPEUSD: number; accumulatedDepreciationUSD: number };
+  scrapWrites?: { grossPPELocal: number; accumulatedDepreciationLocal: number };
 }
 
 function runCapitalBlock(row: number, L: BackLanes, args: {
@@ -175,8 +175,8 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   // read had becomes `Number.isNaN(lane) ? d : lane` on the same value; the scrap/learning
   // read-after-write chains thread locals carrying exactly the values the object carried.
   const usefulLifeYearsForCapex = L.usefulLifeYears[row];
-  const g0 = L.grossPPEUSD[row];
-  const a0 = L.accumulatedDepreciationUSD[row];
+  const g0 = L.grossPPELocal[row];
+  const a0 = L.accumulatedDepreciationLocal[row];
   const grossPPEForCapex = Number.isNaN(g0) ? L.ppeDefaultUSD[row] : g0;
   const addressableGrowthAnnual = L.addressableGrowthAnnual[row];
   const categoryShortfall = L.categoryShortfall[row];
@@ -240,17 +240,17 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
     const scrappedDepUSD = (Number.isNaN(a0) ? grossPPEForCapex * 0.45 : a0) * retirement.scrappedShare;
     gCur = Math.max(0, grossPPEForCapex - scrappedGrossUSD);
     aCur = Math.max(0, (Number.isNaN(a0) ? 0 : a0) - scrappedDepUSD);
-    scrapWrites = { grossPPEUSD: gCur, accumulatedDepreciationUSD: aCur };
+    scrapWrites = { grossPPELocal: gCur, accumulatedDepreciationLocal: aCur };
   }
 
   const programme = planCapitalProgramme({
-    grossPPEUSD: grossPPEForCapex,
+    grossPPELocal: grossPPEForCapex,
     mothballedPpeShare: retirement.mothballedShare,
-    accumulatedDepreciationUSD: Number.isNaN(aCur) ? (grossPPEForCapex * 0.45) : aCur,
+    accumulatedDepreciationLocal: Number.isNaN(aCur) ? (grossPPEForCapex * 0.45) : aCur,
     usefulLifeYears: usefulLifeYearsForCapex,
     weeklyEbitdaUSD: newEbitda / 52,
     weeklyInterestUSD: weeklyInterest,
-    cashUSD: L.cashUSD[row],
+    cashLocal: L.cashLocal[row],
     currentLiabilitiesUSD: L.currentLiabilitiesUSD[row],
     annualRevenueUSD: L.annualRevenueUSD[row],
     newRevenueUSD: newRevenue,
@@ -292,7 +292,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   if (weeklyDebtFundedPortion > 1000) {
     maintenanceFundingTranches = [{
       id: `${L.ticker[row]}-MAINT-${nextWeek}`,
-      principalUSD: weeklyDebtFundedPortion,
+      principalLocal: weeklyDebtFundedPortion,
       rateType: 'FLOATING',
       floatingMarginBps: Math.round(L.oasSpreadBps[row] * 1.1), // priced wide — bridge, not term
       originationWeek: nextWeek,
@@ -343,8 +343,8 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
     rndExpenseUSD: newRndExpense,
     occupationMixDrift: newOccupationMixDrift,
     capexUSD: newCapex,
-    grossPPEUSD: newGrossPPEUSD,
-    accumulatedDepreciationUSD: newAccumulatedDepreciationUSD,
+    grossPPELocal: newGrossPPEUSD,
+    accumulatedDepreciationLocal: newAccumulatedDepreciationUSD,
     weeklyDepreciationUSD: weeklyDepreciation,
     payoutPressure: programme.payoutPressure,
     learningWrites,
@@ -360,13 +360,13 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
 /** §7.317 — the closure-wide cash primitive as a FACTORY: one mutable cash box, one ledger,
  *  one post; the walk and every later block write through the same instance, exactly as the
  *  closure binding did. */
-function makeCashPoster(ticker: string, region: Company['region'], cashUSD: number, ctx: WeeklyStepContext, retainCashLedger: boolean): {
+function makeCashPoster(ticker: string, region: Company['region'], cashLocal: number, ctx: WeeklyStepContext, retainCashLedger: boolean): {
   post: (label: string, amountUSD: number, counterparty?: PartyRef, settle?: boolean) => void;
   cash: { usd: number };
   cashLedger: { label: string; amountUSD: number }[];
 } {
     const cashLedger: { label: string; amountUSD: number }[] = [];
-    const cash = { usd: cashUSD };
+    const cash = { usd: cashLocal };
     // SETL2: a ledger entry IS a payment instruction. The S5 walk already named every flow and
     // its amount; what it never named was the OTHER SIDE, which is why corporate cash could move
     // without any bank knowing (§7.86). Each post now names a counterparty; where the model does
@@ -491,7 +491,7 @@ function runCashWalk(args: {
       if (isBanksSector) {
       // A bank's real flows live on its named balance sheet (02b); the company-level cash line
       // carries only the accrual bridge. REPORTED, never settled: every line of a bank's P&L is
-      // already booked against `bankEquityUSD` in the sector ledger (macro/banking.ts — interest
+      // already booked against `bankEquityLocal` in the sector ledger (macro/banking.ts — interest
       // earned and paid, repo interest, wholesale and deposit funding, dividends), so settling
       // this bridge as well credited the same income to the same equity twice, out of a boundary
       // that does not exist. Two independent quantities for one balance is rule 4.
@@ -722,8 +722,8 @@ export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapi
   comp.mothballedPpeShare = cap.retirementWrites.mothballedPpeShare;
   comp.mothballedStreakWeeks = cap.retirementWrites.mothballedStreakWeeks;
   if (cap.scrapWrites) {
-    comp.grossPPEUSD = cap.scrapWrites.grossPPEUSD;
-    comp.accumulatedDepreciationUSD = cap.scrapWrites.accumulatedDepreciationUSD;
+    comp.grossPPELocal = cap.scrapWrites.grossPPELocal;
+    comp.accumulatedDepreciationLocal = cap.scrapWrites.accumulatedDepreciationLocal;
   }
 }
 
@@ -880,9 +880,9 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       const profileModule = PROFILE_REGISTRY[profileKey]!;
       // §5-TAXR — the same opening-stock attributes the front pass derives; a profile firm's
       // tax fields are untouched by the pass, so this rebuild reads the same values.
-      const openingGrossPpeUSD = Number.isNaN(L8.grossPPEUSD[row]) ? L8.ppeDefaultUSD[row] : L8.grossPPEUSD[row];
+      const openingGrossPpeUSD = Number.isNaN(L8.grossPPELocal[row]) ? L8.ppeDefaultUSD[row] : L8.grossPPELocal[row];
       const openingNetPpeUSD = Math.max(0,
-        openingGrossPpeUSD - (Number.isNaN(L8.accumulatedDepreciationUSD[row]) ? openingGrossPpeUSD * 0.45 : L8.accumulatedDepreciationUSD[row]));
+        openingGrossPpeUSD - (Number.isNaN(L8.accumulatedDepreciationLocal[row]) ? openingGrossPpeUSD * 0.45 : L8.accumulatedDepreciationLocal[row]));
       const taxAttrs = {
         taxBasisPpeUSD: comp.taxBasisPpeUSD ?? openingNetPpeUSD,
         usefulLifeYears: SECTOR_PPE_USEFUL_LIFE_YEARS[L8.sector[row]] ?? 12,
@@ -913,7 +913,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
         inputCostAnnualUSD: profileInputCostUSD,
         payrollAnnualUSD: weeklyPayrollUSD * 52,
         profileCostsAnnualUSD: pnl.profileCostsAnnualUSD,
-        grossPPEUSD: Number.isNaN(L8.grossPPEUSD[row]) ? 0 : L8.grossPPEUSD[row],
+        grossPPELocal: Number.isNaN(L8.grossPPELocal[row]) ? 0 : L8.grossPPELocal[row],
         ppeDepreciationYears: 20,
         annualInterestUSD: annualInterest,
         taxRate,
@@ -949,14 +949,14 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     const newRndExpense = cap.rndExpenseUSD;
     const newOccupationMixDrift = cap.occupationMixDrift;
     const newCapex = cap.capexUSD;
-    const newGrossPPEUSD = cap.grossPPEUSD;
-    const newAccumulatedDepreciationUSD = cap.accumulatedDepreciationUSD;
+    const newGrossPPEUSD = cap.grossPPELocal;
+    const newAccumulatedDepreciationUSD = cap.accumulatedDepreciationLocal;
     const weeklyDepreciation = cap.weeklyDepreciationUSD;
     const programme = { payoutPressure: cap.payoutPressure };
 
     const __k1 = S08K_PROF ? performance.now() : 0;
     if (S08K_PROF) s08k.capital += __k1 - __k0;
-    const { post, cash, cashLedger } = makeCashPoster(L8.ticker[row], L8.region[row], L8.cashUSD[row], ctx, retainCashLedger);
+    const { post, cash, cashLedger } = makeCashPoster(L8.ticker[row], L8.region[row], L8.cashLocal[row], ctx, retainCashLedger);
     runCashWalk({
       ctx,
       companyId: L8.companyId[row],
@@ -1023,7 +1023,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       // §7.268: the bank's OWN sheet, not the region average — a solvency rating on the
       // cohort's mean rated every bank the same and none of them on itself.
       bankCapitalRatio: Number.isNaN(L8.bankCapitalRatio[row]) ? reg.bankingSector.bankCapitalRatio : L8.bankCapitalRatio[row],
-      bankEquityUSD: Number.isNaN(L8.bankEquityUSD[row]) ? reg.bankingSector.bankEquityUSD : L8.bankEquityUSD[row],
+      bankEquityLocal: Number.isNaN(L8.bankEquityLocal[row]) ? reg.bankingSector.bankEquityLocal : L8.bankEquityLocal[row],
       bankLossRateAnnual: Number.isNaN(L8.bankLossRateAnnual[row])
         ? reg.bankingSector.loanLossProvisionRateAnnualPct : L8.bankLossRateAnnual[row],
     });
@@ -1126,7 +1126,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         ? (Number.isNaN(TS.floatingMarginBps[tr]) ? TRANCHE_DEFAULT_MARGIN_BPS : TS.floatingMarginBps[tr]) / 10000
         : (Number.isNaN(TS.couponRate[tr]) ? TRANCHE_DEFAULT_COUPON : TS.couponRate[tr]);
       const sched = trancheScheduleOf(TS, tr);
-      const acc = trancheWeekAccrual(TS.principalUSD[tr], floating, annualRate, reg.policyRate, (fl & TR_CP) !== 0, TS.maturityWeek[tr],
+      const acc = trancheWeekAccrual(TS.principalLocal[tr], floating, annualRate, reg.policyRate, (fl & TR_CP) !== 0, TS.maturityWeek[tr],
         sched.periodWeeks, sched.anchorWeek, nextWeek);
       const kind = (fl & TR_CP) ? 'COMMERCIAL_PAPER' : floating ? 'LEVERAGED_LOAN' : 'CORP_BOND';
       const trancheId = v2.internedStrings[TS.idRef[tr]];
@@ -1148,7 +1148,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     if (L8.wasDefaulted[row] !== 1 && L8.wasMergerAcquired[row] !== 1 && cash.usd < 0 && L8.homeBankTicker[row]) {
       const revolverRateAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
       let alreadyDrawnUSD = 0;
-      for (const r of rowList) if (TS.flags[r] & TR_FACILITY) alreadyDrawnUSD += TS.principalUSD[r];
+      for (const r of rowList) if (TS.flags[r] & TR_FACILITY) alreadyDrawnUSD += TS.principalLocal[r];
       const headroomUSD = Math.max(0, committedLineHeadroomUSD({
         ebitAnnualUSD: newEbit,
         currentAnnualInterestUSD: annualInterest,
@@ -1160,7 +1160,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       if (drawUSD > 1) {
         const revolver: DebtTranche = {
           id: `${L8.companyId[row]}-REVOLVER-LIQ-${nextWeek}`,
-          principalUSD: drawUSD,
+          principalLocal: drawUSD,
           rateType: 'FLOATING',
           floatingMarginBps: L8.facilityMarginBps[row],
           originationWeek: nextWeek,
@@ -1185,7 +1185,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     const isDefaulted = isInDefault({
       wasDefaulted: L8.wasDefaulted[row] === 1,
       mergerAcquired: L8.wasMergerAcquired[row] === 1,
-      cashUSD: cash.usd,
+      cashLocal: cash.usd,
       coverage: newCoverage,
       coverageFloor: DEFAULT_COVERAGE_FLOOR,
     });
@@ -1216,8 +1216,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // rowList yet, exactly as it was not in comp.debtTranches here).
       let wallUSD = 0, ladderSumUSD = 0;
       for (const r of rowList) {
-        ladderSumUSD += TS.principalUSD[r];
-        if (TS.maturityWeek[r] - nextWeek <= 52) wallUSD += TS.principalUSD[r];
+        ladderSumUSD += TS.principalLocal[r];
+        if (TS.maturityWeek[r] - nextWeek <= 52) wallUSD += TS.principalLocal[r];
       }
       const maturityWallShareOfLadder = wallUSD / Math.max(1, ladderSumUSD);
       const ladderUSD = Math.max(1, ladderSumUSD);
@@ -1320,8 +1320,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     const preFaceByRow = new Map<number, number>();
     for (const r of rowList) {
       const fl = TS.flags[r];
-      if (!(fl & TR_FLOATING)) { if (!(fl & TR_CP)) { preFixedSumUSD += TS.principalUSD[r]; preFaceByRow.set(r, TS.principalUSD[r]); } }
-      else if (!(fl & TR_FACILITY)) { preFloatingSumUSD += TS.principalUSD[r]; preFaceByRow.set(r, TS.principalUSD[r]); }
+      if (!(fl & TR_FLOATING)) { if (!(fl & TR_CP)) { preFixedSumUSD += TS.principalLocal[r]; preFaceByRow.set(r, TS.principalLocal[r]); } }
+      else if (!(fl & TR_FACILITY)) { preFloatingSumUSD += TS.principalLocal[r]; preFaceByRow.set(r, TS.principalLocal[r]); }
     }
     const preActionFixedUSD = preFixedSumUSD + primaryFixedAdjUSD;
     const preActionFloatingUSD = preFloatingSumUSD + primaryFloatingAdjUSD;
@@ -1415,8 +1415,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       });
       if (economics.isAccretive && excessCashAvailable && newRating !== 'CCC' && newRating !== 'D') {
         const calledAmountUSD = callableAmountUSD({
-          tranchePrincipalUSD: TS.principalUSD[rTr],
-          cashUSD: cash.usd,
+          tranchePrincipalUSD: TS.principalLocal[rTr],
+          cashLocal: cash.usd,
           cashFloorUSD: L8.annualRevenueUSD[row] * 0.15,
           premiumPerDollar,
         });
@@ -1440,7 +1440,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           replacedTrancheIds.push({ oldId: v2.internedStrings[TS.idRef[rTr]], newId: `${L8.companyId[row]}-CALL-${state.currentWeek}-${v2.internedStrings[TS.idRef[rTr]]}` });
           calledRefinanceTranches.push({
             id: `${L8.companyId[row]}-CALL-${state.currentWeek}-${v2.internedStrings[TS.idRef[rTr]]}`,
-            principalUSD: calledAmountUSD,
+            principalLocal: calledAmountUSD,
             rateType: 'FIXED',
             couponRate: currentFairRate,
             originationWeek: state.currentWeek,
@@ -1452,8 +1452,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         }
       }
     });
-    // Remove any tranche whose principalUSD reaches zero, then add the replacement issues.
-    rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
+    // Remove any tranche whose principalLocal reaches zero, then add the replacement issues.
+    rowList = rowList.filter(r => TS.principalLocal[r] > 0.01);
     for (const t of calledRefinanceTranches) rowList.push(issueTranche(v2, issuer, t, 'accretive call: replacement issue'));
     for (const rp of replacedTrancheIds) ctx.pendingHolderReplacements.set(`CORP_BOND:${rp.oldId}`, rp.newId);
 
@@ -1486,13 +1486,13 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         region: L8.region[row],
         instrumentType: refinanceAsFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
         purpose: 'REFINANCE',
-        sizeUSD: TS.principalUSD[rTr],
+        sizeUSD: TS.principalLocal[rTr],
         // Need-driven: the issuer walks only where the market is worse than its revolver.
         walkAwayStat: refinanceAsFixed
           ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
           : L8.facilityMarginBps[row],
         rateType: refinanceAsFixed ? 'FIXED' : 'FLOATING',
-        leadBankTicker: leadBankFor(comp, TS.principalUSD[rTr]),
+        leadBankTicker: leadBankFor(comp, TS.principalLocal[rTr]),
         announcedWeek: nextWeek,
       });
     });
@@ -1514,12 +1514,12 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // measured.
     const isDueNow = (r: number): boolean => TS.maturityWeek[r] <= nextWeek && !(TS.flags[r] & TR_CP);
     const maturingRow = rowList.find(isDueNow);
-    const maturingPrincipalUSD = maturingRow !== undefined ? TS.principalUSD[maturingRow] : 0;
+    const maturingPrincipalUSD = maturingRow !== undefined ? TS.principalLocal[maturingRow] : 0;
     // §5-WIRES W3: every row that matures this week hands its face back to the issuer by wire
     // (the holders are paid by the register's paying agent on the same ladder delta).
     for (const r of rowList) {
-      if (isDueNow(r) && TS.principalUSD[r] > 0.01) {
-        retireTranche(v2, issuer, r, TS.principalUSD[r], 'maturing tranche principal repaid');
+      if (isDueNow(r) && TS.principalLocal[r] > 0.01) {
+        retireTranche(v2, issuer, r, TS.principalLocal[r], 'maturing tranche principal repaid');
       }
     }
     rowList = rowList.filter(r => !isDueNow(r));
@@ -1539,7 +1539,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       const newTranche: DebtTranche = o.rateType === 'FIXED'
         ? {
             id: primaryTrancheId(L8.companyId[row], o.purpose, nextWeek),
-            principalUSD: placedUSD,
+            principalLocal: placedUSD,
             rateType: 'FIXED',
             // The CLEARED terms — the whole point of the primary market.
             couponRate: fiveYearSovRate + settlement.clearedStat / 10000,
@@ -1550,7 +1550,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           }
         : {
             id: primaryTrancheId(L8.companyId[row], o.purpose, nextWeek),
-            principalUSD: placedUSD,
+            principalLocal: placedUSD,
             rateType: 'FLOATING',
             floatingMarginBps: Math.round(settlement.clearedStat),
             originationWeek: nextWeek,
@@ -1564,8 +1564,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         let retiredUSD = 0;
         for (const r of rowList) {
           if (!retire.has(v2.internedStrings[TS.idRef[r]])) continue;
-          retiredUSD += TS.principalUSD[r];
-          retireTranche(v2, issuer, r, TS.principalUSD[r], 'term-out: maintenance bridges retired');
+          retiredUSD += TS.principalLocal[r];
+          retireTranche(v2, issuer, r, TS.principalLocal[r], 'term-out: maintenance bridges retired');
         }
         rowList = rowList.filter(r => !retire.has(v2.internedStrings[TS.idRef[r]]));
         debtRepaymentThisWeek += retiredUSD;
@@ -1590,7 +1590,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // bank (a bank) has no revolver; its maturity is repaid from its own book below.
       const revolverTranche: DebtTranche = {
         id: `${L8.companyId[row]}-REVOLVER-${nextWeek}`,
-        principalUSD: maturingPrincipalUSD,
+        principalLocal: maturingPrincipalUSD,
         rateType: 'FLOATING',
         floatingMarginBps: L8.facilityMarginBps[row],
         originationWeek: nextWeek,
@@ -1601,8 +1601,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         facilityBankTicker: L8.homeBankTicker[row],
       };
       rowList.push(issueTranche(v2, issuer, revolverTranche, 'revolver draw: withdrawn refinancing'));
-      debtIssuanceThisWeek += revolverTranche.principalUSD;
-      post('revolver draw: withdrawn refinancing', revolverTranche.principalUSD, bankCredit);
+      debtIssuanceThisWeek += revolverTranche.principalLocal;
+      post('revolver draw: withdrawn refinancing', revolverTranche.principalLocal, bankCredit);
       pushNews({
         id: `refi-fail-${L8.ticker[row]}-${nextWeek}`,
         week: nextWeek,
@@ -1629,7 +1629,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
 
     if (maintenanceFundingTranches.length > 0) {
       for (const t of maintenanceFundingTranches) rowList.push(issueTranche(v2, issuer, t, 'maintenance funding bridge drawn'));
-      debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
+      debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalLocal, 0);
     }
 
     // WS8: the weekly maintenance drip stays a revolver-style bridge (it already prices wide),
@@ -1639,9 +1639,9 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     if (!pendingOfferingIssuerIds.has(L8.companyId[row]) && !primarySettlementByIssuerId.has(L8.companyId[row])) {
       const bridges = rowList.filter(r => v2.internedStrings[TS.idRef[r]].includes('-MAINT-'));
       let bridgeUSD = 0;
-      for (const r of bridges) bridgeUSD += TS.principalUSD[r];
+      for (const r of bridges) bridgeUSD += TS.principalLocal[r];
       let totalDebtForGate = 0;
-      for (const r of rowList) totalDebtForGate += TS.principalUSD[r];
+      for (const r of rowList) totalDebtForGate += TS.principalLocal[r];
       if (bridgeUSD > Math.max(1e6, totalDebtForGate * 0.02)) {
         const asFixed = fixedShareOf(comp) >= 0.5;  // IND4: rating's access, industry's tilt
         const revolverAllInAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
@@ -1682,7 +1682,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // together and the settled reduction reaches holders via settleCorporateActionOnHolders.
     if (cash.usd > 2.5 * L8.currentLiabilitiesUSD[row]) {
       let ladderTotalUSD = 0;
-      for (const r of rowList) ladderTotalUSD += TS.principalUSD[r];
+      for (const r of rowList) ladderTotalUSD += TS.principalLocal[r];
       if (ladderTotalUSD > 50) {
         let toPrepayUSD = Math.min(ladderTotalUSD * 0.05, (cash.usd - 2.5 * L8.currentLiabilitiesUSD[row]) * 0.25);
         if (toPrepayUSD > 1000) {
@@ -1709,7 +1709,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
               if (!worthRetiring) return;
               // The budget buys principal AND the premium, so early repayment retires less per
               // dollar of surplus cash than it used to. That is the point: it is not free.
-              const repaid = Math.min(TS.principalUSD[rTr], toPrepayUSD / (1 + premiumPerDollar));
+              const repaid = Math.min(TS.principalLocal[rTr], toPrepayUSD / (1 + premiumPerDollar));
               toPrepayUSD -= repaid * (1 + premiumPerDollar);
               recordPremium(rTr, repaid * premiumPerDollar);
               if ((TS.flags[rTr] & TR_FACILITY) && TS.bankRef[rTr] >= 0 && repaid > 0) {
@@ -1725,9 +1725,9 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
               }
               retireTranche(v2, issuer, rTr, repaid, 'debt prepayment: principal retired');
             });
-          rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
+          rowList = rowList.filter(r => TS.principalLocal[r] > 0.01);
           let postPrepaySumUSD = 0;
-          for (const r of rowList) postPrepaySumUSD += TS.principalUSD[r];
+          for (const r of rowList) postPrepaySumUSD += TS.principalLocal[r];
           const prepaidUSD = Math.min(ladderTotalUSD, ladderTotalUSD - postPrepaySumUSD);
           facilityRepaidByBank.forEach((repaidUSD, bankTicker) => {
             post('facility prepaid: the loan and the deposit die together', -repaidUSD,
@@ -1745,8 +1745,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       effectiveTaxRate: reg.effectiveTaxRate,
       ebitdaAnnual: newEbitda,
       ebitAnnual: newEbit,
-      totalDebtUSD: rowList.reduce((sum, r) => sum + TS.principalUSD[r], 0),
-      cashUSD: cash.usd,
+      totalDebtUSD: rowList.reduce((sum, r) => sum + TS.principalLocal[r], 0),
+      cashLocal: cash.usd,
       rating: newRating,
     });
 
@@ -1818,7 +1818,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           // A company that wants less leverage still will not pay a make-whole to get it: if
           // nothing in the stack is economic to retire this week, it holds the cash and waits.
           if (!worthRetiring) return;
-          const repaidUSD = Math.min(TS.principalUSD[rTr], remainingToRepayUSD / (1 + premiumPerDollar));
+          const repaidUSD = Math.min(TS.principalLocal[rTr], remainingToRepayUSD / (1 + premiumPerDollar));
           remainingToRepayUSD -= repaidUSD * (1 + premiumPerDollar);
           recordPremium(rTr, repaidUSD * premiumPerDollar);
           // A drawn FACILITY retired here is a KNOWN GAP, measured and left alone rather than
@@ -1830,7 +1830,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           if (TS.flags[rTr] & TR_FACILITY) facilityRepaidUSD += repaidUSD;
           retireTranche(v2, issuer, rTr, repaidUSD, 'opportunistic deleveraging: principal repaid');
         });
-      rowList = rowList.filter(r => TS.principalUSD[r] > 0.01);
+      rowList = rowList.filter(r => TS.principalLocal[r] > 0.01);
       void facilityRepaidUSD;
       const actuallyRepaidUSD = -financing.netDebtChangeUSD - remainingToRepayUSD;
       debtRepaymentThisWeek += actuallyRepaidUSD;
@@ -2065,9 +2065,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     let postActionFixedUSD = 0, postActionFloatingUSD = 0, shortTermDebtSumUSD = 0;
     for (const r of rowList) {
       const fl = TS.flags[r];
-      if (!(fl & TR_FLOATING)) { if (!(fl & TR_CP)) postActionFixedUSD += TS.principalUSD[r]; }
-      else if (!(fl & TR_FACILITY)) postActionFloatingUSD += TS.principalUSD[r];
-      if (TS.maturityWeek[r] - nextWeek <= 52) shortTermDebtSumUSD += TS.principalUSD[r];
+      if (!(fl & TR_FLOATING)) { if (!(fl & TR_CP)) postActionFixedUSD += TS.principalLocal[r]; }
+      else if (!(fl & TR_FACILITY)) postActionFloatingUSD += TS.principalLocal[r];
+      if (TS.maturityWeek[r] - nextWeek <= 52) shortTermDebtSumUSD += TS.principalLocal[r];
     }
     // 13b: the REGISTER's rows are keyed by tranche — each market tranche's own pre/post face
     // (a retirement is that tranche's ratio, 0 when it is gone; the primary's new tranche has no
@@ -2075,7 +2075,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // issuer, so the paying agent's desk pass reads the issuer-level ratio recorded beside them.
     preFaceByRow.forEach((preUSD, r) => {
       const fl = TS.flags[r];
-      settleCorporateActionOnHolders(ctx, v2.internedStrings[TS.idRef[r]], (fl & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND', preUSD, TS.principalUSD[r]);
+      settleCorporateActionOnHolders(ctx, v2.internedStrings[TS.idRef[r]], (fl & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND', preUSD, TS.principalLocal[r]);
     });
     settleCorporateActionOnHolders(ctx, L8.companyId[row], 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
     settleCorporateActionOnHolders(ctx, L8.companyId[row], 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
@@ -2235,7 +2235,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.growthCapex = round1(newGrowthCapex);
 
-    comp.grossPPEUSD = round1(newGrossPPEUSD);
+    comp.grossPPELocal = round1(newGrossPPEUSD);
 
       // IND1: read by stage 05's capacity growth — real net investment is what arrived.
       // IND13 — the plant grew by what entered service. Both lines are named on the rebuild
@@ -2245,7 +2245,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.assetsUnderConstruction = stillUnderConstruction;
 
-    comp.accumulatedDepreciationUSD = round1(newAccumulatedDepreciationUSD);
+    comp.accumulatedDepreciationLocal = round1(newAccumulatedDepreciationUSD);
 
     comp.rndExpense = round1(newRndExpense);
 

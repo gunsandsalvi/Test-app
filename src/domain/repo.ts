@@ -3,7 +3,7 @@
  *
  * What this replaces. Repo already CLEARED — the same auction engine as every other book, with
  * derived schedules and the standing facility as a real seat — but it was not an ASSET CLASS.
- * A position was a scalar `repoLentUSD` beside books that itemize everything else (rule 4); who
+ * A position was a scalar `repoLentLocal` beside books that itemize everything else (rule 4); who
  * lent to whom was unknowable, so the cash leg had no counterparty and the collateral leg had no
  * owner (rule 5); and the pledge was one number, so no particular bond was encumbered and
  * collateral quality could not matter.
@@ -29,7 +29,7 @@ export type RepoParty =
 /** The specific paper pledged: which bond, and how much face of it. */
 export interface RepoPledge {
   bondId: string;
-  faceUSD: number;
+  faceLocal: number;
 }
 
 export interface RepoContract {
@@ -38,7 +38,7 @@ export interface RepoContract {
   lender: RepoParty;
   /** Borrowers are named banks: nothing else in the model funds itself secured yet. */
   borrowerTicker: string;
-  principalUSD: number;
+  principalLocal: number;
   /** Annualised decimal, struck at this session's cleared level (rule 8). */
   rateAnnual: number;
   struckWeek: number;
@@ -53,28 +53,28 @@ export function repoPartyKey(p: RepoParty): string {
 
 /** One week's interest on a contract, at the rate it was struck at. */
 export function repoWeeklyInterestUSD(c: RepoContract): number {
-  return (c.principalUSD * c.rateAnnual) / 52;
+  return (c.principalLocal * c.rateAnnual) / 52;
 }
 
 /** Interest owed over a contract's whole life — what settles when it matures. */
 export function repoInterestToMaturityUSD(c: RepoContract): number {
   const weeks = Math.max(1, c.maturityWeek - c.struckWeek);
-  return (c.principalUSD * c.rateAnnual * weeks) / 52;
+  return (c.principalLocal * c.rateAnnual * weeks) / 52;
 }
 
-export function repoBorrowedUSD(book: RepoContract[], ticker: string): number {
-  return book.reduce((a, c) => a + (c.borrowerTicker === ticker ? c.principalUSD : 0), 0);
+export function repoBorrowedLocal(book: RepoContract[], ticker: string): number {
+  return book.reduce((a, c) => a + (c.borrowerTicker === ticker ? c.principalLocal : 0), 0);
 }
 
-export function repoLentUSD(book: RepoContract[], party: RepoParty): number {
+export function repoLentLocal(book: RepoContract[], party: RepoParty): number {
   const key = repoPartyKey(party);
-  return book.reduce((a, c) => a + (repoPartyKey(c.lender) === key ? c.principalUSD : 0), 0);
+  return book.reduce((a, c) => a + (repoPartyKey(c.lender) === key ? c.principalLocal : 0), 0);
 }
 
-/** What the central bank's window has outstanding to one bank — the sheet's `srfBorrowingUSD`. */
+/** What the central bank's window has outstanding to one bank — the sheet's `srfBorrowingLocal`. */
 export function srfBorrowedUSD(book: RepoContract[], ticker: string): number {
   return book.reduce(
-    (a, c) => a + (c.borrowerTicker === ticker && c.lender.kind === 'CENTRAL_BANK' ? c.principalUSD : 0), 0
+    (a, c) => a + (c.borrowerTicker === ticker && c.lender.kind === 'CENTRAL_BANK' ? c.principalLocal : 0), 0
   );
 }
 
@@ -87,16 +87,16 @@ export function encumberedFaceByBond(book: RepoContract[], ticker: string): Map<
   const byBond = new Map<string, number>();
   book.forEach((c) => {
     if (c.borrowerTicker !== ticker) return;
-    c.collateral.forEach((p) => byBond.set(p.bondId, (byBond.get(p.bondId) ?? 0) + p.faceUSD));
+    c.collateral.forEach((p) => byBond.set(p.bondId, (byBond.get(p.bondId) ?? 0) + p.faceLocal));
   });
   return byBond;
 }
 
 /** Total face pledged by one bank across every bond. */
 export function encumberedFaceUSD(book: RepoContract[], ticker: string): number {
-  let faceUSD = 0;
-  encumberedFaceByBond(book, ticker).forEach((v) => { faceUSD += v; });
-  return faceUSD;
+  let faceLocal = 0;
+  encumberedFaceByBond(book, ticker).forEach((v) => { faceLocal += v; });
+  return faceLocal;
 }
 
 /** The contracts that come due at or before `week` — what settles before new ones are struck. */

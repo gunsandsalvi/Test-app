@@ -39,7 +39,7 @@ function CompanyHolders({ world, id, nav, tab }: { world: World; id: string; nav
   const bankIdByTicker = new Map(world.state.companies.filter((b) => b.isBankEntity && b.bankBalanceSheet && isActiveCompany(b)).map((b) => [b.ticker, b.id]));
   const facilities = facilitiesOfBorrower(ensureV2(world.state), id)
     .filter((f) => bankIdByTicker.has(f.bankTicker))
-    .map((f) => ({ holderId: bankIdByTicker.get(f.bankTicker)!, instrumentType: 'BANK_FACILITY', usd: f.principalUSD, shares: NaN }));
+    .map((f) => ({ holderId: bankIdByTicker.get(f.bankTicker)!, instrumentType: 'BANK_FACILITY', usd: f.principalLocal, shares: NaN }));
   const kinds = ['equity', 'debt'];
   const active = kinds.includes(tab) ? tab : 'equity';
   const [sort, setSort] = useState('usd');
@@ -105,7 +105,7 @@ function RegionHolders({ world, id, nav }: { world: World; id: string; nav: impo
   const cb = r.centralBankSheet ? Object.values(r.centralBankSheet.sovereignHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0) : 0;
   const rows = [...inst.map((h) => ({ ...h, kind: 'institution' })), ...banks.map((h) => ({ ...h, kind: 'bank' })), ...(cb > 0 ? [{ holderId: r.centralBank, usd: cb, kind: 'central bank' }] : [])].sort((a, b) => b.usd - a.usd);
   const total = rows.reduce((a, h) => a + h.usd, 0);
-  const outstanding = materializeGovLadder(ensureV2(world.state), r.id).reduce((a, t) => a + t.principalUSD, 0);
+  const outstanding = materializeGovLadder(ensureV2(world.state), r.id).reduce((a, t) => a + t.principalLocal, 0);
   return (<>
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
       <Hint>{rows.length} holders of the sovereign · {money(total)}</Hint>

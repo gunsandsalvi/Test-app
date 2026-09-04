@@ -61,11 +61,11 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
  */
 
 /** What a firm has to lose, and therefore insures: its plant and the revenue that runs through it. */
-const corporateInsurableBaseUSD = (c: Company) => Math.max(0, c.grossPPEUSD ?? 0) + Math.max(0, c.annualRevenue);
+const corporateInsurableBaseUSD = (c: Company) => Math.max(0, c.grossPPELocal ?? 0) + Math.max(0, c.annualRevenue);
 
 export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepContext): void {
   // This stage moved every one of its flows by DIRECT balance mutation — `comp.cash`,
-  // entity `cashUSD`, household deposits — with zero payment instructions in the file, so no bank
+  // entity `cashLocal`, household deposits — with zero payment instructions in the file, so no bank
   // ever saw the deposits move and 02b's reconcile invented the reserves behind them. Every leg
   // below is now a `pay` instruction settled by the close pass, exactly like every other
   // post-08 flow. The two liability-STOCK updates (beneficiaryLiabilityUSD and the two annual
@@ -224,7 +224,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     // The household side of every leg above now travels through the same instructions — the
     // insurer's payroll reaches households through the wage bill the profile caller charges it,
     // and premiums, claims, contributions and benefits settle like every other payment. No
-    // direct write to `depositsUSD` or `pendingBankSettlementUSD` survives here: settlement's
+    // direct write to `depositsLocal` or `pendingBankSettlementUSD` survives here: settlement's
     // HOUSEHOLD case maintains both, which is the invariant the hand-kept version could break.
   });
 

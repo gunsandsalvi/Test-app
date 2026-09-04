@@ -80,9 +80,9 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     if (!(shares > 0)) return ETF_INCEPTION_NAV_PER_SHARE;
     // holdings flip: row walk on the mirror.
     const H = ctx.v2.holdings;
-    let heldUSD = 0;
-    for (let r = bookHeadOf(ctx.v2, fund.id); r >= 0; r = H.next[r]) heldUSD += H.qtyUSD[r];
-    const navUSD = heldUSD + Math.max(0, entityCashOf(ctx.v2, fund));
+    let heldLocal = 0;
+    for (let r = bookHeadOf(ctx.v2, fund.id); r >= 0; r = H.next[r]) heldLocal += H.qtyLocal[r];
+    const navUSD = heldLocal + Math.max(0, entityCashOf(ctx.v2, fund));
     return navUSD / shares;
   };
 
@@ -155,7 +155,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // settlement close moves the deposit and the pending bank leg), so this view no longer
     // debits it — doing both moved the same dollar twice, and the max(0,…) that guarded the
     // debit died with it. Only the SHARE register settles here.
-    const depositsUSD = householdDepositsOf(ctx.v2, region);
+    const depositsLocal = householdDepositsOf(ctx.v2, region);
     const mmfSharesUSD = Math.max(0, hs.mmfSharesUSD ?? 0);
     const equityHoldingsUSD = realClaimsUSD;
 
@@ -250,7 +250,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
 
       WEALTH_TIERS.forEach((t: WealthTier, i: number) => {
         const tierAssetsUSD =
-          (depositsUSD + mmfSharesUSD) * depositShareOf(t, i)
+          (depositsLocal + mmfSharesUSD) * depositShareOf(t, i)
           + (etfHoldingsUSD + directEquityUSD) * riskyShareOf(t, i)
           + privateBusinessEquityUSD * riskyShareOf(t, i)
           + institutionalClaimsUSD * cautiousShareOf(t, i)
@@ -291,7 +291,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // The house is an ASSET at full value and the mortgage a liability, as in any set of
       // national accounts. Omitting the asset while carrying the debt understated net worth by
       // the entire housing stock.
-      netWorthUSD: depositsUSD + mmfSharesUSD + equityHoldingsUSD + housingStockUSD
+      netWorthUSD: depositsLocal + mmfSharesUSD + equityHoldingsUSD + housingStockUSD
         - (mortgageUSD + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0)),
     };
   });

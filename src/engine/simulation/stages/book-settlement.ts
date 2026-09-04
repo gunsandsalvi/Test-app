@@ -2,7 +2,7 @@
  * SETL6 — the cash half of a cleared book, shared by the five clearing adapters
  * (07b bonds, 07c sovereigns, 07d loans, 07e equity, 07f bills).
  *
- * Until this existed each book moved its participants' money itself: `entity.cashUSD +=`,
+ * Until this existed each book moved its participants' money itself: `entity.cashLocal +=`,
  * `cashReservesUSD +=`. A balance changed and no bank's book knew — the same shape as the
  * corporate-cash leak §7.86 was found by, and the reason institutional cash volatility could
  * not be seen for what it was (§7.91): the clearing legs ARE the volatility, and they were

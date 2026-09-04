@@ -65,17 +65,17 @@ export function callEconomics(i: {
  */
 export function callableAmountUSD(i: {
   tranchePrincipalUSD: number;
-  cashUSD: number;
+  cashLocal: number;
   cashFloorUSD: number;
   premiumPerDollar: number;
 }): number {
-  const budgetUSD = i.cashUSD - i.cashFloorUSD;
+  const budgetUSD = i.cashLocal - i.cashFloorUSD;
   if (!(budgetUSD > 0)) return 0;
   return Math.max(0, Math.min(i.tranchePrincipalUSD, budgetUSD / (1 + i.premiumPerDollar)));
 }
 
 /** The paper coming due inside a window — what has to be refinanced or repaid. */
-export function tranchesDueWithin<T extends { maturityWeek?: number; principalUSD: number }>(
+export function tranchesDueWithin<T extends { maturityWeek?: number; principalLocal: number }>(
   tranches: T[],
   week: number,
   withinWeeks: number
@@ -84,6 +84,6 @@ export function tranchesDueWithin<T extends { maturityWeek?: number; principalUS
 }
 
 /** A ladder carries no zero rungs: a tranche repaid to nothing is gone, not a row of zeroes. */
-export function dropExhausted<T extends { principalUSD: number }>(tranches: T[], dustUSD = 1): T[] {
-  return tranches.filter((t) => t.principalUSD > dustUSD);
+export function dropExhausted<T extends { principalLocal: number }>(tranches: T[], dustUSD = 1): T[] {
+  return tranches.filter((t) => t.principalLocal > dustUSD);
 }

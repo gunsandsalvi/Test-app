@@ -59,7 +59,7 @@ export interface SecurityLoan {
    */
   currency: CurrencyCode;
   /** What the borrower posted, and what comes back when the shares do. */
-  collateralUSD: number;
+  collateralLocal: number;
   /**
    * The lender's WHOLE position in the name the week this loan was struck — shares it could still
    * deliver plus everything it already had out. A recall is the lender selling out from under the
@@ -132,7 +132,7 @@ export function shortSizeShares(args: {
 
 /**
  * What a party's stock-loan positions are worth to it, net, as one balance-sheet number — the
- * same shape `repoLentUSD` takes for the repo book: the contracts are the one representation, this
+ * same shape `repoLentLocal` takes for the repo book: the contracts are the one representation, this
  * is the scalar derived from them.
  *
  * A LENDER has parted with shares and holds cash against them, so its position is the shares it
@@ -148,8 +148,8 @@ export function stockLoanNetUSD(
 ): number {
   return book.reduce((a, l) => {
     const markUSD = l.shares * Math.max(0, priceOf(l.instrumentId));
-    if (l.lender.id === entityId) return a + markUSD - l.collateralUSD;
-    if (l.borrower.id === entityId) return a + l.collateralUSD - markUSD;
+    if (l.lender.id === entityId) return a + markUSD - l.collateralLocal;
+    if (l.borrower.id === entityId) return a + l.collateralLocal - markUSD;
     return a;
   }, 0);
 }

@@ -25,11 +25,11 @@ const ROW_IS_KIND: Record<CreditKind, (flags: number) => boolean> = {
 const isKindRow = (flags: number, kind: CreditKind): boolean => ROW_IS_KIND[kind](flags);
 
 /** The issuer's live tranches of a kind, in ladder order: id and face. */
-export function liveTranchesOf(v2: V2World, issuerId: string, kind: CreditKind): { id: string; faceUSD: number }[] {
+export function liveTranchesOf(v2: V2World, issuerId: string, kind: CreditKind): { id: string; faceLocal: number }[] {
   const S = v2.tranches;
-  const out: { id: string; faceUSD: number }[] = [];
+  const out: { id: string; faceLocal: number }[] = [];
   for (const r of ladderRowsOf(v2, issuerId)) {
-    if (isKindRow(S.flags[r], kind) && S.principalUSD[r] > 0.01) out.push({ id: v2.internedStrings[S.idRef[r]], faceUSD: S.principalUSD[r] });
+    if (isKindRow(S.flags[r], kind) && S.principalLocal[r] > 0.01) out.push({ id: v2.internedStrings[S.idRef[r]], faceLocal: S.principalLocal[r] });
   }
   return out;
 }
@@ -54,15 +54,15 @@ export function splitAcrossTranches(
   }
   if (leftUSD <= 0) return out;
   const live = liveTranchesOf(v2, issuerId, kind).filter((t) => t.id !== primary?.trancheId);
-  const faceUSD = live.reduce((a, t) => a + t.faceUSD, 0);
-  if (!(faceUSD > 0)) {
+  const faceLocal = live.reduce((a, t) => a + t.faceLocal, 0);
+  if (!(faceLocal > 0)) {
     if (process.env.SPLIT_TRACE === '1') console.log(`  [split-fallback] ${issuerId} ${kind} total ${(totalUSD / 1e6).toFixed(1)}M ladderRows ${ladderRowsOf(v2, issuerId).length} rowById ${v2.rowById.get(issuerId)} primary ${primary?.trancheId ?? '-'}`);
     // Nothing live of this kind: the primary carries it when there is one, else the issuer's id.
     if (primary) { const p = out.find((x) => x.instrumentId === primary.trancheId); if (p) p.usd += leftUSD; else out.push({ instrumentId: primary.trancheId, usd: leftUSD }); }
     else out.push({ instrumentId: issuerId, usd: leftUSD });
     return out;
   }
-  live.forEach((t) => { const usd = leftUSD * (t.faceUSD / faceUSD); if (usd > 0) out.push({ instrumentId: t.id, usd }); });
+  live.forEach((t) => { const usd = leftUSD * (t.faceLocal / faceLocal); if (usd > 0) out.push({ instrumentId: t.id, usd }); });
   return out;
 }
 

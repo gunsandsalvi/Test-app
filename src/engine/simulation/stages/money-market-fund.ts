@@ -58,7 +58,7 @@ export function findRegionMmf(entities: InstitutionalEntity[], regionId: RegionI
  * fund quotes the floor its first dollar would earn (the RRP), net of fee — the honest opening
  * quote, and the reason the market can bootstrap itself when that beats the deposit rate.
  */
-export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashUSD: number, reg: Region, week: number, govLadder: GovDebtTrancheView[]): number {
+export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashLocal: number, reg: Region, week: number, govLadder: GovDebtTrancheView[]): number {
   const rrpRateAnnual = Math.max(0, reg.policyRate - ON_RRP_SPREAD_BPS / 10000);
   const repoRateAnnual = reg.repoRateAnnual ?? rrpRateAnnual;
 
@@ -68,7 +68,7 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashUSD: num
   // the fund holding bills it could not see and earning nothing on them.
   const billTenorById = new Map(
     govLadder
-      .filter((t) => isDiscountBill(t.tenorAtIssuanceYears) && t.principalUSD > 0)
+      .filter((t) => isDiscountBill(t.tenorAtIssuanceYears) && t.principalLocal > 0)
       .map((t) => [t.id, Math.max(1 / 52, (t.maturityWeek - week) / 52)] as const)
   );
   const billByTenor: Record<string, number> = {};
@@ -83,16 +83,16 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashUSD: num
     ? computeSovereignBookAnnualYield(billByTenor, reg.zeroRates, (id) => billTenorById.get(id))
     : 0;
 
-  const repoLentUSD = entity.repoLentUSD ?? 0;
+  const repoLentLocal = entity.repoLentLocal ?? 0;
   // What is parked at the reverse repo window earns the floor; the cash still on the account
   // earns nothing until the next session decides where it goes.
   const rrpLentUSD = entity.rrpLentUSD ?? 0;
-  const idleCashUSD = Math.max(0, cashUSD);
-  const totalUSD = billUSD + repoLentUSD + rrpLentUSD + idleCashUSD;
+  const idleCashUSD = Math.max(0, cashLocal);
+  const totalUSD = billUSD + repoLentLocal + rrpLentUSD + idleCashUSD;
   if (totalUSD <= 0) return Math.max(0, rrpRateAnnual - MMF_FEE_ANNUAL);
 
   const grossAnnual =
-    (billUSD * billYieldAnnual + repoLentUSD * repoRateAnnual + rrpLentUSD * rrpRateAnnual) / totalUSD;
+    (billUSD * billYieldAnnual + repoLentLocal * repoRateAnnual + rrpLentUSD * rrpRateAnnual) / totalUSD;
   return Math.max(0, grossAnnual - MMF_FEE_ANNUAL);
 }
 
@@ -248,8 +248,8 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     if (e.entityType !== 'MONEY_MARKET_FUND') return e;
     // holdings flip: row walk on the mirror.
     let holdingsUSD = 0;
-    for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r];
-    const bookUSD = entityCashOf(ctx.v2, e) + holdingsUSD + (e.repoLentUSD ?? 0) + (e.rrpLentUSD ?? 0);
+    for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) holdingsUSD += H.qtyLocal[r];
+    const bookUSD = entityCashOf(ctx.v2, e) + holdingsUSD + (e.repoLentLocal ?? 0) + (e.rrpLentUSD ?? 0);
     if (bookUSD <= 0) return e;
     const feeUSD = (bookUSD * MMF_FEE_ANNUAL) / 52;
     // A STABLE-NAV FUND DISTRIBUTES WHAT IT EARNED, NOT WHAT IT QUOTED.

@@ -16,7 +16,7 @@
  *     balance sheet. So the accrual cannot be keyed by institution id; it is keyed by PARTY.
  *
  * One ledger, keyed `<region>|<bondId>|<partyKey>`, and it is the ONLY writer of the receivable
- * on either book — the bank's `sovereignAccruedCouponUSD` and the treasury's
+ * on either book — the bank's `sovereignAccruedCouponLocal` and the treasury's
  * `sovereignCouponPayableUSD` are the same balance seen from two sides. That is what makes them
  * incapable of drifting: the treasury pays exactly the sum of what its holders accrued.
  *
@@ -77,11 +77,11 @@ export function accrueSovereignHolders(
 ): Map<string, number> {
   const accrued = ctx.sovereignAccruedInterestUSD;
   const bankEarnedUSD = new Map<string, number>();
-  const accrue = (bondId: string, party: PartyRef, notionalUSD: number): number => {
+  const accrue = (bondId: string, party: PartyRef, notional: number): number => {
     const coupon = couponByBond[bondId] ?? 0;
     const weeks = weeksOf(bondId);
-    if (!(coupon > 0) || !(notionalUSD > 0) || !(weeks > 0)) return 0;
-    const usd = (notionalUSD * coupon * weeks) / 52;
+    if (!(coupon > 0) || !(notional > 0) || !(weeks > 0)) return 0;
+    const usd = (notional * coupon * weeks) / 52;
     if (!(usd > 0)) return 0;
     const k = accrualKey(regionId, bondId, party);
     accrued.set(k, (accrued.get(k) ?? 0) + usd);
@@ -96,7 +96,7 @@ export function accrueSovereignHolders(
     for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
       if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
       // §3.13-SOV row 3: the coupon accrues to the BOND the row names.
-      accrue(ctx.v2.internedStrings[H.instrRef[r]], { kind: 'INSTITUTION', id: entity.id }, H.qtyUSD[r]);
+      accrue(ctx.v2.internedStrings[H.instrRef[r]], { kind: 'INSTITUTION', id: entity.id }, H.qtyLocal[r]);
     }
   });
   ctx.updatedCompanies.forEach((c) => {
@@ -184,12 +184,12 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
     const earnedUSD = bankEarnedUSD.get(c.ticker) ?? 0;
     const key = `|${partyKey({ kind: 'BANK_SECURITIES', ticker: c.ticker })}`;
-    let heldUSD = 0;
-    accrued.forEach((usd, k) => { if (k.endsWith(key)) heldUSD += usd; });
-    if (earnedUSD === 0 && heldUSD === (c.bankBalanceSheet.sovereignAccruedCouponUSD ?? 0)) return;
+    let heldLocal = 0;
+    accrued.forEach((usd, k) => { if (k.endsWith(key)) heldLocal += usd; });
+    if (earnedUSD === 0 && heldLocal === (c.bankBalanceSheet.sovereignAccruedCouponLocal ?? 0)) return;
     c.bankBalanceSheet = {
       ...bookPnL(c.bankBalanceSheet, earnedUSD, 'sovereign coupon accrual', c.ticker),
-      sovereignAccruedCouponUSD: heldUSD,
+      sovereignAccruedCouponLocal: heldLocal,
     };
   });
 }

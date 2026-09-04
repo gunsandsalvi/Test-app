@@ -45,8 +45,8 @@ test("a profile firm's depreciation comes off its PLANT, not its revenue", () =>
   const base = { revenueUSD: 1000, otherIncomeAnnualUSD: 0, inputCostAnnualUSD: 0,
     payrollAnnualUSD: 0, profileCostsAnnualUSD: 0, ppeDepreciationYears: 20,
     annualInterestUSD: 0, taxRate: 0, sharesOutstanding: 1 };
-  const light = profileIncome({ ...base, grossPPEUSD: 0 });
-  const heavy = profileIncome({ ...base, grossPPEUSD: 2000 });
+  const light = profileIncome({ ...base, grossPPELocal: 0 });
+  const heavy = profileIncome({ ...base, grossPPELocal: 2000 });
   assert.equal(light.ebitUSD, 1000);
   assert.equal(heavy.ebitUSD, 900, '2000 of plant over 20 years is 100 a year');
   assert.equal(light.ebitdaUSD, heavy.ebitdaUSD, 'and it does not touch EBITDA');
@@ -119,7 +119,7 @@ test('TAXR: the statement carries the attributes through both paths', () => {
   const ind = industrialIncome({ revenueUSD: 1000, ebitdaMargin: 0.3, daShareOfRevenue: 0.05,
     annualInterestUSD: 0, taxRate: 0.25, sharesOutstanding: 10, tax });
   const pro = profileIncome({ revenueUSD: 1000, otherIncomeAnnualUSD: 0, inputCostAnnualUSD: 0,
-    payrollAnnualUSD: 0, profileCostsAnnualUSD: 700, grossPPEUSD: 1000, ppeDepreciationYears: 20,
+    payrollAnnualUSD: 0, profileCostsAnnualUSD: 700, grossPPELocal: 1000, ppeDepreciationYears: 20,
     annualInterestUSD: 0, taxRate: 0.25, sharesOutstanding: 10, tax });
   [ind, pro].forEach((s) => {
     assert.ok(s.taxPaidAnnualUSD > 0);

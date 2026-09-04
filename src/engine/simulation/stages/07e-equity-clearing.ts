@@ -138,7 +138,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
-      outstandingUSD: c.sharesOutstanding,
+      outstandingLocal: c.sharesOutstanding,
       tradableFloatUSD: c.sharesOutstanding,
       currentStat: refPriceOf(c),
       statKind: 'PRICE_LIKE',
@@ -395,8 +395,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       let totalCashDemandWeightUSD = 0;
       for (let ci = 0; ci < nC; ci++) {
         const structuralUSD = entityPoolUSD * (floatValueArr[ci] / totalFloatValueUSD);
-        const heldUSD = heldSharesArr[ci] * refPriceArr[ci];
-        const weightUSD = offeredValueArr[ci] + Math.max(0, structuralUSD - heldUSD);
+        const heldLocal = heldSharesArr[ci] * refPriceArr[ci];
+        const weightUSD = offeredValueArr[ci] + Math.max(0, structuralUSD - heldLocal);
         cashWeightArr[ci] = weightUSD;
         totalCashDemandWeightUSD += weightUSD;
       }

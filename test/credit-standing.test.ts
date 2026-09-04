@@ -12,7 +12,7 @@ import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare }
 /** A bank sheet at a given capital ratio, with equity and a loss rate the rest of the world
  *  would recognise — the three numbers a bank's own standing is now measured from. */
 const bankSheet = (bankCapitalRatio: number) =>
-  ({ bankCapitalRatio, bankEquityUSD: 1e8, bankLossRateAnnual: 0.008 });
+  ({ bankCapitalRatio, bankEquityLocal: 1e8, bankLossRateAnnual: 0.008 });
 
 test('coverage is unbounded, because a bound is not a measurement', () => {
   // The old [-50, 50] clamp destroyed the information that a firm has no earnings at all.
@@ -45,7 +45,7 @@ test("a bank's coverage is a continuum, not a step: every ratio has its own numb
   for (let i = 1; i < seen.length; i++) assert.ok(seen[i] > seen[i - 1]);
   // And a worse loan book buys fewer years of buffer at the same capital.
   const risky = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueUSD: 1e9, ebitdaUSD: 0,
-    ebitUSD: 0, annualInterestUSD: 0, bankCapitalRatio: 0.12, bankEquityUSD: 1e8,
+    ebitUSD: 0, annualInterestUSD: 0, bankCapitalRatio: 0.12, bankEquityLocal: 1e8,
     bankLossRateAnnual: 0.04 }).coverage;
   assert.ok(risky < at(0.12));
 });
@@ -63,20 +63,20 @@ test('a draw never exceeds the shortfall or the remaining headroom', () => {
 
 test('default needs BOTH cash exhausted and coverage below the floor', () => {
   const base = { wasDefaulted: false, mergerAcquired: false, coverageFloor: 1.0 };
-  assert.equal(isInDefault({ ...base, cashUSD: -1, coverage: 0.5 }), true);
-  assert.equal(isInDefault({ ...base, cashUSD: -1, coverage: 5.0 }), false, 'solvent but illiquid is not default');
-  assert.equal(isInDefault({ ...base, cashUSD: 1e9, coverage: 0.1 }), false, 'thin cover with cash is not default');
+  assert.equal(isInDefault({ ...base, cashLocal: -1, coverage: 0.5 }), true);
+  assert.equal(isInDefault({ ...base, cashLocal: -1, coverage: 5.0 }), false, 'solvent but illiquid is not default');
+  assert.equal(isInDefault({ ...base, cashLocal: 1e9, coverage: 0.1 }), false, 'thin cover with cash is not default');
 });
 
 test('an acquired firm is not in default, however bad its book', () => {
-  assert.equal(isInDefault({ wasDefaulted: true, mergerAcquired: true, cashUSD: -1e9,
+  assert.equal(isInDefault({ wasDefaulted: true, mergerAcquired: true, cashLocal: -1e9,
     coverage: -100, coverageFloor: 1.0 }), false);
 });
 
 test('the maturity wall is the share falling due inside a year', () => {
   const ladder = [
-    { principalUSD: 250, maturityWeek: 10 },
-    { principalUSD: 750, maturityWeek: 400 },
+    { principalLocal: 250, maturityWeek: 10 },
+    { principalLocal: 750, maturityWeek: 400 },
   ];
   assert.equal(maturityWallShare(ladder, 5), 0.25);
   assert.equal(maturityWallShare([], 5), 0);

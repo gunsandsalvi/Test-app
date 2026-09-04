@@ -41,7 +41,7 @@
 export interface ClearingInstrument {
   id: string;
   /** Face value outstanding — the real denominator for liquidity and index weighting. */
-  outstandingUSD: number;
+  outstandingLocal: number;
   /**
    * The part of that stock genuinely in play: what the participants below can hold between them.
    * The rest sits with passive holders (foreign official accounts, central banks, households)

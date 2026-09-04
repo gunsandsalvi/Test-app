@@ -117,7 +117,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
     // life. A thirteen-week bill issued nine weeks ago is a four-week bill and is priced as one,
     // where the group priced it as whatever its issue label said.
     const activeBills = liveBillTranches
-      .filter((t) => t.principalUSD > 0)
+      .filter((t) => t.principalLocal > 0)
       .map((t) => ({
         key: t.id,
         years: Math.max(1 / 52, (t.maturityWeek - state.currentWeek) / 52),
@@ -125,7 +125,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       .filter((b) => b.years > 1 / 52);
     if (activeBills.length > 0) {
       const outstandingByBond = new Map<string, number>(
-        liveBillTranches.map((t) => [t.id, t.principalUSD])
+        liveBillTranches.map((t) => [t.id, t.principalLocal])
       );
       const billIdList = activeBills.map((b) => b.key);
       /** The bills THIS region has live — a row is a bill if its id is one of them. */
@@ -159,7 +159,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         Math.max(1, calculateNelsonSiegelZeroRate(b.years, reg.yieldCurveParams) * 10000);
       const instruments: ClearingInstrument[] = activeBills.map((b) => ({
         id: b.key,
-        outstandingUSD: outstandingByBond.get(b.key) ?? 0,
+        outstandingLocal: outstandingByBond.get(b.key) ?? 0,
         tradableFloatUSD: outstandingByBond.get(b.key) ?? 0,
         currentStat: billPriceAtYieldBps(b, billCurrentYieldBps(b)),
         statKind: 'PRICE_LIKE',
@@ -173,7 +173,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
         billStockByRegion[r] = materializeGovLadder(ctx.v2, r)
           .filter((t) => isDiscountBill(t.tenorAtIssuanceYears))
-          .reduce((a, t) => a + t.principalUSD, 0);
+          .reduce((a, t) => a + t.principalLocal, 0);
       });
       const regionEntities = ctx.updatedInstitutionalEntities.filter(
         (e) => mandateWeightForIssuer(e.entityType, e.region, regionId, billStockByRegion) > 0
@@ -183,7 +183,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // appetite over the whole sovereign stock rather than each over its own half.
       const wholeSovStockUSD = materializeGovLadder(ctx.v2, regionId)
         .filter((t) => t.maturityWeek > ctx.nextWeek)
-        .reduce((s, t) => s + Math.max(0, t.principalUSD), 0) || 1;
+        .reduce((s, t) => s + Math.max(0, t.principalLocal), 0) || 1;
 
       const participants: ClearingParticipant[] = [];
 
@@ -209,7 +209,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // SETL6: reserves plus this week's already-agreed securities settlement — 07c's bids
         // are commitments that have not settled yet, and the same reserves cannot fund both.
         const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
-        const facilityBookUSD = facilityBookOf(ctx.v2, bank.ticker);
+        const facilityBookLocal = facilityBookOf(ctx.v2, bank.ticker);
         const settledCashUSD = reservesUSD
           + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
         // REPO2: the floor is the face of THIS BILL actually pledged, not a blended share.
@@ -217,13 +217,13 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const fundableUSD = Math.min(
           Math.max(0, settledCashUSD - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
-          leverageHeadroomUSD(sheet, reservesUSD, facilityBookUSD)
+          leverageHeadroomUSD(sheet, reservesUSD, facilityBookLocal)
         );
-        const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD, facilityBookUSD);
+        const appetiteUSD = sovereignBookCapacityUSD(sheet, reservesUSD, facilityBookLocal);
         const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet, reservesUSD, bankDepositLines(ctx, bank.ticker));
         activeBills.forEach((b) => {
-          const heldUSD = sheet.sovereignBondHoldingsByBond?.[b.key] ?? 0;
-          holdings.set(b.key, heldUSD);
+          const heldLocal = sheet.sovereignBondHoldingsByBond?.[b.key] ?? 0;
+          holdings.set(b.key, heldLocal);
           const bondShare = (outstandingByBond.get(b.key) ?? 0) / totalBillStockUSD;
           const bondShareOfSovStock = (outstandingByBond.get(b.key) ?? 0) / wholeSovStockUSD;
           demand.set(b.key, {
@@ -294,11 +294,11 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           if (!billIds.has(h.instrumentId)) return;
           heldByBond.set(h.instrumentId, (heldByBond.get(h.instrumentId) ?? 0) + (h.quantityOrNotionalUSD ?? 0));
         });
-        const cashUSD = cashOf(ctx.v2, comp);
-        const targetUSD = corporateTreasuryTargetUSD(cashUSD, comp.annualRevenue ?? 0, riskAversionOf(comp.management));
-        const heldUSD = Array.from(heldByBond.values()).reduce((a, v) => a + v, 0);
-        if (!(targetUSD > 1) && !(heldUSD > 1)) return;
-        const budgetUSD = Math.max(0, cashUSD
+        const cashLocal = cashOf(ctx.v2, comp);
+        const targetUSD = corporateTreasuryTargetUSD(cashLocal, comp.annualRevenue ?? 0, riskAversionOf(comp.management));
+        const heldLocal = Array.from(heldByBond.values()).reduce((a, v) => a + v, 0);
+        if (!(targetUSD > 1) && !(heldLocal > 1)) return;
+        const budgetUSD = Math.max(0, cashLocal
           + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: comp.ticker }));
         const holdings = new Map<string, number>();
         const demand = new Map<string, ParticipantDemand>();
@@ -318,7 +318,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       const priorDealerInventory = new Map<string, number>();
       (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => {
-        if (billIds.has(p.bondId)) priorDealerInventory.set(p.bondId, p.inventoryUSD);
+        if (billIds.has(p.bondId)) priorDealerInventory.set(p.bondId, p.inventoryLocal);
       });
 
       // PUB2b: a maturing bill rolls back into bills, so the CB's book keeps its shape rather
@@ -539,7 +539,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         updateBankSheet(ctx, bank.ticker, {
           ...bookPnL(existingSheet, -feeUSD, 'bill book fee', bank.ticker),
           sovereignBondHoldingsByBond: byTenor,
-          sovereignBondHoldingsUSD: Math.round(Object.values(byTenor).reduce((s, v) => s + v, 0)),
+          sovereignBondHoldingsLocal: Math.round(Object.values(byTenor).reduce((s, v) => s + v, 0)),
         });
       });
 
@@ -638,12 +638,12 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           // same retirement.
           const row = trancheRowOf(ctx.v2, inst.id);
           if (row === undefined) return;
-          const takeUSD = Math.min(unplacedUSD, ctx.v2.tranches.principalUSD[row]);
+          const takeUSD = Math.min(unplacedUSD, ctx.v2.tranches.principalLocal[row]);
           if (!(takeUSD > 0)) return;
           const govIssuer = { id: `GOV_${regionId}`, ticker: `GOV_${regionId}`, region: regionId, kind: 'GOVERNMENT' as const };
           retireTranche(ctx.v2, govIssuer, row, takeUSD, 'bill issuance withdrawn');
           commitLadder(ctx.v2, govIssuer,
-            ladderRowsOf(ctx.v2, govIssuer.id).filter((r) => ctx.v2.tranches.principalUSD[r] > 0.01));
+            ladderRowsOf(ctx.v2, govIssuer.id).filter((r) => ctx.v2.tranches.principalLocal[r] > 0.01));
         });
       }
       // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the
@@ -652,8 +652,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const bondDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !billIds.has(p.bondId));
       const billDealerRows = activeBills.map((b) => ({
         bondId: b.key,
-        inventoryUSD: deskViewById.get(b.key) ?? 0,
-      })).filter((r) => Math.abs(r.inventoryUSD) > 1);
+        inventoryLocal: deskViewById.get(b.key) ?? 0,
+      })).filter((r) => Math.abs(r.inventoryLocal) > 1);
       reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: [...bondDealerRows, ...billDealerRows] };
     }
 
@@ -686,8 +686,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       let maturedUSD = 0;
       for (const r of ladderRowsOf(v2Mirror, comp.id)) {
         if (!(TSf.flags[r] & TR_CP)) continue;
-        cpOutstandingUSD += TSf.principalUSD[r];
-        if (TSf.maturityWeek[r] <= ctx.nextWeek) maturedUSD += TSf.principalUSD[r];
+        cpOutstandingUSD += TSf.principalLocal[r];
+        if (TSf.maturityWeek[r] <= ctx.nextWeek) maturedUSD += TSf.principalLocal[r];
       }
       const survivingUSD = Math.max(0, cpOutstandingUSD - maturedUSD);
 
@@ -702,8 +702,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // price is not, and what the book will not fund at that price does not place.
       let annualInterest = 0;
       for (const r of ladderRowsOf(v2Mirror, comp.id)) {
-        if (!(TSf.flags[r] & TR_FLOATING)) annualInterest += TSf.principalUSD[r] * (Number.isNaN(TSf.couponRate[r]) ? 0.05 : TSf.couponRate[r]);
-        else annualInterest += TSf.principalUSD[r] * (reg.policyRate + (Number.isNaN(TSf.floatingMarginBps[r]) ? 200 : TSf.floatingMarginBps[r]) / 10000);
+        if (!(TSf.flags[r] & TR_FLOATING)) annualInterest += TSf.principalLocal[r] * (Number.isNaN(TSf.couponRate[r]) ? 0.05 : TSf.couponRate[r]);
+        else annualInterest += TSf.principalLocal[r] * (reg.policyRate + (Number.isNaN(TSf.floatingMarginBps[r]) ? 200 : TSf.floatingMarginBps[r]) / 10000);
       }
       const latestSnap = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
       const dividendsQuarterUSD = Math.abs(latestSnap?.cashFlowStatement?.dividendsPaid ?? 0);
@@ -758,7 +758,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // institutions left the desks carrying a claim on CP that had already been repaid, and the
       // ledger check caught it immediately: holders at 117% of the EUR stock by week ten.
       const cpBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
-      const deskCpRows = new Map<string, { instrumentId: string; inventoryUSD: number; units?: number }[]>();
+      const deskCpRows = new Map<string, { instrumentId: string; inventoryLocal: number; units?: number }[]>();
       cpBanks.forEach((bank) => {
         const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
         if (sheet?.dealerDeskInventory?.[CP_BOOK]) deskCpRows.set(bank.ticker, sheet.dealerDeskInventory[CP_BOOK]);
@@ -772,8 +772,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           let repaidUSD = 0;
           rows.forEach((r) => {
             if (r.instrumentId !== iss.comp.id) return;
-            repaidUSD += r.inventoryUSD * (1 - survivingShare);
-            r.inventoryUSD *= survivingShare;
+            repaidUSD += r.inventoryLocal * (1 - survivingShare);
+            r.inventoryLocal *= survivingShare;
             if (r.units !== undefined) r.units *= survivingShare;
           });
           if (repaidUSD > 0) {
@@ -791,8 +791,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           }
         });
         heldByIssuerByEntity.forEach((byIssuer, entityId) => {
-          const heldUSD = byIssuer.get(iss.comp.id) ?? 0;
-          if (!(heldUSD > 0)) return;
+          const heldLocal = byIssuer.get(iss.comp.id) ?? 0;
+          if (!(heldLocal > 0)) return;
           // 13b: the matured tranches' rows are what is repaid; a row keyed by the issuer itself
           // (no tranche behind it) shares the issuer's surviving ratio as before.
           let repaidUSD = 0;
@@ -803,8 +803,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             if (tr === undefined) repaidUSD += usd * (1 - survivingShare);
             else if ((TSm.flags[tr] & TR_CP) && TSm.maturityWeek[tr] <= ctx.nextWeek) repaidUSD += usd;
           });
-          repaidUSD = Math.min(heldUSD, repaidUSD);
-          byIssuer.set(iss.comp.id, heldUSD - repaidUSD);
+          repaidUSD = Math.min(heldLocal, repaidUSD);
+          byIssuer.set(iss.comp.id, heldLocal - repaidUSD);
           if (repaidUSD > 0) {
             pay(ctx, {
               payer: { kind: 'COMPANY', ticker: iss.comp.ticker },
@@ -830,7 +830,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
               // week: `applyHolderInterestAccruals` (stage 08) pays every holder of record
               // exactly what it accrued, from the issuer, and clears the balance.
               payHoldersAccruedInterest(ctx, v2Mirror.internedStrings[TSr.idRef[r]], 'COMMERCIAL_PAPER');
-              if (TSr.principalUSD[r] > 0.01) retireTranche(v2Mirror, cpIssuer, r, TSr.principalUSD[r], 'commercial paper matured');
+              if (TSr.principalLocal[r] > 0.01) retireTranche(v2Mirror, cpIssuer, r, TSr.principalLocal[r], 'commercial paper matured');
             } else kept.push(r);
           }
           commitLadder(v2Mirror, cpIssuer, kept);
@@ -845,7 +845,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           ...sheet,
           dealerDeskInventory: {
             ...(sheet.dealerDeskInventory ?? {}),
-            [CP_BOOK]: rows.filter((r) => Math.abs(r.inventoryUSD) > 1),
+            [CP_BOOK]: rows.filter((r) => Math.abs(r.inventoryLocal) > 1),
           },
         });
       });
@@ -859,7 +859,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const TSb = v2Mirror.tranches;
         let survCouponSum = 0;
         for (const r of ladderRowsOf(v2Mirror, iss.comp.id)) {
-          if (TSb.flags[r] & TR_CP) survCouponSum += TSb.principalUSD[r] * (Number.isNaN(TSb.couponRate[r]) ? 0 : TSb.couponRate[r]);
+          if (TSb.flags[r] & TR_CP) survCouponSum += TSb.principalLocal[r] * (Number.isNaN(TSb.couponRate[r]) ? 0 : TSb.couponRate[r]);
         }
         const weightedCouponBps = iss.survivingUSD > 0 ? survCouponSum / iss.survivingUSD * 10000 : 0;
         const fairOpeningBps = cpReservationYieldBps({
@@ -873,7 +873,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           // OWN7: what the INSTITUTIONS hold, before the desks are built. Their own positions are
           // added below — the desks have to be sized against a live float, and a float of zero
           // makes `buildDealerDeskParticipants` return no desk at all.
-          outstandingUSD: iss.survivingUSD,
+          outstandingLocal: iss.survivingUSD,
           tradableFloatUSD: heldByInstitutionsUSD.get(iss.comp.id) ?? 0,
           currentStat: weightedCouponBps > 0 ? weightedCouponBps : Math.max(1, fairOpeningBps),
           statKind: 'YIELD_LIKE',
@@ -896,7 +896,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const sleeveUSD = institutionTotalAssetsUSD(ctx, entity) * entity.assetAllocationTarget.cashPct * CP_SHARE_OF_TERM_SLEEVE;
         const holdings = heldByIssuerByEntity.get(entity.id) ?? new Map<string, number>();
         if (!(sleeveUSD > 0) && holdings.size === 0) return;
-        const cashUSD = institutionSpendableUSD(ctx, entity) * CP_SHARE_OF_TERM_SLEEVE;
+        const cashLocal = institutionSpendableUSD(ctx, entity) * CP_SHARE_OF_TERM_SLEEVE;
         const demand = new Map<string, ParticipantDemand>();
         // §7.340 — ONE sleeve, many bids: the per-issuer limit is a CONCENTRATION rule, not a
         // budget, and with fifty issuers in the book fifty bids at 5% each offered the same
@@ -917,7 +917,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             }),
             maxHoldingUSD: lineUSD,
             fullSizeStatRange: CP_FULL_SIZE_YIELD_RANGE_BPS,
-            maxNetPurchaseUSD: cashUSD * bidShare,
+            maxNetPurchaseUSD: cashLocal * bidShare,
           });
         });
         cpParticipants.push({ id: entity.id, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
@@ -970,7 +970,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             ? { trancheId: `${iss.comp.ticker}-CP-${ctx.nextWeek}`, sliceUSD: primarySliceOf(usd - (prior?.get(issuerId) ?? 0), cpBoughtByIssuer.get(issuerId) ?? 0, outcome.marketTakeUSD) }
             : undefined;
           splitAcrossTranches(v2Mirror, issuerId, 'COMMERCIAL_PAPER', usd, primary).forEach((t) => {
-            if (t.usd > 1) rows.push({ instrumentId: t.instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, units: t.usd, faceUSD: t.usd });
+            if (t.usd > 1) rows.push({ instrumentId: t.instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, units: t.usd, faceLocal: t.usd });
           });
         });
         store.append(entity.id, rows);
@@ -984,7 +984,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         if (placedUSD > 1) {
           issueTranche(v2Mirror, { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId }, {
             id: `${iss.comp.ticker}-CP-${ctx.nextWeek}`,
-            principalUSD: placedUSD,
+            principalLocal: placedUSD,
             rateType: 'FIXED',
             couponRate: Number((clearedBps / 10000).toFixed(4)),
             originationWeek: ctx.nextWeek,
@@ -1002,7 +1002,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         if (revolverUSD > 1) {
           issueTranche(v2Mirror, { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId }, {
             id: `${iss.comp.ticker}-REVOLVER-${ctx.nextWeek}`,
-            principalUSD: revolverUSD,
+            principalLocal: revolverUSD,
             rateType: 'FLOATING',
             floatingMarginBps: REVOLVER_MARGIN_BPS,
             originationWeek: ctx.nextWeek,

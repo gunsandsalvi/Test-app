@@ -118,7 +118,7 @@ function buildCarrierOffers(
     // CAP — the carrier's own weekly capital charge, spread across its fleet by capacity. The
     // return its hulls require is a real cost of offering the capacity, and a floor without it
     // prices freight where the fleet cannot be replaced.
-    const netPpeUSD = Math.max(0, (carrier.grossPPEUSD ?? 0) - (carrier.accumulatedDepreciationUSD ?? 0));
+    const netPpeUSD = Math.max(0, (carrier.grossPPELocal ?? 0) - (carrier.accumulatedDepreciationLocal ?? 0));
     const costOfCapital = Math.max(0,
       (regions[home]?.zeroRates?.tenor10Y ?? regions[home]?.policyRate ?? 0) + (carrier.beta ?? 1) * EQUITY_RISK_PREMIUM);
     const fleetCapacityTonnes = (carrier.carrierFleet?.assets ?? []).reduce((a, x: FreightAsset) => {

@@ -39,27 +39,27 @@ test('a floating tranche has nothing to refinance into and never calls', () => {
 
 test('the callable size is smaller than the free version, because cash covers the premium', () => {
   // 100 of cash over the floor at a 25% premium buys 80 of principal, not 100.
-  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 1000, cashUSD: 100, cashFloorUSD: 0,
+  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 1000, cashLocal: 100, cashFloorUSD: 0,
     premiumPerDollar: 0.25 }), 80);
   // And never more than the tranche itself.
-  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 50, cashUSD: 1e9, cashFloorUSD: 0,
+  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 50, cashLocal: 1e9, cashFloorUSD: 0,
     premiumPerDollar: 0 }), 50);
 });
 
 test('a firm at or below its cash floor calls nothing', () => {
-  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 1000, cashUSD: 100, cashFloorUSD: 100,
+  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 1000, cashLocal: 100, cashFloorUSD: 100,
     premiumPerDollar: 0 }), 0);
-  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 1000, cashUSD: -1e9, cashFloorUSD: 0,
+  assert.equal(callableAmountUSD({ tranchePrincipalUSD: 1000, cashLocal: -1e9, cashFloorUSD: 0,
     premiumPerDollar: 0 }), 0);
 });
 
 test('the maturity window is what has to be refinanced or repaid', () => {
-  const ladder = [{ principalUSD: 1, maturityWeek: 10 }, { principalUSD: 1, maturityWeek: 100 },
-                  { principalUSD: 1 }];
+  const ladder = [{ principalLocal: 1, maturityWeek: 10 }, { principalLocal: 1, maturityWeek: 100 },
+                  { principalLocal: 1 }];
   assert.equal(tranchesDueWithin(ladder, 5, 52).length, 1);
   assert.equal(tranchesDueWithin(ladder, 5, 200).length, 2, 'undated paper is never "due"');
 });
 
 test('a ladder carries no zero rungs', () => {
-  assert.equal(dropExhausted([{ principalUSD: 0 }, { principalUSD: 0.005 }, { principalUSD: 5 }], 0.01).length, 1);
+  assert.equal(dropExhausted([{ principalLocal: 0 }, { principalLocal: 0.005 }, { principalLocal: 5 }], 0.01).length, 1);
 });

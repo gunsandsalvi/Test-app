@@ -223,7 +223,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       title: `${c.name} starts mothballing its plant`,
       description: `${c.ticker} has run part of its plant idle for its management's horizon — it makes what it expects to sell — and begins taking it offline (${P(share, 1)} this week, no upkeep, no staff). Revenue ${M(c.annualRevenue)}, expected earnings ${M(c.expectedEbitdaUSD ?? c.ebitda)}, ${N(c.employeeCount)} people.`,
       refs: [company(c), region(c.region)],
-      materialityUSD: (c.grossPPEUSD ?? 0) * share,
+      materialityUSD: (c.grossPPELocal ?? 0) * share,
       impactRegion: c.region, impactSector: c.sector, affectedTicker: c.ticker,
     });
   });
@@ -232,7 +232,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   ctx.updatedCompanies.filter((c) => c.isBankEntity && isActiveCompany(c)).forEach((b) => {
     const sheet = ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet;
     if (!sheet) return;
-    const now = sheet.srfBorrowingUSD ?? 0;
+    const now = sheet.srfBorrowingLocal ?? 0;
     const toldLastWeek = state.newsFeed.some((n) => n.id === `window-${b.ticker}-${week - 1}`);
     if (now > 1e6 && !toldLastWeek) {
       push({
@@ -240,7 +240,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         kind: 'central bank window',
         category: 'CENTRAL_BANK',
         title: `${b.name} borrows at the central bank`,
-        description: `${b.ticker} draws ${M(now)} at the standing facility: reserves ${M(bankReservesOf(ctx.v2, b.ticker))} against ${M(householdDepositsAt(ctx.v2, b.ticker, currencyOf(b.region)))} of household deposits, capital ratio ${P(sheet.bankCapitalRatio)}, central bank loan ${M(sheet.centralBankLoanUSD ?? 0)}.`,
+        description: `${b.ticker} draws ${M(now)} at the standing facility: reserves ${M(bankReservesOf(ctx.v2, b.ticker))} against ${M(householdDepositsAt(ctx.v2, b.ticker, currencyOf(b.region)))} of household deposits, capital ratio ${P(sheet.bankCapitalRatio)}, central bank loan ${M(sheet.centralBankLoanLocal ?? 0)}.`,
         refs: [company(b), region(b.region)],
         materialityUSD: now,
         impactRegion: b.region, impactSector: b.sector, affectedTicker: b.ticker,
@@ -252,7 +252,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   // ---- 7. Estates closed: what the creditors got. ----
   (ctx.estates ?? []).filter((e) => e.closedWeek === week).forEach((e) => {
     const c = byTicker.get(e.ticker) ?? prevByTicker.get(e.ticker);
-    const owed = e.claims.reduce((a, cl) => a + (cl.principalUSD ?? 0), 0);
+    const owed = e.claims.reduce((a, cl) => a + (cl.principalLocal ?? 0), 0);
     push({
       id: `estate-${e.ticker}-${week}`,
       kind: 'estate closed',

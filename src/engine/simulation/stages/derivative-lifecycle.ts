@@ -264,6 +264,6 @@ export function settleDerivativeClass(
 }
 
 /** Initial margin on a contract about to be struck: the A side's cash, held by the B side. */
-export function initialMarginUSD(c: Pick<DerivativeContract, 'classId' | 'notionalUSD'>): number {
-  return c.notionalUSD * derivativeProfile(c.classId).initialMarginRate;
+export function initialMarginUSD(c: Pick<DerivativeContract, 'classId' | 'notional'>): number {
+  return c.notional * derivativeProfile(c.classId).initialMarginRate;
 }

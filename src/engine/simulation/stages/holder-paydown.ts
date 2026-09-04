@@ -61,8 +61,8 @@ export function reconcileHolderPrincipal(args: {
   });
   deskSheets.forEach(({ sheet }) => {
     (sheet?.dealerDeskInventory?.[deskBook] ?? []).forEach((p) => {
-      if (p.inventoryUSD > 0 && outstandingByIssuerId.has(p.instrumentId)) {
-        heldByIssuer.set(p.instrumentId, (heldByIssuer.get(p.instrumentId) ?? 0) + p.inventoryUSD);
+      if (p.inventoryLocal > 0 && outstandingByIssuerId.has(p.instrumentId)) {
+        heldByIssuer.set(p.instrumentId, (heldByIssuer.get(p.instrumentId) ?? 0) + p.inventoryLocal);
       }
     });
   });
@@ -72,12 +72,12 @@ export function reconcileHolderPrincipal(args: {
   // drift this burns is B-scale.
   const factorByIssuer = new Map<string, number>();
   const trace = process.env.PAYDOWN_TRACE === '1';
-  heldByIssuer.forEach((heldUSD, issuerId) => {
-    const outstandingUSD = Math.max(0, outstandingByIssuerId.get(issuerId) ?? 0);
-    if (!(heldUSD > outstandingUSD + 1e6)) return;
+  heldByIssuer.forEach((heldLocal, issuerId) => {
+    const outstandingLocal = Math.max(0, outstandingByIssuerId.get(issuerId) ?? 0);
+    if (!(heldLocal > outstandingLocal + 1e6)) return;
     const issuer = issuerById.get(issuerId);
-    if (trace && heldUSD - outstandingUSD > 1e9) {
-      console.log(`  [paydown] ${deskBook} ${issuer?.ticker ?? issuerId} held ${(heldUSD / 1e6).toFixed(0)}M out ${(outstandingUSD / 1e6).toFixed(0)}M`
+    if (trace && heldLocal - outstandingLocal > 1e9) {
+      console.log(`  [paydown] ${deskBook} ${issuer?.ticker ?? issuerId} held ${(heldLocal / 1e6).toFixed(0)}M out ${(outstandingLocal / 1e6).toFixed(0)}M`
         + `${!issuer ? ' SKIP:no-issuer' : issuer.isBankEntity ? ' SKIP:bank' : ` cash ${(cashOf(ctx.v2, issuer) / 1e6).toFixed(0)}M`}`);
     }
     if (!issuer) return;
@@ -87,10 +87,10 @@ export function reconcileHolderPrincipal(args: {
     // holders' books until G2 unifies the roll with its modeled holders; it crosses the $1M
     // slack rarely (twice in eight weeks across all banks).
     if (issuer.isBankEntity) return;
-    const desiredBurnUSD = heldUSD - outstandingUSD;
+    const desiredBurnUSD = heldLocal - outstandingLocal;
     const availableUSD = Math.max(0, cashOf(ctx.v2, issuer) + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: issuer.ticker }));
     const burnUSD = Math.min(desiredBurnUSD, availableUSD);
-    if (burnUSD > 1) factorByIssuer.set(issuerId, (heldUSD - burnUSD) / heldUSD);
+    if (burnUSD > 1) factorByIssuer.set(issuerId, (heldLocal - burnUSD) / heldLocal);
   });
   if (factorByIssuer.size === 0) return;
 
@@ -122,8 +122,8 @@ export function reconcileHolderPrincipal(args: {
     let touched = false;
     const newRows = rows.map((p) => {
       const factor = factorByIssuer.get(p.instrumentId);
-      if (factor === undefined || !(p.inventoryUSD > 0)) return p;
-      const paidUSD = p.inventoryUSD * (1 - factor);
+      if (factor === undefined || !(p.inventoryLocal > 0)) return p;
+      const paidUSD = p.inventoryLocal * (1 - factor);
       if (paidUSD > 1) {
         const payer = payerOf(p.instrumentId);
         if (payer) {
@@ -139,7 +139,7 @@ export function reconcileHolderPrincipal(args: {
       touched = true;
       return {
         ...p,
-        inventoryUSD: p.inventoryUSD * factor,
+        inventoryLocal: p.inventoryLocal * factor,
         units: p.units !== undefined ? p.units * factor : undefined,
       };
     });

@@ -26,7 +26,7 @@ import { transferHolding } from '../../ledger/holdings-ledger';
 import { isTrancheKind } from '../../../domain/assets';
 import { GameState, RegionId, Company, InstitutionalEntity, ItemizedHolding } from '../../../types';
 import {
-  Estate, EstateClaim, CLAIM_SENIORITY, estateAssetsUSD, claimsAtSeniority, outstandingUSD,
+  Estate, EstateClaim, CLAIM_SENIORITY, estateAssetsUSD, claimsAtSeniority, outstandingLocal,
   realisedDebtRecoveryRate,
 } from '../../../domain/estate';
 import { getOutputInventoryUSD, isActiveCompany } from '../../../domain/company';
@@ -190,7 +190,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     estate.assets.receivablesUSD = receivablesBySellerUSD.get(estate.ticker) ?? 0;
     // The inventory is the REAL rows too: the finished stock and the
     // input lots (consignments the receiver took delivery of land here), read each week.
-    estate.assets.inventoryUSD = comp ? Math.max(0, getOutputInventoryUSD(comp)) + totalInputValueUSD(ctx.v2, comp.id) : 0;
+    estate.assets.inventoryLocal = comp ? Math.max(0, getOutputInventoryUSD(comp)) + totalInputValueUSD(ctx.v2, comp.id) : 0;
 
     // A WORKOUT IS A DISPOSAL PROGRAMME, NOT A DECAY. Both schedules below run from the week
     // the estate opened and the last week of each takes whatever is left in one lot. Selling a
@@ -203,9 +203,9 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
 
     // Inventory leaves at the company's OWN turnover — the rate its market was taking the goods
     // before it failed — and at the discount a buyer needs for holding it that long.
-    const turnoverWeeks = Math.max(1, inventoryTurnoverWeeks(comp, estate.assets.inventoryUSD));
-    const invSoldUSD = estate.assets.inventoryUSD / weeksLeft(turnoverWeeks);
-    estate.assets.inventoryUSD -= invSoldUSD;
+    const turnoverWeeks = Math.max(1, inventoryTurnoverWeeks(comp, estate.assets.inventoryLocal));
+    const invSoldUSD = estate.assets.inventoryLocal / weeksLeft(turnoverWeeks);
+    estate.assets.inventoryLocal -= invSoldUSD;
 
     // Plant goes to peers as cheap capex, at the rate its region actually buys capital goods
     // against the plant already installed there. Slow, and the discount is the largest, because
@@ -237,13 +237,13 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // `openEstate` and never touched again, it kept the close test below permanently false: an
     // estate opened with any cash at all could never close, its holders kept dead paper for
     // ever, and the dead issuer's ladder was never extinguished.
-    estate.assets.cashUSD = availableUSD - paidUSD;
+    estate.assets.cashLocal = availableUSD - paidUSD;
 
     // Closed when there is nothing left to sell or collect AND the account is empty (or every
     // claim is satisfied, in which case the waterfall stopped short of the money): the residual
     // claims are written off.
-    const claimsRemainUSD = outstandingUSD(estate.claims);
-    if (estateAssetsUSD(estate.assets) <= 1 && (estate.assets.cashUSD <= 1 || claimsRemainUSD <= 1)) {
+    const claimsRemainUSD = outstandingLocal(estate.claims);
+    if (estateAssetsUSD(estate.assets) <= 1 && (estate.assets.cashLocal <= 1 || claimsRemainUSD <= 1)) {
       estate.closedWeek = week;
       writeOffResidual(ctx, index, estate);
       // A closed estate takes no more delivery — what is still on its
@@ -341,7 +341,7 @@ function sellAssetsToPeers(
     // bargain is book minus price), and the inventory rows with their real units.
     const ppeShareUSD = ppeSoldUSD * share;
     if (ppeShareUSD > 0) {
-      peer.grossPPEUSD = (peer.grossPPEUSD ?? 0) + ppeShareUSD;
+      peer.grossPPELocal = (peer.grossPPELocal ?? 0) + ppeShareUSD;
     }
     if (comp && invSoldUSD > 0 && preInvUSD > 0) {
       // The slice each peer takes moves by wire, off the ORIGINAL rows (the shares
@@ -379,11 +379,11 @@ function distribute(
   [CLAIM_SENIORITY.SECURED, CLAIM_SENIORITY.UNSECURED, CLAIM_SENIORITY.EQUITY].forEach((seniority) => {
     if (remainingUSD <= 1) return;
     const claims = claimsAtSeniority(estate, seniority);
-    const owedUSD = outstandingUSD(claims);
+    const owedUSD = outstandingLocal(claims);
     if (!(owedUSD > 0)) return;
     const payUSD = Math.min(remainingUSD, owedUSD);
     claims.forEach((claim) => {
-      const stillOwedUSD = Math.max(0, claim.principalUSD - claim.recoveredUSD);
+      const stillOwedUSD = Math.max(0, claim.principalLocal - claim.recoveredUSD);
       if (stillOwedUSD <= 0) return;
       const shareUSD = payUSD * (stillOwedUSD / owedUSD);
       if (shareUSD <= 0) return;
@@ -409,7 +409,7 @@ function distribute(
 /** Whatever the workout could not pay comes off the holders' books as a loss. */
 function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Estate): void {
   estate.claims.forEach((claim) => {
-    const lostUSD = Math.max(0, claim.principalUSD - claim.recoveredUSD);
+    const lostUSD = Math.max(0, claim.principalLocal - claim.recoveredUSD);
     if (lostUSD <= 0) return;
     reduceHolding(ctx, index, claim, estate.companyId, lostUSD, true);
   });
@@ -421,7 +421,7 @@ function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Es
     const rows = byInstrument.get(estate.companyId);
     if (!rows) return;
     rows.forEach((r) => {
-      const leftUSD = H.qtyUSD[r];
+      const leftUSD = H.qtyLocal[r];
       if (!(leftUSD > 0)) return;
       const type = index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
       const region = index.v2.internedStrings[H.regionRef[r]] as RegionId;
@@ -465,7 +465,7 @@ function reduceHolding(
       const takes: { type: ItemizedHolding['instrumentType']; region: RegionId; usd: number; id: string }[] = [];
       for (let i = 0; i < rows.length && leftUSD > 0; i++) {
         const r = rows[i];
-        const takeUSD = Math.min(leftUSD, H.qtyUSD[r]);
+        const takeUSD = Math.min(leftUSD, H.qtyLocal[r]);
         leftUSD -= takeUSD;
         if (takeUSD > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeUSD, id: index.v2.internedStrings[H.instrRef[r]] });
       }
@@ -498,7 +498,7 @@ function reduceHolding(
     // (there is no loan row to write down); what the ladder still carries for this lender bounds
     // what this write can extinguish.
     const onLadderUSD = facilitiesOfBorrower(index.v2, companyId)
-      .filter((f) => f.bankTicker === ticker).reduce((a, f) => a + f.principalUSD, 0);
+      .filter((f) => f.bankTicker === ticker).reduce((a, f) => a + f.principalLocal, 0);
     const leftUSD = Math.max(0, amountUSD - onLadderUSD);
     // Equity moves by what the BOOK moved: a LOSS writes equity down by what was actually
     // extinguished — no more; a RECOVERY is an asset swap for the matched slice (cash in, facility
@@ -517,7 +517,7 @@ function reduceHolding(
 
 function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   const claims: EstateClaim[] = [];
-  const addClaim = (c: EstateClaim) => { if (c.principalUSD > 1) claims.push(c); };
+  const addClaim = (c: EstateClaim) => { if (c.principalLocal > 1) claims.push(c); };
   // ONE BASIS FOR THE WHOLE WATERFALL, AND IT IS FACE. A bank's facility claim is the face on
   // the dead firm's ladder; a register holder's claim is the quantity its row carries, which is
   // face while the wire layer prices credit at par. The two must never drift apart, so what the
@@ -532,7 +532,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
       // A row names a tranche or its issuer; the claim is on the issuer either way.
       if (issuerIdOf(ctx.v2, ctx.v2.internedStrings[H.instrRef[r]]) !== comp.id) continue;
-      const usd = H.qtyUSD[r];
+      const usd = H.qtyLocal[r];
       const instrumentType = ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
       if (instrumentType !== 'EQUITY') {
         const id = ctx.v2.internedStrings[H.instrRef[r]];
@@ -544,18 +544,18 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
       // to COMPILE until it does.
       switch (instrumentType) {
         case 'LEVERAGED_LOAN':
-          addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'LEVERAGED_LOAN', seniority: CLAIM_SENIORITY.SECURED, principalUSD: usd, recoveredUSD: 0 });
+          addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'LEVERAGED_LOAN', seniority: CLAIM_SENIORITY.SECURED, principalLocal: usd, recoveredUSD: 0 });
           break;
         case 'CORP_BOND':
-          addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'CORP_BOND', seniority: CLAIM_SENIORITY.UNSECURED, principalUSD: usd, recoveredUSD: 0 });
+          addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'CORP_BOND', seniority: CLAIM_SENIORITY.UNSECURED, principalLocal: usd, recoveredUSD: 0 });
           break;
         case 'COMMERCIAL_PAPER':
           // CP: senior unsecured, ranking with the bonds. Its holders are money funds, which is
           // exactly why a CP default is a systemic event and a bond default usually is not.
-          addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'COMMERCIAL_PAPER', seniority: CLAIM_SENIORITY.UNSECURED, principalUSD: usd, recoveredUSD: 0 });
+          addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'COMMERCIAL_PAPER', seniority: CLAIM_SENIORITY.UNSECURED, principalLocal: usd, recoveredUSD: 0 });
           break;
         case 'EQUITY':
-          addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'EQUITY', seniority: CLAIM_SENIORITY.EQUITY, principalUSD: usd, recoveredUSD: 0 });
+          addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'EQUITY', seniority: CLAIM_SENIORITY.EQUITY, principalLocal: usd, recoveredUSD: 0 });
           break;
         case 'GOV_BOND':
         case 'PE_FUND_INTEREST':
@@ -572,11 +572,11 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   // The banks' own facilities: secured, and they rank with the first-lien loans. Step 10: the
   // lender's claim is the facility row on this firm's ladder, one claim per lender.
   const facilityByLender = new Map<string, number>();
-  facilitiesOfBorrower(ctx.v2, comp.id).forEach((f) => facilityByLender.set(f.bankTicker, (facilityByLender.get(f.bankTicker) ?? 0) + f.principalUSD));
+  facilitiesOfBorrower(ctx.v2, comp.id).forEach((f) => facilityByLender.set(f.bankTicker, (facilityByLender.get(f.bankTicker) ?? 0) + f.principalLocal));
   ctx.updatedCompanies.forEach((bank) => {
     const usd = facilityByLender.get(bank.ticker);
     if (!bank.isBankEntity || !usd) return;
-    addClaim({ holder: { kind: 'BANK', ticker: bank.ticker }, instrumentType: 'BANK_FACILITY', seniority: CLAIM_SENIORITY.SECURED, principalUSD: usd, recoveredUSD: 0 });
+    addClaim({ holder: { kind: 'BANK', ticker: bank.ticker }, instrumentType: 'BANK_FACILITY', seniority: CLAIM_SENIORITY.SECURED, principalLocal: usd, recoveredUSD: 0 });
   });
   if (claims.length === 0) return undefined;
   // ONE INVARIANT, ONE REPORTER. This used to `defect()` — killing the run — when an estate's
@@ -587,18 +587,18 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   // estate takes what the register actually claims; O7 owns the size of the gap and step 11f owns
   // closing it.
 
-  const grossPpeUSD = comp.grossPPEUSD ?? 0;
-  const netPpeUSD = Math.max(0, grossPpeUSD - (comp.accumulatedDepreciationUSD ?? 0));
+  const grossPpeUSD = comp.grossPPELocal ?? 0;
+  const netPpeUSD = Math.max(0, grossPpeUSD - (comp.accumulatedDepreciationLocal ?? 0));
   return {
     companyId: comp.id,
     ticker: comp.ticker,
     regionId: comp.region as RegionId,
     openedWeek: ctx.nextWeek,
     assets: {
-      cashUSD: Math.max(0, cashOf(ctx.v2, comp)),
+      cashLocal: Math.max(0, cashOf(ctx.v2, comp)),
       receivablesUSD: Math.max(0, comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE * 0.6),
       // The finished stock and the input lots — the rows the workout sells and re-reads weekly.
-      inventoryUSD: Math.max(0, getOutputInventoryUSD(comp)) + totalInputValueUSD(ctx.v2, comp.id),
+      inventoryLocal: Math.max(0, getOutputInventoryUSD(comp)) + totalInputValueUSD(ctx.v2, comp.id),
       ppeUSD: netPpeUSD,
     },
     claims,
@@ -607,10 +607,10 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
 }
 
 /** Weeks of sales the inventory represents — the rate its own market was taking it. */
-function inventoryTurnoverWeeks(comp: Company | undefined, inventoryUSD: number): number {
-  if (!comp || !(inventoryUSD > 0)) return 1;
+function inventoryTurnoverWeeks(comp: Company | undefined, inventoryLocal: number): number {
+  if (!comp || !(inventoryLocal > 0)) return 1;
   const weeklySalesUSD = Math.max(1, comp.annualRevenue / 52);
-  return Math.max(1, Math.min(156, inventoryUSD / weeklySalesUSD));
+  return Math.max(1, Math.min(156, inventoryLocal / weeklySalesUSD));
 }
 
 /** How long it takes a region to absorb a plant: its own installed base against what it buys. */
@@ -625,7 +625,7 @@ function regionalPpeAbsorptionWeeks(
   let weeklyCapexUSD = 0;
   ctx.updatedCompanies.forEach((c) => {
     if (c.region !== regionId) return;
-    installedUSD += Math.max(0, (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0));
+    installedUSD += Math.max(0, (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0));
     weeklyCapexUSD += Math.max(0, (c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)) / 52;
   });
   const out = (!(weeklyCapexUSD > 0) || !(installedUSD > 0)) ? 52

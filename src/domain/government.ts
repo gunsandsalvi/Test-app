@@ -45,7 +45,7 @@ export function sovereignCouponByBond(tranches: readonly GovDebtTrancheView[] | 
 export function weeklyInterestExpenseUSD(tranches: readonly GovDebtTrancheView[] | undefined): number {
   return (tranches ?? [])
     .filter((t) => !isDiscountBill(t.tenorAtIssuanceYears))
-    .reduce((a, t) => a + (t.principalUSD * (t.couponRate ?? 0)) / 52, 0);
+    .reduce((a, t) => a + (t.principalLocal * (t.couponRate ?? 0)) / 52, 0);
 }
 
 /**
@@ -70,8 +70,8 @@ export function isDiscountBill(tenorAtIssuanceYears: number): boolean {
  * were paid a coupon that does not exist. Discounting the proceeds while KEEPING the coupon would
  * have been worse than either — it doubles the cost.
  */
-export function discountBillProceedsUSD(faceUSD: number, annualYield: number, tenorYears: number): number {
-  return faceUSD / (1 + Math.max(-0.99, annualYield) * tenorYears);
+export function discountBillProceedsUSD(faceLocal: number, annualYield: number, tenorYears: number): number {
+  return faceLocal / (1 + Math.max(-0.99, annualYield) * tenorYears);
 }
 
 /**
@@ -109,10 +109,10 @@ export interface SovereignLadderIndex {
 }
 
 export function sovereignLadderIndex(
-  tranches: readonly { id: string; maturityWeek: number; tenorAtIssuanceYears: number; principalUSD: number }[] | undefined,
+  tranches: readonly { id: string; maturityWeek: number; tenorAtIssuanceYears: number; principalLocal: number }[] | undefined,
   week: number
 ): SovereignLadderIndex {
-  const live = new Map((tranches ?? []).filter((t) => t.principalUSD > 0).map((t) => [t.id, t] as const));
+  const live = new Map((tranches ?? []).filter((t) => t.principalLocal > 0).map((t) => [t.id, t] as const));
   return {
     has: (id) => live.has(id),
     isBill: (id) => { const t = live.get(id); return t !== undefined && isDiscountBill(t.tenorAtIssuanceYears); },
@@ -151,7 +151,7 @@ export function billYieldFromPrice(priceFraction: number, tenorYears: number): n
 export function weeklyBillDiscountAccrualUSD(tranches: readonly GovDebtTrancheView[] | undefined): number {
   return (tranches ?? [])
     .filter((t) => isDiscountBill(t.tenorAtIssuanceYears))
-    .reduce((a, t) => a + (t.principalUSD * (t.couponRate ?? 0)) / 52, 0);
+    .reduce((a, t) => a + (t.principalLocal * (t.couponRate ?? 0)) / 52, 0);
 }
 
 /**

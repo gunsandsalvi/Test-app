@@ -2,9 +2,9 @@
  * THE SETTLEMENT LAYER (CASH / SETL1) — where money actually moves.
  *
  * Until now every stage moved cash by mutating whatever field it owned: a company's `cash`, an
- * entity's `cashUSD`, a bank's `cashReservesUSD`, the treasury's account. Nothing connected them,
+ * entity's `cashLocal`, a bank's `cashReservesUSD`, the treasury's account. Nothing connected them,
  * which is exactly how corporate cash came to sit outside the banking system for the whole life
- * of the model — reported as `corporateDepositsUSD`, held by no bank, backed by no asset.
+ * of the model — reported as `corporateDepositsLocal`, held by no bank, backed by no asset.
  * A leak like that cannot happen once there is one place money moves through.
  *
  * **The real mechanism this reproduces.** A deposit is a named bank's liability to a named
@@ -348,14 +348,14 @@ export function pendingSettlementUSD(ctx: WeeklyStepContext, party: PartyRef): n
 /**
  * STOCK-LOAN COLLATERAL A LENDER HOLDS IS NOT ITS MONEY TO SPEND. A fund that lends
  * shares receives the borrower's cash and must hand it back when the shares return; it sits in
- * `cashUSD` beside the fund's own balance, and every book that sized a bid on `cash + pending`
+ * `cashLocal` beside the fund's own balance, and every book that sized a bid on `cash + pending`
  * spent it — the small-cap ETF bought equity with it, redeemed it away in kind, and then ran
  * ~10M under for fifteen weeks returning collateral it no longer had. Memoised per loan-book
  * array (the lending stage rebuilds the array when it writes).
  */
 const collateralHeldByBook = new WeakMap<object, Map<string, number>>();
 export function stockLoanCollateralHeldUSD(ctx: WeeklyStepContext, entityId: string): number {
-  let heldUSD = 0;
+  let heldLocal = 0;
   for (const reg of Object.values(ctx.updatedRegions)) {
     const book = reg?.securityLoanBook;
     if (!book || book.length === 0) continue;
@@ -364,13 +364,13 @@ export function stockLoanCollateralHeldUSD(ctx: WeeklyStepContext, entityId: str
       byLender = new Map<string, number>();
       for (const loan of book) {
         if (loan.lender.kind !== 'INSTITUTION') continue;
-        byLender.set(loan.lender.id, (byLender.get(loan.lender.id) ?? 0) + Math.max(0, loan.collateralUSD));
+        byLender.set(loan.lender.id, (byLender.get(loan.lender.id) ?? 0) + Math.max(0, loan.collateralLocal));
       }
       collateralHeldByBook.set(book, byLender);
     }
-    heldUSD += byLender.get(entityId) ?? 0;
+    heldLocal += byLender.get(entityId) ?? 0;
   }
-  return heldUSD;
+  return heldLocal;
 }
 
 /** What an institution can put behind a bid this week: its balance, plus what settlement already
@@ -704,7 +704,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   report.bankEquityDeltaByBank.forEach((equityDeltaUSD, ticker) => {
     const bank = bankByTicker.get(ticker);
     if (!bank?.bankBalanceSheet) { report.unresolvedUSD += equityDeltaUSD; return; }
-    if (equityDeltaUSD !== 0) bank.bankBalanceSheet = { ...bank.bankBalanceSheet, bankEquityUSD: bank.bankBalanceSheet.bankEquityUSD + equityDeltaUSD };
+    if (equityDeltaUSD !== 0) bank.bankBalanceSheet = { ...bank.bankBalanceSheet, bankEquityLocal: bank.bankBalanceSheet.bankEquityLocal + equityDeltaUSD };
   });
   projectBooks(ctx, accounts);
 

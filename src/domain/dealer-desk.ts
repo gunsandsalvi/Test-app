@@ -71,8 +71,8 @@ export const DESK_SPREAD_BPS_BY_BOOK: Record<string, number> = {
 export interface DealerDeskPosition {
   instrumentId: string;
   /** Marked to this week's cleared level. A trading book is carried at market, not at cost. */
-  inventoryUSD: number;
-  /** For a book that clears in UNITS (07e's shares), the position itself. `inventoryUSD` is
+  inventoryLocal: number;
+  /** For a book that clears in UNITS (07e's shares), the position itself. `inventoryLocal` is
    *  then this times the current price, and the difference week to week is real trading P&L —
    *  without it, the mark showed up as a phantom fee and the per-bank identity drifted by it. */
   units?: number;
@@ -103,7 +103,7 @@ export function dealerDeskGrossUSD(inventory: DealerDeskInventory | undefined, e
   let grossUSD = 0;
   Object.entries(inventory).forEach(([book, positions]) => {
     if (book === exceptBook) return;
-    positions.forEach((p) => { grossUSD += Math.abs(p.inventoryUSD); });
+    positions.forEach((p) => { grossUSD += Math.abs(p.inventoryLocal); });
   });
   return grossUSD;
 }
@@ -144,7 +144,7 @@ export function regionalDeskView(
   const byInstrument = new Map<string, number>();
   inventories.forEach((inv) => {
     (inv?.[book] ?? []).forEach((p) => {
-      byInstrument.set(p.instrumentId, (byInstrument.get(p.instrumentId) ?? 0) + p.inventoryUSD);
+      byInstrument.set(p.instrumentId, (byInstrument.get(p.instrumentId) ?? 0) + p.inventoryLocal);
     });
   });
   return byInstrument;

@@ -41,7 +41,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     const marginBps = reg ? facilityMarginBpsFor(v2, c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker)) : 350;
     const tranche = {
       id: `${c.id}-REVOLVER-OD-${ctx.nextWeek}-C`,
-      principalUSD: drawUSD,
+      principalLocal: drawUSD,
       rateType: 'FLOATING' as const,
       floatingMarginBps: marginBps,
       originationWeek: ctx.nextWeek,
@@ -140,15 +140,15 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       const loans = [...(c.bankBalanceSheet.businessLoans ?? [])];
       (smeRows ?? []).forEach((r) => {
         const existing = loans.find((l) => l.borrowerKind === 'SME_POOL' && l.borrowerId === r.poolId);
-        if (existing) existing.principalUSD = Math.round(existing.principalUSD + r.usd);
+        if (existing) existing.principalLocal = Math.round(existing.principalLocal + r.usd);
         else loans.push({
-          id: `${c.ticker}-SME-${r.industry}`, borrowerId: r.poolId, borrowerKind: 'SME_POOL', principalUSD: Math.round(r.usd),
+          id: `${c.ticker}-SME-${r.industry}`, borrowerId: r.poolId, borrowerKind: 'SME_POOL', principalLocal: Math.round(r.usd),
           marginBps: 350, originationWeek: ctx.nextWeek, termWeeks: 52 * 5, status: 'PERFORMING',
         });
       });
       const sheet = {
         ...c.bankBalanceSheet,
-        primeBrokerageLoansUSD: Math.round((c.bankBalanceSheet.primeBrokerageLoansUSD ?? 0) + drawnUSD),
+        primeBrokerageLoansLocal: Math.round((c.bankBalanceSheet.primeBrokerageLoansLocal ?? 0) + drawnUSD),
         businessLoans: loans,
       };
       return { ...c, bankBalanceSheet: sheet };

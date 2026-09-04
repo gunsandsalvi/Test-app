@@ -37,7 +37,7 @@ const REGION_CODE = new Map<string, number>(COMPANY_REGIONS.map((r, i) => [r, i]
 const NUMERIC_FIELDS = [
   'annualRevenue', 'baselineAnnualRevenue', 'ebitda', 'cash',
   'stockPrice', 'sharesOutstanding', 'employeeCount', 'previousEmployeeCount',
-  'baselineEmployeeCount', 'grossPPEUSD', 'accumulatedDepreciationUSD', 'maintenanceCapex',
+  'baselineEmployeeCount', 'grossPPELocal', 'accumulatedDepreciationLocal', 'maintenanceCapex',
   'growthCapex', 'capex', 'previousCapex', 'offeredWageIndex', 'unfilledVacancyShare',
   'inputSupplyConstraintFactor', 'executionQuality', 'oasSpreadBps',
   'revenueVolatility', 'forwardPE', 'baselineRecoveryRate', 'baselineDividendYield',

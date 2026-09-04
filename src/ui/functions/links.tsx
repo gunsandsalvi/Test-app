@@ -58,9 +58,9 @@ export const links: FunctionModule = {
         {managed.length ? <Refs title="funds it runs" world={world} nav={nav} refs={managed} /> : null}
         <SectionLabel>bank lines</SectionLabel>
         {lines.length === 0 ? <Card style={{ padding: '10px 14px', color: T.hint, fontSize: 12 }}>no facility drawn at any bank.</Card> : (
-          <Table rows={lines} keyOf={(l) => `${l.bankId}:${l.maturityWeek}:${l.principalUSD}`} columns={[
+          <Table rows={lines} keyOf={(l) => `${l.bankId}:${l.maturityWeek}:${l.principalLocal}`} columns={[
             { key: 'bank', label: 'bank', render: (l) => <Link to={{ type: 'company', id: l.bankId }} nav={nav}>{labelOf(world, { type: 'company', id: l.bankId }).ticker}</Link> },
-            { key: 'usd', label: 'drawn', render: (l) => money(l.principalUSD) },
+            { key: 'usd', label: 'drawn', render: (l) => money(l.principalLocal) },
             { key: 'margin', label: 'margin', render: (l) => `${bps(l.marginBps)}bp` },
             { key: 'due', label: 'due', render: (l) => formatMonthYear(displayWeek(world.state, l.maturityWeek)) },
             { key: 'status', label: 'status', width: 1.2, render: (l) => (l.status === 'PERFORMING' ? 'paying' : words(l.status)) },
@@ -102,7 +102,7 @@ export const links: FunctionModule = {
     }
     const r = regionOf(world, ref.id);
     if (!r) return null;
-    const banks = world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && isActiveCompany(c)).map((c) => ({ ref: { type: 'company' as const, id: c.id }, v: money(c.bankBalanceSheet ? stateDepositLines(world.state, c.ticker).householdUSD : undefined) }));
+    const banks = world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && isActiveCompany(c)).map((c) => ({ ref: { type: 'company' as const, id: c.id }, v: money(c.bankBalanceSheet ? stateDepositLines(world.state, c.ticker).householdLocal : undefined) }));
     const lanes = Object.keys(world.state.freightRatePerTonneLaneMoneyByLane ?? {}).filter((k) => k.startsWith(r.id + '>') || k.endsWith('>' + r.id)).map((k) => ({ ref: { type: 'lane' as const, id: k } }));
     const pairs = world.state.fxPairs.filter((p) => p.pair.includes(r.currency)).map((p) => ({ ref: { type: 'fx' as const, id: p.pair } }));
     const indexes = (world.state.marketIndexes ?? []).filter((x) => x.id.startsWith(r.id)).map((x) => ({ ref: { type: 'index' as const, id: x.id } }));

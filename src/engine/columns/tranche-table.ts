@@ -24,7 +24,7 @@ export const TRANCHE_DISCOUNT_BILL = 4;
 
 export interface TrancheRowSource {
   issuerId: string;
-  principalUSD: number;
+  principalLocal: number;
   couponRate?: number;
   maturityWeek: number;
   rateType?: string;
@@ -45,7 +45,7 @@ export class TrancheTable {
       { name: 'maturityWeek', kind: 'i32' },
       { name: 'rateType', kind: 'u8' },
       { name: 'kindFlags', kind: 'u8' },
-      { name: 'principalUSD', kind: 'f64' },
+      { name: 'principalLocal', kind: 'f64' },
       { name: 'couponRate', kind: 'f64' },
       { name: 'floatingMarginBps', kind: 'f64' },
     ], 1 << 14);
@@ -56,7 +56,7 @@ export class TrancheTable {
   get maturityWeek(): Int32Array { return this.table.i32('maturityWeek'); }
   get rateType(): Uint8Array { return this.table.u8('rateType'); }
   get kindFlags(): Uint8Array { return this.table.u8('kindFlags'); }
-  get principalUSD(): Float64Array { return this.table.f64('principalUSD'); }
+  get principalLocal(): Float64Array { return this.table.f64('principalLocal'); }
   get couponRate(): Float64Array { return this.table.f64('couponRate'); }
   get floatingMarginBps(): Float64Array { return this.table.f64('floatingMarginBps'); }
 
@@ -70,7 +70,7 @@ export class TrancheTable {
       this.issuerStart = new Int32Array(issuers.length + 1);
     }
     const issuerId = this.issuerId, maturityWeek = this.maturityWeek, rateType = this.rateType;
-    const kindFlags = this.kindFlags, principalUSD = this.principalUSD;
+    const kindFlags = this.kindFlags, principalLocal = this.principalLocal;
     const couponRate = this.couponRate, floatingMarginBps = this.floatingMarginBps;
     let at = 0;
     for (let i = 0; i < issuers.length; i++) {
@@ -85,7 +85,7 @@ export class TrancheTable {
         rateType[at] = tr.rateType === 'FLOATING' ? RATE_FLOATING : RATE_FIXED;
         kindFlags[at] = (tr.isBankFacility ? TRANCHE_BANK_FACILITY : 0)
           | (tr.isCommercialPaper ? TRANCHE_COMMERCIAL_PAPER : 0);
-        principalUSD[at] = tr.principalUSD ?? 0;
+        principalLocal[at] = tr.principalLocal ?? 0;
         couponRate[at] = tr.couponRate ?? 0;
         floatingMarginBps[at] = tr.floatingMarginBps ?? 0;
         at++;

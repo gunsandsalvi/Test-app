@@ -59,9 +59,9 @@ export function closeSeedMoney(
       // rule the field carried; a sub-dollar change here moved the week-2 print — §7.392), so the
       // funding residual is struck on the rounded lines.
       const lines = depositLinesAt(v2, companies, institutionalEntities, b.ticker);
-      const otherDepositsUSD = Math.round(Math.max(0, lines.corporateUSD)) + Math.round(Math.max(0, lines.institutionalUSD))
-        + Math.max(0, lines.smeUSD) + Math.max(0, s.clientMarginUSD ?? 0) + Math.max(0, s.centralBankLoanUSD ?? 0);
-      const needUSD = bankTotalAssetsUSD(s, openingCashOf(s), facilityBookOf(v2, b.ticker)) - s.bankEquityUSD - (s.repoBorrowedUSD ?? 0) - (s.srfBorrowingUSD ?? 0) - otherDepositsUSD;
+      const otherDepositsUSD = Math.round(Math.max(0, lines.corporateLocal)) + Math.round(Math.max(0, lines.institutionalLocal))
+        + Math.max(0, lines.smeLocal) + Math.max(0, s.clientMarginLocal ?? 0) + Math.max(0, s.centralBankLoanLocal ?? 0);
+      const needUSD = bankTotalAssetsUSD(s, openingCashOf(s), facilityBookOf(v2, b.ticker)) - s.bankEquityLocal - (s.repoBorrowedLocal ?? 0) - (s.srfBorrowingLocal ?? 0) - otherDepositsUSD;
       let lineUSD = 0;
       if (needUSD >= 0) {
         lineUSD = Math.round(needUSD);
@@ -90,7 +90,7 @@ export function closeSeedMoney(
     const weights = new Map<string, number>();
     // §3.13-SOV row 3: weighted by BOND, so the fallback book below names bonds like every
     // other holder's does.
-    materializeGovLadder(v2, regionId).forEach((t) => { weights.set(t.id, (weights.get(t.id) ?? 0) + t.principalUSD); });
+    materializeGovLadder(v2, regionId).forEach((t) => { weights.set(t.id, (weights.get(t.id) ?? 0) + t.principalLocal); });
     const weightTotal = [...weights.values()].reduce((a, v) => a + v, 0) || 1;
     const scaled: Record<string, number> = {};
     if (currentBookUSD > 0) {
@@ -116,13 +116,13 @@ export function closeSeedMoney(
       ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; instrumentId: string; quantityOrNotionalUSD?: number }[] }).treasuryHoldings ?? [])
         .forEach((h) => { if (holdingClassOf(h.instrumentType) === 'SOVEREIGN' && h.issuerRegion === regionId) add(h.instrumentId, h.quantityOrNotionalUSD ?? 0); });
     });
-    (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => add(p.bondId, p.inventoryUSD));
+    (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => add(p.bondId, p.inventoryLocal));
     // §3.13-SOV row 2: the seed's ladder is a stash, not a field — `openSeededMirrors` issues
     // its rows next and the stash is gone. The outstanding of a bond IS what its holders hold:
     // no group, no share of a bucket.
     stashSeedGovLadder(reg, seedGovLadderOf(reg).map((t) => ({
       ...t,
-      principalUSD: Math.round(heldByBond.get(t.id) ?? 0),
+      principalLocal: Math.round(heldByBond.get(t.id) ?? 0),
     })));
     // The stash carries what the seed STATED; the tenor is derived, as it is on every read.
     reg.governmentInterestWeeklyUSD = Math.round(weeklyInterestExpenseUSD(seedGovLadderOf(reg).map(govTrancheView)));
@@ -174,7 +174,7 @@ export function seedOpeningAccruals(
       const since = currentWeek - anchorWeek;
       const elapsedWeeks = since <= 0 ? 0 : since % periodWeeks;
       if (elapsedWeeks === 0) continue;
-      const annualUSD = TS.principalUSD[tr] * (floating ? policyRate + annualRate : annualRate);
+      const annualUSD = TS.principalLocal[tr] * (floating ? policyRate + annualRate : annualRate);
       const accruedUSD = (annualUSD * elapsedWeeks) / 52;
       if (!(accruedUSD > 0)) continue;
       accrueHoldersInterest({ pendingHolderAccrualUSD },

@@ -30,7 +30,7 @@ export type PartyRef =
   | { kind: 'CLEARING_HOUSE'; region: RegionId }
   | { kind: 'INSTITUTION'; id: string }
   /** SEG1 — a private-sector segment pool: the mass of small firms below naming resolution.
-   *  Its balance is `cashUSD` on the region's `SmePool`, held across the region's
+   *  Its balance is `cashLocal` on the region's `SmePool`, held across the region's
    *  banks pro-rata by market share (small firms bank everywhere; there is no house bank). */
   | { kind: 'SEGMENT'; region: RegionId; industry: string }
   | { kind: 'HOUSEHOLD'; region: RegionId }

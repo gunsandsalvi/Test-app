@@ -32,7 +32,7 @@ export type DerivedF64Field = typeof DERIVED_F64_FIELDS[number];
  * §3.13c — THE LANE NAMES ARE `keyof Company` OR A NAMED DERIVATION, CHECKED.
  *
  * They were `as const` alone, so the literal union reached every consumer and the compiler held
- * the call sites in step — but NOTHING tied them to the domain type. Renaming `Company.grossPPEUSD`
+ * the call sites in step — but NOTHING tied them to the domain type. Renaming `Company.grossPPELocal`
  * produced 35 errors across the tree and NONE here: the lane kept its stale string, compiled, and
  * would have read `undefined` off every company for ever. That is the shape that made the `…USD`
  * rename unsafe to attempt — a field name in a string the compiler does not check — and
@@ -47,8 +47,8 @@ const F64_FIELDS = [
   'antitrustWeeksAboveThreshold', 'employeeCount', 'previousEmployeeCount', 'baselineEmployeeCount',
   'baselineNetPpeUSD', 'payrollWeeklyUSD', 'realInputConsumptionCostWeeklyUSD', 'ebitda',
   'baselineEbitdaMargin', 'ebit', 'netIncome', 'eps', 'sharesOutstanding', 'cash', 'totalDebt',
-  'currentLiabilities', 'capex', 'previousCapex', 'maintenanceCapex', 'growthCapex', 'grossPPEUSD',
-  'accumulatedDepreciationUSD', 'capexCommissionedLastWeekUSD', 'rndExpense',
+  'currentLiabilities', 'capex', 'previousCapex', 'maintenanceCapex', 'growthCapex', 'grossPPELocal',
+  'accumulatedDepreciationLocal', 'capexCommissionedLastWeekUSD', 'rndExpense',
   'baselineGrowthCapexToRevenueRatio', 'maintenanceShortfallStreak', 'executionQuality',
   // clocks / market
   'earningsWeekModulo', 'lastEarningsReportWeek', 'lastEarningsSurprisePct', 'mmfSharesUSD',

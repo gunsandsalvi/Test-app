@@ -29,7 +29,7 @@ export function executeTrade(
     weeklyFinancingCost: 0,
   };
 
-  const updatedCash = state.portfolio.cashUSD - (executionDetails?.spreadCostUSD ?? 0);
+  const updatedCash = state.portfolio.cashLocal - (executionDetails?.spreadCostUSD ?? 0);
 
   const updatedPositions = [newPos, ...state.portfolio.positions];
   const totalMarginReq = updatedPositions.reduce((s, p) => s + p.marginRequirement, 0);
@@ -74,9 +74,9 @@ export function executeTrade(
       const inventory = { ...(sheet.dealerDeskInventory ?? {}) };
       const rows = [...(inventory[book] ?? [])];
       const at = rows.findIndex((r) => r.instrumentId === instrumentId);
-      if (at >= 0) rows[at] = { instrumentId, inventoryUSD: rows[at].inventoryUSD + inventoryDeltaUSD };
-      else rows.push({ instrumentId, inventoryUSD: inventoryDeltaUSD });
-      inventory[book] = rows.filter((r) => Math.abs(r.inventoryUSD) > 1);
+      if (at >= 0) rows[at] = { instrumentId, inventoryLocal: rows[at].inventoryLocal + inventoryDeltaUSD };
+      else rows.push({ instrumentId, inventoryLocal: inventoryDeltaUSD });
+      inventory[book] = rows.filter((r) => Math.abs(r.inventoryLocal) > 1);
 
       updatedCompanies = [...state.companies];
       updatedCompanies[bankIndex] = {
@@ -99,7 +99,7 @@ export function executeTrade(
           b
         ).entries())
           .filter(([, usd]) => Math.abs(usd) > 1)
-          .map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD }));
+          .map(([companyId, inventoryLocal]) => ({ companyId, inventoryLocal }));
         updatedRegions[posData.region] = {
           ...region,
           bankingSector: {
@@ -118,7 +118,7 @@ export function executeTrade(
     regions: updatedRegions,
     portfolio: {
       ...state.portfolio,
-      cashUSD: updatedCash,
+      cashLocal: updatedCash,
       navUSD,
       positions: updatedPositions,
       totalRequiredMarginUSD: totalMarginReq,

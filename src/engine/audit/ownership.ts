@@ -26,16 +26,16 @@ function o1(state: GameState, week: number): AuditFinding[] {
     const o = outstanding[c.region]; if (!o) return;
     (c.debtTranches ?? []).forEach((t) => {
       if (t.isBankFacility) return; // on a bank's loan book, tested in O4
-      if (t.isCommercialPaper) o.cp += t.principalUSD; else if (t.rateType === 'FIXED') o.corp += t.principalUSD; else o.loan += t.principalUSD;
+      if (t.isCommercialPaper) o.cp += t.principalLocal; else if (t.rateType === 'FIXED') o.corp += t.principalLocal; else o.loan += t.principalLocal;
     });
   });
   // Paper issued THIS week is in the auction (07c/07f place it next week, and what
   // they cannot place is withdrawn from the ladder); it is offered, not yet anyone's, and not
   // yet owed to nobody either. Everything older must have a holder.
   // §3.13-SOV row 2: the sovereign outstanding comes from the ONE store now.
-  REGION_IDS.forEach((r) => { outstanding[r].sov = sum(materializeGovLadder(ensureV2(state), r).filter((t) => t.originationWeek < state.currentWeek), (t) => t.principalUSD); });
+  REGION_IDS.forEach((r) => { outstanding[r].sov = sum(materializeGovLadder(ensureV2(state), r).filter((t) => t.originationWeek < state.currentWeek), (t) => t.principalLocal); });
   // The VALUE, which is still the face: nothing marks credit yet (§9.13 part 3). When the mark
-  // lands this must read `faceUSD` — a ladder carries face, and comparing a mark to it would
+  // lands this must read `faceLocal` — a ladder carries face, and comparing a mark to it would
   // report every basis point of spread as paper that does not exist.
   const add = (h: { instrumentType: string; issuerRegion: string; quantityOrNotionalUSD?: number }) => {
     const b = held[h.issuerRegion]; if (!b) return; const v = h.quantityOrNotionalUSD ?? 0;
@@ -47,13 +47,13 @@ function o1(state: GameState, week: number): AuditFinding[] {
     ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; quantityOrNotionalUSD?: number }[] }).treasuryHoldings ?? []).forEach(add);
     const bs = c.bankBalanceSheet; if (!bs || c.isDefaulted) return;
     held[c.region].sov += sum(Object.values(bs.sovereignBondHoldingsByBond ?? {}), (v) => Number(v) || 0);
-    (bs.dealerDeskInventory?.['commercial paper'] ?? []).forEach((p) => { held[c.region].cp += p.inventoryUSD; });
+    (bs.dealerDeskInventory?.['commercial paper'] ?? []).forEach((p) => { held[c.region].cp += p.inventoryLocal; });
   });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r]; if (!reg) return;
-    (reg.bankingSector.corpBondDealerInventory ?? []).forEach((p) => { held[r].corp += p.inventoryUSD; });
-    (reg.bankingSector.loanDealerInventory ?? []).forEach((p) => { held[r].loan += p.inventoryUSD; });
-    (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => { held[r].sov += p.inventoryUSD; });
+    (reg.bankingSector.corpBondDealerInventory ?? []).forEach((p) => { held[r].corp += p.inventoryLocal; });
+    (reg.bankingSector.loanDealerInventory ?? []).forEach((p) => { held[r].loan += p.inventoryLocal; });
+    (reg.bankingSector.sovBondDealerInventory ?? []).forEach((p) => { held[r].sov += p.inventoryLocal; });
     held[r].sov += sum(Object.values(reg.centralBankSheet?.sovereignHoldingsByBond ?? {}), (v) => Number(v) || 0);
     void regionById;
     (['corp', 'loan', 'sov', 'cp'] as const).forEach((k) => {
@@ -126,11 +126,11 @@ function o4(state: GameState, week: number): AuditFinding[] {
   const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   let orphanLoans = 0, orphanUSD = 0, lenderless = 0, lenderlessUSD = 0;
   for (let r = 0; r < S.used; r++) {
-    if (!(S.flags[r] & TR_FACILITY) || S.bankRef[r] < 0 || S.issuerRef[r] < 0 || !(S.principalUSD[r] > 0.01)) continue;
+    if (!(S.flags[r] & TR_FACILITY) || S.bankRef[r] < 0 || S.issuerRef[r] < 0 || !(S.principalLocal[r] > 0.01)) continue;
     const c = byId.get(v2.internedStrings[S.issuerRef[r]]);
-    if (!c || !(isActiveCompany(c) || openEstates.has(c.id))) { orphanLoans++; orphanUSD += S.principalUSD[r]; }
+    if (!c || !(isActiveCompany(c) || openEstates.has(c.id))) { orphanLoans++; orphanUSD += S.principalLocal[r]; }
     const b = bankByTicker.get(v2.internedStrings[S.bankRef[r]]);
-    if (!b || !b.bankBalanceSheet || !isActiveCompany(b)) { lenderless++; lenderlessUSD += S.principalUSD[r]; }
+    if (!b || !b.bankBalanceSheet || !isActiveCompany(b)) { lenderless++; lenderlessUSD += S.principalLocal[r]; }
   }
   if (orphanLoans) out.push({ family: 'O', check: 'O4 every facility has a live borrower', week, usd: orphanUSD, message: `${orphanLoans} facilities (${B(orphanUSD)}) sit on the ladders of firms that are gone or dead with no open estate` });
   if (lenderless) out.push({ family: 'O', check: 'O4 every facility has a live lender', week, usd: lenderlessUSD, message: `${lenderless} facilities (${B(lenderlessUSD)}) name a lender that has no sheet` });
@@ -151,20 +151,20 @@ function o6(state: GameState, week: number): AuditFinding[] {
   const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
   state.companies.forEach((c) => {
     if (c.mergerAcquired) return;
-    for (const r of ladderRowsOf(v2, c.id)) { const k = kindOfFlags(S.flags[r]); if (k) add(issued, `${c.region}|${k}`, S.principalUSD[r]); }
+    for (const r of ladderRowsOf(v2, c.id)) { const k = kindOfFlags(S.flags[r]); if (k) add(issued, `${c.region}|${k}`, S.principalLocal[r]); }
   });
   const kindRefs = new Map(KINDS.map((k) => [v2.internedIdByString.get(k), k] as const));
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
       const k = kindRefs.get(H.typeRef[r]); if (!k) continue;
-      add(held, `${v2.internedStrings[H.regionRef[r]]}|${k}`, H.qtyUSD[r]);
+      add(held, `${v2.internedStrings[H.regionRef[r]]}|${k}`, H.qtyLocal[r]);
     }
   });
   const DESK_BOOKS: Record<string, typeof KINDS[number]> = { 'corporate bond': 'CORP_BOND', 'leveraged loan': 'LEVERAGED_LOAN', 'commercial paper': 'COMMERCIAL_PAPER' };
   state.companies.forEach((b) => {
     const inv = b.bankBalanceSheet?.dealerDeskInventory; if (!inv || !isActiveCompany(b)) return;
-    Object.entries(DESK_BOOKS).forEach(([book, k]) => (inv[book] ?? []).forEach((p) => add(held, `${b.region}|${k}`, p.inventoryUSD)));
+    Object.entries(DESK_BOOKS).forEach(([book, k]) => (inv[book] ?? []).forEach((p) => add(held, `${b.region}|${k}`, p.inventoryLocal)));
   });
   const gaps: string[] = []; let gapUSD = 0;
   new Set([...issued.keys(), ...held.keys()]).forEach((key) => {
@@ -194,7 +194,7 @@ function o7(state: GameState, week: number): AuditFinding[] {
   state.institutionalEntities.forEach((e) => {
     materializeBook(v2, e.id).forEach((h) => {
       if (!isTrancheKind(h.instrumentType)) return;
-      // The claim is FACE; when the mark lands this reads `faceUSD` (§9.13 part 3).
+      // The claim is FACE; when the mark lands this reads `faceLocal` (§9.13 part 3).
       const usd = h.quantityOrNotionalUSD ?? 0;
       if (!(usd > 0)) return;
       claimedByTranche.set(h.instrumentId, (claimedByTranche.get(h.instrumentId) ?? 0) + usd);
@@ -203,17 +203,17 @@ function o7(state: GameState, week: number): AuditFinding[] {
   });
   const faceById = new Map<string, number>();
   state.companies.forEach((c) => {
-    (c.debtTranches ?? []).forEach((t) => faceById.set(t.id, (faceById.get(t.id) ?? 0) + t.principalUSD));
+    (c.debtTranches ?? []).forEach((t) => faceById.set(t.id, (faceById.get(t.id) ?? 0) + t.principalLocal));
   });
   const over: [string, number][] = [];
   let overUSD = 0;
   claimedByTranche.forEach((claimedUSD, id) => {
-    const faceUSD = faceById.get(id);
+    const faceLocal = faceById.get(id);
     // A row naming the ISSUER rather than a tranche has no single ladder row behind it; O6 owns
     // that comparison at the region-and-kind level.
-    if (faceUSD === undefined) return;
-    const dust = 1e-9 * Math.max(1, faceUSD, claimedUSD) * Math.max(1, rowsByTranche.get(id) ?? 1);
-    if (claimedUSD - faceUSD > dust) { over.push([id, claimedUSD - faceUSD]); overUSD += claimedUSD - faceUSD; }
+    if (faceLocal === undefined) return;
+    const dust = 1e-9 * Math.max(1, faceLocal, claimedUSD) * Math.max(1, rowsByTranche.get(id) ?? 1);
+    if (claimedUSD - faceLocal > dust) { over.push([id, claimedUSD - faceLocal]); overUSD += claimedUSD - faceLocal; }
   });
   if (over.length) {
     over.sort((a, b) => b[1] - a[1]);
@@ -254,8 +254,8 @@ function o8(state: GameState, week: number): AuditFinding[] {
     const inv = b.bankBalanceSheet?.dealerDeskInventory;
     if (!inv || !isActiveCompany(b)) return;
     CREDIT_BOOKS.forEach((book) => (inv[book] ?? []).forEach((p) => {
-      if (isTrancheId(v2, p.instrumentId)) { trancheKeyed++; trancheKeyedUSD += p.inventoryUSD; }
-      else { issuerKeyed++; issuerKeyedUSD += p.inventoryUSD; }
+      if (isTrancheId(v2, p.instrumentId)) { trancheKeyed++; trancheKeyedUSD += p.inventoryLocal; }
+      else { issuerKeyed++; issuerKeyedUSD += p.inventoryLocal; }
     }));
   });
   if (issuerKeyed > 0) {
@@ -300,11 +300,11 @@ function o5(state: GameState, week: number): AuditFinding[] {
   let deadParty = 0, deadUSD = 0;
   (state.derivativesBook ?? []).forEach((k) => {
     const alive = (p: { kind: string; ticker?: string; id?: string }) => p.kind === 'INSTITUTION' ? !!ents.get(p.id!) && !ents.get(p.id!)!.isDefaulted : !!tickers.get(p.ticker!) && isActiveCompany(tickers.get(p.ticker!)!);
-    if (!alive(k.a as never) || !alive(k.b as never)) { deadParty++; deadUSD += k.notionalUSD; }
+    if (!alive(k.a as never) || !alive(k.b as never)) { deadParty++; deadUSD += k.notional; }
   });
   if (deadParty) out.push({ family: 'O', check: 'O5 contracts have two live parties', week, usd: deadUSD, message: `${deadParty} contracts (${B(deadUSD)}) have a dead or missing party` });
   let overRecovered = 0;
-  (state.estates ?? []).forEach((e) => { e.claims.forEach((c) => { if (c.recoveredUSD > c.principalUSD * 1.001 + 1) overRecovered++; }); });
+  (state.estates ?? []).forEach((e) => { e.claims.forEach((c) => { if (c.recoveredUSD > c.principalLocal * 1.001 + 1) overRecovered++; }); });
   if (overRecovered) out.push({ family: 'O', check: 'O5 recovered ≤ owed', week, usd: overRecovered, message: `${overRecovered} estate claims recovered more than they were owed` });
   let badIndex = 0;
   (state.marketIndexes ?? []).forEach((x) => { const w = sum(x.constituents, (c) => c.weight); if (x.constituents.length && Math.abs(w - 1) > AUDIT_BOOKS_TOLERANCE) badIndex++; });
@@ -374,7 +374,7 @@ function o9(state: GameState, week: number): AuditFinding[] {
   book.forEach((c) => {
     const a = keyOf(c.a as never), b = keyOf(c.b as never);
     if (a === b) selfFaced++;
-    if (c.settledMarkUSD === undefined) { unmarkedN++; unmarkedNotionalUSD += c.notionalUSD; return; }
+    if (c.settledMarkUSD === undefined) { unmarkedN++; unmarkedNotionalUSD += c.notional; return; }
     markByParty.set(a, (markByParty.get(a) ?? 0) + c.settledMarkUSD);
     markByParty.set(b, (markByParty.get(b) ?? 0) - c.settledMarkUSD);
   });
@@ -450,7 +450,7 @@ function o11(state: GameState, week: number): AuditFinding[] {
     Object.entries(state.regions[r]?.centralBankSheet?.sovereignHoldingsByBond ?? {})
       .forEach(([id, v]) => check(id, Number(v) || 0, `CB ${r}`));
     (state.regions[r]?.bankingSector?.sovBondDealerInventory ?? [])
-      .forEach((pos) => check(pos.bondId, Math.abs(pos.inventoryUSD || 0), `desk ${r}`));
+      .forEach((pos) => check(pos.bondId, Math.abs(pos.inventoryLocal || 0), `desk ${r}`));
   });
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;

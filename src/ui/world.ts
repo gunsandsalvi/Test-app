@@ -125,7 +125,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     put(`bank:${c.id}:nim`, s.netInterestMarginPct);
     put(`bank:${c.id}:deposits`, spendableDepositsOf(s, stateDepositLines(state, c.ticker)));
     put(`bank:${c.id}:reserves`, bankReservesOf(ensureV2(state), c.ticker));
-    put(`bank:${c.id}:central bank loan`, s.centralBankLoanUSD ?? 0);
+    put(`bank:${c.id}:central bank loan`, s.centralBankLoanLocal ?? 0);
     put(`bank:${c.id}:loans`, loanBooksOf(s, facilityBookOf(ensureV2(state), c.ticker)));
   });
   const boundByBook = new Map<string, number>();
@@ -180,7 +180,7 @@ export function bookOf(world: World, entityId: string): RegisterRow[] {
       instrumentId: world.v2.internedStrings[H.instrRef[r]],
       instrumentType: world.v2.internedStrings[H.typeRef[r]],
       region: world.v2.internedStrings[H.regionRef[r]],
-      usd: H.qtyUSD[r],
+      usd: H.qtyLocal[r],
       shares: H.shares[r],
     });
   }
@@ -202,7 +202,7 @@ export function holdersOf(world: World, instrumentId: string): RegisterRow[] {
         instrumentId: world.v2.internedStrings[H.instrRef[r]],
         instrumentType: world.v2.internedStrings[H.typeRef[r]],
         region: world.v2.internedStrings[H.regionRef[r]],
-        usd: H.qtyUSD[r],
+        usd: H.qtyLocal[r],
         shares: H.shares[r],
       });
     }
@@ -220,17 +220,17 @@ export function sovereignHoldersOf(world: World, regionId: string): { holderId: 
   world.state.institutionalEntities.forEach((e) => {
     for (let r = bookHeadOf(world.v2, e.id); r >= 0; r = H.next[r]) {
       if (H.typeRef[r] !== govRef || H.regionRef[r] !== regRef) continue;
-      out.set(e.id, (out.get(e.id) ?? 0) + H.qtyUSD[r]);
+      out.set(e.id, (out.get(e.id) ?? 0) + H.qtyLocal[r]);
     }
   });
   return [...out.entries()].map(([holderId, usd]) => ({ holderId, usd })).sort((a, b) => b.usd - a.usd);
 }
 
 /** The bank lines to one borrower — its facility rows, seen from each lender (step 10). */
-export function bankLinesTo(world: World, borrowerId: string): { bankId: string; principalUSD: number; marginBps: number; maturityWeek: number; status: string }[] {
+export function bankLinesTo(world: World, borrowerId: string): { bankId: string; principalLocal: number; marginBps: number; maturityWeek: number; status: string }[] {
   const bankIdByTicker = new Map(world.state.companies.filter((b) => b.isBankEntity).map((b) => [b.ticker, b.id]));
   return facilitiesOfBorrower(world.v2, borrowerId).map((f) => ({
-    bankId: bankIdByTicker.get(f.bankTicker) ?? f.bankTicker, principalUSD: f.principalUSD, marginBps: f.marginBps, maturityWeek: f.maturityWeek, status: 'PERFORMING',
+    bankId: bankIdByTicker.get(f.bankTicker) ?? f.bankTicker, principalLocal: f.principalLocal, marginBps: f.marginBps, maturityWeek: f.maturityWeek, status: 'PERFORMING',
   }));
 }
 

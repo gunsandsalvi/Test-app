@@ -415,9 +415,9 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     S.baselineGrowthRatioResolved[row] = nn(CN.baselineGrowthCapexToRevenueRatio[row],
       growthCapexResolved / Math.max(1, annualRev));
     S.baselineEbitdaMarginResolved[row] = nn(CN.baselineEbitdaMargin[row], ebitdaV / Math.max(1, annualRev));
-    const openingGross = nn(CN.grossPPEUSD[row], annualRev * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
+    const openingGross = nn(CN.grossPPELocal[row], annualRev * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
     S.openingGrossPpeUSD[row] = openingGross;
-    const openingNet = Math.max(0, openingGross - nn(CN.accumulatedDepreciationUSD[row], openingGross * 0.45));
+    const openingNet = Math.max(0, openingGross - nn(CN.accumulatedDepreciationLocal[row], openingGross * 0.45));
     S.openingNetPpeUSD[row] = openingNet;
     S.taxBasisOpenUSD[row] = nn(CN.taxBasisPpeUSD[row], openingNet);
     S.carryforwardUSD[row] = nn(CN.taxLossCarryforwardUSD[row], 0);
@@ -433,7 +433,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     {
       const TS = v2.tranches;
       for (const tr of ladderRowsOf(v2, comp.id)) {
-        S.trPrincipal[atTr] = TS.principalUSD[tr];
+        S.trPrincipal[atTr] = TS.principalLocal[tr];
         const fl = TS.flags[tr];
         const floating = (fl & TR_FLOATING) !== 0;
         S.trIsFloating[atTr] = floating ? 1 : 0;
@@ -517,10 +517,10 @@ export function allocCoreOut(S: FrontSeam): FrontCoreOut {
  *  falls due this week and how much that payment is. The seam's lanes and the store's rows carry
  *  the same resolved inputs (the seam resolves the defaults from the rows). */
 export function trancheWeekAccrual(
-  principalUSD: number, isFloating: boolean, annualRate: number, policyRate: number,
+  principalLocal: number, isFloating: boolean, annualRate: number, policyRate: number,
   isCP: boolean, maturityWeek: number, periodWeeks: number, anchorWeek: number, week: number
 ): { annualUSD: number; weeklyUSD: number; due: boolean; dueUSD: number } {
-  const annualUSD = isFloating ? principalUSD * (policyRate + annualRate) : principalUSD * annualRate;
+  const annualUSD = isFloating ? principalLocal * (policyRate + annualRate) : principalLocal * annualRate;
   let due: boolean;
   if (isCP) due = maturityWeek === week;
   else { const since = week - anchorWeek; due = since > 0 && since % periodWeeks === 0; }

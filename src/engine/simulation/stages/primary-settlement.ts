@@ -118,7 +118,7 @@ export function settlePricedOfferings(
       const at = rows.findIndex((r) => r.instrumentId === issuerId);
       // The position carries its UNITS. An equity book clears in shares, so a residual stored
       // as dollars alone is read back as a share count by every units-aware consumer (desk
-      // build, fee mark) — inventoryUSD-as-units at a $40 price is a 40x phantom position.
+      // build, fee mark) — inventoryLocal-as-units at a $40 price is a 40x phantom position.
       // Credit clears in dollars, where units and money are the same number.
       const residualUnits = instrumentType === 'EQUITY'
         ? residualUSD / Math.max(1e-9, outcome.clearedStat)
@@ -126,15 +126,15 @@ export function settlePricedOfferings(
       if (at >= 0) {
         const prevUnits = rows[at].units
           ?? (instrumentType === 'EQUITY'
-            ? rows[at].inventoryUSD / Math.max(1e-9, outcome.clearedStat)
-            : rows[at].inventoryUSD);
+            ? rows[at].inventoryLocal / Math.max(1e-9, outcome.clearedStat)
+            : rows[at].inventoryLocal);
         rows[at] = {
           instrumentId: issuerId,
-          inventoryUSD: rows[at].inventoryUSD + residualUSD,
+          inventoryLocal: rows[at].inventoryLocal + residualUSD,
           units: prevUnits + residualUnits,
         };
       } else {
-        rows.push({ instrumentId: issuerId, inventoryUSD: residualUSD, units: residualUnits });
+        rows.push({ instrumentId: issuerId, inventoryLocal: residualUSD, units: residualUnits });
       }
       inventory[deskBook] = rows;
       updateBankSheet(ctx, lead.ticker, { ...existingSheet, dealerDeskInventory: inventory });

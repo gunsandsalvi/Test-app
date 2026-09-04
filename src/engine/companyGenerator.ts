@@ -162,8 +162,8 @@ export function buildQuarterlyFundamentalSnapshot(
   // Callers always seed/carry this from the company's own PP&E history; the fallback below only
   // covers a caller that hasn't been wired up yet, and is revenue-scaled (what this company
   // actually produces), never debt-scaled (an unrelated financing decision).
-  grossPPEUSD?: number,
-  accumulatedDepreciationUSD?: number,
+  grossPPELocal?: number,
+  accumulatedDepreciationLocal?: number,
   daQuarterlyOverride?: number,
   costDrivers?: CogsCostDrivers,
   // Real current-portion-of-debt split from this company's own debt tranche maturities, when
@@ -231,8 +231,8 @@ export function buildQuarterlyFundamentalSnapshot(
   const workingCapitalUSD = annualRevenue * 0.08;
   const accountsReceivable = workingCapitalUSD * 0.6;
   const accountsPayable = workingCapitalUSD * 0.4;
-  const grossPPE = grossPPEUSD ?? (annualRevenue * DEFAULT_PPE_INTENSITY / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION));
-  const accumulatedDepreciation = accumulatedDepreciationUSD ?? (grossPPE * INITIAL_ACCUM_DEPRECIATION_FRACTION);
+  const grossPPE = grossPPELocal ?? (annualRevenue * DEFAULT_PPE_INTENSITY / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION));
+  const accumulatedDepreciation = accumulatedDepreciationLocal ?? (grossPPE * INITIAL_ACCUM_DEPRECIATION_FRACTION);
   const netPPE = grossPPE - accumulatedDepreciation;
   const totalAssets = cash + accountsReceivable + finishedGoodsInventoryUSD + rawMaterialsInventoryUSD + netPPE;
   const shortTermDebt = shortTermDebtUSD ?? (totalDebt * 0.15);
@@ -355,7 +355,7 @@ export function generateDebtTranches(ticker: string, debtBase: number, initialRa
   const basePolicyRate = policyRate;
   let cumulativePrincipalAssigned = 0;
   return maturityWeeks.map((tenorWeeks, i) => {
-    const principalUSD = debtBase * trancheWeights[i];
+    const principalLocal = debtBase * trancheWeights[i];
     // §3.37-SEED: the rung is part-way through its life. Remaining life lands uniformly in
     // [1, tenorWeeks], so a run of any length meets maturities in proportion to its length.
     const trancheId = `${ticker}-T${i + 1}`;
@@ -379,12 +379,12 @@ export function generateDebtTranches(ticker: string, debtBase: number, initialRa
     // a leveraged loan IS. The midpoint test delivers that: a single-tranche CCC issuer (10%
     // fixed) now comes out floating, a single-tranche AA issuer (85%) fixed, and multi-rung
     // issuers land within a few points of their target share.
-    const isFixed = (cumulativePrincipalAssigned + principalUSD / 2) < fixedShare * debtBase;
-    cumulativePrincipalAssigned += principalUSD;
+    const isFixed = (cumulativePrincipalAssigned + principalLocal / 2) < fixedShare * debtBase;
+    cumulativePrincipalAssigned += principalLocal;
     return isFixed
       ? {
           id: trancheId,
-          principalUSD,
+          principalLocal,
           rateType: 'FIXED' as const,
           couponRate: basePolicyRate + baseSpreadBps / 10000,
           originationWeek,
@@ -394,7 +394,7 @@ export function generateDebtTranches(ticker: string, debtBase: number, initialRa
         }
       : {
           id: trancheId,
-          principalUSD,
+          principalLocal,
           rateType: 'FLOATING' as const,
           floatingMarginBps: Math.round(baseSpreadBps * 0.85),
           originationWeek,
@@ -468,7 +468,7 @@ export function generateInitialCompanies(
         if (initReg?.bankingSector) {
           const bs = initReg.bankingSector;
           // D: the seed's stated loan books size the opening revenue; nothing stores them.
-          const totalAssets = seedLoanBookUSD(initReg.lastWeekNominalGdpUSD, 'business') + seedLoanBookUSD(initReg.lastWeekNominalGdpUSD, 'consumer') + bs.sovereignBondHoldingsUSD;
+          const totalAssets = seedLoanBookUSD(initReg.lastWeekNominalGdpUSD, 'business') + seedLoanBookUSD(initReg.lastWeekNominalGdpUSD, 'consumer') + bs.sovereignBondHoldingsLocal;
           derivedRevBase = bs.netInterestMarginPct * totalAssets * bankShare * 2.2;
         }
       }
@@ -572,11 +572,11 @@ export function generateInitialCompanies(
       // freshly-generated company's "current portion of long-term debt" reflects its actual
       // ladder rather than a flat 15% guess.
       const debtTranches = generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating, regionPolicyRate, tmpl.rank);
-      const initialShortTermDebtUSD = debtTranches.filter(t => t.maturityWeek <= 52).reduce((s, t) => s + t.principalUSD, 0);
+      const initialShortTermDebtUSD = debtTranches.filter(t => t.maturityWeek <= 52).reduce((s, t) => s + t.principalLocal, 0);
       // Real per-tranche interest from the same ladder, not a flat spread-over-totalDebt guess.
       const initialAnnualInterest = debtTranches.reduce((s, t) => s + (t.rateType === 'FIXED'
-        ? t.principalUSD * (t.couponRate ?? 0.05)
-        : t.principalUSD * (regionPolicyRate + (t.floatingMarginBps ?? 200) / 10000)), 0);
+        ? t.principalLocal * (t.couponRate ?? 0.05)
+        : t.principalLocal * (regionPolicyRate + (t.floatingMarginBps ?? 200) / 10000)), 0);
 
       const snapQ1 = buildQuarterlyFundamentalSnapshot(-3, "Q1 '25", 'Mar 31, 2025', tmpl.revBase * 0.94, ebitda * 0.93, netIncome * 0.91, eps * 0.92, tmpl.cashBase * 0.95, tmpl.debtBase * 1.02, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, undefined, 0, 0, 0, initialGrossPPEUSD, initialAccumulatedDepreciationUSD, undefined, undefined, initialShortTermDebtUSD, initialAnnualInterest);
       const snapQ2 = buildQuarterlyFundamentalSnapshot(-2, "Q2 '25", 'Jun 30, 2025', tmpl.revBase * 0.96, ebitda * 0.95, netIncome * 0.94, eps * 0.95, tmpl.cashBase * 0.97, tmpl.debtBase * 1.01, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ1, 0, 0, 0, initialGrossPPEUSD, initialAccumulatedDepreciationUSD, undefined, undefined, initialShortTermDebtUSD, initialAnnualInterest);
@@ -639,8 +639,8 @@ export function generateInitialCompanies(
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
         debtTranches,
         capex,
-        grossPPEUSD: initialGrossPPEUSD,
-        accumulatedDepreciationUSD: initialAccumulatedDepreciationUSD,
+        grossPPELocal: initialGrossPPEUSD,
+        accumulatedDepreciationLocal: initialAccumulatedDepreciationUSD,
         maintenanceCapex,
         growthCapex,
         baselineGrowthCapexToRevenueRatio: growthCapex / Math.max(1, tmpl.revBase),
@@ -696,8 +696,8 @@ export function generateInitialCompanies(
           const share = tmpl.bankMarketShare ?? 0.25;
           if (!bs) return undefined;
           const sheet = {
-            sovereignBondHoldingsUSD: bs.sovereignBondHoldingsUSD * share,
-            bankEquityUSD: bs.bankEquityUSD * share,
+            sovereignBondHoldingsLocal: bs.sovereignBondHoldingsLocal * share,
+            bankEquityLocal: bs.bankEquityLocal * share,
             bankCapitalRatio: bs.bankCapitalRatio,
             netInterestMarginPct: bs.netInterestMarginPct,
             loanLossProvisionRateAnnualPct: bs.loanLossProvisionRateAnnualPct,
@@ -705,14 +705,14 @@ export function generateInitialCompanies(
             centralBankReservesUSD: bs.centralBankReservesUSD * share,
             moneySupplyM2USD: bs.moneySupplyM2USD * share,
             itemizedHoldings: [],
-            srfBorrowingUSD: 0,
-            onRrpLendingUSD: 0,
+            srfBorrowingLocal: 0,
+            onRrpLendingLocal: 0,
             corpBondDealerInventory: [],
             sovereignBondHoldingsByBond: {},
             sovBondDealerInventory: [],
             loanDealerInventory: [],
-            repoLentUSD: 0,
-            repoBorrowedUSD: 0,
+            repoLentLocal: 0,
+            repoBorrowedLocal: 0,
             repoEncumberedCollateralUSD: 0,
             businessLoans: [],
             householdLoans: [],
@@ -1004,11 +1004,18 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
     const v = c[field];
     if (typeof v === 'number' && isFinite(v)) c[field] = v * k;
   };
-  ['annualRevenue', 'baselineAnnualRevenue', 'sharesOutstanding', 'grossPPEUSD',
-    'accumulatedDepreciationUSD', 'ebitda', 'ebit', 'netIncome', 'capex', 'maintenanceCapex',
-    'growthCapex', 'currentLiabilities', 'annualInterest', 'technicalReservesUSD', 'aumUSD',
-    'insurancePremiumsWrittenUSD', 'insuranceClaimsPaidUSD'].forEach(scale);
-  ((c.debtTranches as DebtTranche[] | undefined) ?? []).forEach((t) => { t.principalUSD *= k; });
+  // §3.13c: `satisfies keyof Company` — these are FIELD NAMES in strings, and without the
+  // constraint a rename would leave one behind silently, scaling everything but it. Same shape
+  // as the lane lists in `company-store.ts`.
+  const SIZED_FIELDS = ['annualRevenue', 'baselineAnnualRevenue', 'sharesOutstanding', 'grossPPELocal',
+    'accumulatedDepreciationLocal', 'ebitda', 'ebit', 'netIncome', 'capex', 'maintenanceCapex',
+    // `annualInterest` was in this list and is NOT a field — it is DERIVED from the ladder
+    // (`front-core.ts:trancheWeekAccrual`), which is scaled below. The string was dead: the scale
+    // no-ops on `undefined`, so nothing happened and nothing said so.
+    'growthCapex', 'currentLiabilities', 'technicalReservesUSD', 'aumUSD',
+    'insurancePremiumsWrittenUSD', 'insuranceClaimsPaidUSD'] as const satisfies readonly (keyof Company)[];
+  SIZED_FIELDS.forEach(scale);
+  ((c.debtTranches as DebtTranche[] | undefined) ?? []).forEach((t) => { t.principalLocal *= k; });
   ((c.historicalFundamentals as FundamentalSnapshot[] | undefined) ?? [])
     .forEach((snap) => scaleSnapshot(snap as unknown as Record<string, unknown>, k));
   stashOpeningCash(c as unknown as Company, openingCashOf(c as unknown as Company) * k);
@@ -1152,10 +1159,10 @@ export function dealProductLinesAndHeadcount(
         const industry = industryOfSubUnit(unitId);
         const smeShare = industry ? (INDUSTRY_REGISTRY[industry]?.smeShareOfActivity ?? 0) : 0;
         const demandUSD = Math.max(0, demandLevelAnnualUSD(_regionId as RegionId, unitId));
-        const smeUSD = smeRevenueForSubUnitUSD
+        const smeLocal = smeRevenueForSubUnitUSD
           ? Math.max(0, smeRevenueForSubUnitUSD(_regionId as RegionId, unitId))
           : demandUSD * Math.max(0, smeShare);
-        targetUSD.set(unitId, Math.max(0, demandUSD - smeUSD));
+        targetUSD.set(unitId, Math.max(0, demandUSD - smeLocal));
       });
       for (let round = 0; round < 24; round++) {
         const currentUSD = new Map<string, number>();
@@ -1273,8 +1280,8 @@ export function generatePrivateCompanies(
     const provisionalRating: CreditRating = seed.leverage > 4.5 ? 'B' : seed.leverage > 3 ? 'BB' : 'BBB';
     const debtTranches = generateDebtTranches(ticker, debtBase, provisionalRating, regionPolicyRate, 3 + (idx % 5));
     const annualInterest = debtTranches.reduce((a, t) => a + (t.rateType === 'FIXED'
-      ? t.principalUSD * (t.couponRate ?? 0.05)
-      : t.principalUSD * (regionPolicyRate + (t.floatingMarginBps ?? 200) / 10000)), 0);
+      ? t.principalLocal * (t.couponRate ?? 0.05)
+      : t.principalLocal * (regionPolicyRate + (t.floatingMarginBps ?? 200) / 10000)), 0);
     const da = revBase * 0.045;
     const ebit = Math.max(1, ebitda - da);
     const coverage = ebit / Math.max(0.5, annualInterest);
@@ -1284,7 +1291,7 @@ export function generatePrivateCompanies(
     const capex = Math.round(revBase * 0.05);
     const maintenanceCapex = Math.round(capex * 0.6);
     const ppeIntensity = SECTOR_PPE_INTENSITY[sector] ?? 0.5;
-    const grossPPEUSD = Math.round(revBase * ppeIntensity / 0.65);
+    const grossPPELocal = Math.round(revBase * ppeIntensity / 0.65);
 
     const pc = {
       id: `${region}_PRV_${ticker}`,
@@ -1317,7 +1324,7 @@ export function generatePrivateCompanies(
       capex, maintenanceCapex, growthCapex: capex - maintenanceCapex,
       baselineGrowthCapexToRevenueRatio: (capex - maintenanceCapex) / Math.max(1, revBase),
       maintenanceShortfallStreak: 0,
-      grossPPEUSD, accumulatedDepreciationUSD: Math.round(grossPPEUSD * 0.35),
+      grossPPELocal, accumulatedDepreciationLocal: Math.round(grossPPELocal * 0.35),
       executionQuality: 1.0,
       occupationMixDrift: {},
       creditRating: rating,

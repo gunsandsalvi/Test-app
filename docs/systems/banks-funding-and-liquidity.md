@@ -88,9 +88,9 @@ checked by `scripts/check-atlas.sh`.
 | A1.b corporate, operational | `src/engine/ledger/accounts.ts:corporateDepositsAt` | ✅ |
 | A1.c institutional/wholesale, rate-sensitive | `src/engine/ledger/accounts.ts:institutionalDepositsAt` | ⚠️ |
 | A1.d VERIFY stickiness differs by class | `src/engine/macro/banking.ts:stressedOutflowUSD` | ⚠️ |
-| A2 wholesale borrowing — interbank, repo, CP | `src/domain/repo.ts:repoBorrowedUSD` | ⚠️ |
+| A2 wholesale borrowing — interbank, repo, CP | `src/domain/repo.ts:repoBorrowedLocal` | ⚠️ |
 | A2.a short, and it rolls | `src/domain/repo.ts:maturingAt` | ✅ |
-| A3 capital: equity and subordinated debt | `src/domain/banking.ts:bankEquityUSD` | ⚠️ |
+| A3 capital: equity and subordinated debt | `src/domain/banking.ts:bankEquityLocal` | ⚠️ |
 | A4 the central bank, on the corridor's terms | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ⚠️ |
 | A5 each source has a price; the mix is a decision | `src/engine/macro/banking.ts:evolveBankingSector` | ⚠️ |
 | B1 pays a rate on each source, to a real holder | `src/engine/simulation/stages/02b-bank-diversification.ts:runBankDiversificationStage` | ✅ |
@@ -126,7 +126,7 @@ checked by `scripts/check-atlas.sh`.
 | F1 deposit lines by class, as reads of who banks there | `src/engine/ledger/accounts.ts:bankDepositLines` | ✅ |
 | F2 the reserve balance, as a read of its account | `src/engine/ledger/accounts.ts:bankReservesOf` | ✅ |
 | F3 VERIFY assets = liabilities + equity every week | `src/engine/simulation/bank-identity-trace.ts:residualOf` | ✅ |
-| F4 a liquidity metric somebody outside can see | `src/ui/objects/company.tsx:srfBorrowingUSD` | ⚠️ |
+| F4 a liquidity metric somebody outside can see | `src/ui/objects/company.tsx:srfBorrowingLocal` | ⚠️ |
 
 ---
 

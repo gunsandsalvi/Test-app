@@ -30,8 +30,8 @@ export const contract = defineObject<DerivativeContract>({
   searchable: false,
   find: (world, id) => (world.state.derivativesBook ?? []).find((k) => k.id === id),
   list: () => [],
-  label: (world, _id, k) => ({ ticker: `${classWord(k.classId)} · ${partyName(world, k.a)} × ${partyName(world, k.b)}`, name: `${money(k.notionalUSD)} ${classWord(k.classId)} between ${partyName(world, k.a)} and ${partyName(world, k.b)}`, kind: classWord(k.classId), region: k.regionId }),
-  headline: (_w, _id, k) => ({ value: money(k.notionalUSD), sub: classWord(k.classId) }),
+  label: (world, _id, k) => ({ ticker: `${classWord(k.classId)} · ${partyName(world, k.a)} × ${partyName(world, k.b)}`, name: `${money(k.notional)} ${classWord(k.classId)} between ${partyName(world, k.a)} and ${partyName(world, k.b)}`, kind: classWord(k.classId), region: k.regionId }),
+  headline: (_w, _id, k) => ({ value: money(k.notional), sub: classWord(k.classId) }),
   overview({ world, obj: k, nav }) {
     const a = partyRef(world, k.a); const b = partyRef(world, k.b);
     const left = k.maturityWeek - world.state.currentWeek;
@@ -40,7 +40,7 @@ export const contract = defineObject<DerivativeContract>({
       <>
         <ObjectHeader name={`${classWord(k.classId)}, ${partyName(world, k.a)} × ${partyName(world, k.b)}`} sub={<><RegionLink id={k.regionId} nav={nav} />{k.termKey ? ` · ${k.termKey}` : ''} · {k.id}</>} />
         <StatGrid>
-          <Stat label="notional" value={money(k.notionalUSD)} sub={k.units !== undefined ? `${num(k.units, 0)} units` : ''} />
+          <Stat label="notional" value={money(k.notional)} sub={k.units !== undefined ? `${num(k.units, 0)} units` : ''} />
           <Stat label={k.classId === 'IRS' ? 'fixed rate' : k.classId === 'CDS' ? 'spread' : 'strike'} value={k.classId === 'IRS' || k.classId === 'CDS' ? pctLevel(k.strike, k.classId === 'CDS' ? 2 : 3) : num(k.strike, 4)} sub="struck at" />
           <Stat label="matures" value={formatDate(displayWeek(world.state, k.maturityWeek))} sub={left > 0 ? `in ${formatSpan(left)}` : 'due'} />
         </StatGrid>

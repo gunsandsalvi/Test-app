@@ -32,7 +32,7 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
 const base = (over: Partial<DerivativeContract>): DerivativeContract => ({
   id: 'c', classId: 'IRS', regionId: 'USA', currency: 'USD',
   a: { kind: 'BANK', ticker: 'AAA' }, b: { kind: 'INSTITUTION', id: 'INS1' },
-  notionalUSD: 1_000_000, strike: 0.05, referenceId: '', termKey: 's5',
+  notional: 1_000_000, strike: 0.05, referenceId: '', termKey: 's5',
   struckWeek: 0, maturityWeek: 260, ...over,
 });
 
@@ -91,9 +91,9 @@ test('FX forward: the holder short the foreign currency gains when it falls; the
 
 test('one capacity budget across every class: what the CDS desk wrote consumes what the FX desk can write', () => {
   const book: DerivativeContract[] = [
-    base({ classId: 'CDS', a: { kind: 'BANK', ticker: 'HEDGER' }, b: { kind: 'BANK', ticker: 'DESK' }, notionalUSD: 100 }),
-    base({ classId: 'FX_FORWARD', a: { kind: 'INSTITUTION', id: 'X' }, b: { kind: 'BANK', ticker: 'DESK' }, notionalUSD: 500 }),
-    base({ classId: 'IRS', a: { kind: 'BANK', ticker: 'DESK' }, notionalUSD: 1000, maturityWeek: 5 }), // matured: no charge
+    base({ classId: 'CDS', a: { kind: 'BANK', ticker: 'HEDGER' }, b: { kind: 'BANK', ticker: 'DESK' }, notional: 100 }),
+    base({ classId: 'FX_FORWARD', a: { kind: 'INSTITUTION', id: 'X' }, b: { kind: 'BANK', ticker: 'DESK' }, notional: 500 }),
+    base({ classId: 'IRS', a: { kind: 'BANK', ticker: 'DESK' }, notional: 1000, maturityWeek: 5 }), // matured: no charge
   ];
   const charged = standingPfeChargeUSD(book, 'BANK:DESK', 10);
   assert.ok(Math.abs(charged - (100 * 0.10 + 500 * 0.02)) < 1e-9);
@@ -106,11 +106,11 @@ test('one capacity budget across every class: what the CDS desk wrote consumes w
 test('standing cover nets exactly one side of one party, live contracts only, by reference and tenor', () => {
   const me = { kind: 'COMPANY', ticker: 'ME' } as const;
   const book: DerivativeContract[] = [
-    base({ classId: 'IRS', a: me, termKey: 's5', notionalUSD: 10 }),
-    base({ classId: 'IRS', a: me, termKey: 's10', notionalUSD: 20 }),
-    base({ classId: 'IRS', b: me, termKey: 's5', notionalUSD: 40 }),
-    base({ classId: 'IRS', a: me, termKey: 's5', notionalUSD: 80, maturityWeek: 10 }), // matures this week
-    base({ classId: 'COMMODITY_FUTURE', b: me, referenceId: 'OIL', termKey: '3M', units: 7, notionalUSD: 700 }),
+    base({ classId: 'IRS', a: me, termKey: 's5', notional: 10 }),
+    base({ classId: 'IRS', a: me, termKey: 's10', notional: 20 }),
+    base({ classId: 'IRS', b: me, termKey: 's5', notional: 40 }),
+    base({ classId: 'IRS', a: me, termKey: 's5', notional: 80, maturityWeek: 10 }), // matures this week
+    base({ classId: 'COMMODITY_FUTURE', b: me, referenceId: 'OIL', termKey: '3M', units: 7, notional: 700 }),
   ];
   assert.equal(standingCoverUSD(book, 'IRS', 'a', derivativePartyKey(me), 10, undefined, 's5'), 10);
   assert.equal(standingCoverUSD(book, 'IRS', 'a', derivativePartyKey(me), 10), 30);
@@ -142,15 +142,15 @@ test('the standing-book index answers exactly what the per-participant walks ans
   const me = { kind: 'BANK', ticker: 'ME' } as const;
   const you = { kind: 'INSTITUTION', id: 'YOU' } as const;
   const book: DerivativeContract[] = [
-    base({ id: '1', a: me, b: you, notionalUSD: 10, termKey: 's5' }),
-    base({ id: '2', a: me, b: you, notionalUSD: 20, termKey: 's10' }),
-    base({ id: '3', a: you, b: me, notionalUSD: 40, termKey: 's2' }),
-    base({ id: '4', classId: 'CDS', a: me, b: you, notionalUSD: 100, referenceId: 'IG-NAME', termKey: '' }),
-    base({ id: '5', classId: 'CDS', a: you, b: me, notionalUSD: 200, referenceId: 'HY-NAME', termKey: '' }),
-    base({ id: '6', classId: 'COMMODITY_FUTURE', a: you, b: me, notionalUSD: 700, units: 7, referenceId: 'OIL', termKey: '3M' }),
-    base({ id: '7', classId: 'COMMODITY_FUTURE', a: me, b: you, notionalUSD: 300, units: 3, referenceId: 'OIL', termKey: '3M' }),
-    base({ id: 'matured', a: me, b: you, notionalUSD: 999, maturityWeek: 10 }),
-    base({ id: 'self', classId: 'FX_FORWARD', a: me, b: me, notionalUSD: 50, referenceId: 'EUR', termKey: '' }),
+    base({ id: '1', a: me, b: you, notional: 10, termKey: 's5' }),
+    base({ id: '2', a: me, b: you, notional: 20, termKey: 's10' }),
+    base({ id: '3', a: you, b: me, notional: 40, termKey: 's2' }),
+    base({ id: '4', classId: 'CDS', a: me, b: you, notional: 100, referenceId: 'IG-NAME', termKey: '' }),
+    base({ id: '5', classId: 'CDS', a: you, b: me, notional: 200, referenceId: 'HY-NAME', termKey: '' }),
+    base({ id: '6', classId: 'COMMODITY_FUTURE', a: you, b: me, notional: 700, units: 7, referenceId: 'OIL', termKey: '3M' }),
+    base({ id: '7', classId: 'COMMODITY_FUTURE', a: me, b: you, notional: 300, units: 3, referenceId: 'OIL', termKey: '3M' }),
+    base({ id: 'matured', a: me, b: you, notional: 999, maturityWeek: 10 }),
+    base({ id: 'self', classId: 'FX_FORWARD', a: me, b: me, notional: 50, referenceId: 'EUR', termKey: '' }),
   ];
   const isIG = (ref: string) => ref === 'IG-NAME';
   const index = new StandingBook(10, isIG);
@@ -174,7 +174,7 @@ test('the standing-book index answers exactly what the per-participant walks ans
     void party;
   }
   // A strike appends; the index folds the tail and stays the book's.
-  book.push(base({ id: '8', a: me, b: you, notionalUSD: 5, termKey: 's5' }));
+  book.push(base({ id: '8', a: me, b: you, notional: 5, termKey: 's5' }));
   index.extend(book);
   assert.equal(index.coverUSD('IRS', 'a', meKey, undefined, 's5'), 15);
   assert.equal(index.pfeChargeUSD(meKey), standingPfeChargeUSD(book, meKey, 10, isIG));

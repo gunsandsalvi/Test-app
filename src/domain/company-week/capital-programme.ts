@@ -21,13 +21,13 @@ import { PATIENCE_MEDIAN_WEEKS } from '../preferences';
 
 export interface CapitalProgrammeInputs {
   /** The plant, as a stock. */
-  grossPPEUSD: number;
-  accumulatedDepreciationUSD: number;
+  grossPPELocal: number;
+  accumulatedDepreciationLocal: number;
   usefulLifeYears: number;
   /** What the firm earns and holds this week. */
   weeklyEbitdaUSD: number;
   weeklyInterestUSD: number;
-  cashUSD: number;
+  cashLocal: number;
   currentLiabilitiesUSD: number;
   annualRevenueUSD: number;
   newRevenueUSD: number;
@@ -84,18 +84,18 @@ export interface CapitalProgramme {
  * it was seeded at is what it stayed, and capital ARRIVED at ~0.5% of the stock a year against ~8%
  * straight-line depreciation. The anchor is the firm's own gross plant over its own useful life.
  */
-export function maintenanceTargetUSD(grossPPEUSD: number, usefulLifeYears: number): number {
-  return grossPPEUSD / Math.max(1, usefulLifeYears);
+export function maintenanceTargetUSD(grossPPELocal: number, usefulLifeYears: number): number {
+  return grossPPELocal / Math.max(1, usefulLifeYears);
 }
 
 /** What a firm can put behind upkeep this week: operating cash, a small draw, and — only if it is
  *  investment grade — a bridge. A distressed company cannot borrow its way out of deferred upkeep. */
 export function maintenanceFundingCapacityUSD(i: CapitalProgrammeInputs): number {
   const weeklyOperatingCashFlow = i.weeklyEbitdaUSD - i.weeklyInterestUSD;
-  const activePpeUSD = i.grossPPEUSD * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
+  const activePpeUSD = i.grossPPELocal * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
   const weeklyDesired = maintenanceTargetUSD(activePpeUSD, i.usefulLifeYears) / 52;
   const borrowing = bridgeCapacityUSD(i, weeklyDesired);
-  return Math.max(0, weeklyOperatingCashFlow) + Math.max(0, i.cashUSD) * 0.05 + borrowing;
+  return Math.max(0, weeklyOperatingCashFlow) + Math.max(0, i.cashLocal) * 0.05 + borrowing;
 }
 
 /** The weekly bridge a firm can draw against its upkeep: half the desired spend, investment grade
@@ -113,7 +113,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   const patience = i.patienceWeeks ?? PATIENCE_MEDIAN_WEEKS;
   const ra = i.riskAversion ?? 1;
   // §5-DYN: mothballed plant draws no upkeep — that saving is most of why a firm mothballs.
-  const activePpeUSD = i.grossPPEUSD * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
+  const activePpeUSD = i.grossPPELocal * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
   const targetMaintenanceCapexUSD = maintenanceTargetUSD(activePpeUSD, i.usefulLifeYears);
   const weeklyDesiredMaintenance = targetMaintenanceCapexUSD / 52;
   const weeklyOperatingCashFlow = i.weeklyEbitdaUSD - i.weeklyInterestUSD;
@@ -140,7 +140,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   const payoutPressure = fcfBeforeGrowthCapex > 0 ? Math.min(1, excessCashGeneration / fcfBeforeGrowthCapex) : 0;
 
   const rateDrag = Math.max(0, i.effectiveDebtRate - 0.04) * 2.0 * ra;
-  const cashHealthFactor = i.cashUSD < 0 ? 0.05 : (i.cashUSD < i.currentLiabilitiesUSD * 0.25 * ra ? 0.4 : 1.0);
+  const cashHealthFactor = i.cashLocal < 0 ? 0.05 : (i.cashLocal < i.currentLiabilitiesUSD * 0.25 * ra ? 0.4 : 1.0);
   const safeMarketCap = Math.max(0, isFinite(i.marketCapUSD) ? i.marketCapUSD : 0);
   const safeTotalDebt = Math.max(0, isFinite(i.totalDebtUSD) ? i.totalDebtUSD : 0);
   const safeRev = Math.max(1, isFinite(i.annualRevenueUSD) ? i.annualRevenueUSD : 1);
@@ -169,7 +169,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   // does: the firm RAISES the money first (the financing decision and the primary market),
   // the proceeds land as cash, and the next week's cap has grown by exactly what was raised.
   const deployableCashUSD = Math.max(0,
-    i.cashUSD - i.annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * ra);
+    i.cashLocal - i.annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * ra);
   const growthFundingCapUSD = Math.max(0, fcfBeforeGrowthCapex) + deployableCashUSD;
   const targetGrowthCapex = Math.min(desiredGrowthCapex, growthFundingCapUSD);
   // The stock-adjustment weight is the median's 0.10 at the median horizon (§7.288's convention),
@@ -187,7 +187,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
     rndExpenseUSD: 0,
     capexUSD: maintenanceCapexUSD + growthCapexUSD,
     payoutPressure,
-    weeklyDepreciationUSD: i.grossPPEUSD / (Math.max(1, i.usefulLifeYears) * 52),
+    weeklyDepreciationUSD: i.grossPPELocal / (Math.max(1, i.usefulLifeYears) * 52),
   };
 }
 

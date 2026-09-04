@@ -14,7 +14,7 @@ export interface TrancheView {
   ownerRef: { type: 'company' | 'region'; id: string };
   ownerName: string;
   id: string;
-  principalUSD: number;
+  principalLocal: number;
   couponRate: number;
   rateType?: string;
   floatingMarginBps?: number;
@@ -35,7 +35,7 @@ function trancheOf(world: World, key: string): TrancheView | undefined {
   const reg = regionOf(world, owner);
   if (reg) {
     const t = materializeGovLadder(ensureV2(world.state), reg.id).find((x) => x.id === id);
-    return t ? { ownerRef: { type: 'region', id: owner }, ownerName: `${owner} treasury`, id, principalUSD: t.principalUSD, couponRate: t.couponRate, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, tenorYears: t.tenorAtIssuanceYears } : undefined;
+    return t ? { ownerRef: { type: 'region', id: owner }, ownerName: `${owner} treasury`, id, principalLocal: t.principalLocal, couponRate: t.couponRate, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, tenorYears: t.tenorAtIssuanceYears } : undefined;
   }
   const c = companyOf(world, owner);
   if (!c) return undefined;
@@ -43,7 +43,7 @@ function trancheOf(world: World, key: string): TrancheView | undefined {
   if (!t) return undefined;
   const policy = regionOf(world, c.region)?.policyRate ?? 0;
   const coupon = t.rateType === 'FLOATING' ? policy + (t.floatingMarginBps ?? 0) / 10_000 : (t.couponRate ?? 0);
-  return { ownerRef: { type: 'company', id: c.id }, ownerName: c.name, id, principalUSD: t.principalUSD, couponRate: coupon, rateType: t.rateType, floatingMarginBps: t.floatingMarginBps, seniority: t.seniority, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, callProtection: t.callProtection, isCommercialPaper: t.isCommercialPaper, isBankFacility: t.isBankFacility, facilityBankTicker: t.facilityBankTicker };
+  return { ownerRef: { type: 'company', id: c.id }, ownerName: c.name, id, principalLocal: t.principalLocal, couponRate: coupon, rateType: t.rateType, floatingMarginBps: t.floatingMarginBps, seniority: t.seniority, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, callProtection: t.callProtection, isCommercialPaper: t.isCommercialPaper, isBankFacility: t.isBankFacility, facilityBankTicker: t.facilityBankTicker };
 }
 
 export const tranche = defineObject<TrancheView>({
@@ -52,8 +52,8 @@ export const tranche = defineObject<TrancheView>({
   searchable: false,
   find: trancheOf,
   list: () => [],
-  label: (_w, _id, t) => ({ ticker: t.id, name: `${t.ownerName} · ${money(t.principalUSD)}`, kind: t.ownerRef.type === 'region' ? 'sovereign tranche' : t.isCommercialPaper ? 'commercial paper' : t.isBankFacility ? 'bank facility' : 'debt tranche' }),
-  headline: (_w, _id, t) => ({ value: money(t.principalUSD), sub: pctLevel(t.couponRate, 2) }),
+  label: (_w, _id, t) => ({ ticker: t.id, name: `${t.ownerName} · ${money(t.principalLocal)}`, kind: t.ownerRef.type === 'region' ? 'sovereign tranche' : t.isCommercialPaper ? 'commercial paper' : t.isBankFacility ? 'bank facility' : 'debt tranche' }),
+  headline: (_w, _id, t) => ({ value: money(t.principalLocal), sub: pctLevel(t.couponRate, 2) }),
   overview({ world, obj: t, nav }) {
     const now = world.state.currentWeek;
     const left = t.maturityWeek - now;
@@ -61,7 +61,7 @@ export const tranche = defineObject<TrancheView>({
       <>
         <ObjectHeader name={t.id} sub={<>{t.ownerRef.type === 'region' ? 'sovereign tranche of ' : t.isCommercialPaper ? 'commercial paper of ' : t.isBankFacility ? 'bank facility of ' : t.seniority === 'SUBORDINATED' ? 'subordinated tranche of ' : 'senior tranche of '}<Link to={t.ownerRef} nav={nav}>{t.ownerName}</Link>{t.ownerRef.type === 'region' ? <> · <RegionLink id={t.ownerRef.id} nav={nav} /></> : null}</>} />
         <StatGrid>
-          <Stat label="principal" value={money(t.principalUSD)} sub="outstanding" />
+          <Stat label="principal" value={money(t.principalLocal)} sub="outstanding" />
           <Stat label="coupon" value={pctLevel(t.couponRate, 2)} sub={t.rateType === 'FLOATING' ? `policy + ${t.floatingMarginBps ?? 0}bp` : 'fixed'} />
           <Stat label="due" value={formatDate(displayWeek(world.state, t.maturityWeek))} sub={left > 0 ? `in ${formatSpan(left)}` : 'matured'} neg={left <= 4} />
         </StatGrid>
@@ -72,7 +72,7 @@ export const tranche = defineObject<TrancheView>({
           {t.isCommercialPaper ? <KV k="paper" hint="13-week, rolled weekly" v="commercial paper" /> : null}
           {t.isBankFacility ? <KV k="paper" hint={t.facilityBankTicker ? `drawn at ${t.facilityBankTicker}` : undefined} v="bank facility" /> : null}
           {t.callProtection ? <KV k="call protection" v={words(String((t.callProtection as { kind?: string }).kind ?? JSON.stringify(t.callProtection)))} /> : null}
-          <KV k="annual interest" v={money(t.principalUSD * t.couponRate)} />
+          <KV k="annual interest" v={money(t.principalLocal * t.couponRate)} />
         </Card>
         <FunctionTiles nav={nav} tiles={[{ fn: 'all', sub: 'the stored record' }]} />
         <AllRow fields={Object.keys(t).length} nav={nav} />

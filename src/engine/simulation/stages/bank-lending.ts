@@ -139,7 +139,7 @@ export function migrateSmeDebtAtSeed(
   if (!(totalEbitdaUSD > 0) || banks.length === 0) return;
 
   const serviceableUSD = totalEbitdaUSD * SME_SERVICEABLE_LEVERAGE;
-  const totalEquityUSD = banks.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0);
+  const totalEquityUSD = banks.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityLocal, 0);
   // §5-WIRES D: the sheets carry no loan-book scalar; what the seed's stated consumer book
   // still occupies of each bank's capital (until HH3 replaces it with real pools) is counted
   // through the same stated number HH3 replaces — the two migrations read one seed.
@@ -154,13 +154,13 @@ export function migrateSmeDebtAtSeed(
     const bankShare = seedHouseholdLineOf(sheet) / totalDepositsUSD;
     const loans: BankLoan[] = [];
     segs.forEach((seg, i) => {
-      const principalUSD = Math.round(migratedUSD * bankShare * (segEbitdaUSD[i] / totalEbitdaUSD));
-      if (principalUSD <= 0) return;
+      const principalLocal = Math.round(migratedUSD * bankShare * (segEbitdaUSD[i] / totalEbitdaUSD));
+      if (principalLocal <= 0) return;
       loans.push({
         id: `${bank.ticker}-SME-${seg.industry}`,
         borrowerId: smePoolId(regionId, seg.industry),
         borrowerKind: 'SME_POOL',
-        principalUSD,
+        principalLocal,
         marginBps: quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle, recoveryRate: creditRecoveryRate(reg) }),
         originationWeek: 0,
         termWeeks: 52 * 5,
@@ -174,14 +174,14 @@ export function migrateSmeDebtAtSeed(
     // until HH3 seeds the real pools and re-derives this again.
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     stashSeedHouseholdLine(sheet, Math.round((
-      businessLoanBookOf(sheet, facilityBookOf(v2, bank.ticker)) + seedConsumerLoanBookUSD(reg, bank) + sovUSD + openingCashOf(sheet) - sheet.bankEquityUSD
+      businessLoanBookOf(sheet, facilityBookOf(v2, bank.ticker)) + seedConsumerLoanBookUSD(reg, bank) + sovUSD + openingCashOf(sheet) - sheet.bankEquityLocal
     )));
   });
 
   // The segments' recorded debt becomes the loans that actually exist.
   const migratedBySegment = new Map<string, number>();
   banks.forEach((bank) => bank.bankBalanceSheet!.businessLoans.forEach((l) => {
-    migratedBySegment.set(l.borrowerId, (migratedBySegment.get(l.borrowerId) ?? 0) + l.principalUSD);
+    migratedBySegment.set(l.borrowerId, (migratedBySegment.get(l.borrowerId) ?? 0) + l.principalLocal);
   }));
   segs.forEach((seg) => {
     seg.debtUSD = migratedBySegment.get(smePoolId(regionId, seg.industry)) ?? 0;
@@ -229,7 +229,7 @@ export function runBankWeeklyLending(
   let loanInterestWeeklyUSD = 0;
   loans.forEach((l) => {
     if (l.status !== 'PERFORMING') return;
-    loanInterestWeeklyUSD += (l.principalUSD * (policyRate + l.marginBps / 10000)) / 52;
+    loanInterestWeeklyUSD += (l.principalLocal * (policyRate + l.marginBps / 10000)) / 52;
   });
 
   // ---- SME losses at the pool's own real default rate — the bank's measured loss experience,
@@ -240,23 +240,23 @@ export function runBankWeeklyLending(
     if (l.borrowerKind !== 'SME_POOL') return l;
     const seg = segByPool.get(l.borrowerId);
     if (!seg) return l;
-    const lossUSD = (l.principalUSD * smePoolAnnualPd(seg) * (1 - creditRecoveryRate(reg))) / 52;
+    const lossUSD = (l.principalLocal * smePoolAnnualPd(seg) * (1 - creditRecoveryRate(reg))) / 52;
     loanLossWeeklyUSD += lossUSD;
-    return { ...l, principalUSD: l.principalUSD - lossUSD };
+    return { ...l, principalLocal: l.principalLocal - lossUSD };
   });
 
   // ---- SME origination: priced, capital-gated. Demand is a slow reach toward the pool's
   // serviceable ceiling; supply is whatever keeps the bank above its regulatory floor. ----
   let declinedOriginationUSD = 0;
   const smeOriginationBySegment = new Map<string, number>();
-  const equityUSD = sheet.bankEquityUSD;
+  const equityUSD = sheet.bankEquityLocal;
   (reg.smePools || []).forEach((seg) => {
     const poolId = smePoolId(regionId, seg.industry);
     const poolLoan = loans.find((l) => l.borrowerId === poolId && l.borrowerKind === 'SME_POOL');
     const ebitdaUSD = Math.max(0, seg.annualRevenueUSD * seg.marginPct);
     const ceilingUSD = ebitdaUSD * SME_SERVICEABLE_LEVERAGE;
     // this bank's share of the pool's demand ≈ its share of the pool's existing loans
-    const bankPoolUSD = poolLoan?.principalUSD ?? 0;
+    const bankPoolUSD = poolLoan?.principalLocal ?? 0;
     const totalPoolDebtUSD = seg.debtUSD || 1;
     const bankShare = totalPoolDebtUSD > 0 ? Math.min(1, bankPoolUSD / totalPoolDebtUSD) : 0;
     // The BORROWER's own hurdle — the price half of the demand curve, and the transmission
@@ -273,7 +273,7 @@ export function runBankWeeklyLending(
     const demandUSD = Math.max(0, (ceilingUSD - totalPoolDebtUSD) * SME_WEEKLY_DEMAND_TAKEUP * appetite * (bankShare || 0.25));
     if (demandUSD <= 0) return;
 
-    const currentRwaUSD = loans.reduce((a, l) => a + l.principalUSD, 0) + householdBookRwaUSD(sheet.householdLoans);
+    const currentRwaUSD = loans.reduce((a, l) => a + l.principalLocal, 0) + householdBookRwaUSD(sheet.householdLoans);
     const headroomUSD = Math.max(0, equityUSD / BANK_MIN_CAPITAL_RATIO - currentRwaUSD);
     const grantedUSD = Math.min(demandUSD, headroomUSD);
     declinedOriginationUSD += demandUSD - grantedUSD;
@@ -282,13 +282,13 @@ export function runBankWeeklyLending(
     smeOriginationBySegment.set(seg.industry, (smeOriginationBySegment.get(seg.industry) ?? 0) + grantedUSD);
     const marginBps = quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle, recoveryRate: creditRecoveryRate(reg) });
     if (poolLoan) {
-      poolLoan.principalUSD += grantedUSD;
+      poolLoan.principalLocal += grantedUSD;
       // the pool's blended margin drifts toward the new quote as new money joins the book
-      poolLoan.marginBps = Math.round((poolLoan.marginBps * (poolLoan.principalUSD - grantedUSD) + marginBps * grantedUSD) / Math.max(1, poolLoan.principalUSD));
+      poolLoan.marginBps = Math.round((poolLoan.marginBps * (poolLoan.principalLocal - grantedUSD) + marginBps * grantedUSD) / Math.max(1, poolLoan.principalLocal));
     } else {
       loans.push({
         id: `${bank.ticker}-SME-${seg.industry}`,
-        borrowerId: poolId, borrowerKind: 'SME_POOL', principalUSD: grantedUSD,
+        borrowerId: poolId, borrowerKind: 'SME_POOL', principalLocal: grantedUSD,
         marginBps, originationWeek: nextWeek, termWeeks: 52 * 5, status: 'PERFORMING',
       });
     }
@@ -415,7 +415,7 @@ export function migrateHouseholdDebtAtSeed(
           // the origination LTV forever, which is the bug this replaced: 156 vintages all reading
           // 0.78, a cross-section with no cross-section in it.
           raw.push({
-            principalUSD: Math.max(0, remainingShare),
+            principalLocal: Math.max(0, remainingShare),
             originationCollateralUSD: 1 / MORTGAGE_LTV_AT_ORIGINATION,
             originationHomePriceUSD: priceNowUSD,
             rateAnnual: Number(mortgageRate.toFixed(4)),
@@ -429,16 +429,16 @@ export function migrateHouseholdDebtAtSeed(
         }
         // One scale factor for the whole cohort set, applied to BOTH legs so the loan-to-value
         // each vintage was written at survives the scaling.
-        const rawTotal = raw.reduce((a, v) => a + v.principalUSD, 0) || 1;
+        const rawTotal = raw.reduce((a, v) => a + v.principalLocal, 0) || 1;
         const scale = bookUSD / rawTotal;
         const vintages = raw.map((v) => ({
           ...v,
-          principalUSD: v.principalUSD * scale,
+          principalLocal: v.principalLocal * scale,
           originationCollateralUSD: v.originationCollateralUSD * scale,
         }));
         return {
           kind: 'MORTGAGE' as const,
-          principalUSD: bookUSD,
+          principalLocal: bookUSD,
           vintages,
           wacAnnual: Number(mortgageRate.toFixed(4)),
           wamWeeks: MORTGAGE_SEED_WAM_WEEKS,
@@ -446,36 +446,36 @@ export function migrateHouseholdDebtAtSeed(
       })(),
       {
         kind: 'CREDIT_CARD',
-        principalUSD: Math.round((hs.creditCardDebtUSD ?? 0) * share),
+        principalLocal: Math.round((hs.creditCardDebtUSD ?? 0) * share),
         marginBps: cardMarginBps,
       },
       {
         kind: 'CONSUMER_TERM',
-        principalUSD: Math.round((hs.otherConsumerLoanDebtUSD ?? 0) * share),
+        principalLocal: Math.round((hs.otherConsumerLoanDebtUSD ?? 0) * share),
         marginBps: termMarginBps,
         wamWeeks: CONSUMER_TERM_SEED_WAM_WEEKS,
       },
-    ] as HouseholdLoanPool[]).filter((pl) => pl.principalUSD > 0);
+    ] as HouseholdLoanPool[]).filter((pl) => pl.principalLocal > 0);
 
     // §5-WIRES D: the consumer scalar this replaces is the seed's STATED book (never stored on
     // the sheet); it stands in the prior RWA exactly as the stored copy used to.
     const replacedRwaUSD = seedConsumerRwaUSD(reg, bank);
-    const facilityBookUSD = facilityBookOf(v2, bank.ticker);
-    const priorRwaUSD = bankRwaUSD(sheet, facilityBookUSD) + replacedRwaUSD;
-    const priorRatio = priorRwaUSD > 0 ? sheet.bankEquityUSD / priorRwaUSD : BANK_WORKING_CAPITAL_RATIO;
+    const facilityBookLocal = facilityBookOf(v2, bank.ticker);
+    const priorRwaUSD = bankRwaUSD(sheet, facilityBookLocal) + replacedRwaUSD;
+    const priorRatio = priorRwaUSD > 0 ? sheet.bankEquityLocal / priorRwaUSD : BANK_WORKING_CAPITAL_RATIO;
     const newHouseholdRwaUSD = householdBookRwaUSD(pools);
     sheet.householdLoans = pools;
     // Equity scales with the risk the books add, at the ratio this bank already ran — no new
     // constant, and the opening capital ratio is preserved by construction.
-    sheet.bankEquityUSD = Math.round((sheet.bankEquityUSD + Math.max(0, newHouseholdRwaUSD - replacedRwaUSD) * priorRatio));
-    applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookUSD, Math.round(openingCashOf(hs) * share)); // the seed's provisional sizing (close-seed strikes the line)
-    sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet, facilityBookUSD))).toFixed(4));
+    sheet.bankEquityLocal = Math.round((sheet.bankEquityLocal + Math.max(0, newHouseholdRwaUSD - replacedRwaUSD) * priorRatio));
+    applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookLocal, Math.round(openingCashOf(hs) * share)); // the seed's provisional sizing (close-seed strikes the line)
+    sheet.bankCapitalRatio = Number((sheet.bankEquityLocal / Math.max(1, bankRwaUSD(sheet, facilityBookLocal))).toFixed(4));
   });
 
   // The household lines become the derived sums they will be every week from here on, and the
   // seed carries the flows the books imply so week 1 opens in the engine's shape, not at zero.
   const sumKind = (kind: HouseholdLoanKind) => banks.reduce(
-    (a, b) => a + (b.bankBalanceSheet!.householdLoans || []).filter((pl) => pl.kind === kind).reduce((x, pl) => x + pl.principalUSD, 0),
+    (a, b) => a + (b.bankBalanceSheet!.householdLoans || []).filter((pl) => pl.kind === kind).reduce((x, pl) => x + pl.principalLocal, 0),
     0
   );
   hs.mortgageDebtUSD = sumKind('MORTGAGE');
@@ -638,24 +638,24 @@ export function runBankHouseholdLending(
   // borrowed is a real measurement, because every vintage remembers the house it was written
   // against; the forced-move floor is one sale per tenure, and a tenure is what the hazard says
   // an owner of the median adult age has left. See `housingTurnoverAnnual`.
-  const mortgageBookNowUSD = (mortgagePool?.vintages ?? []).reduce((a, v) => a + v.principalUSD, 0);
+  const mortgageBookNowUSD = (mortgagePool?.vintages ?? []).reduce((a, v) => a + v.principalLocal, 0);
   const tradeUpUSD = (mortgagePool?.vintages ?? []).reduce((a, v) => {
     const originalLoanUSD = Math.max(0, v.originationCollateralUSD) * MORTGAGE_LTV_AT_ORIGINATION;
-    return a + (affordableLoanUSD > originalLoanUSD ? v.principalUSD : 0);
+    return a + (affordableLoanUSD > originalLoanUSD ? v.principalLocal : 0);
   }, 0);
   const turnoverRateAnnual = housingTurnoverAnnual({
     tenureYears: remainingLifeExpectancyYears(medianAdultAgeYears(reg.ageDistribution)),
     tradeUpShare: mortgageBookNowUSD > 0 ? tradeUpUSD / mortgageBookNowUSD : 0,
   });
 
-  const equityUSD = sheet.bankEquityUSD;
-  const otherRwaUSD = (sheet.businessLoans || []).reduce((a, l) => a + l.principalUSD, 0);
+  const equityUSD = sheet.bankEquityLocal;
+  const otherRwaUSD = (sheet.businessLoans || []).reduce((a, l) => a + l.principalLocal, 0);
   const headroomUSD = () => Math.max(0, equityUSD / 0.08 - (otherRwaUSD + householdBookRwaUSD(pools)));
 
   // This bank's share of the region's household demand ≈ its share of the existing books.
   const regionBookUSD = Math.max(1,
     (hs?.mortgageDebtUSD ?? 0) + (hs?.creditCardDebtUSD ?? 0) + (hs?.otherConsumerLoanDebtUSD ?? 0));
-  const bankBookUSD = pools.reduce((a, pl) => a + pl.principalUSD, 0);
+  const bankBookUSD = pools.reduce((a, pl) => a + pl.principalLocal, 0);
   const bankShare = Math.min(1, bankBookUSD / regionBookUSD) || 0.25;
 
   pools.forEach((pl) => {
@@ -669,11 +669,11 @@ export function runBankHouseholdLending(
       let scheduledUSD = 0;
       let lossUSD = 0;
       vintages.forEach((v) => {
-        if (!(v.principalUSD > 0)) return;
-        const vInterestUSD = (v.principalUSD * v.rateAnnual) / 52;
+        if (!(v.principalLocal > 0)) return;
+        const vInterestUSD = (v.principalLocal * v.rateAnnual) / 52;
         const vScheduledUSD = Math.min(
-          v.principalUSD,
-          annuityWeeklyPrincipalUSD(v.principalUSD, v.rateAnnual, v.wamWeeks));
+          v.principalLocal,
+          annuityWeeklyPrincipalUSD(v.principalLocal, v.rateAnnual, v.wamWeeks));
         // Losses fall on a vintage at ITS OWN severity: the underwater cohorts carry them, which
         // is the entire reason the book is cut this way.
         const vSeverity = mortgageSeverityAtLtv(vintageCurrentLtv(v, medianHomePriceUSD));
@@ -683,12 +683,12 @@ export function runBankHouseholdLending(
         // of only into a cash-flow line, and it is measured off the vintage's own coupon rather
         // than stated.
         const vBurden = Math.max(0.25, Math.min(4, v.rateAnnual / Math.max(0.005, marketMortgageRate)));
-        const vLossUSD = (v.principalUSD
+        const vLossUSD = (v.principalLocal
           * unsecuredLossRateAnnual * MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER * vBurden * vSeverity) / 52;
         interestUSD += vInterestUSD;
         scheduledUSD += vScheduledUSD;
         lossUSD += vLossUSD;
-        v.principalUSD = Math.max(0, v.principalUSD - vScheduledUSD - vLossUSD);
+        v.principalLocal = Math.max(0, v.principalLocal - vScheduledUSD - vLossUSD);
         v.wamWeeks = Math.max(0, v.wamWeeks - 1);
 
         // HSG — THE RESET. A fix runs out and the loan reprices to whatever the market is now.
@@ -711,13 +711,13 @@ export function runBankHouseholdLending(
       // A sale discharges the seller's remaining loan out of the buyer's proceeds — the churn
       // that keeps gross origination from reading as pure net money creation. It retires whole
       // loans from across the book, so it comes off the vintages pro rata.
-      const bookBeforeUSD = vintages.reduce((a, v) => a + v.principalUSD, 0);
+      const bookBeforeUSD = vintages.reduce((a, v) => a + v.principalLocal, 0);
       const salesVolumeUSD = (housingStockUSD * turnoverRateAnnual / 52) * bankShare;
       const bookLtv = housingStockUSD > 0 ? Math.min(2, bookBeforeUSD / (housingStockUSD * bankShare)) : 1;
       const dischargeUSD = Math.min(bookBeforeUSD, salesVolumeUSD * bookLtv);
       if (dischargeUSD > 0 && bookBeforeUSD > 0) {
         const keep = 1 - dischargeUSD / bookBeforeUSD;
-        vintages.forEach((v) => { v.principalUSD *= keep; });
+        vintages.forEach((v) => { v.principalLocal *= keep; });
       }
       mortgageDischargeUSD += dischargeUSD;
 
@@ -753,7 +753,7 @@ export function runBankHouseholdLending(
         // is this cohort that is underwater if prices fall next year, and the twenty-year-old
         // one that is not.
         vintages.push({
-          principalUSD: grantedUSD,
+          principalLocal: grantedUSD,
           originationCollateralUSD: grantedUSD / MORTGAGE_LTV_AT_ORIGINATION,
           originationHomePriceUSD: Math.max(1, medianHomePriceUSD),
           rateAnnual: Number(newRate.toFixed(4)),
@@ -764,27 +764,27 @@ export function runBankHouseholdLending(
         mortgageOriginationUSD += grantedUSD;
       }
       // Vintages that have amortised away leave the book rather than lingering at zero.
-      pl.vintages = vintages.filter((v) => v.principalUSD > 1);
-      // `principalUSD`, `wacAnnual` and `wamWeeks` are MEASUREMENTS of the vintages now — kept
+      pl.vintages = vintages.filter((v) => v.principalLocal > 1);
+      // `principalLocal`, `wacAnnual` and `wamWeeks` are MEASUREMENTS of the vintages now — kept
       // so every existing reader still finds the one number it expects (rule 4).
-      const bookUSD = pl.vintages.reduce((a, v) => a + v.principalUSD, 0);
-      pl.principalUSD = bookUSD;
+      const bookUSD = pl.vintages.reduce((a, v) => a + v.principalLocal, 0);
+      pl.principalLocal = bookUSD;
       pl.wacAnnual = bookUSD > 0
-        ? Number((pl.vintages.reduce((a, v) => a + v.principalUSD * v.rateAnnual, 0) / bookUSD).toFixed(4))
+        ? Number((pl.vintages.reduce((a, v) => a + v.principalLocal * v.rateAnnual, 0) / bookUSD).toFixed(4))
         : Number(newRate.toFixed(4));
       pl.wamWeeks = bookUSD > 0
-        ? Math.round(pl.vintages.reduce((a, v) => a + v.principalUSD * v.wamWeeks, 0) / bookUSD)
+        ? Math.round(pl.vintages.reduce((a, v) => a + v.principalLocal * v.wamWeeks, 0) / bookUSD)
         : MORTGAGE_TERM_WEEKS;
     } else if (pl.kind === 'CREDIT_CARD') {
       const rate = policyRate + (pl.marginBps ?? 1000) / 10000;
-      const interestUSD = (pl.principalUSD * rate) / 52;
-      const paydownUSD = pl.principalUSD * CARD_POOL_PAYMENT_RATE_WEEKLY;
-      const lossUSD = (pl.principalUSD * unsecuredLossRateAnnual) / 52;
+      const interestUSD = (pl.principalLocal * rate) / 52;
+      const paydownUSD = pl.principalLocal * CARD_POOL_PAYMENT_RATE_WEEKLY;
+      const lossUSD = (pl.principalLocal * unsecuredLossRateAnnual) / 52;
       interestWeeklyUSD += interestUSD;
       principalWeeklyUSD += paydownUSD;
-      debtServicePrincipalWeeklyUSD += pl.principalUSD * CARD_MIN_PRINCIPAL_RATE_WEEKLY;
+      debtServicePrincipalWeeklyUSD += pl.principalLocal * CARD_MIN_PRINCIPAL_RATE_WEEKLY;
       lossWeeklyUSD += lossUSD;
-      pl.principalUSD -= paydownUSD + lossUSD;
+      pl.principalLocal -= paydownUSD + lossUSD;
 
       // The pool re-borrows what it paid down, scaled by appetite — the revolving turnover.
       const demandUSD = paydownUSD * appetite;
@@ -795,37 +795,37 @@ export function runBankHouseholdLending(
           annualLossRate: unsecuredLossRateAnnual, riskWeight: CONSUMER_CREDIT_RISK_WEIGHT,
           operatingCostBps: CARD_OPERATING_COST_BPS,
         });
-        pl.principalUSD += grantedUSD;
+        pl.principalLocal += grantedUSD;
         consumerCreditOriginationUSD += grantedUSD;
       }
     } else {
       const rate = policyRate + (pl.marginBps ?? 500) / 10000;
-      const interestUSD = (pl.principalUSD * rate) / 52;
-      const scheduledUSD = annuityWeeklyPrincipalUSD(pl.principalUSD, rate, pl.wamWeeks ?? CONSUMER_TERM_SEED_WAM_WEEKS);
-      const lossUSD = (pl.principalUSD * consumerTermAnnualLossRate(unsecuredLossRateAnnual)) / 52;
+      const interestUSD = (pl.principalLocal * rate) / 52;
+      const scheduledUSD = annuityWeeklyPrincipalUSD(pl.principalLocal, rate, pl.wamWeeks ?? CONSUMER_TERM_SEED_WAM_WEEKS);
+      const lossUSD = (pl.principalLocal * consumerTermAnnualLossRate(unsecuredLossRateAnnual)) / 52;
       interestWeeklyUSD += interestUSD;
       principalWeeklyUSD += scheduledUSD;
       debtServicePrincipalWeeklyUSD += scheduledUSD;
       lossWeeklyUSD += lossUSD;
-      pl.principalUSD -= scheduledUSD + lossUSD;
+      pl.principalLocal -= scheduledUSD + lossUSD;
 
       const demandUSD = scheduledUSD * appetite;
       const grantedUSD = Math.min(demandUSD, headroomUSD() / CONSUMER_CREDIT_RISK_WEIGHT);
       declinedOriginationUSD += demandUSD - grantedUSD;
       if (grantedUSD > 0) {
-        const total = pl.principalUSD + grantedUSD;
+        const total = pl.principalLocal + grantedUSD;
         pl.marginBps = quoteHouseholdMarginBps({
           annualLossRate: consumerTermAnnualLossRate(unsecuredLossRateAnnual), riskWeight: CONSUMER_CREDIT_RISK_WEIGHT,
           operatingCostBps: CONSUMER_TERM_OPERATING_COST_BPS, requiredReturnAnnual: bankHurdle,
         });
-        pl.wamWeeks = Math.round((((pl.wamWeeks ?? CONSUMER_TERM_SEED_WAM_WEEKS) - 1) * pl.principalUSD + CONSUMER_TERM_WEEKS * grantedUSD) / Math.max(1, total));
-        pl.principalUSD = total;
+        pl.wamWeeks = Math.round((((pl.wamWeeks ?? CONSUMER_TERM_SEED_WAM_WEEKS) - 1) * pl.principalLocal + CONSUMER_TERM_WEEKS * grantedUSD) / Math.max(1, total));
+        pl.principalLocal = total;
         consumerCreditOriginationUSD += grantedUSD;
       } else if (pl.wamWeeks) {
         pl.wamWeeks = Math.max(1, pl.wamWeeks - 1);
       }
     }
-    pl.principalUSD = Math.max(0, Math.round(pl.principalUSD));
+    pl.principalLocal = Math.max(0, Math.round(pl.principalLocal));
   });
 
   return {
@@ -874,11 +874,11 @@ export function runBankHouseholdLending(
  * payment instruction (BANK_SECURITIES → CENTRAL_BANK), so the reserves the loan created are
  * extinguished where the money moves.
  */
-export function repayCentralBankLoanUSD(sheet: BankingSector, cashUSD: number, householdDepositsUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
-  const excessCashUSD = Math.max(0, cashUSD - operatingCashBufferUSD(householdDepositsUSD, bufferRatio));
-  const repayUSD = Math.min(Math.max(0, sheet.centralBankLoanUSD ?? 0), excessCashUSD);
+export function repayCentralBankLoanUSD(sheet: BankingSector, cashLocal: number, householdDepositsUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
+  const excessCashUSD = Math.max(0, cashLocal - operatingCashBufferUSD(householdDepositsUSD, bufferRatio));
+  const repayUSD = Math.min(Math.max(0, sheet.centralBankLoanLocal ?? 0), excessCashUSD);
   if (repayUSD < 1e6) return 0;
-  sheet.centralBankLoanUSD = (sheet.centralBankLoanUSD ?? 0) - repayUSD;
+  sheet.centralBankLoanLocal = (sheet.centralBankLoanLocal ?? 0) - repayUSD;
   return repayUSD;
 }
 
@@ -910,7 +910,7 @@ export function operatingCashBufferUSD(householdDepositsUSD: number, bufferRatio
 export function raiseCentralBankLoanUSD(sheet: BankingSector, householdDepositsUSD: number, settledCashUSD: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
   const shortfallUSD = operatingCashBufferUSD(householdDepositsUSD, bufferRatio) - settledCashUSD;
   if (shortfallUSD < 1e6) return 0;
-  sheet.centralBankLoanUSD = (sheet.centralBankLoanUSD ?? 0) + shortfallUSD;
+  sheet.centralBankLoanLocal = (sheet.centralBankLoanLocal ?? 0) + shortfallUSD;
   return shortfallUSD;
 }
 /** The penalty over the standing-facility rate an unsecured central-bank loan carries. */
@@ -941,9 +941,9 @@ export function facilityMarginBpsFor(
 export function applyBankFundingSplit(
   sheet: BankingSector,
   /** The bank's reserves (its account; at the seed, the stash close-seed opens it from). */
-  cashUSD: number,
+  cashLocal: number,
   /** Step 10: the bank's facility book — its rows on the borrowers' ladders (`facilityBookOf`). */
-  facilityBookUSD: number,
+  facilityBookLocal: number,
   householdDepositsUSD: number,
   /** CASH: reserves this bank has already been billed for or promised but that have not settled
    *  yet. The sheet's repo and facility LIABILITIES are struck post-maturity the moment the
@@ -966,8 +966,8 @@ export function applyBankFundingSplit(
   // this split is not responsible for. Whatever is left is what deposits and wholesale money
   // have to cover.
   const fundingNeedUSD = Math.round((
-    bankTotalAssetsUSD(sheet, cashUSD, facilityBookUSD) + pendingCashUSD - sheet.bankEquityUSD
-      - (sheet.repoBorrowedUSD ?? 0) - (sheet.srfBorrowingUSD ?? 0)
+    bankTotalAssetsUSD(sheet, cashLocal, facilityBookLocal) + pendingCashUSD - sheet.bankEquityLocal
+      - (sheet.repoBorrowedLocal ?? 0) - (sheet.srfBorrowingLocal ?? 0)
   ));
   // §5-CLOSE: household money funds what the real corporate, institutional and segment
   // balances do not; nothing is written to a lender that does not exist. The seed's own close

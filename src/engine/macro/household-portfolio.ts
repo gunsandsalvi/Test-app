@@ -83,7 +83,7 @@ export function householdDirectEquityUSD(
       const instrumentId = v2.internedStrings[H.instrRef[r]];
       institutionallyHeldUSD.set(
         instrumentId,
-        (institutionallyHeldUSD.get(instrumentId) ?? 0) + H.qtyUSD[r]
+        (institutionallyHeldUSD.get(instrumentId) ?? 0) + H.qtyLocal[r]
       );
     }
   });
@@ -111,9 +111,9 @@ export function householdEtfHoldingsUSD(
   return hs.etfShares.reduce((sum, holding) => {
     const fund = fundById.get(holding.fundId);
     if (!fund?.etf || !(fund.etf.sharesOutstanding > 0)) return sum;
-    let heldUSD = 0;
-    for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) heldUSD += H.qtyUSD[r];
-    const navUSD = heldUSD + Math.max(0, entityCashOf(v2, fund));
+    let heldLocal = 0;
+    for (let r = bookHeadOf(v2, fund.id); r >= 0; r = H.next[r]) heldLocal += H.qtyLocal[r];
+    const navUSD = heldLocal + Math.max(0, entityCashOf(v2, fund));
     return sum + holding.shares * (navUSD / fund.etf.sharesOutstanding);
   }, 0);
 }

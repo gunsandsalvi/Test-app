@@ -17,7 +17,7 @@
  *
  * Banks play the dealer role (loanDealerInventory) exactly as they do for corporate bonds — real
  * market-making on the syndicated/traded portion, distinct from a bank's own real business loan
- * book (businessLoanBookUSD), which is driven by real lending activity, not a portfolio
+ * book (businessLoanBookLocal), which is driven by real lending activity, not a portfolio
  * allocation decision this engine models.
  *
  * Must run after 07b (so comp.oasSpreadBps is already real this week) and before stage 8, which
@@ -76,7 +76,7 @@ function floatingDebtUSD(v2: V2World, comp: Company): number {
   const S = v2.tranches;
   let sum = 0;
   for (const r of ladderRowsOf(v2, comp.id)) {
-    if ((S.flags[r] & TR_FLOATING) && !(S.flags[r] & TR_FACILITY)) sum += S.principalUSD[r];
+    if ((S.flags[r] & TR_FLOATING) && !(S.flags[r] & TR_FACILITY)) sum += S.principalLocal[r];
   }
   return sum;
 }
@@ -184,7 +184,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const priorDmById = new Map(regionCompanies.map((c) => [c.id, c.leveragedLoan?.discountMarginBps ?? 0]));
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
-      outstandingUSD: floatingDebtOf(c),
+      outstandingLocal: floatingDebtOf(c),
       tradableFloatUSD: floatingDebtOf(c),
       currentStat: c.leveragedLoan!.discountMarginBps,
       statKind: 'YIELD_LIKE',
@@ -374,7 +374,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     });
 
     const priorDealerInventoryById = new Map<string, number>();
-    (reg.bankingSector.loanDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.companyId, p.inventoryUSD));
+    (reg.bankingSector.loanDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.companyId, p.inventoryLocal));
 
     // ETF: the index funds tracking this book's benchmarks. A fund posts a SIZE with no
     // reservation level — its benchmark weight at whatever the market is asking — which is the
@@ -497,7 +497,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
             ? { trancheId: primaryTrancheId(issuerId, offering.purpose, ctx.nextWeek), sliceUSD: primarySliceOf(newHoldingUSD - (prior?.get(issuerId) ?? 0), boughtByInstrument[ii], outcome.marketTakeUSD) }
             : undefined;
           splitAcrossTranches(v2, issuerId, 'LEVERAGED_LOAN', newHoldingUSD, primary).forEach((t) => {
-            if (t.usd > 1) newLoanHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceUSD: t.usd, units: t.usd });
+            if (t.usd > 1) newLoanHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceLocal: t.usd, units: t.usd });
           });
         }
       }
@@ -523,9 +523,9 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         deskCapacityUSD: bookCapacityUSD,
       }),
       BOOK);
-    const newDealerInventory: { companyId: string; inventoryUSD: number }[] = [];
-    deskViewByCompany.forEach((inventoryUSD, companyId) => {
-      if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ companyId, inventoryUSD });
+    const newDealerInventory: { companyId: string; inventoryLocal: number }[] = [];
+    deskViewByCompany.forEach((inventoryLocal, companyId) => {
+      if (Math.abs(inventoryLocal) > 1) newDealerInventory.push({ companyId, inventoryLocal });
     });
     reg.bankingSector = { ...reg.bankingSector, loanDealerInventory: newDealerInventory };
 

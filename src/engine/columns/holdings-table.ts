@@ -58,7 +58,7 @@ export class HoldingsTable {
       { name: 'rowInHolder', kind: 'i32' },
       { name: 'instrumentType', kind: 'u8' },
       { name: 'issuerRegion', kind: 'u8' },
-      { name: 'qtyUSD', kind: 'f64' },
+      { name: 'qtyLocal', kind: 'f64' },
       { name: 'shares', kind: 'f64' },
     ], 1 << 17);
   }
@@ -69,7 +69,7 @@ export class HoldingsTable {
   get rowInHolder(): Int32Array { return this.table.i32('rowInHolder'); }
   get instrumentType(): Uint8Array { return this.table.u8('instrumentType'); }
   get issuerRegion(): Uint8Array { return this.table.u8('issuerRegion'); }
-  get qtyUSD(): Float64Array { return this.table.f64('qtyUSD'); }
+  get qtyLocal(): Float64Array { return this.table.f64('qtyLocal'); }
   get shares(): Float64Array { return this.table.f64('shares'); }
 
   /** §7.315: buildFromRows builds only what its consumers read; the transpose is one of the
@@ -109,7 +109,7 @@ export class HoldingsTable {
 
     const entityRow = this.entityRow, instrumentId = this.instrumentId;
     const rowInHolder = this.rowInHolder, instrumentType = this.instrumentType;
-    const issuerRegion = this.issuerRegion, qtyUSD = this.qtyUSD, shares = this.shares;
+    const issuerRegion = this.issuerRegion, qtyLocal = this.qtyLocal, shares = this.shares;
 
     if (this.holderStart.length !== entities.length + 1) {
       this.holderStart = new Int32Array(entities.length + 1);
@@ -132,7 +132,7 @@ export class HoldingsTable {
         rowInHolder[at] = r;
         instrumentType[at] = code;
         issuerRegion[at] = REGION_CODE.get(h.issuerRegion) ?? 0;
-        qtyUSD[at] = h.quantityOrNotionalUSD ?? 0;
+        qtyLocal[at] = h.quantityOrNotionalUSD ?? 0;
         shares[at] = h.quantityShares ?? 0;
         typeCounts[code]++;
         const list = this.byInstrument.get(iid);
@@ -170,7 +170,7 @@ export class HoldingsTable {
     if (!instrMemo) { instrMemo = []; INSTR_ID_MEMO.set(v2, instrMemo); }
 
     // §7.315: only the columns the table's ONE weekly consumer reads (the accrual pass:
-    // byType/typeRange, instrumentId, qtyUSD, entityRow). The by-instrument transpose, shares,
+    // byType/typeRange, instrumentId, qtyLocal, entityRow). The by-instrument transpose, shares,
     // issuerRegion and rowInHolder had no consumer and cost ~110k Map ops and column fills a
     // week; rowsOfInstrument throws if asked for the skipped index.
     let total = 0;
@@ -181,7 +181,7 @@ export class HoldingsTable {
     this.table.length = total;
 
     const entityRow = this.entityRow, instrumentId = this.instrumentId;
-    const instrumentType = this.instrumentType, qtyUSD = this.qtyUSD;
+    const instrumentType = this.instrumentType, qtyLocal = this.qtyLocal;
 
     const typeCounts = new Int32Array(HOLDING_TYPES.length);
     this.byInstrument.clear();
@@ -198,7 +198,7 @@ export class HoldingsTable {
         entityRow[at] = e;
         instrumentId[at] = iid;
         instrumentType[at] = code;
-        qtyUSD[at] = H.qtyUSD[r];
+        qtyLocal[at] = H.qtyLocal[r];
         typeCounts[code]++;
         at++;
       }

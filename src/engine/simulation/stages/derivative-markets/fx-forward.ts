@@ -59,7 +59,7 @@ function hedgeableExposureByRegion(v2: V2World, entity: InstitutionalEntity): Ma
     const ratio = type === 'EQUITY' ? equityHedgeRatioFor(entity.entityType, entity.hedgeFundStrategy)
       : hedgedAsFixedIncome(type) ? HEDGE_RATIO_FIXED_INCOME : 0;
     if (ratio <= 0) continue;
-    out.set(issuer, (out.get(issuer) ?? 0) + H.qtyUSD[r] * ratio);
+    out.set(issuer, (out.get(issuer) ?? 0) + H.qtyLocal[r] * ratio);
   }
   return out;
 }
@@ -142,8 +142,8 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     if (c.classId !== 'FX_FORWARD' || c.b.kind !== 'BANK') continue;
     const desk = desks.get(c.b.ticker);
     if (!desk) continue;
-    desk.book.grossNotionalUSD += c.notionalUSD;
-    desk.book.netNotionalByRegion[c.referenceId] = (desk.book.netNotionalByRegion[c.referenceId] ?? 0) + c.notionalUSD;
+    desk.book.grossNotionalUSD += c.notional;
+    desk.book.netNotionalByRegion[c.referenceId] = (desk.book.netNotionalByRegion[c.referenceId] ?? 0) + c.notional;
     desk.book.initialMarginHeldUSD += initialMarginUSD(c);
   }
   // The dealers a holder in each region can face, in the order the roster lists them.
@@ -288,7 +288,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       if (participants.length === 0 || !(capacityUSD > 0)) { clearedBasisBps.set(key, 0); return; }
       const instrument: ClearingInstrument = {
         id: instrumentId,
-        outstandingUSD: capacityUSD,
+        outstandingLocal: capacityUSD,
         tradableFloatUSD: capacityUSD,
         currentStat: Math.max(1, ctx.updatedRegions[holderRegion]?.crossCurrencyBasisBps?.[issuer] ?? 10),
         statKind: 'PRICE_LIKE',
@@ -323,10 +323,10 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   const struck: DerivativeContract[] = [];
   const strikeFor = (
     holder: DerivativeParty, holderRegion: RegionId, participantId: string, gaps: Map<RegionId, number>,
-    cashUSD: number
+    cashLocal: number
   ): void => {
     const holderKey = derivativePartyKey(holder);
-    let budgetUSD = Math.max(0, cashUSD + pendingSettlementUSD(ctx, holder)) + (settledNetByParty.get(holderKey) ?? 0);
+    let budgetUSD = Math.max(0, cashLocal + pendingSettlementUSD(ctx, holder)) + (settledNetByParty.get(holderKey) ?? 0);
     gaps.forEach((gapUSD, issuer) => {
       const dealer = pickDealerBank(dealerBanksByRegion.get(holderRegion), desks);
       if (!dealer) return;
@@ -341,7 +341,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         regionId: holderRegion,
         a: holder,
         b: { kind: 'BANK', ticker: dealer },
-        notionalUSD: writableUSD,
+        notional: writableUSD,
         // The traded rate, not the theoretical one: CIP moved AGAINST the client by the desk's
         // basis, because the desk is charging for its balance sheet. Signing this the other way
         // hands the hedger an instant gain at inception and the dealer an instant loss on every
@@ -412,7 +412,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     // contracts that are actually live, this week's strikes included, so it cannot disagree.
     const nextSheet = {
       ...sheet,
-      clientMarginUSD: desk.book.initialMarginHeldUSD,
+      clientMarginLocal: desk.book.initialMarginHeldUSD,
       fxDealerBook: desk.book,
     };
     // The company IS the write; the channel copy in `companyUpdates` was dead post-08.

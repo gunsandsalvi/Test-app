@@ -95,7 +95,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = HFX.next[r]) {
       const issuer = ctx.v2.internedStrings[HFX.regionRef[r]];
       if (!issuer || issuer === e.region) continue;
-      heldNow[issuer] = (heldNow[issuer] ?? 0) + HFX.qtyUSD[r];
+      heldNow[issuer] = (heldNow[issuer] ?? 0) + HFX.qtyLocal[r];
     }
     const prior = e.priorForeignHoldingsByRegion ?? {};
     const touched = new Set([...Object.keys(heldNow), ...Object.keys(prior)]);
@@ -215,7 +215,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
 
     const instrument: ClearingInstrument = {
       id: `FX-${key}`,
-      outstandingUSD: Math.abs(netBaseDemandUSD),
+      outstandingLocal: Math.abs(netBaseDemandUSD),
       tradableFloatUSD: Math.abs(netBaseDemandUSD),
       currentStat: bookRate,
       statKind: 'PRICE_LIKE',
@@ -477,7 +477,7 @@ export function recordForeignHoldingsSnapshot(ctx: WeeklyStepContext): void {
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
       const issuer = ctx.v2.internedStrings[H.regionRef[r]];
       if (!issuer || issuer === e.region) continue;
-      byRegion[issuer] = (byRegion[issuer] ?? 0) + H.qtyUSD[r];
+      byRegion[issuer] = (byRegion[issuer] ?? 0) + H.qtyLocal[r];
     }
     return { ...e, priorForeignHoldingsByRegion: byRegion };
   });

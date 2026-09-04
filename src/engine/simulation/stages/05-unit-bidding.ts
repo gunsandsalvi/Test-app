@@ -888,12 +888,12 @@ function buildRegionSupplyPlans(
     // it has now. IND1/IND13 already grow PP&E by what was DELIVERED and COMMISSIONED, so
     // capacity simply reads the result.
     //
-    // Stage 05 runs BEFORE stage 08 on week 1, so `grossPPEUSD` is not set yet: it carries stage
+    // Stage 05 runs BEFORE stage 08 on week 1, so `grossPPELocal` is not set yet: it carries stage
     // 08's own opening fallback here, or the ratio would be fixed against a one-dollar plant.
-    const grossPPEForCapacityUSD = comp.grossPPEUSD
+    const grossPPEForCapacityUSD = comp.grossPPELocal
       ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
     const netPPEForCapacityUSD = Math.max(1,
-      grossPPEForCapacityUSD - (comp.accumulatedDepreciationUSD ?? (grossPPEForCapacityUSD * 0.45)));
+      grossPPEForCapacityUSD - (comp.accumulatedDepreciationLocal ?? (grossPPEForCapacityUSD * 0.45)));
     if (!(line.unitsPerNetPpeDollar! > 0)) {
       const openingCapacityUnits =
         ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / referencePriceUSD;

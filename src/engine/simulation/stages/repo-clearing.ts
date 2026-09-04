@@ -48,7 +48,7 @@ import { materializeGovLadder } from '../../../engine2/tranches';
 import { BankingSector } from '../../../domain/banking';
 import {
   RepoContract, RepoPledge, RepoParty, repoInterestToMaturityUSD,
-  repoBorrowedUSD, repoLentUSD, srfBorrowedUSD, encumberedFaceByBond,
+  repoBorrowedLocal, repoLentLocal, srfBorrowedUSD, encumberedFaceByBond,
 } from '../../../domain/repo';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay, PartyRef, pendingSettlementUSD, institutionSpendableUSD } from './settlement';
@@ -127,8 +127,8 @@ function nearestCurvePoint(years: number): 'tenor3M' | 'tenor2Y' | 'tenor5Y' | '
 export function collateralCapacityUSD(
   sheet: BankingSector,
   haircutOf: (bondId: string) => number | undefined
-): { faceUSD: number; capacityUSD: number } {
-  let faceUSD = 0; let capacityUSD = 0;
+): { faceLocal: number; capacityUSD: number } {
+  let faceLocal = 0; let capacityUSD = 0;
   Object.entries(sheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, v]) => {
     const usd = Number(v) || 0;
     if (usd <= 0) return;
@@ -136,10 +136,10 @@ export function collateralCapacityUSD(
     // It is not pledged at a guessed one.
     const haircut = haircutOf(bondId);
     if (haircut === undefined) return;
-    faceUSD += usd;
+    faceLocal += usd;
     capacityUSD += usd * (1 - haircut);
   });
-  return { faceUSD, capacityUSD };
+  return { faceLocal, capacityUSD };
 }
 
 /**
@@ -182,10 +182,10 @@ export function unencumberedBorrowingCapacityUSD(
     });
     return Math.max(0, capacityUSD);
   }
-  const { faceUSD, capacityUSD } = collateralCapacityUSD(sheet, haircutOf);
-  if (faceUSD <= 0) return 0;
-  const encumberedFaceUSD = Math.min(faceUSD, sheet.repoEncumberedCollateralUSD ?? 0);
-  const unencumberedShare = (faceUSD - encumberedFaceUSD) / faceUSD;
+  const { faceLocal, capacityUSD } = collateralCapacityUSD(sheet, haircutOf);
+  if (faceLocal <= 0) return 0;
+  const encumberedFaceUSD = Math.min(faceLocal, sheet.repoEncumberedCollateralUSD ?? 0);
+  const unencumberedShare = (faceLocal - encumberedFaceUSD) / faceLocal;
   return Math.max(0, capacityUSD * unencumberedShare);
 }
 
@@ -219,10 +219,10 @@ export function selectCollateral(
     const perDollar = 1 - perDollarHaircut;
     if (perDollar <= 0) continue;
     const wantedFaceUSD = (targetCashUSD - raisedUSD) / perDollar;
-    const faceUSD = Math.min(freeFaceUSD, wantedFaceUSD);
-    if (faceUSD <= 0) continue;
-    pledges.push({ bondId, faceUSD });
-    raisedUSD += faceUSD * perDollar;
+    const faceLocal = Math.min(freeFaceUSD, wantedFaceUSD);
+    if (faceLocal <= 0) continue;
+    pledges.push({ bondId, faceLocal });
+    raisedUSD += faceLocal * perDollar;
   }
   return { pledges, raisedUSD };
 }
@@ -304,7 +304,7 @@ export function runRegionalRepoSession(
   // bank lender's interest income in `evolveBankingSector`, an institution's in its own income
   // line. Equity where the accrual is; cash through the ledger.
   maturedNow.forEach((c) => {
-    const dueUSD = c.principalUSD + repoInterestToMaturityUSD(c);
+    const dueUSD = c.principalLocal + repoInterestToMaturityUSD(c);
     if (!(dueUSD > 0)) return;
     if (c.lender.kind === 'CENTRAL_BANK' && reg.centralBankSheet) {
       reg.centralBankSheet.lastStandingFacilityInterestUSD = (reg.centralBankSheet.lastStandingFacilityInterestUSD ?? 0) + repoInterestToMaturityUSD(c);
@@ -329,7 +329,7 @@ export function runRegionalRepoSession(
   // dip and belongs overnight. A treasury that funds a permanent book overnight is running the
   // maturity mismatch a funding squeeze is made of, and this is what lets it.
   const rolledByTicker = new Map<string, number>();
-  maturedNow.forEach((c) => rolledByTicker.set(c.borrowerTicker, (rolledByTicker.get(c.borrowerTicker) ?? 0) + c.principalUSD));
+  maturedNow.forEach((c) => rolledByTicker.set(c.borrowerTicker, (rolledByTicker.get(c.borrowerTicker) ?? 0) + c.principalLocal));
 
   const needByTicker = new Map<string, { onUSD: number; termUSD: number }>();
   let totalOnNeedUSD = 0;
@@ -374,7 +374,7 @@ export function runRegionalRepoSession(
                   clearedVolumeUSD: number): RepoSessionResult => {
     reg.repoBook = book;
     // C5: the window's lending is the central bank's ASSET, derived from the same book.
-    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentUSD = Math.round(repoLentUSD(book, { kind: 'CENTRAL_BANK' }));
+    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentUSD = Math.round(repoLentLocal(book, { kind: 'CENTRAL_BANK' }));
     reg.repoTermRateAnnual = termRateAnnual === undefined ? undefined : Number(termRateAnnual.toFixed(6));
     // Every scalar the sheets carried is now DERIVED from the book — the G2 pattern.
     banks.forEach((bank) => {
@@ -382,9 +382,9 @@ export function runRegionalRepoSession(
       if (!sheet) return;
       sheetByTicker.set(bank.ticker, {
         ...sheet,
-        repoBorrowedUSD: Math.round((repoBorrowedUSD(book, bank.ticker) - srfBorrowedUSD(book, bank.ticker))),
-        srfBorrowingUSD: Math.round(srfBorrowedUSD(book, bank.ticker)),
-        repoLentUSD: Math.round(repoLentUSD(book, { kind: 'BANK', ticker: bank.ticker })),
+        repoBorrowedLocal: Math.round((repoBorrowedLocal(book, bank.ticker) - srfBorrowedUSD(book, bank.ticker))),
+        srfBorrowingLocal: Math.round(srfBorrowedUSD(book, bank.ticker)),
+        repoLentLocal: Math.round(repoLentLocal(book, { kind: 'BANK', ticker: bank.ticker })),
         repoEncumberedCollateralUSD: Number(
           Array.from(encumberedFaceByBond(book, bank.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
         ),
@@ -393,10 +393,10 @@ export function runRegionalRepoSession(
     const lentByEntityId = new Map<string, number>();
     book.forEach((c) => {
       if (c.lender.kind !== 'INSTITUTION') return;
-      lentByEntityId.set(c.lender.id, (lentByEntityId.get(c.lender.id) ?? 0) + c.principalUSD);
+      lentByEntityId.set(c.lender.id, (lentByEntityId.get(c.lender.id) ?? 0) + c.principalLocal);
     });
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) =>
-      e.region === regionId ? { ...e, repoLentUSD: Math.round((lentByEntityId.get(e.id) ?? 0)) } : e
+      e.region === regionId ? { ...e, repoLentLocal: Math.round((lentByEntityId.get(e.id) ?? 0)) } : e
     );
     return { repoRateAnnual: onRateAnnual, sheetByTicker, fundableNeedUSD: totalNeedUSD, clearedVolumeUSD };
   };
@@ -442,7 +442,7 @@ export function runRegionalRepoSession(
   }) => {
     const instrument: ClearingInstrument = {
       id: args.instrumentId,
-      outstandingUSD: args.needUSD,
+      outstandingLocal: args.needUSD,
       tradableFloatUSD: args.needUSD,
       currentStat: args.currentBps,
       statKind: 'YIELD_LIKE',
@@ -574,8 +574,8 @@ export function runRegionalRepoSession(
         const free = unencumberedByBond(sheet, worked);
         const { pledges, raisedUSD } = selectCollateral(free, haircuts, shareUSD);
         if (raisedUSD <= 1) return;
-        const principalUSD = Math.min(shareUSD, raisedUSD);
-        pledges.forEach((pl) => worked.set(pl.bondId, (worked.get(pl.bondId) ?? 0) + pl.faceUSD));
+        const principalLocal = Math.min(shareUSD, raisedUSD);
+        pledges.forEach((pl) => worked.set(pl.bondId, (worked.get(pl.bondId) ?? 0) + pl.faceLocal));
         const lender: RepoParty = pid === CB_SRF_SEAT_ID
           ? { kind: 'CENTRAL_BANK' }
           : pid.startsWith('BANK-')
@@ -586,13 +586,13 @@ export function runRegionalRepoSession(
           regionId,
           lender,
           borrowerTicker: ticker,
-          principalUSD: Math.round(principalUSD),
+          principalLocal: Math.round(principalLocal),
           rateAnnual,
           struckWeek: week,
           maturityWeek: week + termWeeks,
-          collateral: pledges.map((pl) => ({ bondId: pl.bondId, faceUSD: Math.round(pl.faceUSD) })),
+          collateral: pledges.map((pl) => ({ bondId: pl.bondId, faceLocal: Math.round(pl.faceLocal) })),
         });
-        struckUSD += principalUSD;
+        struckUSD += principalLocal;
       });
     });
     return struckUSD;
@@ -620,14 +620,14 @@ export function runRegionalRepoSession(
   // as being recorded, which is the whole reason the ledger exists.
   const lentByEntity = new Map<string, number>();
   newContracts.forEach((c) => {
-    if (!(c.principalUSD > 0)) return;
+    if (!(c.principalLocal > 0)) return;
     if (c.lender.kind === 'INSTITUTION') {
-      lentByEntity.set(c.lender.id, (lentByEntity.get(c.lender.id) ?? 0) + c.principalUSD);
+      lentByEntity.set(c.lender.id, (lentByEntity.get(c.lender.id) ?? 0) + c.principalLocal);
     }
     pay(ctx, {
       payer: repoLenderParty(c.lender, regionId),
       payee: { kind: 'BANK_SECURITIES', ticker: c.borrowerTicker },
-      amount: c.principalUSD,
+      amount: c.principalLocal,
       currency: currencyOf(regionId),
       reason: 'repo drawdown',
     });
@@ -712,14 +712,14 @@ function returnParkedCash(ctx: WeeklyStepContext, regionId: RegionId): void {
   let returnedUSD = 0;
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.region !== regionId || !(e.rrpLentUSD ?? 0)) return e;
-    const principalUSD = e.rrpLentUSD!;
-    const interestUSD = (principalUSD * (e.rrpRateAnnual ?? 0)) / 52;
-    returnedUSD += principalUSD;
+    const principalLocal = e.rrpLentUSD!;
+    const interestUSD = (principalLocal * (e.rrpRateAnnual ?? 0)) / 52;
+    returnedUSD += principalLocal;
     if (cb && interestUSD > 0) cb.lastReverseRepoInterestUSD = (cb.lastReverseRepoInterestUSD ?? 0) + interestUSD;
     pay(ctx, {
       payer: { kind: 'CENTRAL_BANK', region: regionId },
       payee: { kind: 'INSTITUTION', id: e.id },
-      amount: principalUSD + interestUSD,
+      amount: principalLocal + interestUSD,
       currency: currencyOf(regionId),
       reason: 'reverse repo returned with interest',
     });
@@ -765,22 +765,22 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
 
       let repaidUSD = 0;
       book.forEach((c) => {
-        if (c.borrowerTicker !== ticker || c.principalUSD <= 0) return;
+        if (c.borrowerTicker !== ticker || c.principalLocal <= 0) return;
         let releasedFaceUSD = 0;
         let pledgedFaceUSD = 0;
         c.collateral = c.collateral.map((p) => {
-          pledgedFaceUSD += p.faceUSD;
+          pledgedFaceUSD += p.faceLocal;
           const shortfall = shortfallByBond.get(p.bondId) ?? 0;
           if (shortfall <= 0) return p;
           const totalPledged = pledged.get(p.bondId) ?? 1;
-          const takeUSD = Math.min(p.faceUSD, shortfall * (p.faceUSD / totalPledged));
+          const takeUSD = Math.min(p.faceLocal, shortfall * (p.faceLocal / totalPledged));
           releasedFaceUSD += takeUSD;
-          return { ...p, faceUSD: p.faceUSD - takeUSD };
-        }).filter((p) => p.faceUSD > 1);
+          return { ...p, faceLocal: p.faceLocal - takeUSD };
+        }).filter((p) => p.faceLocal > 1);
         if (releasedFaceUSD <= 0 || pledgedFaceUSD <= 0) return;
         // The loan shrinks by the share of its collateral that is gone.
-        const callUSD = Math.min(c.principalUSD, c.principalUSD * (releasedFaceUSD / pledgedFaceUSD));
-        c.principalUSD -= callUSD;
+        const callUSD = Math.min(c.principalLocal, c.principalLocal * (releasedFaceUSD / pledgedFaceUSD));
+        c.principalLocal -= callUSD;
         repaidUSD += callUSD;
         const payee: PartyRef = c.lender.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: c.lender.ticker }
           : c.lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: c.lender.id }
@@ -796,14 +796,14 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       if (repaidUSD <= 0) return;
       updateBankSheet(ctx, ticker, {
         ...sheet,
-        repoBorrowedUSD: Math.round((repoBorrowedUSD(book, ticker) - srfBorrowedUSD(book, ticker))),
-        srfBorrowingUSD: Math.round(srfBorrowedUSD(book, ticker)),
+        repoBorrowedLocal: Math.round((repoBorrowedLocal(book, ticker) - srfBorrowedUSD(book, ticker))),
+        srfBorrowingLocal: Math.round(srfBorrowedUSD(book, ticker)),
         repoEncumberedCollateralUSD: Number(
           Array.from(encumberedFaceByBond(book, ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
         ),
       });
     });
-    reg.repoBook = book.filter((c) => c.principalUSD > 1);
-    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentUSD = Math.round(repoLentUSD(reg.repoBook, { kind: 'CENTRAL_BANK' }));
+    reg.repoBook = book.filter((c) => c.principalLocal > 1);
+    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentUSD = Math.round(repoLentLocal(reg.repoBook, { kind: 'CENTRAL_BANK' }));
   });
 }

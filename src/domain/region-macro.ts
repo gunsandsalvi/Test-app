@@ -382,7 +382,7 @@ export interface SmePool {
   industry: Industry;
   /** SEG-C — the pool's own money: the summed deposit balances of the small firms in it. Held
    * at the region's banks pro-rata by market share (a mass of small firms banks everywhere,
-   * unlike a corporate with a house bank) as `smeDepositsUSD`, and moved ONLY by the settlement
+   * unlike a corporate with a house bank) as `smeDepositsLocal`, and moved ONLY by the settlement
    * layer — the pool is a party (`SEGMENT` PartyRef) like everyone else. */
   // §5-WIRES A3.3: the pool's cash is its rows at the region's banks (`poolCashOf`, engine/ledger/accounts.ts).
   /** SEG-C — tax accrued weekly on the pool's earnings and REMITTED quarterly as a real
@@ -706,14 +706,14 @@ export interface Region {
    * REPO1 — this region's live secured-funding book: every open contract, with its lender, its
    * borrower, the rate it was struck at, when it matures and the specific paper pledged. Stored
    * ONCE with both parties named, which is what makes the position two-sided (rule 5) without
-   * being two copies of one thing (rule 4). The sheets' `repoLentUSD`, `repoBorrowedUSD`,
-   * `srfBorrowingUSD` and encumbrance are all derived from it (domain/repo.ts).
+   * being two copies of one thing (rule 4). The sheets' `repoLentLocal`, `repoBorrowedLocal`,
+   * `srfBorrowingLocal` and encumbrance are all derived from it (domain/repo.ts).
    */
   repoBook?: RepoContract[];
   /**
    * HF1 — this region's live prime-brokerage lines: which bank finances which fund, how much is
    * drawn, at what haircut and what rate. Stored once with both parties named, the same shape as
-   * the repo book; the brokers' `primeBrokerageLoansUSD` and the funds' leverage are derived.
+   * the repo book; the brokers' `primeBrokerageLoansLocal` and the funds' leverage are derived.
    */
   primeBrokerageBook?: PrimeBrokerageLine[];
   // DRV — the swap and CDS books moved to the ONE derivative book (GameState.derivativesBook).

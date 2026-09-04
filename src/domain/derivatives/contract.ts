@@ -50,7 +50,8 @@ export interface DerivativeContract {
   a: DerivativeParty;
   /** Role B, named by the class profile: receive-fixed / protection seller / short / dealer. */
   b: DerivativeParty;
-  notionalUSD: number;
+  /** §3.13c: no `USD` suffix — `currency` above says what money this is in (rule 8). */
+  notional: number;
   /**
    * What the contract was struck at, in the class's own stat — the same number its market
    * clears: annual decimal rate (IRS), spread bps (CDS), price per unit (futures), home-per-
@@ -91,7 +92,7 @@ export function standingCoverUSD(
     if (c.classId !== classId || c.maturityWeek <= week) continue;
     if (referenceId !== undefined && c.referenceId !== referenceId) continue;
     if (termKey !== undefined && c.termKey !== termKey) continue;
-    if (derivativePartyKey(side === 'a' ? c.a : c.b) === partyKey) usd += c.notionalUSD;
+    if (derivativePartyKey(side === 'a' ? c.a : c.b) === partyKey) usd += c.notional;
   }
   return usd;
 }

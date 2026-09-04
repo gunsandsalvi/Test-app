@@ -109,7 +109,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
   if (comp.isBankEntity && comp.bankBalanceSheet) {
     const sheet = comp.bankBalanceSheet;
     const rwaUSD = Math.max(1, bankRwaUSD(sheet, facilityBookOf(v2, comp.ticker)));
-    const bufferUSD = sheet.bankEquityUSD - rwaUSD * BANK_MIN_CAPITAL_RATIO;
+    const bufferUSD = sheet.bankEquityLocal - rwaUSD * BANK_MIN_CAPITAL_RATIO;
     // The book's own measured provision rate (02b re-derives it weekly from the pools' real
     // default experience); the floor is consumerAnnualLossRate's own de-minimis.
     const lossRateAnnual = Math.max(0.005, sheet.loanLossProvisionRateAnnualPct ?? 0.01);
@@ -124,7 +124,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
       const rate = !(TS.flags[r] & TR_FLOATING)
         ? (Number.isNaN(TS.couponRate[r]) ? 0.05 : TS.couponRate[r])
         : (0.05 + (Number.isNaN(TS.floatingMarginBps[r]) ? 200 : TS.floatingMarginBps[r]) / 10000);
-      interestSum += TS.principalUSD[r] * rate;
+      interestSum += TS.principalLocal[r] * rate;
     }
   }
   const interest = interestSum || 1;
@@ -286,14 +286,14 @@ export function distributeRealTargetByWeight(
 
 export function attributeItemizedHoldings(
   sectorShareUSD: number,
-  candidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[]
+  candidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[]
 ): ItemizedHolding[] {
-  const sorted = [...candidates].sort((a, b) => b.outstandingUSD - a.outstandingUSD);
+  const sorted = [...candidates].sort((a, b) => b.outstandingLocal - a.outstandingLocal);
   let remaining = sectorShareUSD;
   const result: ItemizedHolding[] = [];
   for (const c of sorted) {
     if (remaining <= 0) break;
-    const take = Math.min(c.outstandingUSD * 0.4, remaining); // no single sector holds more than 40% of any one issue
+    const take = Math.min(c.outstandingLocal * 0.4, remaining); // no single sector holds more than 40% of any one issue
     if (take > 0) {
       result.push({
         instrumentId: c.id,
@@ -377,10 +377,10 @@ function deskHoldingsByIssuer(
     if (!bank.isBankEntity || !rows) return;
     const deskId = dealerDeskParticipantId(bank.ticker);
     rows.forEach((p) => {
-      if (!(p.inventoryUSD > 0)) return;
+      if (!(p.inventoryLocal > 0)) return;
       let byDesk = out.get(p.instrumentId);
       if (!byDesk) { byDesk = new Map(); out.set(p.instrumentId, byDesk); }
-      byDesk.set(deskId, (byDesk.get(deskId) ?? 0) + p.inventoryUSD);
+      byDesk.set(deskId, (byDesk.get(deskId) ?? 0) + p.inventoryLocal);
     });
   });
   return out;
@@ -501,11 +501,11 @@ export function applyPendingCorporateActionSettlements(
         let touched = false;
         const newRows = rows.map((p) => {
           const ratio = byId.get(p.instrumentId);
-          if (ratio === undefined || !(p.inventoryUSD > 0) || Math.abs(ratio - 1) < 1e-9) return p;
+          if (ratio === undefined || !(p.inventoryLocal > 0) || Math.abs(ratio - 1) < 1e-9) return p;
           const issuerTicker = issuerTickerOf(p.instrumentId);
           const issuerRegion = regionByIssuerId.get(issuerIdOf(v2, p.instrumentId));
           if (!issuerTicker || !issuerRegion) return p;
-          const deltaUSD = p.inventoryUSD * (ratio - 1);
+          const deltaUSD = p.inventoryLocal * (ratio - 1);
           const house = { kind: 'CLEARING_HOUSE' as const, region: issuerRegion };
           const desk = { kind: 'BANK_SECURITIES' as const, ticker: bank.ticker };
           const spec = { instrumentType: type as ItemizedHolding['instrumentType'], instrumentId: p.instrumentId, issuerRegion, valueUSD: Math.abs(deltaUSD) };
@@ -517,7 +517,7 @@ export function applyPendingCorporateActionSettlements(
             transferHolding(ctx.v2, house, desk, spec, 'corporate action: desk paper placed pro rata');
           }
           touched = true;
-          return { ...p, inventoryUSD: p.inventoryUSD * ratio, units: p.units !== undefined ? p.units * ratio : undefined };
+          return { ...p, inventoryLocal: p.inventoryLocal * ratio, units: p.units !== undefined ? p.units * ratio : undefined };
         });
         if (touched) bank.bankBalanceSheet = { ...sheet, dealerDeskInventory: { ...sheet.dealerDeskInventory, [book]: newRows } };
       });
@@ -554,7 +554,7 @@ export function applyPendingCorporateActionSettlements(
       for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
         const k = pairKeyOf(r);
         const owed = owedByPair.has(k);
-        if (owed) totalByPair.set(k, (totalByPair.get(k) ?? 0) + H.qtyUSD[r]);
+        if (owed) totalByPair.set(k, (totalByPair.get(k) ?? 0) + H.qtyLocal[r]);
         const byIssuer = registerByIssuerByTypeRef.get(H.typeRef[r]);
         if (byIssuer) {
           const inst = H.instrRef[r];
@@ -563,7 +563,7 @@ export function applyPendingCorporateActionSettlements(
             issuerId = issuerIdOf(v2, v2.internedStrings[inst]);
             issuerIdByInstRef[inst] = issuerId;
           }
-          byIssuer.set(issuerId, (byIssuer.get(issuerId) ?? 0) + H.qtyUSD[r]);
+          byIssuer.set(issuerId, (byIssuer.get(issuerId) ?? 0) + H.qtyLocal[r]);
         }
         if (!anyHit && (owed || ratioByPair.has(k))) anyHit = true;
       }
@@ -664,7 +664,7 @@ export function applyPendingCorporateActionSettlements(
           // The holder's share of what the issuer owes, paid AS A PAYMENT from the issuer, so
           // the money has a payer and a payee instead of appearing on the holder's book while
           // the issuer's ledger says it left.
-          const shareUSD = owedUSD * (H.qtyUSD[r] / (denomByPair.get(k) ?? totalUSD));
+          const shareUSD = owedUSD * (H.qtyLocal[r] / (denomByPair.get(k) ?? totalUSD));
           const issuerTicker = issuerTickerOf(v2.internedStrings[H.instrRef[r]]);
           // A holder paid by an issuer nobody can name is money from nobody: a defect at the
           // site that recorded the action, never a credit.
@@ -683,7 +683,7 @@ export function applyPendingCorporateActionSettlements(
       }
       const ratio = ratioByPair.get(k);
       if (ratio === undefined) {
-        if (H.qtyUSD[r] > 1) kept.push(r);
+        if (H.qtyLocal[r] > 1) kept.push(r);
         continue;
       }
       touched = true;
@@ -692,7 +692,7 @@ export function applyPendingCorporateActionSettlements(
       // it stays exact when two actions hit one instrument in a week; debt redeems at PAR, so
       // the notional change IS the cash — the call premium rides `pendingHolderCashUSD` above,
       // and equity is excluded, because a share is bought at a negotiated price.
-      let principalCashUSD = H.typeRef[r] === equityRef ? 0 : H.qtyUSD[r] * (1 - ratio);
+      let principalCashUSD = H.typeRef[r] === equityRef ? 0 : H.qtyLocal[r] * (1 - ratio);
       // A replaced tranche's retired slice is re-keyed onto the replacement below, not redeemed.
       if (replacedNewIdByPair.has(k)) principalCashUSD = 0;
       // A PLACEMENT IS TAKEN UP ONLY AS FAR AS THE CASH REACHES. A holder
@@ -745,7 +745,7 @@ export function applyPendingCorporateActionSettlements(
         const key = `${type}|${id}`;
         let a = actions.get(key);
         if (!a) { a = { type, id, region: v2.internedStrings[H.regionRef[r]] as RegionId, retiredUSD: 0, retiredSh: 0, placedUSD: 0, placedSh: 0, anyShares: false }; actions.set(key, a); }
-        const dUSD = H.qtyUSD[r] * (effectiveRatio - 1);
+        const dUSD = H.qtyLocal[r] * (effectiveRatio - 1);
         const dSh = Number.isNaN(H.shares[r]) ? Number.NaN : H.shares[r] * (effectiveRatio - 1);
         if (!Number.isNaN(dSh)) a.anyShares = true;
         if (dUSD < 0) { a.retiredUSD -= dUSD; if (!Number.isNaN(dSh)) a.retiredSh -= dSh; }
@@ -918,7 +918,7 @@ export function applyHolderInterestAccruals(
     // entity object per row.
     const entityIdByRow: string[] = entities.map((e) => e.id);
     const byTypeRows = holdings.byType;
-    const qtyCol = holdings.qtyUSD;
+    const qtyCol = holdings.qtyLocal;
     const instCol = holdings.instrumentId;
     const entCol = holdings.entityRow;
     accrualsByType.forEach((byId, type) => {

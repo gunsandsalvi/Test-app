@@ -55,7 +55,7 @@ function p2(state: GameState, week: number): AuditFinding[] {
   if (wide > n * 0.1) out.push({ family: 'P', check: 'P2 CDS basis bounded', week, usd: wide, message: `${wide} of ${n} names carry a CDS more than 150bp or 75% away from the bond` });
   const closed = (state.estates ?? []).filter((e) => e.closedWeek !== undefined);
   if (closed.length >= 5) {
-    const owed = sum(closed, (e) => sum(e.claims.filter((c) => c.seniority < 99 && c.instrumentType !== 'EQUITY'), (c) => c.principalUSD));
+    const owed = sum(closed, (e) => sum(e.claims.filter((c) => c.seniority < 99 && c.instrumentType !== 'EQUITY'), (c) => c.principalLocal));
     const got = sum(closed, (e) => sum(e.claims.filter((c) => c.seniority < 99 && c.instrumentType !== 'EQUITY'), (c) => c.recoveredUSD));
     const rec = owed > 0 ? got / owed : NaN;
     if (Number.isFinite(rec) && Math.abs(rec - 0.4) > 0.2) out.push({ family: 'P', check: 'P2 recovery priced = recovery delivered', week, usd: rec, message: `${closed.length} closed estates paid ${pct(rec)} of debt claims; every spread is priced at 40%` });
@@ -156,17 +156,17 @@ function p5(state: GameState, week: number): AuditFinding[] {
     issuerById: (id: string) => byId.get(id),
     regionById: (r: string) => state.regions[r as RegionId],
   };
-  let faceUSD = 0, markedUSD = 0, impliedUSD = 0, rows = 0, unpriced = 0;
+  let faceLocal = 0, markedUSD = 0, impliedUSD = 0, rows = 0, unpriced = 0;
   let widest = { id: '', gapUSD: 0 };
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     e.itemizedHoldings.forEach((h) => {
       if (!isTrancheKind(h.instrumentType)) return;
-      const face = h.faceUSD ?? h.quantityOrNotionalUSD ?? 0;
+      const face = h.faceLocal ?? h.quantityOrNotionalUSD ?? 0;
       if (!(Math.abs(face) > 0)) return;
       const price = trancheClearedPricePerFace(world, v2, h.instrumentId, week);
       if (price === undefined) { unpriced++; return; }
-      faceUSD += face;
+      faceLocal += face;
       markedUSD += h.quantityOrNotionalUSD ?? 0;
       impliedUSD += face * price;
       rows++;
@@ -176,7 +176,7 @@ function p5(state: GameState, week: number): AuditFinding[] {
   });
   const gapUSD = markedUSD - impliedUSD;
   if (rows > 0 && Math.abs(gapUSD) > 1e6) {
-    out.push({ family: 'P', check: 'P5 the register marks credit at its cleared spread', week, usd: gapUSD, message: `${rows} credit rows on ${B(faceUSD)} of face are marked at ${B(markedUSD)} against ${B(impliedUSD)} implied by their own cleared spreads — a ${B(gapUSD)} gap (widest ${widest.id} by ${B(widest.gapUSD)}${unpriced ? `; ${unpriced} rows could not be priced` : ''})` });
+    out.push({ family: 'P', check: 'P5 the register marks credit at its cleared spread', week, usd: gapUSD, message: `${rows} credit rows on ${B(faceLocal)} of face are marked at ${B(markedUSD)} against ${B(impliedUSD)} implied by their own cleared spreads — a ${B(gapUSD)} gap (widest ${widest.id} by ${B(widest.gapUSD)}${unpriced ? `; ${unpriced} rows could not be priced` : ''})` });
   }
   return out;
 }
@@ -247,7 +247,7 @@ export function auditPrices(state: GameState, week: number): AuditFinding[] {
 function p8(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
-  let faceUSD = 0, impliedUSD = 0, rungs = 0;
+  let faceLocal = 0, impliedUSD = 0, rungs = 0;
   const byRegion: string[] = [];
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
@@ -255,22 +255,22 @@ function p8(state: GameState, week: number): AuditFinding[] {
     let face = 0, implied = 0;
     materializeGovLadder(v2, r).forEach((t) => {
       const weeks = t.maturityWeek - state.currentWeek;
-      if (!(weeks > 0) || !(t.principalUSD > 0)) return;
+      if (!(weeks > 0) || !(t.principalLocal > 0)) return;
       const y = zeroRateAt(reg.zeroRates, weeks / 52);
       const price = priceFromYield({ annualCouponRate: t.couponRate, periodWeeks: COUPON_PERIOD_WEEKS, weeksToMaturity: weeks }, y);
-      face += t.principalUSD;
-      implied += t.principalUSD * price;
+      face += t.principalLocal;
+      implied += t.principalLocal * price;
       rungs++;
     });
     if (face > 0) {
-      faceUSD += face; impliedUSD += implied;
+      faceLocal += face; impliedUSD += implied;
       byRegion.push(`${r} ${pct(implied / face - 1)}`);
     }
   });
-  const gapUSD = faceUSD - impliedUSD;
+  const gapUSD = faceLocal - impliedUSD;
   if (rungs > 0 && Math.abs(gapUSD) > 1e6) {
     out.push({ family: 'P', check: 'P8 the sovereign book is carried at par', week, usd: gapUSD,
-      message: `${rungs} sovereign rungs on ${B(faceUSD)} of face are carried at face against ${B(impliedUSD)} implied by the curve this book itself cleared — a ${B(gapUSD)} gap (${byRegion.join(' | ')}); the auction prices it now, and the register still carries it at par` });
+      message: `${rungs} sovereign rungs on ${B(faceLocal)} of face are carried at face against ${B(impliedUSD)} implied by the curve this book itself cleared — a ${B(gapUSD)} gap (${byRegion.join(' | ')}); the auction prices it now, and the register still carries it at par` });
   }
   return out;
 }

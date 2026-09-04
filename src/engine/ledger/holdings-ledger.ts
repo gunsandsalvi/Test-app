@@ -43,7 +43,7 @@ export interface HoldingSpec {
   /** HOW MANY UNITS moved, in the instrument's own unit — par for credit, shares for equity.
    *  `valueUSD` is units x price, so the wire carries a real price instead of the 1.00 every
    *  notional instrument used to move at. Defaults to shares, then to the value. */
-  faceUSD?: number;
+  faceLocal?: number;
 }
 
 /** The register's own read of a party as a holder: only institutions hold register rows today. */
@@ -58,7 +58,7 @@ const holderIdOf = (p: PartyRef): string | undefined => (p.kind === 'INSTITUTION
  */
 function priceOf(spec: HoldingSpec): { quantity: number; priceUSD: number } {
   if (spec.shares !== undefined && spec.shares > 0) return { quantity: spec.shares, priceUSD: spec.valueUSD / spec.shares };
-  if (spec.faceUSD !== undefined && spec.faceUSD > 0) return { quantity: spec.faceUSD, priceUSD: spec.valueUSD / spec.faceUSD };
+  if (spec.faceLocal !== undefined && spec.faceLocal > 0) return { quantity: spec.faceLocal, priceUSD: spec.valueUSD / spec.faceLocal };
   return { quantity: spec.valueUSD, priceUSD: 1 };
 }
 
@@ -68,19 +68,19 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const tRef = internString(v2, spec.instrumentType), iRef = internString(v2, spec.instrumentId);
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
-    H.qtyUSD[r] += spec.valueUSD;
+    H.qtyLocal[r] += spec.valueUSD;
     if (spec.shares !== undefined) H.shares[r] = (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]) + spec.shares;
-    const movedUnits = spec.shares ?? spec.faceUSD ?? spec.valueUSD;
+    const movedUnits = spec.shares ?? spec.faceLocal ?? spec.valueUSD;
     H.units[r] = (Number.isNaN(H.units[r]) ? 0 : H.units[r]) + movedUnits;
     markBookDirty(v2, holderId);
     return;
   }
   pushBookRow(v2, holderId, {
     instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
-    quantityOrNotionalUSD: spec.valueUSD, quantityShares: spec.shares, faceUSD: spec.faceUSD,
+    quantityOrNotionalUSD: spec.valueUSD, quantityShares: spec.shares, faceLocal: spec.faceLocal,
     // UNITS: shares where the instrument is share-counted, else par — which today equals the
     // value, because credit's price is still pinned at 1 (step 13 is what unpins it).
-    units: spec.shares ?? spec.faceUSD ?? spec.valueUSD,
+    units: spec.shares ?? spec.faceLocal ?? spec.valueUSD,
   });
 }
 
@@ -96,7 +96,7 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
  * answer to one question.
  */
 const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
-  H.qtyUSD[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0);
+  H.qtyLocal[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0);
 
 /**
  * Take from the holder's row(s) of this instrument; a row emptied is unlinked. One walk of the
@@ -123,9 +123,9 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] === tRef && H.instrRef[r] === iRef && (leftUSD > 1e-9 || leftShares > 1e-12)) {
       hit = true;
-      walkedUSD += Math.abs(H.qtyUSD[r]);
-      const takeUSD = Math.min(leftUSD, H.qtyUSD[r]);
-      H.qtyUSD[r] -= takeUSD; leftUSD -= takeUSD;
+      walkedUSD += Math.abs(H.qtyLocal[r]);
+      const takeUSD = Math.min(leftUSD, H.qtyLocal[r]);
+      H.qtyLocal[r] -= takeUSD; leftUSD -= takeUSD;
       if (!Number.isNaN(leftShares) && !Number.isNaN(H.shares[r])) {
         walkedShares += Math.abs(H.shares[r]);
         const takeSh = Math.min(leftShares, H.shares[r]); H.shares[r] -= takeSh; leftShares -= takeSh;
@@ -247,7 +247,7 @@ export function scaleHoldings(
   let valueUSD = 0, shares = 0, anyShares = false, region: RegionId | undefined;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
-    valueUSD += H.qtyUSD[r] * Math.abs(1 - ratio);
+    valueUSD += H.qtyLocal[r] * Math.abs(1 - ratio);
     if (!Number.isNaN(H.shares[r])) { anyShares = true; shares += H.shares[r] * Math.abs(1 - ratio); }
     region = v2.internedStrings[H.regionRef[r]] as RegionId;
   }
@@ -311,14 +311,14 @@ export function markCreditBook(
   let rows = 0, deltaUSD = 0;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (!isTrancheKind(v2.internedStrings[H.typeRef[r]])) continue;
-    if (Number.isNaN(H.units[r])) H.units[r] = H.qtyUSD[r];
-    const faceUSD = H.units[r];
-    if (!(Math.abs(faceUSD) > 0)) continue;
+    if (Number.isNaN(H.units[r])) H.units[r] = H.qtyLocal[r];
+    const faceLocal = H.units[r];
+    if (!(Math.abs(faceLocal) > 0)) continue;
     const price = priceOfInstrument(v2.internedStrings[H.instrRef[r]]);
     if (price === undefined) continue;
-    const before = H.qtyUSD[r];
-    H.qtyUSD[r] = faceUSD * price;
-    deltaUSD += H.qtyUSD[r] - before;
+    const before = H.qtyLocal[r];
+    H.qtyLocal[r] = faceLocal * price;
+    deltaUSD += H.qtyLocal[r] - before;
     rows++;
   }
   if (rows > 0) markBookDirty(v2, holderId);
@@ -328,7 +328,7 @@ export function markCreditBook(
 /** A change of value with no change of quantity — accretion, a NAV mark. No wire: nothing moved. */
 export function markHolding(v2: V2World, holderId: string, row: number, valueUSD: number): void {
   const H: HoldingStore = mutableHoldings(v2);
-  H.qtyUSD[row] = valueUSD;
+  H.qtyLocal[row] = valueUSD;
   markBookDirty(v2, holderId);
 }
 
@@ -344,7 +344,7 @@ export function bookPositions(v2: V2World, holderId: string, instrumentType: Hol
     if (H.typeRef[r] !== tRef) continue;
     const id = v2.internedStrings[H.instrRef[r]];
     const cur = out.get(id) ?? { valueUSD: 0, shares: undefined };
-    cur.valueUSD += H.qtyUSD[r];
+    cur.valueUSD += H.qtyLocal[r];
     if (!Number.isNaN(H.shares[r])) cur.shares = (cur.shares ?? 0) + H.shares[r];
     out.set(id, cur);
   }

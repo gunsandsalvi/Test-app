@@ -66,8 +66,8 @@ function priorByClearingKey(v2: V2World, inv: DealerDeskInventory | undefined, b
   (inv?.[book] ?? []).forEach((p) => {
     const key = clearingKeyOf(v2, p.instrumentId);
     const cur = byKey.get(key);
-    if (!cur) { byKey.set(key, { instrumentId: key, inventoryUSD: p.inventoryUSD, ...(p.units !== undefined ? { units: p.units } : {}) }); return; }
-    cur.inventoryUSD += p.inventoryUSD;
+    if (!cur) { byKey.set(key, { instrumentId: key, inventoryLocal: p.inventoryLocal, ...(p.units !== undefined ? { units: p.units } : {}) }); return; }
+    cur.inventoryLocal += p.inventoryLocal;
     if (p.units !== undefined) cur.units = (cur.units ?? 0) + p.units;
   });
   return byKey;
@@ -104,13 +104,13 @@ export function buildDealerDeskParticipants(args: {
     if (!sheet) return;
     const prior = priorByClearingKey(ctx.v2, sheet.dealerDeskInventory, book);
     const capacityUSD = dealerDeskCapacityUSD({
-      balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
+      balanceSheetCapacityUSD: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
       leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
     let priorTotalUSD = 0;
-    prior.forEach((p) => { priorTotalUSD += Math.abs(p.inventoryUSD); });
+    prior.forEach((p) => { priorTotalUSD += Math.abs(p.inventoryLocal); });
     if (capacityUSD <= 0 && priorTotalUSD <= 0) return;
 
     // A desk pays for inventory with the bank's own reserves, above the buffer it must keep —
@@ -126,7 +126,7 @@ export function buildDealerDeskParticipants(args: {
       const priorPos = prior.get(inst.id);
       const px = unitPrice(i);
       // Carried at market: the position is the UNITS it holds, valued at this week's level.
-      const priorUnits = Math.max(0, priorPos?.units ?? (priorPos ? priorPos.inventoryUSD / px : 0));
+      const priorUnits = Math.max(0, priorPos?.units ?? (priorPos ? priorPos.inventoryLocal / px : 0));
       const priorUSD = priorUnits * px;
       // A DESK'S EXISTING POSITION IS A FACT, not a function of this week's float, and it is
       // declared before any float test. It used to sit BELOW the `liveFloatUSD[i] <= 0` guard, so
@@ -225,33 +225,33 @@ export function applyDealerDeskFills(args: {
       // session priced it resolves to the auction's instrument.
       const ck = clearingKeyOf(ctx.v2, instrumentId);
       if (!clearedIds.has(ck)) { positions.push(p); return; }
-      const units = p.units ?? p.inventoryUSD;
+      const units = p.units ?? p.inventoryLocal;
       const markedUSD = units * unitPrice(ck);
       prevMarkedUSD += markedUSD;
-      markToMarketUSD += markedUSD - p.inventoryUSD;
+      markToMarketUSD += markedUSD - p.inventoryLocal;
     });
     let newUSD = 0;
     const bookKind = DESK_BOOK_KIND[book];
     const applyFill = (units: number, instrumentId: string): void => {
       if (!clearedIds.has(instrumentId)) return;
-      const inventoryUSD = units * unitPrice(instrumentId);
-      if (Math.abs(inventoryUSD) <= 1) return;
+      const inventoryLocal = units * unitPrice(instrumentId);
+      if (Math.abs(inventoryLocal) <= 1) return;
       // A credit fill is priced per ISSUER and STORED per tranche, split by face the same way
       // the register splits a holder's position — so the desk and the register name the same
       // paper. A short position splits by the same weights with the sign put back.
       if (isTrancheKind(bookKind) && !isTrancheId(ctx.v2, instrumentId)) {
-        const sign = inventoryUSD < 0 ? -1 : 1;
-        const parts = splitAcrossTranches(ctx.v2, instrumentId, bookKind as CreditKind, Math.abs(inventoryUSD));
+        const sign = inventoryLocal < 0 ? -1 : 1;
+        const parts = splitAcrossTranches(ctx.v2, instrumentId, bookKind as CreditKind, Math.abs(inventoryLocal));
         parts.forEach((t) => {
           const usd = sign * t.usd;
           if (Math.abs(usd) <= 1) return;
-          positions.push({ instrumentId: t.instrumentId, inventoryUSD: usd, units: usd });
+          positions.push({ instrumentId: t.instrumentId, inventoryLocal: usd, units: usd });
           newUSD += usd;
         });
         return;
       }
-      positions.push({ instrumentId, inventoryUSD, units });
-      newUSD += inventoryUSD;
+      positions.push({ instrumentId, inventoryLocal, units });
+      newUSD += inventoryLocal;
     };
     if (dpi !== undefined) {
       const nI = result.nInstruments;
@@ -283,11 +283,11 @@ export function applyDealerDeskFills(args: {
         inUnits ? { valueUSD: units * unitPrice(instrumentId), shares: units } : { valueUSD: units };
       const before = new Map<string, { valueUSD: number; shares?: number }>();
       prior.forEach((p, instrumentId) => {
-        if (clearedIds.has(instrumentId)) before.set(instrumentId, toEntry(p.units ?? p.inventoryUSD, instrumentId));
+        if (clearedIds.has(instrumentId)) before.set(instrumentId, toEntry(p.units ?? p.inventoryLocal, instrumentId));
       });
       const after = new Map<string, { valueUSD: number; shares?: number }>();
       positions.forEach((p) => {
-        if (clearedIds.has(p.instrumentId)) after.set(p.instrumentId, toEntry(p.units ?? p.inventoryUSD, p.instrumentId));
+        if (clearedIds.has(p.instrumentId)) after.set(p.instrumentId, toEntry(p.units ?? p.inventoryLocal, p.instrumentId));
       });
       clearedBookDelta({ kind: 'BANK_SECURITIES', ticker: bank.ticker }, bank.region, kind, before, after,
         (id) => unitPrice(id), `${book} desk fill`);
@@ -313,8 +313,8 @@ export function applyDealerDeskFills(args: {
       // whether its removal had a cash leg.
       const floatById = new Map(args.instruments.map((i2) => [i2.id, i2.tradableFloatUSD]));
       prior.forEach((p, instrumentId) => {
-        if (!clearedIds.has(instrumentId) || Math.abs(p.inventoryUSD) < 25e6) return;
-        console.log(`    [desk-prior] ${bank.ticker} ${instrumentId} held ${(p.inventoryUSD / 1e6).toFixed(1)}M`
+        if (!clearedIds.has(instrumentId) || Math.abs(p.inventoryLocal) < 25e6) return;
+        console.log(`    [desk-prior] ${bank.ticker} ${instrumentId} held ${(p.inventoryLocal / 1e6).toFixed(1)}M`
           + ` -> fill ${dbgFills.has(instrumentId) ? (((dbgFills.get(instrumentId) ?? 0) * unitPrice(instrumentId)) / 1e6).toFixed(1) + 'M' : 'NONE'}`
           + ` float ${((floatById.get(instrumentId) ?? 0) / 1e6).toFixed(1)}M`);
       });
@@ -338,7 +338,7 @@ export function totalDeskCapacityUSD(ctx: WeeklyStepContext, banks: Company[], b
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
     capacityUSD += dealerDeskCapacityUSD({
-      balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
+      balanceSheetCapacityUSD: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
       leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
@@ -361,7 +361,7 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
     freeUSD.set(bank.ticker, dealerDeskCapacityUSD({
-      balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
+      balanceSheetCapacityUSD: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
       leverageHeadroomUSD: leverageHeadroomUSD(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
       inventory: sheet.dealerDeskInventory,
       book,
@@ -369,7 +369,7 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
     const byBorrower = new Map<string, number>();
     // The relationship is the facilities this bank has lent — its rows on the ladders.
     facilityRowsOf(ctx.v2, bank.ticker).forEach((l) => {
-      byBorrower.set(l.borrowerId, (byBorrower.get(l.borrowerId) ?? 0) + l.principalUSD);
+      byBorrower.set(l.borrowerId, (byBorrower.get(l.borrowerId) ?? 0) + l.principalLocal);
     });
     lentByBankByBorrower.set(bank.ticker, byBorrower);
   });

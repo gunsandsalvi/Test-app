@@ -65,10 +65,10 @@ export function runBillAccretionStage(state: GameState, ctx: WeeklyStepContext):
       const byTenor = { ...(existing.sovereignBondHoldingsByBond || {}) };
       let gainUSD = 0;
       rateByBill.forEach((rate, key) => {
-        const heldUSD = Number(byTenor[key]) || 0;
-        if (heldUSD <= 0 || rate === 0) return;
-        const accretedUSD = heldUSD * rate;
-        byTenor[key] = heldUSD + accretedUSD;
+        const heldLocal = Number(byTenor[key]) || 0;
+        if (heldLocal <= 0 || rate === 0) return;
+        const accretedUSD = heldLocal * rate;
+        byTenor[key] = heldLocal + accretedUSD;
         gainUSD += accretedUSD;
       });
       if (gainUSD === 0 && !(existing.lastBillAccretionWeeklyUSD ?? 0)) return c;
@@ -77,7 +77,7 @@ export function runBillAccretionStage(state: GameState, ctx: WeeklyStepContext):
         bankBalanceSheet: {
           ...bookPnL(existing, gainUSD, 'bill accretion', c.ticker),
           sovereignBondHoldingsByBond: byTenor,
-          sovereignBondHoldingsUSD: Math.round(Object.values(byTenor).reduce((a: number, v) => a + (Number(v) || 0), 0)),
+          sovereignBondHoldingsLocal: Math.round(Object.values(byTenor).reduce((a: number, v) => a + (Number(v) || 0), 0)),
           // §7.254: recorded so next week's NIM income measure counts the return this book
           // actually earned; the equity leg above is the booking, this line is the reading.
           lastBillAccretionWeeklyUSD: Math.round(gainUSD),
@@ -98,7 +98,7 @@ export function runBillAccretionStage(state: GameState, ctx: WeeklyStepContext):
         // §3.13-SOV row 3: the accretion is the BILL's own.
         const rate = rateByBill.get(ctx.v2.internedStrings[H.instrRef[r]]);
         if (!rate) continue;
-        markHolding(ctx.v2, e.id, r, H.qtyUSD[r] * (1 + rate));
+        markHolding(ctx.v2, e.id, r, H.qtyLocal[r] * (1 + rate));
         touched = true;
       }
       void touched;
@@ -111,10 +111,10 @@ export function runBillAccretionStage(state: GameState, ctx: WeeklyStepContext):
       const book = { ...cb.sovereignHoldingsByBond };
       let gainUSD = 0;
       rateByBill.forEach((rate, key) => {
-        const heldUSD = Number(book[key]) || 0;
-        if (heldUSD <= 0 || rate === 0) return;
-        book[key] = heldUSD * (1 + rate);
-        gainUSD += heldUSD * rate;
+        const heldLocal = Number(book[key]) || 0;
+        if (heldLocal <= 0 || rate === 0) return;
+        book[key] = heldLocal * (1 + rate);
+        gainUSD += heldLocal * rate;
       });
       if (gainUSD > 0) {
         cb.sovereignHoldingsByBond = book;

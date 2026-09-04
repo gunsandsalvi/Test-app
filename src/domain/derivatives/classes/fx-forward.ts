@@ -61,7 +61,7 @@ export const FX_FORWARD_PROFILE: DerivativeClassProfile = {
   markToMarketUSDToA: (c, m) => {
     const rate = m.fxToUsd(c.referenceId as RegionId);
     if (!(c.strike > 0) || !(rate > 0)) return null;
-    return c.notionalUSD * ((c.strike - rate) / c.strike);
+    return c.notional * ((c.strike - rate) / c.strike);
   },
   markReasonLive: 'fx forward variation margin',
   markReasonFinal: 'fx forward variation margin',

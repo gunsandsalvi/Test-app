@@ -27,34 +27,34 @@ export const PCA_CAPITAL_RATIO = 0.02;
 
 /** What an assuming bank must hold against a book it takes on: the ratio a bank's treasury
  *  actually runs at, on the book's own risk weight. */
-export function assumingCapitalUSD(sheet: BankingSector, facilityBookUSD: number): number {
-  return bankRwaUSD(sheet, facilityBookUSD) * BANK_WORKING_CAPITAL_RATIO;
+export function assumingCapitalUSD(sheet: BankingSector, facilityBookLocal: number): number {
+  return bankRwaUSD(sheet, facilityBookLocal) * BANK_WORKING_CAPITAL_RATIO;
 }
 
 /** Under prompt corrective action: capital below the closure ratio, or no capital at all. */
-export function isBankUnderPca(sheet: BankingSector, facilityBookUSD: number): boolean {
-  const rwaUSD = bankRwaUSD(sheet, facilityBookUSD);
-  if (rwaUSD > 0) return sheet.bankEquityUSD < rwaUSD * PCA_CAPITAL_RATIO;
-  return sheet.bankEquityUSD < 0;
+export function isBankUnderPca(sheet: BankingSector, facilityBookLocal: number): boolean {
+  const rwaUSD = bankRwaUSD(sheet, facilityBookLocal);
+  if (rwaUSD > 0) return sheet.bankEquityLocal < rwaUSD * PCA_CAPITAL_RATIO;
+  return sheet.bankEquityLocal < 0;
 }
 
 /** Every asset on the sheet, cash included — the one asset side the identity counts. */
-export function bankSheetAssetsUSD(sheet: BankingSector, cashUSD: number, facilityBookUSD: number): number {
+export function bankSheetAssetsUSD(sheet: BankingSector, cashLocal: number, facilityBookLocal: number): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByBond || {})
     .reduce((a, v) => a + (Number(v) || 0), 0);
-  return loanBooksOf(sheet, facilityBookUSD) + sovUSD + cashUSD
-    + (sheet.repoLentUSD ?? 0) + (sheet.onRrpLendingUSD ?? 0)
-    + (sheet.sovereignAccruedCouponUSD ?? 0)
+  return loanBooksOf(sheet, facilityBookLocal) + sovUSD + cashLocal
+    + (sheet.repoLentLocal ?? 0) + (sheet.onRrpLendingLocal ?? 0)
+    + (sheet.sovereignAccruedCouponLocal ?? 0)
     + dealerDeskGrossUSD(sheet.dealerDeskInventory)
-    + (sheet.primeBrokerageLoansUSD ?? 0);
+    + (sheet.primeBrokerageLoansLocal ?? 0);
 }
 
 /** The liabilities an assuming bank takes on whole: every deposit class and the secured lines.
  *  Wholesale money and equity are the two the plan decides. */
 export function bankAssumedLiabilitiesUSD(sheet: BankingSector, lines: DepositLines): number {
-  return lines.householdUSD + lines.corporateUSD + lines.institutionalUSD
-    + lines.smeUSD + (sheet.clientMarginUSD ?? 0)
-    + (sheet.repoBorrowedUSD ?? 0) + (sheet.srfBorrowingUSD ?? 0);
+  return lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
+    + lines.smeLocal + (sheet.clientMarginLocal ?? 0)
+    + (sheet.repoBorrowedLocal ?? 0) + (sheet.srfBorrowingLocal ?? 0);
 }
 
 export interface BankResolutionPlan {
@@ -91,16 +91,16 @@ export interface BankResolutionPlan {
  * its holders take their loss through the estate, like any other issuer's bondholders.
  */
 export function planBankResolution(
-  sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number, cashUSD: number, lines: DepositLines, facilityBookUSD: number,
+  sheet: BankingSector, ownLadderPrincipalUSD: number, acquirerCapitalUSD: number, cashLocal: number, lines: DepositLines, facilityBookLocal: number,
 ): BankResolutionPlan {
-  const centralBankLoanUSD = Math.max(0, sheet.centralBankLoanUSD ?? 0);
-  const netBookUSD = bankSheetAssetsUSD(sheet, cashUSD, facilityBookUSD) - bankAssumedLiabilitiesUSD(sheet, lines) - centralBankLoanUSD;
+  const centralBankLoanLocal = Math.max(0, sheet.centralBankLoanLocal ?? 0);
+  const netBookUSD = bankSheetAssetsUSD(sheet, cashLocal, facilityBookLocal) - bankAssumedLiabilitiesUSD(sheet, lines) - centralBankLoanLocal;
   const capitalUSD = Math.max(0, acquirerCapitalUSD);
   const estateUSD = Math.max(0, netBookUSD - capitalUSD);
   const shortfallUSD = Math.max(0, capitalUSD - netBookUSD);
   return {
     ladderBailedInUSD: Math.max(0, ownLadderPrincipalUSD),
-    centralBankLoanAssumedUSD: centralBankLoanUSD,
+    centralBankLoanAssumedUSD: centralBankLoanLocal,
     netBookUSD,
     acquirerCapitalUSD: capitalUSD,
     guaranteeUSD: shortfallUSD,
@@ -113,25 +113,25 @@ export function planBankResolution(
  * floor, by equity among those (size is what lets it carry the deposits), and failing any at the
  * floor, the largest equity that is not itself under PCA. Nobody → no resolution this week.
  */
-export function chooseAssumingBank<T extends { sheet: BankingSector; facilityBookUSD: number }>(candidates: T[], minCapitalRatio: number): T | undefined {
-  const live = candidates.filter((c) => !isBankUnderPca(c.sheet, c.facilityBookUSD));
-  const ratioOf = (c: T) => { const rwa = bankRwaUSD(c.sheet, c.facilityBookUSD); return rwa > 0 ? c.sheet.bankEquityUSD / rwa : Infinity; };
+export function chooseAssumingBank<T extends { sheet: BankingSector; facilityBookLocal: number }>(candidates: T[], minCapitalRatio: number): T | undefined {
+  const live = candidates.filter((c) => !isBankUnderPca(c.sheet, c.facilityBookLocal));
+  const ratioOf = (c: T) => { const rwa = bankRwaUSD(c.sheet, c.facilityBookLocal); return rwa > 0 ? c.sheet.bankEquityLocal / rwa : Infinity; };
   const atFloor = live.filter((c) => ratioOf(c) >= minCapitalRatio);
   const pool = atFloor.length > 0 ? atFloor : live;
   if (pool.length === 0) return undefined;
-  return pool.reduce((best, c) => (c.sheet.bankEquityUSD > best.sheet.bankEquityUSD ? c : best));
+  return pool.reduce((best, c) => (c.sheet.bankEquityLocal > best.sheet.bankEquityLocal ? c : best));
 }
 
 /** Two household pools of one kind become one: the mortgage book by its vintages (the principal
  *  IS their sum — rule 4), the floating books by principal with their terms blended. */
 export function mergeHouseholdPool(mine: HouseholdLoanPool, theirs: HouseholdLoanPool): HouseholdLoanPool {
-  const total = mine.principalUSD + theirs.principalUSD;
+  const total = mine.principalLocal + theirs.principalLocal;
   const blend = (a: number | undefined, b: number | undefined) => (
     a === undefined && b === undefined ? undefined
-      : total > 0 ? ((a ?? b ?? 0) * mine.principalUSD + (b ?? a ?? 0) * theirs.principalUSD) / total
+      : total > 0 ? ((a ?? b ?? 0) * mine.principalLocal + (b ?? a ?? 0) * theirs.principalLocal) / total
         : (a ?? b)
   );
-  const out: HouseholdLoanPool = { ...mine, principalUSD: total };
+  const out: HouseholdLoanPool = { ...mine, principalLocal: total };
   if (mine.vintages || theirs.vintages) out.vintages = [...(mine.vintages ?? []), ...(theirs.vintages ?? [])];
   const wac = blend(mine.wacAnnual, theirs.wacAnnual);
   if (wac !== undefined) out.wacAnnual = Number(wac.toFixed(4));
@@ -155,7 +155,7 @@ export function mergeDesks(mine: DealerDeskInventory | undefined, theirs: Dealer
       if (i < 0) { merged.push({ ...r }); return; }
       const m = merged[i];
       merged[i] = {
-        ...m, inventoryUSD: m.inventoryUSD + r.inventoryUSD,
+        ...m, inventoryLocal: m.inventoryLocal + r.inventoryLocal,
         ...(m.units !== undefined || r.units !== undefined ? { units: (m.units ?? 0) + (r.units ?? 0) } : {}),
       };
     });
@@ -165,9 +165,9 @@ export function mergeDesks(mine: DealerDeskInventory | undefined, theirs: Dealer
 }
 
 /** The statistics a sheet reports, re-read after its lines moved (readings, never drivers). */
-export function restateBankSheetStatistics(sheet: BankingSector, cashUSD: number, lines: DepositLines, facilityBookUSD: number): void {
-  const rwaUSD = bankRwaUSD(sheet, facilityBookUSD);
-  sheet.bankCapitalRatio = Number((rwaUSD > 0 ? sheet.bankEquityUSD / rwaUSD : 0.13).toFixed(4));
-  sheet.centralBankReservesUSD = Math.max(0, cashUSD);
-  sheet.moneySupplyM2USD = lines.householdUSD + lines.corporateUSD;
+export function restateBankSheetStatistics(sheet: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number): void {
+  const rwaUSD = bankRwaUSD(sheet, facilityBookLocal);
+  sheet.bankCapitalRatio = Number((rwaUSD > 0 ? sheet.bankEquityLocal / rwaUSD : 0.13).toFixed(4));
+  sheet.centralBankReservesUSD = Math.max(0, cashLocal);
+  sheet.moneySupplyM2USD = lines.householdLocal + lines.corporateLocal;
 }

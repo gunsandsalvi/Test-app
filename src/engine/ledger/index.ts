@@ -8,7 +8,7 @@
  *
  * WHY THIS EXISTS (§7.229): before it, forty-three sites across fifteen files assigned to a balance
  * directly, and two mechanisms existed solely to absorb the resulting gap — 02b's reconcile, which
- * invented 14.3B of reserves a week, and the `Math.max(0, cashUSD)` clamp, which destroyed negative
+ * invented 14.3B of reserves a week, and the `Math.max(0, cashLocal)` clamp, which destroyed negative
  * balances and so created 6.0B a week of overspend. Conservation was a habit forty-three authors
  * happened to share. It is now a property of the import graph, enforced by `check-hygiene.sh`.
  */

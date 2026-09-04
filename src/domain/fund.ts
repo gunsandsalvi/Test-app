@@ -28,10 +28,10 @@ export interface Distributable {
 export function distributable(
   requestedUSD: number,
   totalDrawnUSD: number,
-  cashUSD: number
+  cashLocal: number
 ): Distributable {
   const byDrawn = Math.min(requestedUSD, Math.max(0, totalDrawnUSD));
-  const payableUSD = Math.max(0, Math.min(byDrawn, Math.max(0, cashUSD)));
+  const payableUSD = Math.max(0, Math.min(byDrawn, Math.max(0, cashLocal)));
   const boundBy: Distributable['boundBy'] =
     payableUSD >= requestedUSD ? 'nothing'
       : payableUSD < byDrawn ? 'cash'
@@ -44,6 +44,6 @@ export function distributable(
  * it is here: the corporate sweep book bounded redemptions by the fund's cash while the PE book did
  * not, and nothing made that inconsistency visible.
  */
-export function redeemable(requestedUSD: number, cashUSD: number): number {
-  return Math.max(0, Math.min(Math.max(0, requestedUSD), Math.max(0, cashUSD)));
+export function redeemable(requestedUSD: number, cashLocal: number): number {
+  return Math.max(0, Math.min(Math.max(0, requestedUSD), Math.max(0, cashLocal)));
 }

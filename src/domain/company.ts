@@ -74,9 +74,9 @@ export interface SegmentFinancial {
 
 export interface DebtTranche {
   id: string; // format: "{ticker}-T{n}"
-  principalUSD: number;
+  principalLocal: number;
   rateType: 'FIXED' | 'FLOATING';
-  couponRate?: number; // FIXED only — locked annual rate, paid on principalUSD, never changes until maturity
+  couponRate?: number; // FIXED only — locked annual rate, paid on principalLocal, never changes until maturity
   floatingMarginBps?: number; // FLOATING only — locked spread over policyRate, never changes until maturity
   originationWeek: number;
   maturityWeek: number;
@@ -333,8 +333,8 @@ export interface Company {
   previousCapex?: number;
   maintenanceCapex: number;
   growthCapex: number;
-  grossPPEUSD: number;
-  accumulatedDepreciationUSD: number;
+  grossPPELocal: number;
+  accumulatedDepreciationLocal: number;
   /** IND1: capital goods that actually ARRIVED last week, at landed cost. Real net investment. */
   /**
    * IND13 — ASSETS UNDER CONSTRUCTION: capital that has arrived and is not yet plant.
@@ -643,7 +643,7 @@ export function isActiveCompany(c: Company): boolean { return !c.isDefaulted && 
 export function fullStaffingCapHeads(c: Company): number {
   const baselineHeads = c.baselineEmployeeCount ?? 0;
   if (!(baselineHeads > 0)) return Math.max(1, c.employeeCount ?? 1);
-  const netPpeUSD = (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0);
+  const netPpeUSD = (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0);
   // §5-PROD: a firm that has LEARNED runs the same plant with fewer people — the ceiling is
   // heads-per-plant at the firm's own current unit-labour productivity, not its baseline's.
   const learning = Math.max(1e-6, c.learningMultiplier ?? 1);
@@ -685,8 +685,8 @@ export function operatingBufferShareOf(c: { management?: import('./preferences')
 }
 
 /** What this firm wants to be holding in short government paper, given the cash it has now. */
-export function corporateTreasuryTargetUSD(cashUSD: number, annualRevenueUSD: number, riskAversion = 1): number {
-  const investableUSD = Math.max(0, cashUSD - annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversion);
+export function corporateTreasuryTargetUSD(cashLocal: number, annualRevenueUSD: number, riskAversion = 1): number {
+  const investableUSD = Math.max(0, cashLocal - annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversion);
   return investableUSD * TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH;
 }
 
@@ -819,4 +819,4 @@ export const marketCapOf = (c: { stockPrice: number; sharesOutstanding: number }
 /** Total debt is the ladder's face — the week-end VIEW (`debtTranches`); inside a week the engine
  *  reads the live rows (`ladderTotalUSD` in engine2/tranches.ts). */
 export const totalDebtOf = (c: { debtTranches?: DebtTranche[] }): number =>
-  (c.debtTranches ?? []).reduce((s, t) => s + t.principalUSD, 0);
+  (c.debtTranches ?? []).reduce((s, t) => s + t.principalLocal, 0);

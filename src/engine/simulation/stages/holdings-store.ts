@@ -201,7 +201,7 @@ export class HoldingsStore {
         if (rid >= 0) {
           const H = mutableHoldings(this.v2);
           H.shares[rid] = next;
-          H.qtyUSD[rid] = next * pricePerShare;
+          H.qtyLocal[rid] = next * pricePerShare;
           markBookDirty(this.v2, entityId);
         }
         remaining -= take;
@@ -388,7 +388,7 @@ export function consolidateRegister(ctx: WeeklyStepContext): void {
       const k = pairKey(r);
       const first = firstByKey.get(k);
       if (first === undefined) { firstByKey.set(k, r); kept.push(r); continue; }
-      Hm.qtyUSD[first] = H.qtyUSD[first] + H.qtyUSD[r];
+      Hm.qtyLocal[first] = H.qtyLocal[first] + H.qtyLocal[r];
       const sh = H.shares[r];
       if (!Number.isNaN(sh)) {
         const cur = H.shares[first];

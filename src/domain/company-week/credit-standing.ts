@@ -33,7 +33,7 @@ export function creditMetrics(i: {
   annualInterestUSD: number;
   bankCapitalRatio: number;
   /** A bank's own equity and the annual loss rate its own book is running. */
-  bankEquityUSD: number;
+  bankEquityLocal: number;
   bankLossRateAnnual: number;
 }): { leverage: number; coverage: number } {
   // A BANK IS RATED ON ITS OWN SHEET, AND ON A CONTINUUM. Its leverage denominator was
@@ -51,7 +51,7 @@ export function creditMetrics(i: {
   // default probability uses; on a rating ladder it turns negative for any bank under the floor,
   // rating a thin but solvent bank below a corporate with no earnings at all.
   const rawLeverage = i.isBank
-    ? i.totalDebtUSD / Math.max(1, i.bankEquityUSD)
+    ? i.totalDebtUSD / Math.max(1, i.bankEquityLocal)
     : i.totalDebtUSD / Math.max(1, i.ebitdaUSD);
   const rawCoverage = i.isBank
     ? Math.max(0, i.bankCapitalRatio) / Math.max(1e-4, i.bankLossRateAnnual)
@@ -91,22 +91,22 @@ export function revolverDrawUSD(i: {
 export function isInDefault(i: {
   wasDefaulted: boolean;
   mergerAcquired: boolean;
-  cashUSD: number;
+  cashLocal: number;
   coverage: number;
   coverageFloor: number;
 }): boolean {
   if (i.mergerAcquired) return false;
-  return i.wasDefaulted || (i.cashUSD < 0 && i.coverage < i.coverageFloor);
+  return i.wasDefaulted || (i.cashLocal < 0 && i.coverage < i.coverageFloor);
 }
 
 /** The share of a firm's ladder falling due inside a year — the refinancing wall a rating reads. */
 export function maturityWallShare(
-  tranches: { principalUSD: number; maturityWeek?: number }[],
+  tranches: { principalLocal: number; maturityWeek?: number }[],
   week: number
 ): number {
   const wallUSD = tranches
     .filter((t) => (t.maturityWeek ?? Infinity) - week <= 52)
-    .reduce((a, t) => a + t.principalUSD, 0);
-  const ladderUSD = Math.max(1, tranches.reduce((a, t) => a + t.principalUSD, 0));
+    .reduce((a, t) => a + t.principalLocal, 0);
+  const ladderUSD = Math.max(1, tranches.reduce((a, t) => a + t.principalLocal, 0));
   return wallUSD / ladderUSD;
 }

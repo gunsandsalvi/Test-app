@@ -30,7 +30,7 @@ export interface RegionSnapshot {
   bankDepositsUSD: number;
   /** The part of those deposits that is client margin — a line on the bank's SHEET rather than a
    *  row in the account store, so it moves without any settled row moving. */
-  clientMarginUSD: number;
+  clientMarginLocal: number;
   bankLoansUSD: number;
 }
 export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingUSD?: number; /** §3.13c: the dated tail per currency, for the exact form of W1 */ moneyPendingByCurrency?: Record<string, number>; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number>; /** W5: register shares held per asset kind */ registerQtyByKind?: Record<string, number>; /** W5_TRACE=1: per `holderId|kind` */ registerQtyByHolder?: Record<string, number> };
@@ -48,11 +48,11 @@ export function snapshotOf(state: GameState): AuditSnapshot {
       centralBankAssetsUSD: centralBankAssetsUSD(cb, waysAndMeansOf(ensureV2(state), r), currencyOf(r), ensureV2(state).fx),
       // §3.13-SOV row 2: read from the ONE store, not the array beside it. The audit runs after
       // the whole week, so the reconcile in 11-fiscal has already run and the two agree.
-      sovereignOutstandingUSD: materializeGovLadder(ensureV2(state), r).reduce((a, t) => a + t.principalUSD, 0),
+      sovereignOutstandingUSD: materializeGovLadder(ensureV2(state), r).reduce((a, t) => a + t.principalLocal, 0),
       // The SAME read M6 takes at week end — every deposit class BUT the margin line, which is
       // a bank liability and not spendable money (`spendableDepositsOf`).
       bankDepositsUSD: banks.reduce((a, b) => a + spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker)), 0),
-      clientMarginUSD: banks.reduce((a, b) => a + (b.bankBalanceSheet!.clientMarginUSD ?? 0), 0),
+      clientMarginLocal: banks.reduce((a, b) => a + (b.bankBalanceSheet!.clientMarginLocal ?? 0), 0),
       bankLoansUSD: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!, facilityBookOf(ensureV2(state), b.ticker)), 0),
     };
   });
@@ -65,7 +65,7 @@ export function ladderUSDByKey(state: GameState): Record<string, number> {
   for (const c of state.companies) {
     for (const t of c.debtTranches ?? []) {
       const key = `${c.region}|${trancheKindOf(t)}`;
-      out[key] = (out[key] ?? 0) + t.principalUSD;
+      out[key] = (out[key] ?? 0) + t.principalLocal;
     }
   }
   return out;
@@ -77,7 +77,7 @@ export function ladderUSDByTicker(state: GameState): Record<string, number> {
   for (const c of state.companies) {
     for (const t of c.debtTranches ?? []) {
       const key = `${c.ticker}|${trancheKindOf(t)}`;
-      out[key] = (out[key] ?? 0) + t.principalUSD;
+      out[key] = (out[key] ?? 0) + t.principalLocal;
     }
   }
   return out;

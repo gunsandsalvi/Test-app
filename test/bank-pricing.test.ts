@@ -49,8 +49,8 @@ test('§7.291 — a bank at its regulatory floor prices at coin-flip PD; a capit
   const { bankRwaUSD } = await import('../src/domain/bank-pricing');
   const sheet = (equityUSD: number) => ({
     businessLoans: [],
-    householdLoans: [{ kind: 'CREDIT_CARD', principalUSD: 10e9, marginBps: 0 }],
-    bankEquityUSD: equityUSD, loanLossProvisionRateAnnualPct: 0.02,
+    householdLoans: [{ kind: 'CREDIT_CARD', principalLocal: 10e9, marginBps: 0 }],
+    bankEquityLocal: equityUSD, loanLossProvisionRateAnnualPct: 0.02,
   }) as never;
   // Step 10: the facility book is the bank's rows on the borrowers' ladders, read by the caller.
   const rwa = bankRwaUSD(sheet(0), 10e9);

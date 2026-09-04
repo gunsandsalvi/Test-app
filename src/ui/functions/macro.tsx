@@ -85,13 +85,13 @@ export const macro: FunctionModule = {
         <KV k="net interest margin" hint={sub('bank nim')} v={pctLevel(bs?.netInterestMarginPct, 2)} />
         <KV k="loans" hint="business · household" v={`${money(books.businessLoanUSD)} · ${money(books.consumerLoanUSD)}`} />
         <KV k="reserves at the central bank" v={money(bs?.centralBankReservesUSD)} />
-        <KV k="at the window" v={money(bs?.srfBorrowingUSD)} />
+        <KV k="at the window" v={money(bs?.srfBorrowingLocal)} />
         <KV k="the banks" v={<Link to={ref} fn="banks" nav={nav}>{count(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted).length)} banks</Link>} />
       </Card>
       <SectionLabel>treasury</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
         <KV k="revenue · outlays" hint="weekly" v={`${money(r.governmentRevenueUSD)} · ${money(r.governmentOutlaysUSD ?? r.governmentSpendingWeeklyUSD)}`} />
-        <KV k="debt" hint="of gdp" v={gdp > 0 ? pctLevel(materializeGovLadder(ensureV2(world.state), r.id).reduce((a, t) => a + t.principalUSD, 0) / gdp, 0) : '—'} />
+        <KV k="debt" hint="of gdp" v={gdp > 0 ? pctLevel(materializeGovLadder(ensureV2(world.state), r.id).reduce((a, t) => a + t.principalLocal, 0) / gdp, 0) : '—'} />
         <KV k="treasury account" v={money(treasuryAccountOf(ensureV2(world.state), r.id as RegionId))} />
         <KV k="sovereign rating" hint={`fiscal stance ${r.fiscalStanceScore.toFixed(2)}`} v={r.sovereignRating} />
         <KV k="the ladder" v={<Link to={ref} fn="ladder" nav={nav}>{count(materializeGovLadder(ensureV2(world.state), r.id).length)} tranches</Link>} />

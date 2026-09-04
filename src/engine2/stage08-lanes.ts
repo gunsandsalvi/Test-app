@@ -28,11 +28,11 @@ import { patienceWeeksOf, riskAversionOf } from '../domain/preferences';
 export interface BackLanes {
   n: number;
   // --- capital block inputs (comp scalars; NaN = the field was undefined) ---
-  grossPPEUSD: Float64Array;
-  accumulatedDepreciationUSD: Float64Array;
+  grossPPELocal: Float64Array;
+  accumulatedDepreciationLocal: Float64Array;
   ppeDefaultUSD: Float64Array;          // annualRevenue × sector intensity, the ?? fallback
   annualRevenueUSD: Float64Array;
-  cashUSD: Float64Array;
+  cashLocal: Float64Array;
   currentLiabilitiesUSD: Float64Array;
   maintenanceCapexUSD: Float64Array;    // NaN = undefined
   growthCapexUSD: Float64Array;         // NaN = undefined
@@ -86,7 +86,7 @@ export interface BackLanes {
   employeeCount: Float64Array;
   employeeCountUpdate: Float64Array;       // NaN = no update / no field (the ?? fallback)
   bankCapitalRatio: Float64Array;          // NaN = no bank sheet
-  bankEquityUSD: Float64Array;             // NaN = no bank sheet
+  bankEquityLocal: Float64Array;             // NaN = no bank sheet
   bankLossRateAnnual: Float64Array;        // NaN = no bank sheet
   customerConcentration: Float64Array;     // NaN = undefined
   supplierConcentration: Float64Array;     // NaN = undefined
@@ -134,8 +134,8 @@ export function buildBackLanes(
   const N = S.num, T = S.str;
   const L: BackLanes = {
     n,
-    grossPPEUSD: N.grossPPEUSD, accumulatedDepreciationUSD: N.accumulatedDepreciationUSD, ppeDefaultUSD: f(),
-    annualRevenueUSD: N.annualRevenue, cashUSD: N.cash, currentLiabilitiesUSD: N.currentLiabilities,
+    grossPPELocal: N.grossPPELocal, accumulatedDepreciationLocal: N.accumulatedDepreciationLocal, ppeDefaultUSD: f(),
+    annualRevenueUSD: N.annualRevenue, cashLocal: N.cash, currentLiabilitiesUSD: N.currentLiabilities,
     maintenanceCapexUSD: N.maintenanceCapex, growthCapexUSD: N.growthCapex, capexUSD: N.capex,
     maintenanceShortfallStreak: N.maintenanceShortfallStreak, baselineGrowthCapexToRevenueRatio: N.baselineGrowthCapexToRevenueRatio,
     marketCapUSD: N.marketCap, totalDebtUSD: N.totalDebt,
@@ -154,7 +154,7 @@ export function buildBackLanes(
     baselineAnnualRevenueUSD: N.baselineAnnualRevenue, lastOpportunisticOfferingWeek: N.lastOpportunisticOfferingWeek,
     employeeCount: N.employeeCount, employeeCountUpdate: f(),
     bankCapitalRatio: f(),
-    bankEquityUSD: f(),
+    bankEquityLocal: f(),
     bankLossRateAnnual: f(),
     customerConcentration: N.customerConcentration, supplierConcentration: N.supplierConcentration,
     hasVehicle: new Uint8Array(n), boundaryTraceKey: new Array(n),
@@ -212,7 +212,7 @@ export function buildBackLanes(
     L.facilityMarginBps[i] = c.isBankEntity ? NaN_ : facilityMarginBpsFor(v2, c, updatedRegions[c.region], c.homeBankTicker ? bankByTicker.get(c.homeBankTicker) : undefined);
     L.employeeCountUpdate[i] = wu?.employeeCount ?? NaN_;
     L.bankCapitalRatio[i] = c.bankBalanceSheet?.bankCapitalRatio ?? NaN_;
-    L.bankEquityUSD[i] = c.bankBalanceSheet?.bankEquityUSD ?? NaN_;
+    L.bankEquityLocal[i] = c.bankBalanceSheet?.bankEquityLocal ?? NaN_;
     L.bankLossRateAnnual[i] = c.bankBalanceSheet?.loanLossProvisionRateAnnualPct ?? NaN_;
     // NOTE (§7.320): revenueVolatility is NOT seam-computable — the PROFILE modules append
     // comp.revenueHistory MID-LOOP (profiles/bank.ts:52 and siblings), after any seam and

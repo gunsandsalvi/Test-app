@@ -134,7 +134,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
 
       const instruments: ClearingInstrument[] = [{
         id,
-        outstandingUSD: floatUnits,
+        outstandingLocal: floatUnits,
         tradableFloatUSD: floatUnits,
         currentStat: priorPrint,
         statKind: 'PRICE_LIKE',
@@ -251,7 +251,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
             regionId: 'USA',
             a: longParty,
             b: s.party,
-            notionalUSD: sizeUnits * strike,
+            notional: sizeUnits * strike,
             strike,
             referenceId: comm.id,
             termKey,

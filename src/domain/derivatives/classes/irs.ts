@@ -37,7 +37,7 @@ export const IRS_PROFILE: DerivativeClassProfile = {
   // The floating leg pays the rate the week PRINTED; the fixed leg pays the strike. A payer of
   // fixed gains exactly when rates rose against it, which is the hedge it entered for.
   periodicLegUSDToB: (c, m) => {
-    const usdToB = (c.notionalUSD * (c.strike - m.overnightRateAnnual(c.regionId))) / 52;
+    const usdToB = (c.notional * (c.strike - m.overnightRateAnnual(c.regionId))) / 52;
     return { usdToB, reason: 'swap settlement' };
   },
   markToMarketUSDToA: () => null,
@@ -48,6 +48,6 @@ export const IRS_PROFILE: DerivativeClassProfile = {
     const par = m.parRateAnnual(c.regionId, c.termKey);
     if (!Number.isFinite(par)) return 0;
     const remainingWeeks = Math.max(0, c.maturityWeek - m.week);
-    return (c.notionalUSD * (c.strike - par) / 52) * remainingWeeks;
+    return (c.notional * (c.strike - par) / 52) * remainingWeeks;
   },
 };

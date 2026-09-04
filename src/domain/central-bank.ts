@@ -26,7 +26,7 @@ export interface CentralBank {
   /** Assets: the real sovereign book, by tenor bucket. Clears in 07c like any other holder. */
   sovereignHoldingsByBond: Record<string, number>;
   /** Asset: the unsecured loans to banks drawn at the funding close (the lender of
-   *  last resort). Equals the sum of the banks' `centralBankLoanUSD`. */
+   *  last resort). Equals the sum of the banks' `centralBankLoanLocal`. */
   loansToBanksUSD: number;
   /** C4b — OFFICIAL SETTLEMENT. When a payer in this region pays a payee in another,
    *  reserves leave this central bank's system and appear in the other's; the receiving central

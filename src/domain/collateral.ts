@@ -15,7 +15,7 @@
 /** A pledge of one bond's paper against a secured borrowing. */
 export interface Pledge {
   bondId: string;
-  faceUSD: number;
+  faceLocal: number;
 }
 
 export interface CollateralPosition {
@@ -33,7 +33,7 @@ export function pledgedFaceByBond(
   const out = new Map<string, number>();
   for (const c of contracts) {
     if (c.borrowerTicker !== ticker) continue;
-    for (const p of c.collateral) out.set(p.bondId, (out.get(p.bondId) ?? 0) + p.faceUSD);
+    for (const p of c.collateral) out.set(p.bondId, (out.get(p.bondId) ?? 0) + p.faceLocal);
   }
   return out;
 }
@@ -51,9 +51,9 @@ export const PLEDGE_ROUNDING_TOLERANCE_USD = 1;
 
 export function overPledgedByBond(position: CollateralPosition): Map<string, number> {
   const out = new Map<string, number>();
-  position.pledgedByBond.forEach((faceUSD, bondId) => {
-    const heldUSD = position.heldByBond.get(bondId) ?? 0;
-    const excessUSD = faceUSD - heldUSD;
+  position.pledgedByBond.forEach((faceLocal, bondId) => {
+    const heldLocal = position.heldByBond.get(bondId) ?? 0;
+    const excessUSD = faceLocal - heldLocal;
     if (excessUSD > PLEDGE_ROUNDING_TOLERANCE_USD) out.set(bondId, excessUSD);
   });
   return out;

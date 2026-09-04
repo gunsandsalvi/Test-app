@@ -22,7 +22,7 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const bs = own ?? reg.bankingSector;
   const sovUSD = own
     ? Object.values(own.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0)
-    : reg.bankingSector.sovereignBondHoldingsUSD * share;
+    : reg.bankingSector.sovereignBondHoldingsLocal * share;
   // §5-WIRES D: the credit books are the sheet's rows; a bank with no sheet holds no rows.
   const creditBookUSD = own ? loanBooksOf(own, facilityBookOf(ensureV2(input.state), comp.ticker)) : 0;
   const totalAssets = creditBookUSD + sovUSD;

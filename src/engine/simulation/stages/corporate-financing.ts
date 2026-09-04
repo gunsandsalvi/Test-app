@@ -120,10 +120,10 @@ export function decideCorporateFinancing(params: {
   /** Annual EBIT — the operating profit invested capital actually produces after depreciation. */
   ebitAnnual?: number;
   totalDebtUSD: number;
-  cashUSD: number;
+  cashLocal: number;
   rating: CreditRating;
 }): FinancingDecision {
-  const { comp, costOfDebtAnnual, effectiveTaxRate, ebitdaAnnual, totalDebtUSD, cashUSD, rating } = params;
+  const { comp, costOfDebtAnnual, effectiveTaxRate, ebitdaAnnual, totalDebtUSD, cashLocal, rating } = params;
   // §5-BRAINS — the CFO's own risk weight: a risk-averse one needs a wider spread to act,
   // levers up more slowly and pays down faster. The median is the stated rule.
   const ra = riskAversionOf(comp.management);
@@ -144,7 +144,7 @@ export function decideCorporateFinancing(params: {
   // and the issuer count decaying 324 → 252 — recorded in the plan's RVr close-out).
   const afterTaxCostOfDebt = costOfDebtAnnual * (1 - effectiveTaxRate);
   const nopatAnnual = Math.max(0, (params.ebitAnnual ?? ebitdaAnnual * 0.75)) * (1 - effectiveTaxRate);
-  const netPPEUSD = Math.max(1, (comp.grossPPEUSD ?? 0) - (comp.accumulatedDepreciationUSD ?? 0));
+  const netPPEUSD = Math.max(1, (comp.grossPPELocal ?? 0) - (comp.accumulatedDepreciationLocal ?? 0));
   const investedCapitalUSD = netPPEUSD + comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
   const returnOnInvestedCapital = nopatAnnual / investedCapitalUSD;
   const earningsYield = comp.stockPrice > 0 ? comp.eps / comp.stockPrice : 0;
@@ -168,10 +168,10 @@ export function decideCorporateFinancing(params: {
     };
   }
 
-  if (spreadOverCost < -ACTION_THRESHOLD * ra && cashUSD > 0 && totalDebtUSD > 0) {
+  if (spreadOverCost < -ACTION_THRESHOLD * ra && cashLocal > 0 && totalDebtUSD > 0) {
     // Debt costs more than the money can earn: pay it down out of surplus cash.
     return {
-      netDebtChangeUSD: -Math.min(cashUSD * WEEKLY_DELEVERAGING_RATE * ra, totalDebtUSD * WEEKLY_DELEVERAGING_RATE * ra),
+      netDebtChangeUSD: -Math.min(cashLocal * WEEKLY_DELEVERAGING_RATE * ra, totalDebtUSD * WEEKLY_DELEVERAGING_RATE * ra),
       reason: 'DELEVER_EXPENSIVE_DEBT',
       walkAwayCostAnnual,
     };

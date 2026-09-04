@@ -89,7 +89,7 @@ checked by `scripts/check-atlas.sh`.
 | B2.a within a mandate, against acceptable collateral, with a limit | `src/engine/simulation/stages/securities-lending.ts:maxHoldingUSD` | ⚠️ |
 | **B3 an agent may sit in the middle** | — | ❌ |
 | B4 VERIFY the lendable pool is a read, and caps the short | `src/engine/simulation/stages/securities-lending.ts:deliverable` | ✅ |
-| **C1 the collateral is worth MORE than the loan — a haircut** | `src/engine/simulation/stages/securities-lending.ts:collateralUSD` | ⚠️ |
+| **C1 the collateral is worth MORE than the loan — a haircut** | `src/engine/simulation/stages/securities-lending.ts:collateralLocal` | ⚠️ |
 | C2 both sides marked, and the difference is posted | `src/engine/simulation/stages/securities-lending.ts:marginCallUSD` | ✅ |
 | C2.a the margin flow is real money between named parties | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
 | C3 cash collateral is reinvested, and that is a position | `src/engine/simulation/stages/repo-clearing.ts:CASH_SLEEVE_OVERNIGHT_SHARE` | ⚠️ |

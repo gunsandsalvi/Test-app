@@ -36,10 +36,10 @@ export function companyColumns(bank: boolean): PeerColumn<Company>[] {
       name,
       { key: 'cap', label: 'capital', render: (r) => pctLevel(r.obj.bankBalanceSheet?.bankCapitalRatio, 1), value: (r) => r.obj.bankBalanceSheet?.bankCapitalRatio ?? -1 },
       { key: 'nim', label: 'nim', render: (r) => pctLevel(r.obj.bankBalanceSheet?.netInterestMarginPct, 2), value: (r) => r.obj.bankBalanceSheet?.netInterestMarginPct ?? -1 },
-      { key: 'deposits', label: 'deposits', render: (r, w) => { if (!r.obj.bankBalanceSheet) return money(undefined); const l = stateDepositLines(w.state, r.obj.ticker); return money(l.householdUSD + l.corporateUSD + l.institutionalUSD + l.smeUSD); }, value: (r, w) => (r.obj.bankBalanceSheet ? stateDepositLines(w.state, r.obj.ticker).householdUSD : 0) },
+      { key: 'deposits', label: 'deposits', render: (r, w) => { if (!r.obj.bankBalanceSheet) return money(undefined); const l = stateDepositLines(w.state, r.obj.ticker); return money(l.householdLocal + l.corporateLocal + l.institutionalLocal + l.smeLocal); }, value: (r, w) => (r.obj.bankBalanceSheet ? stateDepositLines(w.state, r.obj.ticker).householdLocal : 0) },
       { key: 'loans', label: 'loans', render: (r, w) => money(r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet, facilityBookOf(w.v2, r.obj.ticker)) : undefined), value: (r, w) => (r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet, facilityBookOf(w.v2, r.obj.ticker)) : 0) },
       { key: 'share', label: 'share', render: (r) => pctLevel(r.obj.bankMarketShare, 0), value: (r) => r.obj.bankMarketShare ?? 0 },
-      { key: 'window', label: 'window', render: (r) => money(r.obj.bankBalanceSheet?.srfBorrowingUSD), value: (r) => r.obj.bankBalanceSheet?.srfBorrowingUSD ?? 0 },
+      { key: 'window', label: 'window', render: (r) => money(r.obj.bankBalanceSheet?.srfBorrowingLocal), value: (r) => r.obj.bankBalanceSheet?.srfBorrowingLocal ?? 0 },
       { key: 'mcap', label: 'mkt cap', render: (r) => money(marketCapOf(r.obj), 1), value: (r) => marketCapOf(r.obj) },
     ];
   }
@@ -115,10 +115,10 @@ export const company = defineObject<Company>({
     const ladder = materializeLadder(world.v2, c.id);
     const nextMaturity = ladder.length ? Math.min(...ladder.map((t) => t.maturityWeek)) : undefined;
     const equityHolders = holdersOf(world, c.id).filter((h) => h.instrumentType === 'EQUITY');
-    const heldUSD = equityHolders.reduce((a, h) => a + h.usd, 0);
-    const floatShare = marketCapOf(c) > 0 ? heldUSD / marketCapOf(c) : undefined;
-    const cashUSD = cashOf(ensureV2(world.state), c);
-    const netDebt = (totalDebtOf(c) ?? 0) - cashUSD;
+    const heldLocal = equityHolders.reduce((a, h) => a + h.usd, 0);
+    const floatShare = marketCapOf(c) > 0 ? heldLocal / marketCapOf(c) : undefined;
+    const cashLocal = cashOf(ensureV2(world.state), c);
+    const netDebt = (totalDebtOf(c) ?? 0) - cashLocal;
     const sheet = c.bankBalanceSheet;
     const lines = bankLinesTo(world, c.id);
     const contracts = contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker });
@@ -149,12 +149,12 @@ export const company = defineObject<Company>({
         )}
         {sheet ? (
           <Card style={{ padding: '2px 0' }}>
-            <KV k="deposits" hint="all classes" v={money((() => { const l = stateDepositLines(world.state, c.ticker); return l.householdUSD + l.corporateUSD + l.institutionalUSD + l.smeUSD; })())} />
+            <KV k="deposits" hint="all classes" v={money((() => { const l = stateDepositLines(world.state, c.ticker); return l.householdLocal + l.corporateLocal + l.institutionalLocal + l.smeLocal; })())} />
             <KV k="loans" hint="business · household" v={`${money(businessLoanBookOf(sheet, facilityBookOf(ensureV2(world.state), c.ticker)))} · ${money(consumerLoanBookOf(sheet))}`} />
-            <KV k="sovereign book" v={money(sheet.sovereignBondHoldingsUSD)} />
+            <KV k="sovereign book" v={money(sheet.sovereignBondHoldingsLocal)} />
             <KV k="reserves at the central bank" v={money(bankReservesOf(ensureV2(world.state), c.ticker))} />
-            <KV k="central bank loan" hint="lender of last resort" v={money(sheet.centralBankLoanUSD ?? 0)} />
-            <KV k="at the window" v={money(sheet.srfBorrowingUSD)} />
+            <KV k="central bank loan" hint="lender of last resort" v={money(sheet.centralBankLoanLocal ?? 0)} />
+            <KV k="at the window" v={money(sheet.srfBorrowingLocal)} />
             <KV k="market share" hint="of the region's deposits" v={pctLevel(c.bankMarketShare)} />
           </Card>
         ) : (
@@ -163,7 +163,7 @@ export const company = defineObject<Company>({
             <KV k="ebitda margin" hint={c.expectedEbitdaUSD !== undefined && c.annualRevenue > 0 ? `management expects ${pctLevel(c.expectedEbitdaUSD / c.annualRevenue)}` : undefined} v={c.annualRevenue > 0 ? pctLevel(c.ebitda / c.annualRevenue) : '—'} />
             <KV k="net debt / ebitda" hint={`leverage ${ratio(c.leverage)}`} v={c.ebitda > 0 ? ratio(netDebt / c.ebitda) : '—'} />
             <KV k="interest coverage" v={ratio(c.interestCoverage)} />
-            <KV k="cash" v={money(cashUSD)} />
+            <KV k="cash" v={money(cashLocal)} />
             <KV k="people" hint={c.previousEmployeeCount !== undefined && c.previousEmployeeCount !== c.employeeCount ? `${c.employeeCount > c.previousEmployeeCount ? '+' : ''}${count(c.employeeCount - c.previousEmployeeCount)} this week` : undefined} v={count(c.employeeCount)} />
             {c.mothballedPpeShare ? <KV k="plant mothballed" v={pctLevel(c.mothballedPpeShare, 0)} /> : null}
           </Card>

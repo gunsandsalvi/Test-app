@@ -38,13 +38,13 @@ import { moveFacilityLender } from '../../ledger/tranche-ledger';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../../domain/banking';
 import { moveSectorRowsToBank, bankReservesOf, bankDepositLines, heldCurrenciesOf } from '../../ledger/accounts';
 
-const sheetLinesUSD = (s: BankingSector, cashUSD: number, lines: DepositLines, facilityBookUSD: number): number =>
-  Math.abs(lines.householdUSD) + Math.abs(lines.corporateUSD) + Math.abs(lines.institutionalUSD)
-  + Math.abs(s.clientMarginUSD ?? 0) + Math.abs(lines.smeUSD) + Math.abs(s.centralBankLoanUSD ?? 0)
-  + Math.abs(s.bankEquityUSD) + Math.abs(s.srfBorrowingUSD ?? 0) + Math.abs(s.repoBorrowedUSD ?? 0)
-  + Math.abs(businessLoanBookOf(s, facilityBookUSD)) + Math.abs(consumerLoanBookOf(s)) + Math.abs(s.sovereignBondHoldingsUSD)
-  + Math.abs(cashUSD) + Math.abs(s.repoLentUSD ?? 0) + Math.abs(s.onRrpLendingUSD ?? 0)
-  + Math.abs(s.sovereignAccruedCouponUSD ?? 0) + Math.abs(s.primeBrokerageLoansUSD ?? 0);
+const sheetLinesUSD = (s: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number): number =>
+  Math.abs(lines.householdLocal) + Math.abs(lines.corporateLocal) + Math.abs(lines.institutionalLocal)
+  + Math.abs(s.clientMarginLocal ?? 0) + Math.abs(lines.smeLocal) + Math.abs(s.centralBankLoanLocal ?? 0)
+  + Math.abs(s.bankEquityLocal) + Math.abs(s.srfBorrowingLocal ?? 0) + Math.abs(s.repoBorrowedLocal ?? 0)
+  + Math.abs(businessLoanBookOf(s, facilityBookLocal)) + Math.abs(consumerLoanBookOf(s)) + Math.abs(s.sovereignBondHoldingsLocal)
+  + Math.abs(cashLocal) + Math.abs(s.repoLentLocal ?? 0) + Math.abs(s.onRrpLendingLocal ?? 0)
+  + Math.abs(s.sovereignAccruedCouponLocal ?? 0) + Math.abs(s.primeBrokerageLoansLocal ?? 0);
 
 /** Every link in the world that names the failed bank now names the assuming one. */
 export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionId: RegionId, from: string, to: string): void {
@@ -114,7 +114,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
   const forced = (process.env.BANK_RESOLUTION_FORCE ?? '').split(',')
     .map((s) => s.split('@')).filter(([t, w]) => t && Number(w) === week).map(([t]) => t);
   const failing = liveBanks().filter((c) => isBankUnderPca(c.bankBalanceSheet!, facilityBookOf(ctx.v2, c.ticker)) || forced.includes(c.ticker))
-    .sort((a, b) => a.bankBalanceSheet!.bankEquityUSD - b.bankBalanceSheet!.bankEquityUSD);
+    .sort((a, b) => a.bankBalanceSheet!.bankEquityLocal - b.bankBalanceSheet!.bankEquityLocal);
   if (failing.length === 0) return;
   const failingIds = new Set(failing.map((c) => c.id));
 
@@ -122,7 +122,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     const regionId = bank.region as RegionId;
     const candidates = liveBanks()
       .filter((c) => c.region === regionId && !failingIds.has(c.id))
-      .map((c) => ({ comp: c, sheet: c.bankBalanceSheet!, facilityBookUSD: facilityBookOf(ctx.v2, c.ticker) }));
+      .map((c) => ({ comp: c, sheet: c.bankBalanceSheet!, facilityBookLocal: facilityBookOf(ctx.v2, c.ticker) }));
     const chosen = chooseAssumingBank(candidates, BANK_MIN_CAPITAL_RATIO);
     if (!chosen) {
       // THE LAST BANK STANDING IS RECAPITALISED BY ITS TREASURY. With no peer to
@@ -134,7 +134,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       // are not diluted here (no share mechanics on a bank's equity yet — recorded), which
       // overstates what they keep; the injection itself is real money.
       const sheet = bank.bankBalanceSheet!;
-      const injectionUSD = Math.max(0, assumingCapitalUSD(sheet, facilityBookOf(ctx.v2, bank.ticker)) - sheet.bankEquityUSD);
+      const injectionUSD = Math.max(0, assumingCapitalUSD(sheet, facilityBookOf(ctx.v2, bank.ticker)) - sheet.bankEquityLocal);
       if (injectionUSD > 0) {
         pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'BANK', ticker: bank.ticker },
           amount: injectionUSD, currency: currencyOf(regionId), reason: 'resolution: public recapitalisation' });
@@ -151,10 +151,10 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       return;
     }
     const acquirer = chosen.comp;
-    const ladderUSD = ladderRowsOf(ctx.v2, bank.id).reduce((a, r) => a + ctx.v2.tranches.principalUSD[r], 0);
-    const cashUSD = bankReservesOf(ctx.v2, bank.ticker);
+    const ladderUSD = ladderRowsOf(ctx.v2, bank.id).reduce((a, r) => a + ctx.v2.tranches.principalLocal[r], 0);
+    const cashLocal = bankReservesOf(ctx.v2, bank.ticker);
     const failingFacilityBookUSD = facilityBookOf(ctx.v2, bank.ticker);
-    const plan = planBankResolution(bank.bankBalanceSheet!, ladderUSD, assumingCapitalUSD(bank.bankBalanceSheet!, failingFacilityBookUSD), cashUSD, bankDepositLines(ctx, bank.ticker), failingFacilityBookUSD);
+    const plan = planBankResolution(bank.bankBalanceSheet!, ladderUSD, assumingCapitalUSD(bank.bankBalanceSheet!, failingFacilityBookUSD), cashLocal, bankDepositLines(ctx, bank.ticker), failingFacilityBookUSD);
     const traceOn = process.env.BANK_RESOLUTION_TRACE === '1';
     const traceSheet = (label: string, c: typeof bank) => {
       if (!traceOn || !c.bankBalanceSheet) return;
@@ -165,7 +165,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     traceSheet('before', bank); traceSheet('before', acquirer);
 
     // ---- 1. Every non-cash line moves (the ledger's transfer); the target keeps only its cash. ----
-    assumeBankBooks(acquirer.bankBalanceSheet!, bank.bankBalanceSheet!, plan, cashUSD);
+    assumeBankBooks(acquirer.bankBalanceSheet!, bank.bankBalanceSheet!, plan, cashLocal);
     moveSectorRowsToBank(ctx.v2, bank.ticker, acquirer.ticker); // the sector parties' rows at the failed bank move with its SME line
     traceSheet('assumed', bank); traceSheet('assumed', acquirer);
 
@@ -173,7 +173,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // §3.13c-FX: MONEY BY MONEY. A failed bank holds whatever currencies its desk sold and its
     // clients left it, and the acquirer assumes the POSITION, not its value netted into one
     // currency — paying only the home-money total left the foreign rows on the shell and the
-    // guard found 16.7M still on QYTV in week 12. These legs sum to exactly `cashUSD` at this
+    // guard found 16.7M still on QYTV in week 12. These legs sum to exactly `cashLocal` at this
     // pass's rates, which is what `assumeBankBooks` above struck the shell's equity on, so the
     // shell nets to zero; sweeping AFTER the week's other legs instead breaks that equality and
     // leaves the difference as equity (measured: 134.8M on DOIE).
@@ -194,12 +194,12 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     }
     rekeyBankLinks(state, ctx, regionId, bank.ticker, acquirer.ticker);
     // Premises and people go with the books: the branches open on Monday under the new name.
-    acquirer.grossPPEUSD = (acquirer.grossPPEUSD ?? 0) + (bank.grossPPEUSD ?? 0);
-    acquirer.accumulatedDepreciationUSD = (acquirer.accumulatedDepreciationUSD ?? 0) + (bank.accumulatedDepreciationUSD ?? 0);
+    acquirer.grossPPELocal = (acquirer.grossPPELocal ?? 0) + (bank.grossPPELocal ?? 0);
+    acquirer.accumulatedDepreciationLocal = (acquirer.accumulatedDepreciationLocal ?? 0) + (bank.accumulatedDepreciationLocal ?? 0);
     acquirer.employeeCount += bank.employeeCount;
     acquirer.annualRevenue += bank.annualRevenue;
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (bank.bankMarketShare ?? 0)).toFixed(6));
-    bank.grossPPEUSD = 0; bank.accumulatedDepreciationUSD = 0; bank.employeeCount = 0;
+    bank.grossPPELocal = 0; bank.accumulatedDepreciationLocal = 0; bank.employeeCount = 0;
     bank.annualRevenue = 0; bank.ebitda = 0; bank.ebit = 0; bank.bankMarketShare = 0;
 
     // ---- 3. Settle the reserve legs while both sheets still exist, then verify the shell is empty. ----

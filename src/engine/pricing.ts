@@ -292,10 +292,10 @@ export function priceCrossCurrencyBasisSwap(
   const basisDiffBps = currentBasisBps - contractedBasisBps;
   // Approximate duration = tenorYears * 0.9
   const duration = tenorYears * 0.9;
-  const notionalUSD = notionalBase * fxSpot;
+  const notional = notionalBase * fxSpot;
   const multiplier = direction === 'LONG' ? 1 : -1;
-  const npvUSD = notionalUSD * (basisDiffBps / 10000) * duration * multiplier;
-  const dv01USD = notionalUSD * duration * 0.0001 * multiplier;
+  const npvUSD = notional * (basisDiffBps / 10000) * duration * multiplier;
+  const dv01USD = notional * duration * 0.0001 * multiplier;
 
   return { npvUSD, dv01USD };
 }

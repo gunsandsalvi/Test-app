@@ -50,8 +50,8 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBook: Record<string, number> = {};
   Object.entries(bs.sovereignBondHoldingsByBond || {}).forEach(([k, v]) => { scaledBook[k] = v * share; });
   return {
-    sovereignBondHoldingsUSD: bs.sovereignBondHoldingsUSD * share,
-    bankEquityUSD: bs.bankEquityUSD * share,
+    sovereignBondHoldingsLocal: bs.sovereignBondHoldingsLocal * share,
+    bankEquityLocal: bs.bankEquityLocal * share,
     bankCapitalRatio: bs.bankCapitalRatio,
     netInterestMarginPct: bs.netInterestMarginPct,
     loanLossProvisionRateAnnualPct: bs.loanLossProvisionRateAnnualPct,
@@ -59,19 +59,19 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     centralBankReservesUSD: bs.centralBankReservesUSD * share,
     moneySupplyM2USD: bs.moneySupplyM2USD * share,
     itemizedHoldings: [],
-    srfBorrowingUSD: bs.srfBorrowingUSD * share,
-    onRrpLendingUSD: bs.onRrpLendingUSD * share,
+    srfBorrowingLocal: bs.srfBorrowingLocal * share,
+    onRrpLendingLocal: bs.onRrpLendingLocal * share,
     corpBondDealerInventory: [],
     sovereignBondHoldingsByBond: scaledBook,
     sovBondDealerInventory: [],
     loanDealerInventory: [],
-    repoLentUSD: bs.repoLentUSD * share,
-    repoBorrowedUSD: bs.repoBorrowedUSD * share,
+    repoLentLocal: bs.repoLentLocal * share,
+    repoBorrowedLocal: bs.repoBorrowedLocal * share,
     repoEncumberedCollateralUSD: bs.repoEncumberedCollateralUSD * share,
     businessLoans: [],
-    householdLoans: (bs.householdLoans || []).map((pl) => ({ ...pl, principalUSD: pl.principalUSD * share })),
-    centralBankLoanUSD: (bs.centralBankLoanUSD ?? 0) * share,
-    clientMarginUSD: (bs.clientMarginUSD ?? 0) * share,
+    householdLoans: (bs.householdLoans || []).map((pl) => ({ ...pl, principalLocal: pl.principalLocal * share })),
+    centralBankLoanLocal: (bs.centralBankLoanLocal ?? 0) * share,
+    clientMarginLocal: (bs.clientMarginLocal ?? 0) * share,
   };
 }
 
@@ -103,7 +103,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const depositsOf = (b: Company) => {
         if (!b.bankBalanceSheet) return 0;
         const l = bankDepositLines(ctx, b.ticker);
-        return Math.max(0, l.householdUSD) + Math.max(0, l.corporateUSD) + Math.max(0, l.institutionalUSD) + Math.max(0, l.smeUSD);
+        return Math.max(0, l.householdLocal) + Math.max(0, l.corporateLocal) + Math.max(0, l.institutionalLocal) + Math.max(0, l.smeLocal);
       };
       const regionDepositsUSD = banks.reduce((a, b) => a + depositsOf(b), 0);
       if (regionDepositsUSD > 0) {
@@ -143,14 +143,14 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // an overdraft is credit ALREADY extended, and pricing it is the bank's only choice left.
     ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
       if (c.region !== regionId || c.isDefaulted || c.isBankEntity || c.mergerAcquired) return;
-      const cashUSD = cashOf(ctx.v2, c);
-      if (!c.homeBankTicker || !(cashUSD < -1)) return;
-      const drawUSD = -cashUSD;
+      const cashLocal = cashOf(ctx.v2, c);
+      if (!c.homeBankTicker || !(cashLocal < -1)) return;
+      const drawUSD = -cashLocal;
       // P1: priced off the borrower's own PD at its bank's hurdle, like every facility.
       const marginBps = facilityMarginBpsFor(ensureV2(state), c, reg, ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker));
       const tranche = {
         id: `${c.id}-REVOLVER-OD-${ctx.nextWeek}`,
-        principalUSD: drawUSD,
+        principalLocal: drawUSD,
         rateType: 'FLOATING' as const,
         floatingMarginBps: marginBps,
         originationWeek: ctx.nextWeek,
@@ -178,9 +178,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       let negUSD = 0, negN = 0, unbankedUSD = 0, unbankedN = 0;
       ctx.updatedCompanies.forEach((c) => {
         if (c.region !== regionId || c.isBankEntity || c.mergerAcquired) return;
-        const cashUSD = cashOf(ctx.v2, c);
-        if (!c.homeBankTicker) { unbankedUSD += cashUSD; unbankedN++; return; }
-        if (cashUSD < 0) { negUSD += cashUSD; negN++; }
+        const cashLocal = cashOf(ctx.v2, c);
+        if (!c.homeBankTicker) { unbankedUSD += cashLocal; unbankedN++; return; }
+        if (cashLocal < 0) { negUSD += cashLocal; negN++; }
       });
       console.log(`  [recon-base] w${ctx.nextWeek} ${regionId} negatives ${(negUSD / 1e6).toFixed(0)}M x${negN} | unbanked ${(unbankedUSD / 1e6).toFixed(0)}M x${unbankedN}`);
     }
@@ -190,7 +190,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     // The week's real household-credit flows, per bank, for the region roll-up below.
     const householdFlowsByBank = new Map<string, {
-      interestUSD: number; debtServicePrincipalUSD: number; principalUSD: number;
+      interestUSD: number; debtServicePrincipalUSD: number; principalLocal: number;
       mortgageOriginationUSD: number; mortgageDischargeUSD: number; mortgageRateQuotedAnnual: number; turnoverRateAnnual: number; mortgageBookUSD: number;
       consumerCreditOriginationUSD: number;
     }>();
@@ -204,8 +204,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       let borrowPrincipalUSD = 0, borrowInterestUSD = 0, lendPrincipalUSD = 0, lendInterestUSD = 0;
       dueThisWeek.forEach((c) => {
         const interestUSD = repoInterestToMaturityUSD(c);
-        if (c.borrowerTicker === ticker) { borrowPrincipalUSD += c.principalUSD; borrowInterestUSD += interestUSD; }
-        if (c.lender.kind === 'BANK' && c.lender.ticker === ticker) { lendPrincipalUSD += c.principalUSD; lendInterestUSD += interestUSD; }
+        if (c.borrowerTicker === ticker) { borrowPrincipalUSD += c.principalLocal; borrowInterestUSD += interestUSD; }
+        if (c.lender.kind === 'BANK' && c.lender.ticker === ticker) { lendPrincipalUSD += c.principalLocal; lendInterestUSD += interestUSD; }
       });
       return { borrowPrincipalUSD, borrowInterestUSD, lendPrincipalUSD, lendInterestUSD };
     };
@@ -216,18 +216,18 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const riskFactor = bank.bankRiskFactor ?? 1.0;
       // step 10: the bank's facility book is its rows on the borrowers' ladders.
       const facilityRows = facilityRowsOf(ctx.v2, bank.ticker);
-      const facilityBookUSD = facilityBookOf(ctx.v2, bank.ticker);
+      const facilityBookLocal = facilityBookOf(ctx.v2, bank.ticker);
 
       // Last week's itemized book earns its real interest — computed here so the margin
       // reads the same loans the book actually holds.
       const priorLoanInterestWeeklyUSD = (prevSheet.businessLoans || [])
         .filter((l) => l.status === 'PERFORMING')
-        .reduce((a, l) => a + (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
+        .reduce((a, l) => a + (l.principalLocal * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
       // The FACILITY interest is paid by the borrower as a real payment (stage 08 →
       // settlement), so the evolution measures it and never credits it; the facilities are the
       // ladder rows (step 10). SME pools have no cash ledger of their own and pay through the book.
       const priorFacilityInterestWeeklyUSD = facilityRows
-        .reduce((a, f) => a + (f.principalUSD * (reg.policyRate + f.marginBps / 10000)) / 52, 0);
+        .reduce((a, f) => a + (f.principalLocal * (reg.policyRate + f.marginBps / 10000)) / 52, 0);
       // The SME slice is a real payment now too — each pool pays its own interest from
       // its own book (SEGMENT → BANK through settlement), on the same prior-week basis the
       // facility exclusion uses, so the evolution must not credit it either.
@@ -237,7 +237,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         .forEach((l) => {
           const seg = (reg.smePools || []).find((s) => smePoolId(regionId, s.industry) === l.borrowerId);
           if (!seg) return;
-          const interestUSD = (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52;
+          const interestUSD = (l.principalLocal * (reg.policyRate + l.marginBps / 10000)) / 52;
           priorSmeInterestWeeklyUSD += interestUSD;
           pay(ctx, {
             payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
@@ -254,14 +254,14 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         const rate = pl.kind === 'MORTGAGE'
           ? (pl.wacAnnual ?? currentMortgageRateAnnual(reg))
           : reg.policyRate + (pl.marginBps ?? 500) / 10000;
-        return a + (pl.principalUSD * rate) / 52;
+        return a + (pl.principalLocal * rate) / 52;
       }, 0);
 
       const reservesUSD = bankReservesOf(ctx.v2, bank.ticker);
       const householdOpenUSD = householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region));
       const { sheet, householdLineUSD: evolvedHouseholdLineUSD } = evolveBankingSector(
         prevSheet,
-        { businessLoanUSD: businessLoanBookOf(prevSheet, facilityBookUSD), consumerLoanUSD: consumerLoanBookOf(prevSheet) },
+        { businessLoanUSD: businessLoanBookOf(prevSheet, facilityBookLocal), consumerLoanUSD: consumerLoanBookOf(prevSheet) },
         reservesUSD,
         bankDepositLines(ctx, bank.ticker),
         reg.estimatedHouseholdIncomeUSD * share,
@@ -330,7 +330,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // basis, real SME write-offs, and priced origination under the real capital constraint.
       const lending = runBankWeeklyLending(bank, sheet, reg, regionId, ctx.nextWeek);
       // A loan creates a deposit — the pool's new money is written by this bank's own
-      // credit (no reserve moves) and lands on the pool's cash and this bank's smeDepositsUSD
+      // credit (no reserve moves) and lands on the pool's cash and this bank's smeDepositsLocal
       // line at settlement, in the same week the loan appeared on the book above.
       lending.smeOriginationBySegment.forEach((grantedUSD, industry) => {
         pay(ctx, {
@@ -354,15 +354,15 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         mortgageRateQuotedAnnual: household.mortgageRateQuotedAnnual,
         turnoverRateAnnual: household.turnoverRateAnnual,
         mortgageBookUSD: (household.sheet.householdLoans ?? [])
-          .filter((pl) => pl.kind === 'MORTGAGE').reduce((a, pl) => a + pl.principalUSD, 0),
+          .filter((pl) => pl.kind === 'MORTGAGE').reduce((a, pl) => a + pl.principalLocal, 0),
         consumerCreditOriginationUSD: household.consumerCreditOriginationUSD,
-        principalUSD: household.principalWeeklyUSD,
+        principalLocal: household.principalWeeklyUSD,
       });
       const lentSheet = household.sheet;
       const withDeposits: BankingSector = {
         ...lentSheet,
         loanLossProvisionRateAnnualPct: Number(
-          (businessLoanBookOf(lentSheet, facilityBookUSD) > 0 ? (lending.loanLossWeeklyUSD * 52) / businessLoanBookOf(lentSheet, facilityBookUSD) : 0).toFixed(4)
+          (businessLoanBookOf(lentSheet, facilityBookLocal) > 0 ? (lending.loanLossWeeklyUSD * 52) / businessLoanBookOf(lentSheet, facilityBookLocal) : 0).toFixed(4)
         ),
       };
       ctx.g2DeclinedOriginationUSD[regionId] = (ctx.g2DeclinedOriginationUSD[regionId] ?? 0) + lending.declinedOriginationUSD;
@@ -389,19 +389,19 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const poolMarginWeighted = new Map<string, number>();
       newSheets.forEach(({ sheet }) => (sheet.businessLoans || []).forEach((l) => {
         if (l.borrowerKind !== 'SME_POOL') return;
-        poolTotals.set(l.borrowerId, (poolTotals.get(l.borrowerId) ?? 0) + l.principalUSD);
+        poolTotals.set(l.borrowerId, (poolTotals.get(l.borrowerId) ?? 0) + l.principalLocal);
         poolMarginWeighted.set(l.borrowerId,
-          (poolMarginWeighted.get(l.borrowerId) ?? 0) + l.principalUSD * l.marginBps);
+          (poolMarginWeighted.get(l.borrowerId) ?? 0) + l.principalLocal * l.marginBps);
       }));
       (reg.smePools || []).forEach((seg) => {
         const id = smePoolId(regionId, seg.industry);
-        const principalUSD = poolTotals.get(id) ?? 0;
-        seg.debtUSD = Math.round(principalUSD);
+        const principalLocal = poolTotals.get(id) ?? 0;
+        seg.debtUSD = Math.round(principalLocal);
         // The blended margin of the pool's REAL loans, derived beside the principal —
         // sme-pools reads it for debt service instead of an invented +300bp, closing the
         // credit-transmission loop (a tightening now reaches measured pool distress).
-        seg.blendedMarginBps = principalUSD > 0
-          ? Number(((poolMarginWeighted.get(id) ?? 0) / principalUSD).toFixed(1))
+        seg.blendedMarginBps = principalLocal > 0
+          ? Number(((poolMarginWeighted.get(id) ?? 0) / principalLocal).toFixed(1))
           : seg.blendedMarginBps;
       });
     }
@@ -463,7 +463,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           });
         }
       }
-      const cbLoanInterestUSD = ((sheet.centralBankLoanUSD ?? 0) * (reg.policyRate + (SRF_SPREAD_BPS + CENTRAL_BANK_LOAN_PENALTY_BPS) / 10000)) / 52;
+      const cbLoanInterestUSD = ((sheet.centralBankLoanLocal ?? 0) * (reg.policyRate + (SRF_SPREAD_BPS + CENTRAL_BANK_LOAN_PENALTY_BPS) / 10000)) / 52;
       if (cbLoanInterestUSD > 0) {
         pay(ctx, {
           payer: { kind: 'BANK', ticker: bank.ticker },
@@ -487,7 +487,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const deskView = (book: string) =>
       Array.from(regionalDeskView(newSheets.map(({ sheet }) => sheet.dealerDeskInventory), book).entries())
         .filter(([, usd]) => Math.abs(usd) > 1);
-    const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.ticker)) + sheet.sovereignBondHoldingsUSD + bankReservesOf(ctx.v2, bank.ticker);
+    const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.ticker)) + sheet.sovereignBondHoldingsLocal + bankReservesOf(ctx.v2, bank.ticker);
     const totalAssets = newSheets.reduce((s, e) => s + assetsOf(e), 0);
     const weightedAvg = (f: (s: BankingSector) => number) =>
       totalAssets > 0
@@ -500,8 +500,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // BankingSector field fails to compile here until it is summed, averaged, or explicitly
     // declared per-bank-only.
     reg.bankingSector = {
-      sovereignBondHoldingsUSD: sumField((s) => s.sovereignBondHoldingsUSD),
-      bankEquityUSD: sumField((s) => s.bankEquityUSD),
+      sovereignBondHoldingsLocal: sumField((s) => s.sovereignBondHoldingsLocal),
+      bankEquityLocal: sumField((s) => s.bankEquityLocal),
       bankCapitalRatio: Number(weightedAvg((s) => s.bankCapitalRatio).toFixed(4)),
       netInterestMarginPct: Number(weightedAvg((s) => s.netInterestMarginPct).toFixed(4)),
       loanLossProvisionRateAnnualPct: Number(weightedAvg((s) => s.loanLossProvisionRateAnnualPct).toFixed(4)),
@@ -514,8 +514,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
             .filter((e) => e.region === regionId && e.entityType === 'MONEY_MARKET_FUND')
             .reduce((a, e) => a + (e.mmfSharesOutstandingUSD ?? 0), 0),
       itemizedHoldings: priorAggregate.itemizedHoldings || [],
-      srfBorrowingUSD: sumField((s) => s.srfBorrowingUSD),
-      onRrpLendingUSD: sumField((s) => s.onRrpLendingUSD),
+      srfBorrowingLocal: sumField((s) => s.srfBorrowingLocal),
+      onRrpLendingLocal: sumField((s) => s.onRrpLendingLocal),
       // Real per-bank sovereign holdings, summed across named banks — each bank is its own real
       // participant in the sovereign-bond clearing engine (07c-sovereign-bond-clearing.ts).
       sovereignBondHoldingsByBond: (() => {
@@ -531,27 +531,27 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // These three arrays are the derived regional view of those desks and nothing decides off
       // them — the books that clear later this week overwrite them with their own session's
       // result, and a desk's position is only ever written by the bank that took it.
-      corpBondDealerInventory: deskView('corporate bond').map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD })),
+      corpBondDealerInventory: deskView('corporate bond').map(([companyId, inventoryLocal]) => ({ companyId, inventoryLocal })),
       sovBondDealerInventory: [
         // §3.13-SOV row 3: the desk row names the BOND (the field is still called bondId).
-        ...deskView('sovereign bond').map(([instrumentId, inventoryUSD]) => ({ bondId: instrumentId, inventoryUSD })),
-        ...deskView('bill').map(([instrumentId, inventoryUSD]) => ({ bondId: instrumentId, inventoryUSD })),
+        ...deskView('sovereign bond').map(([instrumentId, inventoryLocal]) => ({ bondId: instrumentId, inventoryLocal })),
+        ...deskView('bill').map(([instrumentId, inventoryLocal]) => ({ bondId: instrumentId, inventoryLocal })),
       ],
-      loanDealerInventory: deskView('leveraged loan').map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD })),
+      loanDealerInventory: deskView('leveraged loan').map(([companyId, inventoryLocal]) => ({ companyId, inventoryLocal })),
       // The region's overnight book is the sum of the named banks' real positions. The
       // RATE is one market print per region and lives on reg.repoRateAnnual — never a second
       // copy on any sheet.
-      repoLentUSD: sumField((s) => s.repoLentUSD ?? 0),
-      repoBorrowedUSD: sumField((s) => s.repoBorrowedUSD ?? 0),
+      repoLentLocal: sumField((s) => s.repoLentLocal ?? 0),
+      repoBorrowedLocal: sumField((s) => s.repoBorrowedLocal ?? 0),
       repoEncumberedCollateralUSD: sumField((s) => s.repoEncumberedCollateralUSD ?? 0),
       // Itemized loans live per bank; the aggregate carries no copy (a flattened region
       // view would be a second ledger). Corporate deposits sum like everything else.
       businessLoans: [],
       householdLoans: [],
-      centralBankLoanUSD: sumField((s) => s.centralBankLoanUSD ?? 0),
-      clientMarginUSD: sumField((s) => s.clientMarginUSD ?? 0),
-      sovereignAccruedCouponUSD: sumField((s) => s.sovereignAccruedCouponUSD ?? 0),
-      primeBrokerageLoansUSD: sumField((s) => s.primeBrokerageLoansUSD ?? 0),
+      centralBankLoanLocal: sumField((s) => s.centralBankLoanLocal ?? 0),
+      clientMarginLocal: sumField((s) => s.clientMarginLocal ?? 0),
+      sovereignAccruedCouponLocal: sumField((s) => s.sovereignAccruedCouponLocal ?? 0),
+      primeBrokerageLoansLocal: sumField((s) => s.primeBrokerageLoansLocal ?? 0),
       householdDepositInterestWeeklyUSD: sumField((s) => s.householdDepositInterestWeeklyUSD ?? 0),
       lastBillAccretionWeeklyUSD: sumField((s) => s.lastBillAccretionWeeklyUSD ?? 0),
       reservesInterestWeeklyUSD: sumField((s) => s.reservesInterestWeeklyUSD ?? 0),
@@ -575,7 +575,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const sumPools = (kind: HouseholdLoanKind) => newSheets.reduce(
       (a, { sheet }) => a + (sheet.householdLoans || [])
         .filter((pl) => pl.kind === kind)
-        .reduce((x, pl) => x + pl.principalUSD, 0),
+        .reduce((x, pl) => x + pl.principalLocal, 0),
       0
     );
     const hs = reg.householdState;
@@ -598,7 +598,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     householdFlowsByBank.forEach((f) => {
       interestUSD += f.interestUSD;
       servicePrincipalUSD += f.debtServicePrincipalUSD;
-      bookPrincipalUSD += f.principalUSD;
+      bookPrincipalUSD += f.principalLocal;
       mortgageOriginationUSD += f.mortgageOriginationUSD;
       mortgageDischargeUSD += f.mortgageDischargeUSD;
       consumerCreditUSD += f.consumerCreditOriginationUSD;

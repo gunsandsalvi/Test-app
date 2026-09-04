@@ -9,7 +9,7 @@ export interface InstitutionalSector {
   corpBondHoldingsUSD: number;
   sovBondHoldingsUSD: number;
   equityHoldingsUSD: number;
-  cashUSD: number;
+  cashLocal: number;
   sectorEquityUSD: number;
   investmentIncomeMarginPct: number;
   itemizedHoldings: ItemizedHolding[];
@@ -148,22 +148,22 @@ export interface InstitutionalEntity {
    */
   /**
    * Cash this entity lent overnight in the general-collateral repo market this week
-   * (stages/repo-clearing.ts). It matures back into cashUSD with interest at the start of the
+   * (stages/repo-clearing.ts). It matures back into cashLocal with interest at the start of the
    * next week's money-market session. Part of the entity's book (markInstitutionalBooks and
    * the S4 conservation check count it), NOT part of its weekly purchase capacity — the cash
    * is genuinely out the door for the week, and counting it twice would let the entity buy
    * securities with money it had already lent.
    */
-  repoLentUSD?: number;
+  repoLentLocal?: number;
   /**
    * Cash parked at the central bank's overnight reverse repo window this week, at the rate it
    * was struck at. The administered floor is a real facility, so the money genuinely leaves the
-   * account: like `repoLentUSD` it is part of the entity's book and not part of its purchase
+   * account: like `repoLentLocal` it is part of the entity's book and not part of its purchase
    * capacity, and it returns with interest at the start of the next money-market session.
    */
   rrpLentUSD?: number;
   rrpRateAnnual?: number;
-  /** HF — this entity's stock-loan book, netted to one number the way `repoLentUSD` nets the repo
+  /** HF — this entity's stock-loan book, netted to one number the way `repoLentLocal` nets the repo
    * one. Positive for whichever side the mark has moved toward; a short's P&L lives here.
    * Derived every week from the region's loan book — never set by hand. */
   stockLoanNetUSD?: number;
@@ -213,10 +213,10 @@ export interface InstitutionalEntity {
  * mark of exactly this sum, read a week stale by every sizing pass.
  */
 export function institutionTotalAssetsUSD(
-  e: { repoLentUSD?: number; rrpLentUSD?: number; stockLoanNetUSD?: number; entityType: InstitutionalEntityType; peFund?: unknown },
-  cashUSD: number, bookUSD: number, pendingUSD: number, portfolioUSD: number
+  e: { repoLentLocal?: number; rrpLentUSD?: number; stockLoanNetUSD?: number; entityType: InstitutionalEntityType; peFund?: unknown },
+  cashLocal: number, bookUSD: number, pendingUSD: number, portfolioUSD: number
 ): number {
-  return cashUSD + pendingUSD + (e.repoLentUSD ?? 0) + (e.rrpLentUSD ?? 0) + (e.stockLoanNetUSD ?? 0)
+  return cashLocal + pendingUSD + (e.repoLentLocal ?? 0) + (e.rrpLentUSD ?? 0) + (e.stockLoanNetUSD ?? 0)
     + (e.entityType === 'PRIVATE_EQUITY' && e.peFund ? portfolioUSD : bookUSD);
 }
 

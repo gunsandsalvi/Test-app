@@ -29,8 +29,8 @@ export const contracts: FunctionModule = {
     const classes = [...new Set(mine.map((k) => k.classId))];
     const tabs = ['all', ...classes.map(classWord)];
     const active = tabs.includes(args.tab ?? '') ? args.tab! : 'all';
-    const shown = mine.filter((k) => active === 'all' || classWord(k.classId) === active).sort((a, b) => b.notionalUSD - a.notionalUSD);
-    const notional = shown.reduce((a, k) => a + k.notionalUSD, 0);
+    const shown = mine.filter((k) => active === 'all' || classWord(k.classId) === active).sort((a, b) => b.notional - a.notional);
+    const notional = shown.reduce((a, k) => a + k.notional, 0);
     const settled = shown.reduce((a, k) => a + (k.settledMarkUSD ?? 0), 0);
     if (mine.length === 0) return <Card style={{ padding: 14, color: T.muted }}>no derivative contract names this {ref.type === 'fx' ? 'pair' : ref.type}.</Card>;
     return (<>
@@ -39,13 +39,13 @@ export const contracts: FunctionModule = {
         <KV k="contracts" v={count(shown.length)} />
         <KV k="notional" v={money(notional)} />
         {settled !== 0 ? <KV k="mark settled to the longs" hint="cumulative variation margin" v={money(settled)} /> : null}
-        {classes.map((c) => <KV key={c} k={classWord(c)} v={`${count(mine.filter((k) => k.classId === c).length)} · ${money(mine.filter((k) => k.classId === c).reduce((a, k) => a + k.notionalUSD, 0))}`} />)}
+        {classes.map((c) => <KV key={c} k={classWord(c)} v={`${count(mine.filter((k) => k.classId === c).length)} · ${money(mine.filter((k) => k.classId === c).reduce((a, k) => a + k.notional, 0))}`} />)}
       </Card>
       <Table rows={shown.slice(0, 100)} keyOf={(k) => k.id} columns={[
         { key: 'id', label: 'contract', width: 1.6, render: (k) => <Link to={{ type: 'contract', id: k.id }} nav={nav}>{classWord(k.classId)}</Link> },
         { key: 'a', label: 'a', width: 0.8, render: (k) => { const r = partyRef(world, k.a); return r ? <Link to={r} nav={nav}>{partyName(world, k.a)}</Link> : partyName(world, k.a); } },
         { key: 'b', label: 'b', width: 0.8, render: (k) => { const r = partyRef(world, k.b); return r ? <Link to={r} nav={nav}>{partyName(world, k.b)}</Link> : partyName(world, k.b); } },
-        { key: 'usd', label: 'size', render: (k) => money(k.notionalUSD) },
+        { key: 'usd', label: 'size', render: (k) => money(k.notional) },
         { key: 'strike', label: 'strike', render: (k) => (k.classId === 'IRS' ? pctLevel(k.strike, 2) : k.classId === 'CDS' ? `${Math.round(k.strike)}bp` : num(k.strike, 2)) },
         { key: 'due', label: 'due', render: (k) => formatMonthYear(displayWeek(world.state, k.maturityWeek)) },
       ]} />

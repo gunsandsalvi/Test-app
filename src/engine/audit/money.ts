@@ -66,7 +66,7 @@ function m2(state: GameState, week: number): AuditFinding[] {
     const cb = reg?.centralBankSheet;
     if (!cb) return;
     if (Math.abs(cb.currencyInCirculationUSD) > 1e6) out.push({ family: 'M', check: 'M2 currency plug', week, usd: cb.currencyInCirculationUSD, message: `${r}: currency in circulation ${B(cb.currencyInCirculationUSD)} is a residual nobody issued` });
-    const cbLoans = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.centralBankLoanUSD ?? 0);
+    const cbLoans = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.centralBankLoanLocal ?? 0);
     if (Math.abs(cbLoans - (cb.loansToBanksUSD ?? 0)) > 1e6) out.push({ family: 'M', check: 'M2 central bank loans = banks\' borrowing', week, usd: cbLoans - (cb.loansToBanksUSD ?? 0), message: `${r}: banks owe the central bank ${B(cbLoans)}, its book says ${B(cb.loansToBanksUSD ?? 0)}` });
     // The same two-sided identity for the window's other side: what the lenders say they have
     // parked is what the central bank says it has taken. A lender that leaves the world with cash
@@ -128,11 +128,11 @@ function m5(state: GameState, week: number): AuditFinding[] {
   banksOf(state).forEach((b) => {
     const bs = b.bankBalanceSheet!;
     const sov = sum(Object.values(bs.sovereignBondHoldingsByBond ?? {}), (v) => Number(v) || 0);
-    const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryUSD));
-    const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.ticker)) + sov + bankReservesOf(ensureV2(state), b.ticker) + (bs.repoLentUSD ?? 0) + (bs.sovereignAccruedCouponUSD ?? 0) + desks + (bs.primeBrokerageLoansUSD ?? 0);
-    const liabilities = depositsOf(bs, stateDepositLines(state, b.ticker)) + (bs.centralBankLoanUSD ?? 0) + (bs.repoBorrowedUSD ?? 0) + (bs.srfBorrowingUSD ?? 0);
-    const residual = assets - liabilities - bs.bankEquityUSD;
-    if (Math.abs(residual) > Math.max(1e7, assets * 2e-3)) out.push({ family: 'M', check: 'M5 bank sheet closes', week, usd: residual, message: `${b.region}:${b.ticker} assets ${B(assets)} − liabilities ${B(liabilities)} − equity ${B(bs.bankEquityUSD)} = ${B(residual)}` });
+    const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryLocal));
+    const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.ticker)) + sov + bankReservesOf(ensureV2(state), b.ticker) + (bs.repoLentLocal ?? 0) + (bs.sovereignAccruedCouponLocal ?? 0) + desks + (bs.primeBrokerageLoansLocal ?? 0);
+    const liabilities = depositsOf(bs, stateDepositLines(state, b.ticker)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0);
+    const residual = assets - liabilities - bs.bankEquityLocal;
+    if (Math.abs(residual) > Math.max(1e7, assets * 2e-3)) out.push({ family: 'M', check: 'M5 bank sheet closes', week, usd: residual, message: `${b.region}:${b.ticker} assets ${B(assets)} − liabilities ${B(liabilities)} − equity ${B(bs.bankEquityLocal)} = ${B(residual)}` });
   });
   return out;
 }
@@ -164,8 +164,8 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const explained = credit + issued + ownAccount + crossBorder + book + depositInterest + advance;
     // The margin line is inside `depositsOf` but is NOT an account row, so it moves with no
     // settled row and no tally behind it — the one part of the stock the creator list cannot see.
-    const marginNow = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.clientMarginUSD ?? 0);
-    const marginDelta = marginNow - (before.clientMarginUSD ?? 0);
+    const marginNow = sum(banksOf(state, r), (b) => b.bankBalanceSheet!.clientMarginLocal ?? 0);
+    const marginDelta = marginNow - (before.clientMarginLocal ?? 0);
     const gap = (now - moneyBefore) - explained;
     if (Math.abs(gap) > Math.max(5e8, moneyBefore * 0.005)) {
       const unplaced = ls?.bankTallyUnmappedUSD ?? 0;

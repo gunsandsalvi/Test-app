@@ -52,7 +52,7 @@ export interface ItemizedHolding {
    * Absent means the row predates the mark or is not credit; a reader that needs face and finds
    * none falls back to the value, which is what par pricing made them equal to anyway.
    */
-  faceUSD?: number;
+  faceLocal?: number;
 }
 
 /**
@@ -95,8 +95,8 @@ export interface BankingSector {
   // no loan book of its own: a region's book is `regionLoanBooksUSD` over its named banks.
   // §5-WIRES A3.6c: a bank's reserves are its account (`bankReservesOf`) and its four deposit
   // lines are its depositors' accounts (`DepositLines`, `depositLinesAt`) — no field carries them.
-  sovereignBondHoldingsUSD: number;
-  bankEquityUSD: number;
+  sovereignBondHoldingsLocal: number;
+  bankEquityLocal: number;
   bankCapitalRatio: number;
   netInterestMarginPct: number;
   loanLossProvisionRateAnnualPct: number;
@@ -111,36 +111,36 @@ export interface BankingSector {
   // reverse repo facility (earning policyRate - a spread) rather than letting idle cash sit
   // unremunerated or invisibly disappear into the aggregate. See
   // 02b-bank-diversification.ts's applyCentralBankFacilities.
-  srfBorrowingUSD: number;
-  onRrpLendingUSD: number;
+  srfBorrowingLocal: number;
+  onRrpLendingLocal: number;
   // Wall Street: real corporate-bond dealer inventory — the banking sector's shared secondary-
   // market trading book (banks sit in the middle of the real institutional-entity clearing
   // auction, absorbing client order imbalance onto their own book rather than the market simply
   // failing to clear). One position per issuer this region's banks are currently long/short
   // against a flat book; a genuine balance-sheet line updated only by real trade fills, not a
   // formula. See stages/07b-corporate-bond-clearing.ts.
-  corpBondDealerInventory: { companyId: string; inventoryUSD: number }[];
+  corpBondDealerInventory: { companyId: string; inventoryLocal: number }[];
   // Wall Street: the banking sector's real sovereign-bond holdings, broken out by tenor bucket
   // (t2/t5/t10/t30) — banks hold government bonds substantially for real regulatory-liquidity
   // (HQLA) purposes; this per-bucket breakdown is what lets the real sovereign-bond clearing
   // engine (07c-sovereign-bond-clearing.ts) treat "the banking sector" as a real participant in
   // the tenor-point auction rather than one scalar total with no maturity composition.
-  // sovereignBondHoldingsUSD stays the derived sum of these buckets.
+  // sovereignBondHoldingsLocal stays the derived sum of these buckets.
   sovereignBondHoldingsByBond: Record<string, number>;
   // Real dealer inventory for the sovereign-bond clearing auction, by tenor bucket — the same
   // shared-regional-dealer-desk role banks play for corporate bonds (corpBondDealerInventory),
   // distinct from banks' own real investment-portfolio holdings above (sovereignBondHoldingsByBond).
-  sovBondDealerInventory: { bondId: string; inventoryUSD: number }[];
+  sovBondDealerInventory: { bondId: string; inventoryLocal: number }[];
   // Same shared-regional-dealer-desk role for leveraged loans. See 07d-leveraged-loan-clearing.ts.
-  loanDealerInventory: { companyId: string; inventoryUSD: number }[];
+  loanDealerInventory: { companyId: string; inventoryLocal: number }[];
   /**
    * WS6 — this bank's overnight general-collateral repo book, struck fresh each week by
    * stages/repo-clearing.ts and matured (principal AND interest, as explicit flows) at the
    * start of the next week inside evolveBankingSector. Always a one-week-old overnight
    * position, never a term liability.
    */
-  repoLentUSD: number;
-  repoBorrowedUSD: number;
+  repoLentLocal: number;
+  repoBorrowedLocal: number;
   /**
    * CAL — sovereign interest this bank has EARNED but not yet been PAID. A coupon accrues every
    * week and settles on the bucket's date, so in between it is a receivable, and a real one: the
@@ -148,9 +148,9 @@ export interface BankingSector {
    * against equity off the same ledger the treasury pays from, so the holder's claim and the
    * issuer's payable are one number seen from two books and cannot drift by the lumpiness.
    */
-  sovereignAccruedCouponUSD?: number;
+  sovereignAccruedCouponLocal?: number;
   /**
-   * Government-bond collateral pledged against `repoBorrowedUSD` + `srfBorrowingUSD`, at the
+   * Government-bond collateral pledged against `repoBorrowedLocal` + `srfBorrowingLocal`, at the
    * derived per-bucket haircuts (see computeSovereignRepoHaircuts). Pledged paper cannot
    * simultaneously be sold — 07c/07f read this as a floor on the pledging bank's holdings and
    * exclude it from further borrowing capacity.
@@ -158,7 +158,7 @@ export interface BankingSector {
   repoEncumberedCollateralUSD: number;
   /** HF1 — margin loans this bank has out to hedge funds, derived from the region's
    *  prime-brokerage book. A real asset, consuming the leverage ratio like any other loan. */
-  primeBrokerageLoansUSD?: number;
+  primeBrokerageLoansLocal?: number;
   /** G3c: the deposit rate this bank decided to pay (annualised decimal), out of its own
    *  alternative funding cost and the share of its base actually in play. One writer
    *  (evolveBankingSector); anyone who needs the rate reads it here rather than restating it. */
@@ -174,17 +174,17 @@ export interface BankingSector {
    */
   dealerDeskInventory?: DealerDeskInventory;
   /**
-   * G2 slice 1 — the ITEMIZED business loan book: every dollar of `businessLoanBookUSD` is one
+   * G2 slice 1 — the ITEMIZED business loan book: every dollar of `businessLoanBookLocal` is one
    * of these, with a named borrower. Two real borrower classes today: the SME segment pools
    * (borrowerId = "<region>_SEG_<type>" — the ~15x-levered seed scalar recalibrated down to
    * what segment EBITDA can service and bank capital can carry), and corporate bank facilities
    * (borrowerId = company.id, mirroring tranches flagged isBankFacility). Households arrive
-   * with MS. `businessLoanBookUSD` is the derived sum.
+   * with MS. `businessLoanBookLocal` is the derived sum.
    */
   businessLoans: BankLoan[];
   /**
    * HH3 — the itemized household books (mortgage / card / consumer term pools). Owned by the
-   * household-lending pass in bank-lending.ts; `consumerLoanBookUSD` is their derived sum.
+   * household-lending pass in bank-lending.ts; `consumerLoanBookLocal` is their derived sum.
    */
   householdLoans: HouseholdLoanPool[];
   /** §5-WIRES A3.6c: the corporate and institutional deposit lines are READS of the depositors'
@@ -196,9 +196,9 @@ export interface BankingSector {
   /** §5-CLOSE — the central bank's UNSECURED loan to this bank: the lender of last resort at the
    *  funding close, drawn when the week ends short of the buffer and repaid from excess cash. A
    *  named liability with a named creditor; wholesale money "from nobody" is gone. */
-  centralBankLoanUSD?: number;
+  centralBankLoanLocal?: number;
   /** §5-CLOSE — FX clients' margin held by this bank's desk: their money, a liability. */
-  clientMarginUSD?: number;
+  clientMarginLocal?: number;
   /** HH — a reported weekly FLOW (not a stock): interest this bank paid its household
    *  depositors, at its own deposit rate. Part of measured household income. */
   householdDepositInterestWeeklyUSD?: number;
@@ -219,7 +219,7 @@ export interface BankingSector {
  * HH3 — the itemized HOUSEHOLD loan books: mortgages, credit cards and consumer term loans as
  * real pools on named banks' books, the way `businessLoans` already itemizes the corporate side.
  * The region's household debt lines are the DERIVED SUM of these pools across its banks, and
- * `consumerLoanBookUSD` the derived sum per bank — one representation of household borrowing
+ * `consumerLoanBookLocal` the derived sum per bank — one representation of household borrowing
  * where there used to be two: a household aggregate evolved by paydown constants beside a bank
  * scalar chasing an 11.67%-of-it target, with the other 88% of the debt owed to nobody at all.
  */
@@ -240,7 +240,7 @@ export type HouseholdLoanKind = 'MORTGAGE' | 'CREDIT_CARD' | 'CONSUMER_TERM';
  * the mechanism of every mortgage crisis and the one the average could not express.
  */
 export interface MortgageVintage {
-  principalUSD: number;
+  principalLocal: number;
   /** The home value this vintage was written against, in the week it was written. */
   originationCollateralUSD: number;
   /** The region's median home price when it was written — the base its mark is measured from. */
@@ -264,9 +264,9 @@ export interface HouseholdLoanPool {
    * MORTGAGE: the SUM of `vintages` — a measurement of them, not a second stock (rule 4).
    * Every other kind: the pool's own principal.
    */
-  principalUSD: number;
+  principalLocal: number;
   /**
-   * MORTGAGE only — the book, loan cohort by loan cohort. This is the truth; `principalUSD`,
+   * MORTGAGE only — the book, loan cohort by loan cohort. This is the truth; `principalLocal`,
    * `wacAnnual` and `wamWeeks` are derived from it and kept so the rest of the model reads one
    * number where it used to.
    */
@@ -455,7 +455,7 @@ export const MORTGAGE_MIN_LOSS_SEVERITY = 0.05;
  *  omitted the margin line while its week-end read included it, and the whole margin STOCK
  *  printed as "unexplained" money every week the desks held any. */
 export const depositsOf = (s: BankingSector, lines: DepositLines): number =>
-  lines.householdUSD + lines.corporateUSD + lines.institutionalUSD + lines.smeUSD + (s.clientMarginUSD ?? 0);
+  lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.smeLocal + (s.clientMarginLocal ?? 0);
 
 /**
  * THE MONEY STOCK'S SHARE of a bank's deposits: what its customers can actually SPEND.
@@ -469,30 +469,30 @@ export const depositsOf = (s: BankingSector, lines: DepositLines): number =>
  * unexplained line.
  */
 export const spendableDepositsOf = (s: BankingSector, lines: DepositLines): number =>
-  depositsOf(s, lines) - (s.clientMarginUSD ?? 0);
+  depositsOf(s, lines) - (s.clientMarginLocal ?? 0);
 
 /** §5-WIRES A3.6c — A BANK'S DEPOSIT LINES, READ OFF THE LEDGER. The four classes are the
  *  depositors' accounts at the bank: the household sector's row, the pools' rows, and the
  *  firms' and institutions' accounts whose house bank it is (`depositLinesAt`, ledger/accounts.ts).
  *  A sheet-taking function that needs a line takes this beside the sheet, as it takes the cash. */
-export interface DepositLines { householdUSD: number; corporateUSD: number; institutionalUSD: number; smeUSD: number }
-export const ZERO_DEPOSIT_LINES: DepositLines = { householdUSD: 0, corporateUSD: 0, institutionalUSD: 0, smeUSD: 0 };
+export interface DepositLines { householdLocal: number; corporateLocal: number; institutionalLocal: number; smeLocal: number }
+export const ZERO_DEPOSIT_LINES: DepositLines = { householdLocal: 0, corporateLocal: 0, institutionalLocal: 0, smeLocal: 0 };
 export const addDepositLines = (a: DepositLines, b: DepositLines): DepositLines => ({
-  householdUSD: a.householdUSD + b.householdUSD, corporateUSD: a.corporateUSD + b.corporateUSD,
-  institutionalUSD: a.institutionalUSD + b.institutionalUSD, smeUSD: a.smeUSD + b.smeUSD,
+  householdLocal: a.householdLocal + b.householdLocal, corporateLocal: a.corporateLocal + b.corporateLocal,
+  institutionalLocal: a.institutionalLocal + b.institutionalLocal, smeLocal: a.smeLocal + b.smeLocal,
 });
 
 /** §5-WIRES D — THE LOAN BOOKS ARE READS. A stored sum of stored rows can disagree with its rows
  *  (O4's "facilities on ladders = loans on banks" lived on exactly that); the read cannot. */
 /** The business book: the SME pool rows on the sheet plus the bank's facilities, which are the
  *  borrowers' ladder rows (`facilityBookOf`, read by the caller — step 10). */
-export const businessLoanBookOf = (s: { businessLoans?: BankLoan[] }, facilityBookUSD: number): number =>
-  (s.businessLoans ?? []).reduce((a, l) => a + l.principalUSD, 0) + facilityBookUSD;
+export const businessLoanBookOf = (s: { businessLoans?: BankLoan[] }, facilityBookLocal: number): number =>
+  (s.businessLoans ?? []).reduce((a, l) => a + l.principalLocal, 0) + facilityBookLocal;
 export const consumerLoanBookOf = (s: { householdLoans?: HouseholdLoanPool[] }): number =>
-  (s.householdLoans ?? []).reduce((a, p) => a + p.principalUSD, 0);
+  (s.householdLoans ?? []).reduce((a, p) => a + p.principalLocal, 0);
 /** Both credit books together — the RWA's and the leverage ratio's credit term. */
-export const loanBooksOf = (s: { businessLoans?: BankLoan[]; householdLoans?: HouseholdLoanPool[] }, facilityBookUSD: number): number =>
-  businessLoanBookOf(s, facilityBookUSD) + consumerLoanBookOf(s);
+export const loanBooksOf = (s: { businessLoans?: BankLoan[]; householdLoans?: HouseholdLoanPool[] }, facilityBookLocal: number): number =>
+  businessLoanBookOf(s, facilityBookLocal) + consumerLoanBookOf(s);
 /** A region's loan books: the sum over its named banks' rows (the aggregate holds no rows). */
 export function regionLoanBooksUSD<T extends { bankBalanceSheet?: BankingSector }>(banks: T[], facilityBookOf: (b: T) => number): { businessLoanUSD: number; consumerLoanUSD: number } {
   let businessLoanUSD = 0, consumerLoanUSD = 0;
@@ -502,7 +502,7 @@ export function regionLoanBooksUSD<T extends { bankBalanceSheet?: BankingSector 
 
 export function householdBookRwaUSD(pools: HouseholdLoanPool[] | undefined): number {
   return (pools ?? []).reduce(
-    (a, p) => a + p.principalUSD * (p.kind === 'MORTGAGE' ? MORTGAGE_RISK_WEIGHT : CONSUMER_CREDIT_RISK_WEIGHT),
+    (a, p) => a + p.principalLocal * (p.kind === 'MORTGAGE' ? MORTGAGE_RISK_WEIGHT : CONSUMER_CREDIT_RISK_WEIGHT),
     0
   );
 }
@@ -522,7 +522,7 @@ export function householdBookRwaUSD(pools: HouseholdLoanPool[] | undefined): num
 export function vintageCurrentLtv(v: MortgageVintage, medianHomePriceNowUSD: number): number {
   const base = Math.max(1, v.originationHomePriceUSD);
   const markedCollateralUSD = Math.max(1, v.originationCollateralUSD) * (Math.max(0, medianHomePriceNowUSD) / base);
-  return markedCollateralUSD > 0 ? v.principalUSD / markedCollateralUSD : 2;
+  return markedCollateralUSD > 0 ? v.principalLocal / markedCollateralUSD : 2;
 }
 
 /**
@@ -548,7 +548,7 @@ export function bookMortgageSeverity(vintages: MortgageVintage[] | undefined, me
   let weighted = 0;
   let total = 0;
   vintages.forEach((v) => {
-    const w = Math.max(0, v.principalUSD);
+    const w = Math.max(0, v.principalLocal);
     if (w <= 0) return;
     total += w;
     weighted += w * mortgageSeverityAtLtv(vintageCurrentLtv(v, medianHomePriceNowUSD));
@@ -556,12 +556,12 @@ export function bookMortgageSeverity(vintages: MortgageVintage[] | undefined, me
   return total > 0 ? weighted / total : MORTGAGE_MIN_LOSS_SEVERITY;
 }
 
-export function annuityWeeklyPrincipalUSD(principalUSD: number, rateAnnual: number, wamWeeks: number): number {
-  if (!(principalUSD > 0)) return 0;
+export function annuityWeeklyPrincipalUSD(principalLocal: number, rateAnnual: number, wamWeeks: number): number {
+  if (!(principalLocal > 0)) return 0;
   const weeks = Math.max(1, wamWeeks);
   const r = Math.max(0, rateAnnual) / 52;
-  const paymentUSD = principalUSD * levelPaymentFactor(r, weeks);
-  return Math.max(0, Math.min(principalUSD, paymentUSD - principalUSD * r));
+  const paymentUSD = principalLocal * levelPaymentFactor(r, weeks);
+  return Math.max(0, Math.min(principalLocal, paymentUSD - principalLocal * r));
 }
 
 /** G2: one real loan to one named borrower on one named bank's book. */
@@ -572,7 +572,7 @@ export interface BankLoan {
    *  (`facilityRowsOf`/`facilityBookOf`, engine2/tranches.ts). */
   borrowerId: string;
   borrowerKind: 'SME_POOL';
-  principalUSD: number;
+  principalLocal: number;
   /** Spread over policyRate, annual bps — quoted by the bank's own credit arithmetic at
    * origination (slice 3), the same expected-loss + capital-cost pricing the bond market uses. */
   marginBps: number;

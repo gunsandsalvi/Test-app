@@ -1,7 +1,7 @@
 /**
  * §7.275 — ONE API FOR A BANK'S P&L WRITE (Tier-2 ledger enforcement, §5-STRUCT).
  *
- * Eight stage files wrote `bankEquityUSD` with their own spread rebuilds — a fee here, a mark
+ * Eight stage files wrote `bankEquityLocal` with their own spread rebuilds — a fee here, a mark
  * there, a write-down somewhere else — and nothing could enumerate a bank's P&L by reason or
  * catch a NaN before it poisoned the sheet. Every stage-side earnings/loss write goes through
  * here now: the amount is validated the way a payment is (a NaN or infinite P&L is a defect at
@@ -29,5 +29,5 @@ export function bookPnL(
   if (process.env.PNL_TRACE === '1' && Math.abs(deltaUSD) > 10e6) {
     console.log(`  [pnl] ${ticker ?? '?'} ${reason} ${(deltaUSD / 1e6).toFixed(1)}M`);
   }
-  return { ...sheet, bankEquityUSD: sheet.bankEquityUSD + deltaUSD };
+  return { ...sheet, bankEquityLocal: sheet.bankEquityLocal + deltaUSD };
 }

@@ -61,16 +61,16 @@ function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix
   let bucketIndex = 0;
   buckets.forEach(group => {
     if (group.length === 1) { result.push(group[0]); newIdByOldId?.set(group[0].id, group[0].id); return; }
-    const totalPrincipal = group.reduce((s, t) => s + t.principalUSD, 0);
+    const totalPrincipal = group.reduce((s, t) => s + t.principalLocal, 0);
     if (totalPrincipal <= 0) return;
     // Every member's holders re-key to the bucket's one id (the exchange reads this map).
     group.forEach((t) => newIdByOldId?.set(t.id, `${idPrefix}-ASSUMED-${nextWeek}-${bucketIndex}`));
-    const weightedCoupon = group.reduce((s, t) => s + (t.couponRate ?? 0) * t.principalUSD, 0) / totalPrincipal;
-    const weightedMarginBps = group.reduce((s, t) => s + (t.floatingMarginBps ?? 0) * t.principalUSD, 0) / totalPrincipal;
-    const weightedMaturityWeek = Math.round(group.reduce((s, t) => s + t.maturityWeek * t.principalUSD, 0) / totalPrincipal);
+    const weightedCoupon = group.reduce((s, t) => s + (t.couponRate ?? 0) * t.principalLocal, 0) / totalPrincipal;
+    const weightedMarginBps = group.reduce((s, t) => s + (t.floatingMarginBps ?? 0) * t.principalLocal, 0) / totalPrincipal;
+    const weightedMaturityWeek = Math.round(group.reduce((s, t) => s + t.maturityWeek * t.principalLocal, 0) / totalPrincipal);
     result.push({
       id: `${idPrefix}-ASSUMED-${nextWeek}-${bucketIndex++}`,
-      principalUSD: totalPrincipal,
+      principalLocal: totalPrincipal,
       rateType: group[0].rateType,
       couponRate: group[0].rateType === 'FIXED' ? weightedCoupon : undefined,
       floatingMarginBps: group[0].rateType === 'FLOATING' ? Math.round(weightedMarginBps) : undefined,
@@ -143,8 +143,8 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     spin.sharesOutstanding = spinShares;
     spin.stockPrice = Number(spinPrice.toFixed(4));
     spin.debtTranches = [];
-    spin.grossPPEUSD = (parent.grossPPEUSD ?? 0) * share;
-    spin.accumulatedDepreciationUSD = (parent.accumulatedDepreciationUSD ?? 0) * share;
+    spin.grossPPELocal = (parent.grossPPELocal ?? 0) * share;
+    spin.accumulatedDepreciationLocal = (parent.accumulatedDepreciationLocal ?? 0) * share;
     if (spin.baselineNetPpeUSD !== undefined) spin.baselineNetPpeUSD = spin.baselineNetPpeUSD * share;
     spin.antitrustWeeksAboveThreshold = 0;
     revHistSeed(ctx.v2!, rowOf(ctx.v2!, spin.id), spin.annualRevenue);
@@ -169,7 +169,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
       for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = Hs.next[r]) {
         if (Hs.instrRef[r] !== parentRef || Hs.typeRef[r] !== equityRefS) continue;
         const sh = Hs.shares[r];
-        heldShares += Number.isNaN(sh) ? Hs.qtyUSD[r] / Math.max(0.01, parent.stockPrice) : sh;
+        heldShares += Number.isNaN(sh) ? Hs.qtyLocal[r] / Math.max(0.01, parent.stockPrice) : sh;
       }
       if (!(heldShares > 0)) return;
       const fraction = Math.min(1, heldShares / parent.sharesOutstanding);
@@ -187,8 +187,8 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     parent.netIncome = Number((parent.netIncome * (1 - share)).toFixed(1));
     parent.ebitda = Number((parent.ebitda * (1 - share)).toFixed(1));
     parent.employeeCount = Math.max(1, parent.employeeCount - employees);
-    parent.grossPPEUSD = (parent.grossPPEUSD ?? 0) * (1 - share);
-    parent.accumulatedDepreciationUSD = (parent.accumulatedDepreciationUSD ?? 0) * (1 - share);
+    parent.grossPPELocal = (parent.grossPPELocal ?? 0) * (1 - share);
+    parent.accumulatedDepreciationLocal = (parent.accumulatedDepreciationLocal ?? 0) * (1 - share);
     if (parent.baselineNetPpeUSD !== undefined) parent.baselineNetPpeUSD = parent.baselineNetPpeUSD * (1 - share);
     parent.stockPrice = Number((parent.stockPrice * (1 - share)).toFixed(4));
     parent.antitrustWeeksAboveThreshold = 0;
@@ -267,12 +267,12 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   const equityRefT = internString(ctx.v2, 'EQUITY');
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
-    let heldUSD = 0;
+    let heldLocal = 0;
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = Ht.next[r]) {
-      if (Ht.instrRef[r] === targetRef && Ht.typeRef[r] === equityRefT) heldUSD += Ht.qtyUSD[r];
+      if (Ht.instrRef[r] === targetRef && Ht.typeRef[r] === equityRefT) heldLocal += Ht.qtyLocal[r];
     }
-    if (!(heldUSD > 0)) return;
-    const tenderUSD = cashPaid * Math.min(1, heldUSD / targetMarketCapUSD);
+    if (!(heldLocal > 0)) return;
+    const tenderUSD = cashPaid * Math.min(1, heldLocal / targetMarketCapUSD);
     institutionalTenderUSD += tenderUSD;
     pay(ctx, {
       payer: { kind: 'COMPANY', ticker: target.ticker },
@@ -293,8 +293,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   acquirer.sharesOutstanding = Number((acquirer.sharesOutstanding + newShares).toFixed(3));
   acquirer.annualRevenue = Number((acquirer.annualRevenue + target.annualRevenue * 0.85).toFixed(1));
   acquirer.employeeCount += Math.round(target.employeeCount * 0.75);
-  acquirer.grossPPEUSD = (acquirer.grossPPEUSD ?? 0) + (target.grossPPEUSD ?? 0);
-  acquirer.accumulatedDepreciationUSD = (acquirer.accumulatedDepreciationUSD ?? 0) + (target.accumulatedDepreciationUSD ?? 0);
+  acquirer.grossPPELocal = (acquirer.grossPPELocal ?? 0) + (target.grossPPELocal ?? 0);
+  acquirer.accumulatedDepreciationLocal = (acquirer.accumulatedDepreciationLocal ?? 0) + (target.accumulatedDepreciationLocal ?? 0);
 
   // Merge product lines
   if (target.productLines && acquirer.productLines) {
@@ -428,7 +428,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           if (H.instrRef[r] !== targetIdRef && issuerIdOf(ctx.v2, rowId) !== target.id) continue;
           const t = H.typeRef[r];
           if (t !== equityRefR && t !== corpBondRef && t !== levLoanRef && t !== cpRef) continue;
-          swaps.push({ type: ctx.v2.internedStrings[t] as ItemizedHolding['instrumentType'], valueUSD: H.qtyUSD[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r], id: rowId });
+          swaps.push({ type: ctx.v2.internedStrings[t] as ItemizedHolding['instrumentType'], valueUSD: H.qtyLocal[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r], id: rowId });
         }
         if (swaps.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };
@@ -463,7 +463,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           const newId = newIdByOldTrancheId.get(rowId);
           if (newId === undefined || newId === rowId || H.instrRef[r] === targetIdRef) continue;
           if (issuerIdOf(ctx.v2, rowId) === target.id) continue; // exchanged above
-          rekeys.push({ type: ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], valueUSD: H.qtyUSD[r], id: rowId, newId });
+          rekeys.push({ type: ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], valueUSD: H.qtyLocal[r], id: rowId, newId });
         }
         if (rekeys.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };
@@ -504,8 +504,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   target.capex = 0;
   target.maintenanceCapex = 0;
   target.growthCapex = 0;
-  target.grossPPEUSD = 0;
-  target.accumulatedDepreciationUSD = 0;
+  target.grossPPELocal = 0;
+  target.accumulatedDepreciationLocal = 0;
 
   ctx.recentMergers.push({
     acquirerTicker: acquirer.ticker,

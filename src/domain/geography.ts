@@ -8,7 +8,7 @@ export type RegionId = 'USA' | 'UK' | 'JPN' | 'EUR';
  *
  * Every figure this model stores is denominated in one of these, and until now that fact lived
  * only in a comment: 11,243 identifiers carried a `USD` suffix while `currency.ts` said in its
- * own header that a figure is held in the money of whoever owns it. A German firm's `cashUSD`
+ * own header that a figure is held in the money of whoever owns it. A German firm's `cashLocal`
  * was euros. The suffix is now the type, and a number that moves without one does not compile.
  */
 export type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'JPY';

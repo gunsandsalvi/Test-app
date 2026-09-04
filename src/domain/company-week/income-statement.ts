@@ -169,7 +169,7 @@ export function profileIncome(i: {
   inputCostAnnualUSD: number;
   payrollAnnualUSD: number;
   profileCostsAnnualUSD: number;
-  grossPPEUSD: number;
+  grossPPELocal: number;
   ppeDepreciationYears: number;
   annualInterestUSD: number;
   taxRate: number;
@@ -179,7 +179,7 @@ export function profileIncome(i: {
 }): IncomeStatement {
   const ebitdaUSD = i.revenueUSD + i.otherIncomeAnnualUSD
     - i.inputCostAnnualUSD - i.payrollAnnualUSD - i.profileCostsAnnualUSD;
-  const bookDaUSD = i.grossPPEUSD / Math.max(1, i.ppeDepreciationYears);
+  const bookDaUSD = i.grossPPELocal / Math.max(1, i.ppeDepreciationYears);
   const ebitUSD = ebitdaUSD - bookDaUSD;
   const r = netIncomeUSD(ebitUSD, i.annualInterestUSD, i.taxRate,
     i.tax ? { ...i.tax, bookDepreciationAnnualUSD: bookDaUSD } : undefined);

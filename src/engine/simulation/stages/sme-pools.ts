@@ -94,10 +94,10 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // buffer it needs to keep. This is the last link of the credit-transmission chain with a
       // budget behind it — borrowed money raises the cash, which raises what can be invested,
       // and a pool with no cash cannot invest whatever its revenue says. ----
-      const cashUSD = poolCashOf(ctx.v2, regionId, pool.industry);
+      const cashLocal = poolCashOf(ctx.v2, regionId, pool.industry);
       const weeklyWageBillUSD = operatingCostUSD > 0 ? operatingCostUSD : 0;
       const bufferUSD = weeklyWageBillUSD * TARGET_CASH_WEEKS_OF_WAGES;
-      const investableUSD = Math.max(0, cashUSD - bufferUSD);
+      const investableUSD = Math.max(0, cashLocal - bufferUSD);
       pool.capexUSD = Math.round(Math.max(0, Math.min(
         pool.annualRevenueUSD * TARGET_CAPEX_TO_REVENUE,
         investableUSD * 52
@@ -113,7 +113,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // widens quoted margins now reaches measured pool distress, which is the default rate the
       // banks price against: the transmission loop is closed where it used to be open.
       const poolDebtRateAnnual = reg.policyRate + (pool.blendedMarginBps ?? 300) / 10000;
-      const cashCoverWeeks = weeklyWageBillUSD > 0 ? cashUSD / weeklyWageBillUSD : TARGET_CASH_WEEKS_OF_WAGES;
+      const cashCoverWeeks = weeklyWageBillUSD > 0 ? cashLocal / weeklyWageBillUSD : TARGET_CASH_WEEKS_OF_WAGES;
 
       // DIST — THE DEFAULT RATE IS AN INTEGRAL OVER THE POOL, NOT A FUNCTION OF ITS MEAN.
       //

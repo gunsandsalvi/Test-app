@@ -87,7 +87,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.a D3 underlying — a named floating reference rate, observed and transacted | `src/engine/simulation/stages/02b-bank-diversification.ts:repoRateAnnual` | ✅ |
 | A1.b D4 payoff — periodic fixed against floating; only the net moves | `src/domain/derivatives/classes/irs.ts:periodicLegUSDToB` | ✅ |
 | A1.c D7 price — the fixed rate that makes the swap zero at inception, cleared | `src/engine/simulation/stages/derivative-markets/irs.ts:runSwapMarket` | ✅ |
-| A1.d D2 notional — never exchanged | `src/domain/derivatives/contract.ts:notionalUSD` | ✅ |
+| A1.d D2 notional — never exchanged | `src/domain/derivatives/contract.ts:notional` | ✅ |
 | **A2 two legs with their own periodicity and accrual convention, need not match** | — | ❌ |
 | A3 the floating leg FIXES on a stated date against the observed reference | `src/domain/derivatives/profile.ts:overnightRateAnnual` | ⚠️ |
 | A4 both legs in one currency | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ✅ |

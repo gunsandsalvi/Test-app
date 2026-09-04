@@ -235,13 +235,13 @@ function buildCarrierCompany(
   const annualRevenue = clearedWeeklyRevenueUSD * 52;
   let fullSailAnnualFuelCost = 0;
   let fleetWeeklyTonnes = 0;
-  let grossPPEUSD = 0;
+  let grossPPELocal = 0;
   let crewCount = 0;
   assets.forEach(asset => {
     const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);
     const weeklyTonnes = weeklyCapacityTonnes(asset, distanceNm);
     const spec = FREIGHT_ASSET_SPEC[asset.mode];
-    grossPPEUSD += spec.capitalCostUSD;
+    grossPPELocal += spec.capitalCostUSD;
     crewCount += asset.crewCount;
     fleetWeeklyTonnes += weeklyTonnes;
     // Voyages a week AT FULL SAIL, and what each burns — scaled to real utilization below.
@@ -270,7 +270,7 @@ function buildCarrierCompany(
 
   const ebitda = annualRevenue - annualFuelCost - annualCrewCost;
   const usefulLife = assets.length > 0 ? FREIGHT_ASSET_SPEC[assets[0].mode].usefulLifeYears : 20;
-  const depreciation = grossPPEUSD / usefulLife;
+  const depreciation = grossPPELocal / usefulLife;
   const ebit = ebitda - depreciation;
 
   const policyRate = regions[region].policyRate ?? 0.045;
@@ -280,7 +280,7 @@ function buildCarrierCompany(
   // covenant ceiling this model already applies to every other borrower (see
   // corporate-financing.ts). Without that second leg the seed produced carriers at 21x leverage,
   // which is not a shipping cycle, it is a cold start that defaults in the first weeks.
-  const assetBackedUSD = grossPPEUSD * SHIP_FINANCE_LOAN_TO_VALUE;
+  const assetBackedUSD = grossPPELocal * SHIP_FINANCE_LOAN_TO_VALUE;
   const cashFlowBackedUSD = Math.max(0, ebitda) * COVENANT_LEVERAGE_CEILING.B;
   const debtBase = Math.round(Math.min(assetBackedUSD, cashFlowBackedUSD));
   const annualInterest = debtBase * (policyRate + 0.02);
@@ -302,8 +302,8 @@ function buildCarrierCompany(
   // puts them inside every mechanism the model already has — the weekly P&L pass, the rating
   // ladder, equity clearing, default — instead of needing a special case in each. Seeded through
   // the SAME valuation function the market itself prices with, never a multiple.
-  const sharesOutstanding = Math.max(1, Math.round(grossPPEUSD / 1000));
-  const bookEquityUSD = grossPPEUSD * (1 - 0.35) - debtBase + Math.max(0, ebitda) * 0.6;
+  const sharesOutstanding = Math.max(1, Math.round(grossPPELocal / 1000));
+  const bookEquityUSD = grossPPELocal * (1 - 0.35) - debtBase + Math.max(0, ebitda) * 0.6;
   const stockPrice = Number(fairValuePerShare({
     annualEarningsUSD: Math.round((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE)),
     sharesOutstanding,
@@ -348,8 +348,8 @@ function buildCarrierCompany(
     growthCapex: 0,
     baselineGrowthCapexToRevenueRatio: 0,
     maintenanceShortfallStreak: 0,
-    grossPPEUSD,
-    accumulatedDepreciationUSD: Math.round(grossPPEUSD * 0.35),
+    grossPPELocal,
+    accumulatedDepreciationLocal: Math.round(grossPPELocal * 0.35),
     executionQuality: 1.0,
     occupationMixDrift: {},
     creditRating: rating,

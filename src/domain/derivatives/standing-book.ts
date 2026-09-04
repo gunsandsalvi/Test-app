@@ -53,10 +53,10 @@ export class StandingBook {
     const aKey = derivativePartyKey(c.a);
     const bKey = derivativePartyKey(c.b);
     const units = c.units ?? 0;
-    this.addCover(this.sideBook(aKey, sideIndex(c.classId, 'a')), c.referenceId, c.termKey, c.notionalUSD, units);
-    this.addCover(this.sideBook(bKey, sideIndex(c.classId, 'b')), c.referenceId, c.termKey, c.notionalUSD, units);
+    this.addCover(this.sideBook(aKey, sideIndex(c.classId, 'a')), c.referenceId, c.termKey, c.notional, units);
+    this.addCover(this.sideBook(bKey, sideIndex(c.classId, 'b')), c.referenceId, c.termKey, c.notional, units);
     // Charged on either side, once per contract (a party standing on both sides is one charge).
-    const chargeUSD = c.notionalUSD * pfeAddOnRateOf(c, this.isInvestmentGrade);
+    const chargeUSD = c.notional * pfeAddOnRateOf(c, this.isInvestmentGrade);
     this.chargeUSD.set(aKey, (this.chargeUSD.get(aKey) ?? 0) + chargeUSD);
     if (bKey !== aKey) this.chargeUSD.set(bKey, (this.chargeUSD.get(bKey) ?? 0) + chargeUSD);
   }

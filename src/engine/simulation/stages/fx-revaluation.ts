@@ -74,7 +74,7 @@ export function runFxRevaluationStage(state: GameState): void {
     // so it takes the whole of the move. A depositor's foreign balance revalues on the
     // depositor's book (a ledger read) and against the bank as a liability, and the two net.
     const gain = bankNetOf(state, b.ticker) - (bankBefore.get(b.ticker) ?? 0);
-    if (Math.abs(gain) > MIN_MARK) b.bankBalanceSheet!.bankEquityUSD += gain;
+    if (Math.abs(gain) > MIN_MARK) b.bankBalanceSheet!.bankEquityLocal += gain;
     bankGainUSD += gain;
   });
 

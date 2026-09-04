@@ -28,7 +28,7 @@ import { retireHolding } from '../../ledger/holdings-ledger';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { internString } from '../../../engine2/world';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { encumberedFaceByBond, repoBorrowedUSD, srfBorrowedUSD } from '../../../domain/repo';
+import { encumberedFaceByBond, repoBorrowedLocal, srfBorrowedUSD } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -185,7 +185,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const ladderNow = materializeGovLadder(ctx.v2, regionId);
     const maturedTranches = ladderNow.filter(t => t.maturityWeek <= nextWeek);
     const liveTranches = ladderNow.filter(t => t.maturityWeek > nextWeek);
-    const maturedPrincipalUSD = maturedTranches.reduce((s, t) => s + t.principalUSD, 0);
+    const maturedPrincipalUSD = maturedTranches.reduce((s, t) => s + t.principalLocal, 0);
 
     // Redeem the maturing principal out of whoever actually holds it. Without this, a maturing
     // tranche vanished from the government's books while the banks and institutions that owned
@@ -214,7 +214,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // it redeemed because a different bond of similar tenor had. Now the id says which paper
       // came due, and the fraction is 1 for that bond and 0 for every other.
       const redeemedFractionByBond = new Map<string, number>(
-        maturedTranches.filter((t) => t.principalUSD > 0).map((t) => [t.id, 1] as const)
+        maturedTranches.filter((t) => t.principalLocal > 0).map((t) => [t.id, 1] as const)
       );
 
       // §7.247 — THE PLEDGE FOLLOWS THE PAPER ON THE BOOK ITSELF, AT THE MATURITY SITE.
@@ -232,20 +232,20 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       const collateralCalledByBorrower = new Map<string, number>();
       if (redeemedFractionByBond.size > 0) {
         (reg.repoBook ?? []).forEach((ct) => {
-          if (ct.principalUSD <= 0 || ct.collateral.length === 0) return;
+          if (ct.principalLocal <= 0 || ct.collateral.length === 0) return;
           let releasedFaceUSD = 0;
           let pledgedFaceUSD = 0;
           ct.collateral = ct.collateral.map((p) => {
-            pledgedFaceUSD += p.faceUSD;
+            pledgedFaceUSD += p.faceLocal;
             const fraction = redeemedFractionByBond.get(p.bondId) ?? 0;
             if (fraction <= 0) return p;
-            const takeUSD = p.faceUSD * fraction;
+            const takeUSD = p.faceLocal * fraction;
             releasedFaceUSD += takeUSD;
-            return { ...p, faceUSD: p.faceUSD - takeUSD };
-          }).filter((p) => p.faceUSD > 1);
+            return { ...p, faceLocal: p.faceLocal - takeUSD };
+          }).filter((p) => p.faceLocal > 1);
           if (releasedFaceUSD <= 0 || pledgedFaceUSD <= 0) return;
-          const callUSD = Math.min(ct.principalUSD, ct.principalUSD * (releasedFaceUSD / pledgedFaceUSD));
-          ct.principalUSD -= callUSD;
+          const callUSD = Math.min(ct.principalLocal, ct.principalLocal * (releasedFaceUSD / pledgedFaceUSD));
+          ct.principalLocal -= callUSD;
           collateralCalledByBorrower.set(ct.borrowerTicker,
             (collateralCalledByBorrower.get(ct.borrowerTicker) ?? 0) + callUSD);
           pay(ctx, {
@@ -265,10 +265,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         const byTenor = c.bankBalanceSheet.sovereignBondHoldingsByBond || {};
         let redeemedUSD = 0;
         const newByTenor: Record<string, number> = {};
-        Object.entries(byTenor).forEach(([key, heldUSD]) => {
+        Object.entries(byTenor).forEach(([key, heldLocal]) => {
           const fraction = redeemedFractionByBond.get(key) ?? 0;
-          redeemedUSD += heldUSD * fraction;
-          newByTenor[key] = heldUSD * (1 - fraction);
+          redeemedUSD += heldLocal * fraction;
+          newByTenor[key] = heldLocal * (1 - fraction);
         });
         const calledUSD = collateralCalledByBorrower.get(c.ticker) ?? 0;
         if (redeemedUSD <= 0 && calledUSD <= 0) return c;
@@ -294,9 +294,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           bankBalanceSheet: {
             ...c.bankBalanceSheet,
             sovereignBondHoldingsByBond: newByTenor,
-            sovereignBondHoldingsUSD: Math.round(Object.values(newByTenor).reduce((sum, v) => sum + v, 0)),
-            repoBorrowedUSD: Math.round(repoBorrowedUSD(book, c.ticker) - srfBorrowedUSD(book, c.ticker)),
-            srfBorrowingUSD: Math.round(srfBorrowedUSD(book, c.ticker)),
+            sovereignBondHoldingsLocal: Math.round(Object.values(newByTenor).reduce((sum, v) => sum + v, 0)),
+            repoBorrowedLocal: Math.round(repoBorrowedLocal(book, c.ticker) - srfBorrowedUSD(book, c.ticker)),
+            srfBorrowingLocal: Math.round(srfBorrowedUSD(book, c.ticker)),
             repoEncumberedCollateralUSD: Number(
               Array.from(encumberedFaceByBond(book, c.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
             ),
@@ -321,9 +321,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           newInv[book] = rows.map(r => {
             const fraction = redeemedFractionByBond.get(r.instrumentId) ?? 0;
             if (fraction <= 0) return r;
-            redeemedUSD += r.inventoryUSD * fraction;
-            return { ...r, inventoryUSD: r.inventoryUSD * (1 - fraction) };
-          }).filter(r => Math.abs(r.inventoryUSD) > 1);
+            redeemedUSD += r.inventoryLocal * fraction;
+            return { ...r, inventoryLocal: r.inventoryLocal * (1 - fraction) };
+          }).filter(r => Math.abs(r.inventoryLocal) > 1);
         });
         if (!(Math.abs(redeemedUSD) > 0)) return c;
         redemptionPaidUSD += redeemedUSD;
@@ -379,10 +379,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         const remaining: Record<string, number> = {};
         let cbRedeemedUSD = 0;
         Object.entries(cbSheet.sovereignHoldingsByBond || {}).forEach(([key, held]) => {
-          const heldUSD = Number(held) || 0;
-          const redeemedUSD = heldUSD * (redeemedFractionByBond.get(key) ?? 0);
+          const heldLocal = Number(held) || 0;
+          const redeemedUSD = heldLocal * (redeemedFractionByBond.get(key) ?? 0);
           if (redeemedUSD > 0) { cbRedeemedByBond.set(key, redeemedUSD); cbRedeemedUSD += redeemedUSD; }
-          remaining[key] = heldUSD - redeemedUSD;
+          remaining[key] = heldLocal - redeemedUSD;
         });
         cbSheet.sovereignHoldingsByBond = remaining;
         if (cbRedeemedUSD > 0) {
@@ -414,7 +414,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           const id = ctx.v2.internedStrings[Hsov.instrRef[r]];
           const fraction = redeemedFractionByBond.get(id) ?? 0;
           if (fraction <= 0) continue;
-          redeem.push({ id, usd: Hsov.qtyUSD[r] * fraction });
+          redeem.push({ id, usd: Hsov.qtyLocal[r] * fraction });
         }
         if (redeem.length === 0) return;
         let redeemedCashUSD = 0;
@@ -441,7 +441,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // as before. New deficit splits by a real treasury rule below.
     const maturedBillPrincipalUSD = maturedTranches
       .filter(t => isDiscountBill(t.tenorAtIssuanceYears))
-      .reduce((s2, t) => s2 + t.principalUSD, 0);
+      .reduce((s2, t) => s2 + t.principalLocal, 0);
     const maturedBondPrincipalUSD = maturedPrincipalUSD - maturedBillPrincipalUSD;
 
     // ---- PUB1b: what the government actually collected this week, from real payers. ----
@@ -571,10 +571,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // bills when the front end is genuinely cheaper than the belly (positive carve of the real
     // cleared curve), away when it inverts. This is issuance policy, not a market outcome — the
     // market's answer comes back through 07f's cleared bill yields next week.
-    const totalStockUSD = liveTranches.reduce((s2, t) => s2 + t.principalUSD, 0) || 1;
+    const totalStockUSD = liveTranches.reduce((s2, t) => s2 + t.principalLocal, 0) || 1;
     const billStockUSD = liveTranches
       .filter(t => isDiscountBill(t.tenorAtIssuanceYears))
-      .reduce((s2, t) => s2 + t.principalUSD, 0);
+      .reduce((s2, t) => s2 + t.principalLocal, 0);
     const billShareOfStock = billStockUSD / totalStockUSD;
     const costLean = Math.max(-0.05, Math.min(0.05, (reg.zeroRates.tenor2Y - reg.zeroRates.tenor3M) * 2));
     const billShareTarget = Math.max(0.15, Math.min(0.25, 0.18 + costLean));
@@ -603,7 +603,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         if (principal < 100) return;
         newTranches.push({
           id: govBillTrancheId(regionId, weeks, nextWeek),
-          principalUSD: principal,
+          principalLocal: principal,
           couponRate: Number((tenorYears <= 0.3 ? reg.zeroRates.tenor3M : calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams)).toFixed(4)),
           originationWeek: nextWeek,
           maturityWeek: nextWeek + weeks,
@@ -648,7 +648,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           if (principal < 100) return;
           newTranches.push({
             id: govBondTrancheId(regionId, tenorYears, nextWeek),
-            principalUSD: principal,
+            principalLocal: principal,
             couponRate: calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams), // priced off the region's own real curve
             originationWeek: nextWeek,
             maturityWeek: nextWeek + tenorWeeks,
@@ -735,14 +735,14 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       const keep: number[] = [];
       for (const r of ladderRowsOf(ctx.v2, govIssuer.id)) {
         if (matured.has(ctx.v2.internedStrings[S.idRef[r]])) {
-          if (S.principalUSD[r] > 0) retireTranche(ctx.v2, govIssuer, r, S.principalUSD[r], 'sovereign redemption');
+          if (S.principalLocal[r] > 0) retireTranche(ctx.v2, govIssuer, r, S.principalLocal[r], 'sovereign redemption');
         } else keep.push(r);
       }
       commitLadder(ctx.v2, govIssuer, keep);
-      newTranches.forEach((nt) => { if (nt.principalUSD > 0.01) issueTranche(ctx.v2, govIssuer, nt, 'sovereign issuance'); });
+      newTranches.forEach((nt) => { if (nt.principalLocal > 0.01) issueTranche(ctx.v2, govIssuer, nt, 'sovereign issuance'); });
     }
 
-    const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);
+    const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalLocal, 0);
 
     // ---- PUB2b: the week's open-market order. What matured is put back to work (or not, in
     // QT), plus any QE flow the blocked easing calls for. It is placed as a real BID in 07c and

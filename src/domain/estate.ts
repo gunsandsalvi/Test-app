@@ -40,14 +40,14 @@ export interface EstateClaim {
   /** What kind of paper this holder owned — decides where it sits in the waterfall. */
   instrumentType: EstateClaimType;
   seniority: number;
-  principalUSD: number;
+  principalLocal: number;
   recoveredUSD: number;
 }
 
 export interface EstateAssets {
-  cashUSD: number;
+  cashLocal: number;
   receivablesUSD: number;
-  inventoryUSD: number;
+  inventoryLocal: number;
   ppeUSD: number;
 }
 
@@ -65,8 +65,8 @@ export interface Estate {
 }
 
 export function estateAssetsUSD(a: EstateAssets): number {
-  return Math.max(0, a.cashUSD) + Math.max(0, a.receivablesUSD)
-    + Math.max(0, a.inventoryUSD) + Math.max(0, a.ppeUSD);
+  return Math.max(0, a.cashLocal) + Math.max(0, a.receivablesUSD)
+    + Math.max(0, a.inventoryLocal) + Math.max(0, a.ppeUSD);
 }
 
 export function claimsAtSeniority(estate: Estate, seniority: number): EstateClaim[] {
@@ -74,8 +74,8 @@ export function claimsAtSeniority(estate: Estate, seniority: number): EstateClai
 }
 
 /** What a class is still owed after everything paid to it so far. */
-export function outstandingUSD(claims: EstateClaim[]): number {
-  return claims.reduce((a, c) => a + Math.max(0, c.principalUSD - c.recoveredUSD), 0);
+export function outstandingLocal(claims: EstateClaim[]): number {
+  return claims.reduce((a, c) => a + Math.max(0, c.principalLocal - c.recoveredUSD), 0);
 }
 
 /**
@@ -84,7 +84,7 @@ export function outstandingUSD(claims: EstateClaim[]): number {
  */
 export function realisedDebtRecoveryRate(estate: Estate): number | undefined {
   const debt = estate.claims.filter((c) => c.seniority < CLAIM_SENIORITY.EQUITY);
-  const owedUSD = debt.reduce((a, c) => a + c.principalUSD, 0);
+  const owedUSD = debt.reduce((a, c) => a + c.principalLocal, 0);
   if (!(owedUSD > 0)) return undefined;
   return Math.max(0, Math.min(1, debt.reduce((a, c) => a + c.recoveredUSD, 0) / owedUSD));
 }

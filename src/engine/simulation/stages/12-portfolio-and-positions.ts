@@ -39,7 +39,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
 
 
   const usdPolicyRate = updatedRegions.USA.policyRate;
-  ctx.weeklyInterestIncomeUSD = Math.max(0, state.portfolio.cashUSD) * (usdPolicyRate / 52);
+  ctx.weeklyInterestIncomeUSD = Math.max(0, state.portfolio.cashLocal) * (usdPolicyRate / 52);
   ctx.attributionCarry += ctx.weeklyInterestIncomeUSD;
 
   ctx.updatedPositions = ctx.workingPositions.map((pos) => {
@@ -345,10 +345,10 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           const assetReturn = (comp.stockPrice - pos.entryPrice) / pos.entryPrice;
           const regPolicyRate = updatedRegions[pos.region].policyRate;
 
-          const notionalUSD = pos.notional * fxRateToUsd;
-          const priceReturnUSD = notionalUSD * assetReturn;
+          const notional = pos.notional * fxRateToUsd;
+          const priceReturnUSD = notional * assetReturn;
 
-          const carryEst = calculateExpectedCarry('TRS', pos.direction, notionalUSD, {
+          const carryEst = calculateExpectedCarry('TRS', pos.direction, notional, {
             policyRate: regPolicyRate,
             dividendYield: comp.dividendYield || 0.02
           });
@@ -356,11 +356,11 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           ctx.attributionCarry += carryEst.weeklyCarryUSD;
 
           unrealizedPnL = pos.direction === 'LONG' ? priceReturnUSD : -priceReturnUSD;
-          delta = pos.direction === 'LONG' ? notionalUSD : -notionalUSD;
+          delta = pos.direction === 'LONG' ? notional : -notional;
           const pnlMove = unrealizedPnL - prevPnL;
           ctx.attributionEquityDelta += pnlMove;
 
-          marginReq = notionalUSD * marginRate;
+          marginReq = notional * marginRate;
           maintMargin = marginReq * 0.65;
         }
         break;

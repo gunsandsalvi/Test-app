@@ -58,7 +58,7 @@ export function standingPfeChargeUSD(
   for (const c of book) {
     if (c.maturityWeek <= week) continue;
     if (derivativePartyKey(c.a) === partyKey || derivativePartyKey(c.b) === partyKey) {
-      usd += c.notionalUSD * pfeAddOnRateOf(c, isInvestmentGrade);
+      usd += c.notional * pfeAddOnRateOf(c, isInvestmentGrade);
     }
   }
   return usd;

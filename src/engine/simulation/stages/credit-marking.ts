@@ -15,7 +15,7 @@
  *   2. MARKS THE VALUE to `face x price`, where the price comes from the paper's own cash flows
  *      discounted at the region's cleared curve plus the spread that paper's own book cleared.
  *
- * The books keep trading FACE — they read `faceUSD`, not the marked value — so a mark never looks
+ * The books keep trading FACE — they read `faceLocal`, not the marked value — so a mark never looks
  * like a trade and a trade never looks like a mark. That separation is the whole reason face is
  * stored rather than inferred, and it is the same one that makes equity store shares.
  */

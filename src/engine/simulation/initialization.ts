@@ -573,11 +573,11 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // `totalCorpDebt` — see INSTITUTIONAL_OPENING_BOOK_SHARE's doc for what that share minted.
 
     // Compile holding candidates for individual institutional entities and macro sectors
-    const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies.filter(c => c.listingStatus !== 'PRIVATE').map(c => ({
+    const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies.filter(c => c.listingStatus !== 'PRIVATE').map(c => ({
       id: c.id,
       type: 'EQUITY',
       region: regionId,
-      outstandingUSD: marketCapOf(c)
+      outstandingLocal: marketCapOf(c)
     }));
 
     // Keyed by company id (aggregated across that issuer's own tranches), not per-tranche —
@@ -594,31 +594,31 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // shape (the HC2 block below).
     // §5-FINALIZATION 13b: the candidates are the TRANCHES — a register row names the paper the
     // ladder's wires name; the per-issuer weight the books clear by is the sum of its tranches.
-    const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
+    const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
       .flatMap(c => (c.debtTranches || []).filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper && !t.isBankFacility)
-        .map(t => ({ id: t.id, type: 'CORP_BOND' as const, region: regionId, outstandingUSD: t.principalUSD })))
-      .filter(c => c.outstandingUSD > 0);
-    const totalCorpCandidatesUSD = corpCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
+        .map(t => ({ id: t.id, type: 'CORP_BOND' as const, region: regionId, outstandingLocal: t.principalLocal })))
+      .filter(c => c.outstandingLocal > 0);
+    const totalCorpCandidatesUSD = corpCandidates.reduce((s, c) => s + c.outstandingLocal, 0) || 1;
     // OWN6: the opening credit book is the tradable stock itself. Placed here, once the candidate
     // list that defines that stock exists — holdings-view.ts rederives this scalar from the
     // entities' own books every week after, so the seed must open in the same shape.
     reg.institutionalSector.corpBondHoldingsUSD = Math.round(totalCorpCandidatesUSD);
 
-    const loanCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
+    const loanCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
       .flatMap(c => (c.debtTranches || []).filter(t => t.rateType === 'FLOATING' && !t.isBankFacility && !t.isCommercialPaper)
-        .map(t => ({ id: t.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingUSD: t.principalUSD })))
-      .filter(c => c.outstandingUSD > 0);
-    const totalLoanCandidatesUSD = loanCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
+        .map(t => ({ id: t.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingLocal: t.principalLocal })))
+      .filter(c => c.outstandingLocal > 0);
+    const totalLoanCandidatesUSD = loanCandidates.reduce((s, c) => s + c.outstandingLocal, 0) || 1;
     const attributeLoanHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
       loanCandidates
-        .filter(c => shareUSD * (c.outstandingUSD / totalLoanCandidatesUSD) > 1)
+        .filter(c => shareUSD * (c.outstandingLocal / totalLoanCandidatesUSD) > 1)
         .map(c => ({
           instrumentId: c.id,
           instrumentType: c.type,
           issuerRegion: c.region,
-          quantityOrNotionalUSD: shareUSD * (c.outstandingUSD / totalLoanCandidatesUSD), units: shareUSD * (c.outstandingUSD / totalLoanCandidatesUSD),
+          quantityOrNotionalUSD: shareUSD * (c.outstandingLocal / totalLoanCandidatesUSD), units: shareUSD * (c.outstandingLocal / totalLoanCandidatesUSD),
         }));
     // Proportional-by-size, not attributeItemizedHoldings' size-sorted-greedy-with-a-40%-cap
     // fill: the real weekly clearing engine (07b-corporate-bond-clearing.ts) distributes an
@@ -629,12 +629,12 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // with an artificial, systemic buy gap on its first real clearing week.
     const attributeCorpBondHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
       corpCandidates
-        .filter(c => shareUSD * (c.outstandingUSD / totalCorpCandidatesUSD) > 1)
+        .filter(c => shareUSD * (c.outstandingLocal / totalCorpCandidatesUSD) > 1)
         .map(c => ({
           instrumentId: c.id,
           instrumentType: c.type,
           issuerRegion: c.region,
-          quantityOrNotionalUSD: shareUSD * (c.outstandingUSD / totalCorpCandidatesUSD), units: shareUSD * (c.outstandingUSD / totalCorpCandidatesUSD),
+          quantityOrNotionalUSD: shareUSD * (c.outstandingLocal / totalCorpCandidatesUSD), units: shareUSD * (c.outstandingLocal / totalCorpCandidatesUSD),
         }));
 
     // Equity is seeded in SHARES, proportional to each name's market cap — the same shape
@@ -643,7 +643,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // opened with a systemic buy gap in every smaller name; and it stored dollars only, which is
     // the circularity the share registry exists to kill — a book whose size depends on the price
     // it is supposed to set (#28).
-    const totalEquityCandidatesUSD = equityCandidates.reduce((s2, c) => s2 + c.outstandingUSD, 0) || 1;
+    const totalEquityCandidatesUSD = equityCandidates.reduce((s2, c) => s2 + c.outstandingLocal, 0) || 1;
     const equityPriceById = new Map(regionCompanies.map(c => [c.id, c.stockPrice]));
     // §5-CLOSE O2: the institutions can hold AT MOST THE ISSUE. The sector's equity budget is
     // spread over every listed name in proportion to its cap, so the fraction of each name it
@@ -654,9 +654,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const equityFillRatio = Math.min(1, totalEquityCandidatesUSD / Math.max(1, reg.institutionalSector.equityHoldingsUSD || 0));
     const attributeEquityHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
       equityCandidates
-        .filter(c => shareUSD * equityFillRatio * (c.outstandingUSD / totalEquityCandidatesUSD) > 1)
+        .filter(c => shareUSD * equityFillRatio * (c.outstandingLocal / totalEquityCandidatesUSD) > 1)
         .map(c => {
-          const nameUSD = shareUSD * equityFillRatio * (c.outstandingUSD / totalEquityCandidatesUSD);
+          const nameUSD = shareUSD * equityFillRatio * (c.outstandingLocal / totalEquityCandidatesUSD);
           // SHARES are the quantity; the dollars are shares x price, which is why the division
           // happens once and both fields read the same number.
           const shares = nameUSD / Math.max(0.01, equityPriceById.get(c.id) ?? 1);
@@ -671,11 +671,11 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         });
 
     const govDebtTranches = seedGovLadderOf(reg);
-    const sovCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = govDebtTranches.map(gt => ({
+    const sovCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = govDebtTranches.map(gt => ({
       id: gt.id,
       type: 'GOV_BOND',
       region: regionId,
-      outstandingUSD: gt.principalUSD
+      outstandingLocal: gt.principalLocal
     }));
 
     // §3.13-SOV row 3: the seed opens holdings in BONDS, the same ids 07c and 07f clear. It used
@@ -683,7 +683,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // seeded holder could be asked which bond it held and the seed and the auctions spoke two id
     // spaces for one instrument. A holder's share of each bond is that bond's share of the stock.
     const sovOutstandingByBond = new Map<string, number>(
-      govDebtTranches.filter((t) => t.principalUSD > 0).map((t) => [t.id, t.principalUSD])
+      govDebtTranches.filter((t) => t.principalLocal > 0).map((t) => [t.id, t.principalLocal])
     );
     const totalSovOutstandingUSD = Array.from(sovOutstandingByBond.values()).reduce((s, v) => s + v, 0) || 1;
     const attributeSovBondHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
@@ -699,7 +699,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // Seed each named bank's real sovereign book across the same bonds the weekly
     // auction clears, with the same outstanding-weighted split across tenors.
     //
-    // This was missing: banks carried a scalar `sovereignBondHoldingsUSD` but an EMPTY
+    // This was missing: banks carried a scalar `sovereignBondHoldingsLocal` but an EMPTY
     // `sovereignBondHoldingsByBond`, and 07c reads that book. So every bank opened ~$147B
     // below its own target in a $670B market and bought into it every single week, which the
     // auction could only express as a monotonic slide in yields — the whole banking sector
@@ -729,11 +729,11 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const targetUSD = perBankTargets.get(bank.ticker) ?? 0;
         const byBond: Record<string, number> = {};
         sovOutstandingByBond.forEach((bondFaceUSD, bondId) => {
-          const heldUSD = targetUSD * (bondFaceUSD / totalSovOutstandingUSD);
-          if (heldUSD > 1) byBond[bondId] = heldUSD;
+          const heldLocal = targetUSD * (bondFaceUSD / totalSovOutstandingUSD);
+          if (heldLocal > 1) byBond[bondId] = heldLocal;
         });
         bank.bankBalanceSheet!.sovereignBondHoldingsByBond = byBond;
-        bank.bankBalanceSheet!.sovereignBondHoldingsUSD = Number(
+        bank.bankBalanceSheet!.sovereignBondHoldingsLocal = Number(
           Object.values(byBond).reduce((sum, v) => sum + v, 0).toFixed(0)
         );
         // §7.4, applied to the FUNDING side this time. This sovereign book is seeded from the
@@ -749,8 +749,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // §5-WIRES D: the seed's STATED loan books (the rows arrive with the migrations below)
         // stand in the funding side here exactly as the stored scalars did.
         stashSeedHouseholdLine(bs, Math.round((
-          seedLoanBookShareUSD(reg, bank, 'business') + seedLoanBookShareUSD(reg, bank, 'consumer') + bs.sovereignBondHoldingsUSD +
-          openingCashOf(bs) - bs.bankEquityUSD
+          seedLoanBookShareUSD(reg, bank, 'business') + seedLoanBookShareUSD(reg, bank, 'consumer') + bs.sovereignBondHoldingsLocal +
+          openingCashOf(bs) - bs.bankEquityLocal
         )));
       });
 
@@ -767,8 +767,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       reg.bankingSector = {
         ...reg.bankingSector,
         sovereignBondHoldingsByBond: aggByTenor,
-        sovereignBondHoldingsUSD: sumBank(bs => bs.sovereignBondHoldingsUSD),
-        bankEquityUSD: sumBank(bs => bs.bankEquityUSD),
+        sovereignBondHoldingsLocal: sumBank(bs => bs.sovereignBondHoldingsLocal),
+        bankEquityLocal: sumBank(bs => bs.bankEquityLocal),
       };
       // OWN6/OWN7: whatever the central bank and the capital-constrained banks left is the
       // institutions'. Every bond now has a holder, which is what stops the float minting claims
@@ -776,7 +776,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       reg.institutionalSector.sovBondHoldingsUSD = Math.round(Math.max(0,
         totalSovOutstandingUSD
         - totalSovOutstandingUSD * CENTRAL_BANK_SOVEREIGN_SHARE
-        - reg.bankingSector.sovereignBondHoldingsUSD));
+        - reg.bankingSector.sovereignBondHoldingsLocal));
     }
 
     // G2 slice 1: itemize the business book onto real borrowers, and recalibrate the SME
@@ -793,7 +793,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       migrateHouseholdDebtAtSeed(seedV2, regionId, reg, regionBanksForLending);
       reg.bankingSector = {
         ...reg.bankingSector,
-        bankEquityUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0),
+        bankEquityLocal: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityLocal, 0),
       };
 
       // PUB2 (§7.4): close the central bank's balance sheet at birth, now that the banks whose
@@ -810,7 +810,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // nothing any bank did.
       const houseBanks = mandateAllocator(regionBanksForLending.map(b => ({
         ticker: b.ticker, bankMarketShare: b.bankMarketShare,
-        capacityUSD: b.bankBalanceSheet?.bankEquityUSD ?? 0,
+        capacityUSD: b.bankBalanceSheet?.bankEquityLocal ?? 0,
       })));
       regionCompanies.forEach(c => {
         if (c.isBankEntity) return;
@@ -840,19 +840,19 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const corpUSD = Math.round(corpDepositsByBank.get(b.ticker) ?? 0);
         // §5-WIRES A3.3: each pool's row at this bank opens at its share of the pool's opening
         // cash, and the bank's SME line is the sum of those rows — one number, two views.
-        let smeUSD = 0;
+        let smeLocal = 0;
         (reg.smePools || []).forEach((seg) => {
           const rowUSD = bankShareTotal > 0
             ? Math.round(openingCashOf(seg) * ((b.bankMarketShare ?? 0) / bankShareTotal))
             : Math.round(openingCashOf(seg) / regionBanksForLending.length);
           seedV2.accounts.balance[sectorRowAt(seedV2, { kind: 'SEGMENT', region: regionId, industry: seg.industry }, b.ticker, currencyOf(regionId))] = rowUSD;
-          smeUSD += rowUSD;
+          smeLocal += rowUSD;
         });
         // SETL2 (§7.4 — the seed must open in the shape the weekly engine maintains): a corporate
         // balance is a real liability now, so the bank holds the real asset behind it. The money
         // its customers deposited is central-bank money, exactly as a week-1 deposit inflow would
         // be. Without this the sheet opens short by the whole corporate line.
-        stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + corpUSD + smeUSD);
+        stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + corpUSD + smeLocal);
         // Now that the corporate leg is known, the funding identity is re-derived: wholesale is
         // the residual AFTER real deposits, not a plug carrying money the companies already
         // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
@@ -888,7 +888,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
             (reg.institutionalSector.equityHoldingsUSD || 0) +
             (reg.institutionalSector.corpBondHoldingsUSD || 0) +
             (reg.institutionalSector.sovBondHoldingsUSD || 0) +
-            (reg.institutionalSector.cashUSD || 0);
+            (reg.institutionalSector.cashLocal || 0);
           return { id: comp.id, sizeWeight: totalMacroAssetsUSD * share, targetPct: targetFor(role, comp.hedgeFundStrategy).corpBondPct };
         }),
       reg.institutionalSector.corpBondHoldingsUSD || 0
@@ -905,7 +905,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
             (reg.institutionalSector.equityHoldingsUSD || 0) +
             (reg.institutionalSector.corpBondHoldingsUSD || 0) +
             (reg.institutionalSector.sovBondHoldingsUSD || 0) +
-            (reg.institutionalSector.cashUSD || 0);
+            (reg.institutionalSector.cashLocal || 0);
           return { id: comp.id, sizeWeight: totalMacroAssetsUSD * share, targetPct: targetFor(role, comp.hedgeFundStrategy).govBondPct };
         }),
       reg.institutionalSector.sovBondHoldingsUSD || 0
@@ -922,7 +922,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
             (reg.institutionalSector.equityHoldingsUSD || 0) +
             (reg.institutionalSector.corpBondHoldingsUSD || 0) +
             (reg.institutionalSector.sovBondHoldingsUSD || 0) +
-            (reg.institutionalSector.cashUSD || 0);
+            (reg.institutionalSector.cashLocal || 0);
           return { id: comp.id, sizeWeight: totalMacroAssetsUSD * share, targetPct: targetFor(role, comp.hedgeFundStrategy).loanPct };
         }),
       totalLoanCandidatesUSD
@@ -938,7 +938,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         (macroSector.equityHoldingsUSD || 0) +
         (macroSector.corpBondHoldingsUSD || 0) +
         (macroSector.sovBondHoldingsUSD || 0) +
-        (macroSector.cashUSD || 0);
+        (macroSector.cashLocal || 0);
 
       // COH2 — A PENSION FUND IS AS BIG AS THE ENTITLEMENTS IT OWES, and at week 0 that stock is
       // derived rather than left circular.
@@ -1184,7 +1184,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           c.employeeCount, SECTOR_OCCUPATION_MIX[c.sector] ?? { GENERAL: 1.0 },
           baseAnnualWageUSD, unitPools, 1.0
         ) * 52;
-        const netPpeUSD = Math.max(0, (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0));
+        const netPpeUSD = Math.max(0, (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0));
         capitalChargeUSD += netPpeUSD * Math.max(0, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (c.beta ?? 1) * EQUITY_RISK_PREMIUM);
       });
       if (basePayrollUSD > 0) {
@@ -1364,7 +1364,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     if (regionBanks.length === 0) return;
     const byBank = new Map<string, number>();
     const houseBanks = mandateAllocator(regionBanks.map(b => ({
-      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityUSD: b.bankBalanceSheet!.bankEquityUSD,
+      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityUSD: b.bankBalanceSheet!.bankEquityLocal,
     })));
     institutionalEntities.forEach(e => {
       if (e.region !== regionId) return;
@@ -1396,7 +1396,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
 
   const startingCash = 25_000_000; // $25M USD Hedge Fund Starting Capital
   const portfolio: Portfolio = {
-    cashUSD: startingCash,
+    cashLocal: startingCash,
     startingCapitalUSD: startingCash,
     navUSD: startingCash,
     previousNavUSD: startingCash,
@@ -1592,9 +1592,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // tier opened with a gap in the paper that IS traded and a double count in the paper that
     // is not.
     const fixedOf = (f: Company) => (f.debtTranches || [])
-      .filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((a, t) => a + t.principalUSD, 0);
+      .filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((a, t) => a + t.principalLocal, 0);
     const floatOf = (f: Company) => (f.debtTranches || [])
-      .filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((a, t) => a + t.principalUSD, 0);
+      .filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((a, t) => a + t.principalLocal, 0);
     const IG = ['AAA', 'AA', 'A', 'BBB'];
     const sleeve = (t: InstitutionalEntityType, ig: boolean) =>
       ig ? 1 : t === 'INSURER' ? 0.08 : t === 'PENSION_FUND' ? 0.10 : t === 'ASSET_MANAGER' ? 2.0 : 4.0;
@@ -1611,8 +1611,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     firms.forEach(f => {
       const ig = IG.includes(f.creditRating);
       (['CORP_BOND', 'LEVERAGED_LOAN'] as const).forEach(kind => {
-        const tranches = (f.debtTranches || []).filter(t => KIND_TRANCHES[kind](t) && t.principalUSD > 0);
-        const outstanding = tranches.reduce((a, t) => a + t.principalUSD, 0);
+        const tranches = (f.debtTranches || []).filter(t => KIND_TRANCHES[kind](t) && t.principalLocal > 0);
+        const outstanding = tranches.reduce((a, t) => a + t.principalLocal, 0);
         if (outstanding <= 0) return;
         const weights = regionEntities.map(e => seedInstitutionTotalAssetsUSD(e, openingCashOf(e)) * KIND_PCT[kind](e) * sleeve(e.entityType, ig));
         const wSum = weights.reduce((a, b) => a + b, 0) || 1;
@@ -1621,7 +1621,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         tranches
           .forEach(t => {
             regionEntities.forEach((e, i) => {
-              const qty = t.principalUSD * (weights[i] / wSum);
+              const qty = t.principalLocal * (weights[i] / wSum);
               if (qty > 1) {
                 e.itemizedHoldings.push({ instrumentId: t.id, instrumentType: kind, issuerRegion: regionId, quantityOrNotionalUSD: Math.round(qty), units: Math.round(qty) });
               }
@@ -1647,7 +1647,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const regionBanks = companies.filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     if (regionBanks.length === 0) return;
     const lateHouseBanks = mandateAllocator(regionBanks.map(b => ({
-      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityUSD: b.bankBalanceSheet!.bankEquityUSD,
+      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityUSD: b.bankBalanceSheet!.bankEquityLocal,
     })));
     const lateCorporateByBank = new Map<string, number>();
     const lateInstitutionalByBank = new Map<string, number>();

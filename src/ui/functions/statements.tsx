@@ -60,36 +60,36 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
   if (active === 'bank sheet' && bank) {
     const sov = Object.values(bank.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     const lines = stateDepositLines(world.state, c.ticker);
-    const deposits = lines.householdUSD + lines.corporateUSD + lines.institutionalUSD + lines.smeUSD;
-    const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);
+    const deposits = lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.smeLocal;
+    const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0);
     const reservesUSD = bankReservesOf(ensureV2(world.state), c.ticker);
-    const facilityBookUSD = facilityBookOf(ensureV2(world.state), c.ticker);
-    const assets = loanBooksOf(bank, facilityBookUSD) + sov + reservesUSD + (bank.repoLentUSD ?? 0) + (bank.sovereignAccruedCouponUSD ?? 0) + desks + (bank.primeBrokerageLoansUSD ?? 0);
-    const liabilities = deposits + (bank.clientMarginUSD ?? 0) + (bank.centralBankLoanUSD ?? 0) + (bank.repoBorrowedUSD ?? 0) + (bank.srfBorrowingUSD ?? 0);
+    const facilityBookLocal = facilityBookOf(ensureV2(world.state), c.ticker);
+    const assets = loanBooksOf(bank, facilityBookLocal) + sov + reservesUSD + (bank.repoLentLocal ?? 0) + (bank.sovereignAccruedCouponLocal ?? 0) + desks + (bank.primeBrokerageLoansLocal ?? 0);
+    const liabilities = deposits + (bank.clientMarginLocal ?? 0) + (bank.centralBankLoanLocal ?? 0) + (bank.repoBorrowedLocal ?? 0) + (bank.srfBorrowingLocal ?? 0);
     body = (<>
       <Statement units="USD millions · the live sheet" asOf={formatDate(world.state.currentWeek)} lines={[
-        { label: 'Business loans', usd: businessLoanBookOf(bank, facilityBookUSD) },
+        { label: 'Business loans', usd: businessLoanBookOf(bank, facilityBookLocal) },
         { label: 'Household loans', usd: consumerLoanBookOf(bank) },
         { label: 'Sovereign bonds', usd: sov },
         { label: 'Reserves at the central bank', usd: reservesUSD },
-        { label: 'Repo lent', usd: bank.repoLentUSD ?? 0 },
+        { label: 'Repo lent', usd: bank.repoLentLocal ?? 0 },
         { label: 'Desk inventory, gross', usd: desks },
-        { label: 'Prime brokerage loans', usd: bank.primeBrokerageLoansUSD ?? 0 },
-        { label: 'Accrued sovereign coupon', usd: bank.sovereignAccruedCouponUSD ?? 0 },
+        { label: 'Prime brokerage loans', usd: bank.primeBrokerageLoansLocal ?? 0 },
+        { label: 'Accrued sovereign coupon', usd: bank.sovereignAccruedCouponLocal ?? 0 },
         { label: 'Total assets', usd: assets, total: true },
-        { label: 'Household deposits', usd: lines.householdUSD },
-        { label: 'Corporate deposits', usd: lines.corporateUSD },
-        { label: 'Institutional deposits', usd: lines.institutionalUSD },
-        { label: 'Small-business deposits', usd: lines.smeUSD },
-        { label: 'Client margin held', usd: bank.clientMarginUSD ?? 0 },
-        { label: 'Central bank loan', usd: bank.centralBankLoanUSD ?? 0 },
-        { label: 'Repo borrowed · facility', usd: (bank.repoBorrowedUSD ?? 0) + (bank.srfBorrowingUSD ?? 0) },
+        { label: 'Household deposits', usd: lines.householdLocal },
+        { label: 'Corporate deposits', usd: lines.corporateLocal },
+        { label: 'Institutional deposits', usd: lines.institutionalLocal },
+        { label: 'Small-business deposits', usd: lines.smeLocal },
+        { label: 'Client margin held', usd: bank.clientMarginLocal ?? 0 },
+        { label: 'Central bank loan', usd: bank.centralBankLoanLocal ?? 0 },
+        { label: 'Repo borrowed · facility', usd: (bank.repoBorrowedLocal ?? 0) + (bank.srfBorrowingLocal ?? 0) },
         { label: 'Total liabilities', usd: liabilities, total: true },
-        { label: 'Equity', usd: bank.bankEquityUSD, total: true },
-        { label: 'Identity residual', usd: liabilities + bank.bankEquityUSD - assets },
+        { label: 'Equity', usd: bank.bankEquityLocal, total: true },
+        { label: 'Identity residual', usd: liabilities + bank.bankEquityLocal - assets },
       ]} />
       <Card style={{ padding: '2px 0' }}>
-        <KV k="capital ratio" hint={`rwa ${money(bankRwaUSD(bank, facilityBookUSD))} · floor 8% · closed at 2%`} v={pctLevel(bank.bankCapitalRatio, 2)} />
+        <KV k="capital ratio" hint={`rwa ${money(bankRwaUSD(bank, facilityBookLocal))} · floor 8% · closed at 2%`} v={pctLevel(bank.bankCapitalRatio, 2)} />
         <KV k="net interest margin" v={pctLevel(bank.netInterestMarginPct, 2)} />
         <KV k="loan loss rate" hint="annual, own book" v={pctLevel(bank.loanLossProvisionRateAnnualPct, 2)} />
         <KV k="deposit rate paid" v={pctLevel(bank.depositRateAnnual, 2)} />
@@ -146,8 +146,8 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     ) : (
       <Statement units="USD millions · the live book (no quarter filed yet)" asOf={asOf} lines={[
         { label: 'Cash', usd: cashOf(ensureV2(world.state), c) },
-        { label: 'Gross plant', usd: c.grossPPEUSD },
-        { label: 'Accumulated depreciation', usd: -(c.accumulatedDepreciationUSD ?? 0) },
+        { label: 'Gross plant', usd: c.grossPPELocal },
+        { label: 'Accumulated depreciation', usd: -(c.accumulatedDepreciationLocal ?? 0) },
         { label: 'Total debt', usd: totalDebtOf(c), total: true },
       ]} />
     );
@@ -241,7 +241,7 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
       { label: 'Fiscal stance', text: r.fiscalStanceScore.toFixed(2) },
     ]} />;
   } else if (active === 'banks') {
-    const sov = bs?.sovereignBondHoldingsUSD ?? 0;
+    const sov = bs?.sovereignBondHoldingsLocal ?? 0;
     const books = regionLoanBooksUSD(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.ticker));
     const regionLines = world.state.companies.reduce((a, c) => (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? addDepositLines(a, stateDepositLines(world.state, c.ticker)) : a), ZERO_DEPOSIT_LINES);
     body = <Statement units="USD millions · the region's banks, summed" asOf={asOf} lines={[
@@ -249,11 +249,11 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
       { label: 'Household loans', usd: books.consumerLoanUSD },
       { label: 'Sovereign bonds', usd: sov },
       { label: 'Reserves', usd: world.state.companies.reduce((a, c) => a + (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? bankReservesOf(ensureV2(world.state), c.ticker) : 0), 0) },
-      { label: 'Household deposits', usd: regionLines.householdUSD, total: true },
-      { label: 'Corporate deposits', usd: regionLines.corporateUSD },
-      { label: 'Institutional deposits', usd: regionLines.institutionalUSD },
-      { label: 'Central bank loans', usd: bs?.centralBankLoanUSD },
-      { label: 'Equity', usd: bs?.bankEquityUSD, total: true },
+      { label: 'Household deposits', usd: regionLines.householdLocal, total: true },
+      { label: 'Corporate deposits', usd: regionLines.corporateLocal },
+      { label: 'Institutional deposits', usd: regionLines.institutionalLocal },
+      { label: 'Central bank loans', usd: bs?.centralBankLoanLocal },
+      { label: 'Equity', usd: bs?.bankEquityLocal, total: true },
       { label: 'Capital ratio', text: pctLevel(bs?.bankCapitalRatio, 2) },
       { label: 'Net interest margin', text: pctLevel(bs?.netInterestMarginPct, 2) },
       { label: 'Overnight repo rate', text: pctLevel(r.repoRateAnnual, 2) },

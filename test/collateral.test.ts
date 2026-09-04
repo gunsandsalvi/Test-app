@@ -35,9 +35,9 @@ test('holding more than is pledged is never a violation', () => {
 
 test('pledges sum across every contract a borrower has open', () => {
   const book = [
-    { borrowerTicker: 'XIVF', collateral: [{ bondId: 'USA-GOV-B13-4', faceUSD: 100 }] },
-    { borrowerTicker: 'XIVF', collateral: [{ bondId: 'USA-GOV-B13-4', faceUSD: 250 }] },
-    { borrowerTicker: 'OTHR', collateral: [{ bondId: 'USA-GOV-B13-4', faceUSD: 999 }] },
+    { borrowerTicker: 'XIVF', collateral: [{ bondId: 'USA-GOV-B13-4', faceLocal: 100 }] },
+    { borrowerTicker: 'XIVF', collateral: [{ bondId: 'USA-GOV-B13-4', faceLocal: 250 }] },
+    { borrowerTicker: 'OTHR', collateral: [{ bondId: 'USA-GOV-B13-4', faceLocal: 999 }] },
   ];
   assert.equal(pledgedFaceByBond(book, 'XIVF').get('USA-GOV-B13-4'), 350);
 });

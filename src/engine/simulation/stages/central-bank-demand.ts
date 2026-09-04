@@ -45,19 +45,19 @@ export function centralBankParticipant(
   const demand = new Map<string, ParticipantDemand>();
   let orderedUSD = 0;
   bondIds.forEach((key) => {
-    const heldUSD = Number(cb.sovereignHoldingsByBond?.[key]) || 0;
+    const heldLocal = Number(cb.sovereignHoldingsByBond?.[key]) || 0;
     const orderUSD = Math.max(0, Number(cb.plannedPurchasesByBond?.[key]) || 0);
     orderedUSD += orderUSD;
-    holdings.set(key, heldUSD);
+    holdings.set(key, heldLocal);
     demand.set(key, {
       reservationStat: statKind === 'PRICE_LIKE' ? NO_RESERVATION_STAT : -NO_RESERVATION_STAT,
-      maxHoldingUSD: heldUSD + orderUSD,
+      maxHoldingUSD: heldLocal + orderUSD,
       // Full size at once: any positive range would make it price-sensitive.
       fullSizeStatRange: 1e-6,
       maxNetPurchaseUSD: orderUSD,
       // It does not sell what it already holds. Runoff happens through maturity, not the market
       // — a central bank selling its book outright is a rarer operation than QT and is not this.
-      minHoldingUSD: heldUSD,
+      minHoldingUSD: heldLocal,
     });
   });
   if (orderedUSD <= 0) return null;

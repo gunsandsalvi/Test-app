@@ -128,7 +128,7 @@ const IPO_PREMIUM_OVER_ENTRY = 1.15;
  * DRY POWDER — a fund does not sit on its investors' money, it CALLS it deal by deal. So the
  * capital a sponsor can deploy is what its named LPs have COMMITTED and not yet paid in, capped
  * by what those LPs can actually fund out of their own cash. Reading dry powder as the sponsor's
- * `cashUSD` instead measured 0.01B across every sponsor in the world and made an LBO structurally
+ * `cashLocal` instead measured 0.01B across every sponsor in the world and made an LBO structurally
  * impossible; HC4 built `lpCommitments` for exactly this and left the call to HC6.
  */
 export function dryPowderUSD(
@@ -272,7 +272,7 @@ export function runPeLifecycleForRegion(
     .filter((c) => c.region === regionId && c.isBankEntity)
     .map((c) => ({
       ticker: c.ticker, bankMarketShare: c.bankMarketShare,
-      capacityUSD: (ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet)?.bankEquityUSD ?? 0,
+      capacityUSD: (ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet)?.bankEquityLocal ?? 0,
     })));
   const byId = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
   const lpById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
@@ -747,14 +747,14 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
  */
 function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWeek: number): void {
   const seeded = c.debtTranches ?? [];
-  const debtUSD = seeded.reduce((a, t) => a + t.principalUSD, 0);
+  const debtUSD = seeded.reduce((a, t) => a + t.principalLocal, 0);
   c.debtTranches = [];
   if (!(debtUSD > 1) || !c.homeBankTicker) return;
   const bank = ctx.updatedCompanies.find((b) => b.ticker === c.homeBankTicker);
   const marginBps = facilityMarginBpsFor(ctx.v2, c, reg, bank);
   const tranche: DebtTranche = {
     id: `${c.id}-FACILITY-BIRTH-${nextWeek}`,
-    principalUSD: Math.round(debtUSD),
+    principalLocal: Math.round(debtUSD),
     rateType: 'FLOATING',
     floatingMarginBps: marginBps,
     originationWeek: nextWeek,
@@ -767,7 +767,7 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
   pay(ctx, {
     payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
     payee: { kind: 'COMPANY', ticker: c.ticker },
-    amount: tranche.principalUSD,
+    amount: tranche.principalLocal,
     currency: currencyOf(c.region),
     reason: 'firm birth: facility proceeds',
   });
@@ -857,7 +857,7 @@ export function runFirmBirthsForRegion(
     newborn.forEach((c) => {
       // W6: the home bank's facility (fundNewbornDebt, below) funds the opening balance
       // first; the pool carves out the founders' remainder.
-      const loanUSD = (c.debtTranches ?? []).reduce((a, t) => a + t.principalUSD, 0);
+      const loanUSD = (c.debtTranches ?? []).reduce((a, t) => a + t.principalLocal, 0);
       const openingCashUSD = Math.min(Math.max(0, openingCashOf(c) - loanUSD), Math.max(0, poolCashOf(ctx.v2, regionId, seg.industry)));
       if (openingCashUSD > 0) {
         pay(ctx, {
@@ -881,7 +881,7 @@ export function runFirmBirthsForRegion(
     .filter((b) => b.region === regionId && b.isBankEntity && isActiveCompany(b))
     .map((b) => ({
       ticker: b.ticker, bankMarketShare: b.bankMarketShare,
-      capacityUSD: (ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet)?.bankEquityUSD ?? 0,
+      capacityUSD: (ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet)?.bankEquityLocal ?? 0,
     })));
   // Its real share of each market it entered, measured against what the region's firms already
   // sell there — the weekly evolution scales this number, so a firm starting at zero could never

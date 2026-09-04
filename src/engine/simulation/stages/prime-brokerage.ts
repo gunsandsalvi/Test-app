@@ -62,8 +62,8 @@ function measuredHaircutsFor(ctx: WeeklyStepContext, regionId: RegionId, reg: Re
   let sovFaceUSD = 0, sovWeightedUSD = 0;
   sovLadder.forEach((t) => {
     const h = sovHaircutOf(t.id);
-    if (h === undefined || !(t.principalUSD > 0)) return;
-    sovFaceUSD += t.principalUSD; sovWeightedUSD += t.principalUSD * h;
+    if (h === undefined || !(t.principalLocal > 0)) return;
+    sovFaceUSD += t.principalLocal; sovWeightedUSD += t.principalLocal * h;
   });
   const sovBlended = sovFaceUSD > 0 ? sovWeightedUSD / sovFaceUSD : 0;
   const equity = 2 * (medianOf(priceMoves) ?? 0);
@@ -216,7 +216,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
       updateBankSheet(ctx, ticker, {
         ...sheet,
-        primeBrokerageLoansUSD: Math.round(lentByBroker(nextBook, ticker)),
+        primeBrokerageLoansLocal: Math.round(lentByBroker(nextBook, ticker)),
       });
     });
   });
@@ -285,7 +285,7 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
           ...c,
           bankBalanceSheet: {
             ...c.bankBalanceSheet,
-            primeBrokerageLoansUSD: Math.round((c.bankBalanceSheet.primeBrokerageLoansUSD ?? 0) + drawnUSD),
+            primeBrokerageLoansLocal: Math.round((c.bankBalanceSheet.primeBrokerageLoansLocal ?? 0) + drawnUSD),
           },
         };
       });

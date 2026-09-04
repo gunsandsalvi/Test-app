@@ -118,11 +118,11 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       // lending means — so it takes the loss, the collateral goes back, and the shares the
       // borrower owes are worth nothing to return.
       if (!comp || !issuer || issuer.isDefaulted) {
-        if (loan.collateralUSD > 0) {
+        if (loan.collateralLocal > 0) {
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: loan.lender.id },
             payee: { kind: 'INSTITUTION', id: loan.borrower.id },
-            amount: loan.collateralUSD,
+            amount: loan.collateralLocal,
             // The collateral is denominated in the money the shares were quoted in. This branch
             // is the one where the issuer is GONE — de-listed, or a name the company table no
             // longer carries. §3.13c: the loan says what it is denominated in, so there is
@@ -153,7 +153,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       // cost nobody anything: the lender's protection eroded exactly as the borrower's position
       // moved against it, and `stockLoanNetUSD` was an unfunded statistic.
       const markedUSD = loan.shares * comp.stockPrice;
-      const marginCallUSD = markedUSD - loan.collateralUSD;
+      const marginCallUSD = markedUSD - loan.collateralLocal;
       if (Math.abs(marginCallUSD) > 1) {
         pay(ctx, marginCallUSD > 0
           ? {
@@ -170,7 +170,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
             currency: currencyOf(comp.region),
             reason: 'stock loan variation margin returned',
           });
-        loan.collateralUSD = markedUSD;
+        loan.collateralLocal = markedUSD;
       }
 
       // A recalled borrower that has managed to buy the shares back delivers them and is out.
@@ -181,11 +181,11 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           // loan does not hang on a fraction of a share, but handing over the loan's full size
           // out of a position that does not cover it moves shares that are not there.
           deliver(loan.borrower.id, loan.lender.id, loan.instrumentId, Math.min(loan.shares, have), comp.stockPrice);
-          if (loan.collateralUSD > 0) {
+          if (loan.collateralLocal > 0) {
             pay(ctx, {
               payer: { kind: 'INSTITUTION', id: loan.lender.id },
               payee: { kind: 'INSTITUTION', id: loan.borrower.id },
-              amount: loan.collateralUSD,
+              amount: loan.collateralLocal,
               currency: currencyOf(comp.region),
               reason: 'stock loan collateral returned',
             });
@@ -238,14 +238,14 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
         ...loan,
         id: `${loan.id}-R`,
         shares: recalledShares,
-        collateralUSD: loan.collateralUSD * share,
+        collateralLocal: loan.collateralLocal * share,
         recalledWeek: ctx.nextWeek,
       });
       if (loan.shares - recalledShares > 0.0001) {
         carried.push({
           ...loan,
           shares: loan.shares - recalledShares,
-          collateralUSD: loan.collateralUSD * (1 - share),
+          collateralLocal: loan.collateralLocal * (1 - share),
         });
       }
     });
@@ -348,7 +348,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       const demandShares = (borrowDemandByCompany.get(c.id) ?? []).reduce((a, d) => a + d.shares, 0);
       return {
         id: sblInstrumentId(regionId, c.id),
-        outstandingUSD: demandShares,
+        outstandingLocal: demandShares,
         tradableFloatUSD: demandShares,
         currentStat: Math.max(1, lastFee[c.id] ?? 0) || 1,
         statKind: 'YIELD_LIKE',
@@ -464,7 +464,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           if (lenderId === d.fundId) return;
           const shares = borrowedShares * (lenderShares / totalNewShares);
           if (shares <= 0.0001) return;
-          const collateralUSD = shares * c.stockPrice;
+          const collateralLocal = shares * c.stockPrice;
           // The delivery leg: the lender's shares are now in the borrower's hands, and it will
           // sell them in this week's equity auction. The register total is unchanged.
           deliver(lenderId, d.fundId, c.id, shares, c.stockPrice);
@@ -473,7 +473,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: d.fundId },
             payee: { kind: 'INSTITUTION', id: lenderId },
-            amount: collateralUSD,
+            amount: collateralLocal,
             currency: currencyOf(c.region),
             reason: 'stock loan collateral posted',
           });
@@ -487,7 +487,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
             feeBps: Number(clearedBps.toFixed(1)),
             // §3.13c: the money the shares trade in, stated once at strike.
             currency: currencyOf(regionId),
-            collateralUSD,
+            collateralLocal,
             lenderPositionAtStrike: positionAtStrike.get(lenderId) ?? shares,
             struckWeek: ctx.nextWeek,
           });

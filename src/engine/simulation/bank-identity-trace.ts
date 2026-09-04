@@ -46,53 +46,53 @@ export function bankIdentityTraceEnabled(): boolean {
  * cannot verify — and it is why this is typed before the rename runs.
  */
 const FIELD_SIGNS: Record<keyof ReturnType<typeof fieldsOf>, 1 | -1> = {
-  depositsUSD: 1, corporateDepositsUSD: 1, institutionalDepositsUSD: 1, clientMarginUSD: 1,
-  smeDepositsUSD: 1, centralBankLoanUSD: 1, bankEquityUSD: 1, srfBorrowingUSD: 1, repoBorrowedUSD: 1,
-  businessLoanBookUSD: -1, consumerLoanBookUSD: -1, sovHoldingsUSD: -1, cashReservesUSD: -1,
-  repoLentUSD: -1, onRrpLendingUSD: -1, sovereignAccruedCouponUSD: -1, deskInventoryAbsUSD: -1,
-  primeBrokerageLoansUSD: -1,
+  depositsLocal: 1, corporateDepositsLocal: 1, institutionalDepositsLocal: 1, clientMarginLocal: 1,
+  smeDepositsLocal: 1, centralBankLoanLocal: 1, bankEquityLocal: 1, srfBorrowingLocal: 1, repoBorrowedLocal: 1,
+  businessLoanBookLocal: -1, consumerLoanBookLocal: -1, sovHoldingsUSD: -1, cashReservesUSD: -1,
+  repoLentLocal: -1, onRrpLendingLocal: -1, sovereignAccruedCouponLocal: -1, deskInventoryAbsUSD: -1,
+  primeBrokerageLoansLocal: -1,
 };
 
 /** §3.13c: the return type is INFERRED, so its keys are a literal union and `FIELD_SIGNS` below
  *  is checked against them. Annotated `Record<string, number>` it was not: `keyof string-record`
  *  is `string`, so every key matched and nothing was verified. */
-export function fieldsOf(bs: BankingSector, cashUSD: number, lines: DepositLines, facilityBookUSD: number) {
+export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number) {
   return {
-    depositsUSD: lines.householdUSD, corporateDepositsUSD: lines.corporateUSD,
-    institutionalDepositsUSD: lines.institutionalUSD,
-    clientMarginUSD: bs.clientMarginUSD ?? 0, smeDepositsUSD: lines.smeUSD,
-    centralBankLoanUSD: bs.centralBankLoanUSD ?? 0, bankEquityUSD: bs.bankEquityUSD,
-    srfBorrowingUSD: bs.srfBorrowingUSD ?? 0, repoBorrowedUSD: bs.repoBorrowedUSD ?? 0,
-    businessLoanBookUSD: businessLoanBookOf(bs, facilityBookUSD), consumerLoanBookUSD: consumerLoanBookOf(bs),
+    depositsLocal: lines.householdLocal, corporateDepositsLocal: lines.corporateLocal,
+    institutionalDepositsLocal: lines.institutionalLocal,
+    clientMarginLocal: bs.clientMarginLocal ?? 0, smeDepositsLocal: lines.smeLocal,
+    centralBankLoanLocal: bs.centralBankLoanLocal ?? 0, bankEquityLocal: bs.bankEquityLocal,
+    srfBorrowingLocal: bs.srfBorrowingLocal ?? 0, repoBorrowedLocal: bs.repoBorrowedLocal ?? 0,
+    businessLoanBookLocal: businessLoanBookOf(bs, facilityBookLocal), consumerLoanBookLocal: consumerLoanBookOf(bs),
     sovHoldingsUSD: Object.values(bs.sovereignBondHoldingsByBond || {})
       .reduce((a: number, v) => a + (Number(v) || 0), 0),
-    cashReservesUSD: cashUSD, repoLentUSD: bs.repoLentUSD ?? 0,
-    onRrpLendingUSD: bs.onRrpLendingUSD ?? 0,
-    sovereignAccruedCouponUSD: bs.sovereignAccruedCouponUSD ?? 0,
-    deskInventoryAbsUSD: Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryUSD: number }[]>)
-      .reduce((a: number, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0),
-    primeBrokerageLoansUSD: bs.primeBrokerageLoansUSD ?? 0,
+    cashReservesUSD: cashLocal, repoLentLocal: bs.repoLentLocal ?? 0,
+    onRrpLendingLocal: bs.onRrpLendingLocal ?? 0,
+    sovereignAccruedCouponLocal: bs.sovereignAccruedCouponLocal ?? 0,
+    deskInventoryAbsUSD: Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryLocal: number }[]>)
+      .reduce((a: number, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0),
+    primeBrokerageLoansLocal: bs.primeBrokerageLoansLocal ?? 0,
   };
 }
 
-export function residualOf(bs: BankingSector, cashUSD: number, lines: DepositLines, facilityBookUSD: number, signedDesk = false): number {
+export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, signedDesk = false): number {
   const sovUSD = Object.values(bs.sovereignBondHoldingsByBond || {})
     .reduce((a: number, v) => a + (Number(v) || 0), 0);
   return (
-    lines.householdUSD + lines.corporateUSD + lines.institutionalUSD
-    + (bs.clientMarginUSD ?? 0) + lines.smeUSD + (bs.centralBankLoanUSD ?? 0)
-    + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + (bs.repoBorrowedUSD ?? 0)
-    - businessLoanBookOf(bs, facilityBookUSD) - consumerLoanBookOf(bs) - sovUSD - cashUSD
-    - (bs.repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0)
-    - (bs.sovereignAccruedCouponUSD ?? 0)
+    lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
+    + (bs.clientMarginLocal ?? 0) + lines.smeLocal + (bs.centralBankLoanLocal ?? 0)
+    + bs.bankEquityLocal + (bs.srfBorrowingLocal ?? 0) + (bs.repoBorrowedLocal ?? 0)
+    - businessLoanBookOf(bs, facilityBookLocal) - consumerLoanBookOf(bs) - sovUSD - cashLocal
+    - (bs.repoLentLocal ?? 0) - (bs.onRrpLendingLocal ?? 0)
+    - (bs.sovereignAccruedCouponLocal ?? 0)
     // The harness counts a desk row at Math.abs — a SHORT counted as an asset. trade.ts books
     // cash on the SIGNED delta, so if a desk sits net short the two conventions differ by twice
     // the short. `signedDesk` computes the signed variant so a run can print both and show
     // whether the episodic M-scale breaks are exactly that convention gap.
-    - Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryUSD: number }[]>)
+    - Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryLocal: number }[]>)
         .reduce((a: number, rows) => a + rows.reduce(
-          (b, r) => b + (signedDesk ? r.inventoryUSD : Math.abs(r.inventoryUSD)), 0), 0)
-    - (bs.primeBrokerageLoansUSD ?? 0)
+          (b, r) => b + (signedDesk ? r.inventoryLocal : Math.abs(r.inventoryLocal)), 0), 0)
+    - (bs.primeBrokerageLoansLocal ?? 0)
   );
 }
 
@@ -128,9 +128,9 @@ export class BankIdentityTrace {
         || c.bankBalanceSheet;
       if (!sheet) return;
       const lines = bankDepositLines(ctx, c.ticker);
-      const facilityBookUSD = facilityBookOf(ctx.v2, c.ticker);
-      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.ticker), lines, facilityBookUSD));
-      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.ticker), lines, facilityBookUSD, true));
+      const facilityBookLocal = facilityBookOf(ctx.v2, c.ticker);
+      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.ticker), lines, facilityBookLocal));
+      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.ticker), lines, facilityBookLocal, true));
     });
     return out;
   }

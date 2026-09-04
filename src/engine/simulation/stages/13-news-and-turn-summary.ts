@@ -22,11 +22,11 @@ export function runNewsAndTurnSummaryStage(state: GameState, ctx: WeeklyStepCont
   // now reaches a NAMED lead bank's balance sheet instead of the region aggregate that 02b
   // overwrites the following week (§7.30's "a write to a derived view is a write to nothing").
 
-  const cashAfterWeek = state.portfolio.cashUSD + ctx.weeklyInterestIncomeUSD + ctx.weeklyRealizedPnL + ctx.weeklyRealizedCashUSD - ctx.weeklyFinancingCostUSD;
+  const cashAfterWeek = state.portfolio.cashLocal + ctx.weeklyInterestIncomeUSD + ctx.weeklyRealizedPnL + ctx.weeklyRealizedCashUSD - ctx.weeklyFinancingCostUSD;
   const navUSD = cashAfterWeek + updatedPositions.reduce((s, p) => s + p.unrealizedPnL, 0);
   const updatedPortfolio: Portfolio = {
     ...state.portfolio,
-    cashUSD: cashAfterWeek,
+    cashLocal: cashAfterWeek,
     positions: updatedPositions,
     navUSD,
     totalRequiredMarginUSD: ctx.totalRequiredMarginUSD,

@@ -373,13 +373,13 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
 
   // G5: after stage 08 has named this week's defaults, so a workout opens the week it fails.
   run('estate-resolution', () => runEstateResolutionStage(state, ctx));
-  syncCompanyField(state, 'grossPPEUSD');
+  syncCompanyField(state, 'grossPPELocal');
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
   syncCompanyField(state, 'customerConcentration'); syncCompanyField(state, 'supplierConcentration');
   run('10-mergers', () => runMergersStage(state, ctx));
   // §5-MGMT — the quarterly review: a management that fails its measured record is replaced.
   run('management-review', () => runManagementReviewStage(state, ctx));
-  for (const f of ['accumulatedDepreciationUSD', 'acquiredByTicker', 'annualRevenue', 'capex', 'employeeCount', 'grossPPEUSD', 'growthCapex', 'maintenanceCapex', 'marketCap', 'mergerAcquired', 'sharesOutstanding', 'stockPrice', 'totalDebt'] as const) syncCompanyField(state, f);
+  for (const f of ['accumulatedDepreciationLocal', 'acquiredByTicker', 'annualRevenue', 'capex', 'employeeCount', 'grossPPELocal', 'growthCapex', 'maintenanceCapex', 'marketCap', 'mergerAcquired', 'sharesOutstanding', 'stockPrice', 'totalDebt'] as const) syncCompanyField(state, f);
   // PUB3d: bills accrete BEFORE the fiscal stage redeems them, so a maturing bill is repaid at
   // the face its holder has accreted to rather than at last week's value.
   // A stable-NAV fund pays its yield as new shares and its fee leaves to the manager.
@@ -420,7 +420,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // final), before the central bank counts the reserves it just moved.
   run('bank-funding-close', () => runBankFundingCloseStage(state, ctx));
   run('bank-resolution', () => runBankResolutionStage(state, ctx));
-  for (const f of ['cash', 'isDefaulted', 'defaultedWeek', 'bankResolvedWeek', 'employeeCount', 'grossPPEUSD', 'accumulatedDepreciationUSD', 'annualRevenue', 'ebitda', 'ebit', 'bankMarketShare', 'homeBankTicker', 'creditRating', 'stockPrice', 'marketCap'] as const) syncCompanyField(state, f);
+  for (const f of ['cash', 'isDefaulted', 'defaultedWeek', 'bankResolvedWeek', 'employeeCount', 'grossPPELocal', 'accumulatedDepreciationLocal', 'annualRevenue', 'ebitda', 'ebit', 'bankMarketShare', 'homeBankTicker', 'creditRating', 'stockPrice', 'marketCap'] as const) syncCompanyField(state, f);
   // PUB2: the central bank's week — remittances, the TGA, and the reserves its flows move.
   // After stage 11 AND after the close, so every flow of the week has posted before it counts
   // its own liabilities: settling reserves after it reconciled left its sheet not closing.

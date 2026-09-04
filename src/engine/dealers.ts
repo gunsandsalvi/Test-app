@@ -56,7 +56,7 @@ export function dealersFromBanks(
       const sheet = bank.bankBalanceSheet!;
       const grossUSD = dealerDeskGrossUSD(sheet.dealerDeskInventory);
       const capacityUSD = dealerDeskCapacityUSD({
-        balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
+        balanceSheetCapacityUSD: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
         leverageHeadroomUSD: leverageHeadroomUSD(sheet, reservesOf(bank), facilityBookOf(bank)),
         inventory: sheet.dealerDeskInventory,
         book: '',
@@ -64,7 +64,7 @@ export function dealersFromBanks(
       // The axe: the books this desk is genuinely long, so the classes it can fill from stock.
       const longBooks = new Set(
         Object.entries(sheet.dealerDeskInventory ?? {})
-          .filter(([, rows]) => rows.reduce((a, r) => a + r.inventoryUSD, 0) > 0)
+          .filter(([, rows]) => rows.reduce((a, r) => a + r.inventoryLocal, 0) > 0)
           .map(([book]) => book)
       );
       const axeAssetClasses = ALL_ASSET_CLASSES.filter((a) => longBooks.has(DESK_BOOK_BY_ASSET_TYPE[a]));
@@ -88,7 +88,7 @@ export function dealersFromBanks(
 /** What this desk holds of one instrument right now. */
 export function deskInventoryUSD(bank: Company | undefined, book: string, instrumentId: string): number {
   const rows = bank?.bankBalanceSheet?.dealerDeskInventory?.[book] ?? [];
-  return rows.filter((r) => r.instrumentId === instrumentId).reduce((a, r) => a + r.inventoryUSD, 0);
+  return rows.filter((r) => r.instrumentId === instrumentId).reduce((a, r) => a + r.inventoryLocal, 0);
 }
 
 /**

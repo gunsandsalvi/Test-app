@@ -96,7 +96,7 @@ function fixedDebtUSD(v2: V2World, comp: Company): number {
   const S = v2.tranches;
   let sum = 0;
   for (const r of ladderRowsOf(v2, comp.id)) {
-    if (!(S.flags[r] & (TR_FLOATING | TR_CP))) sum += S.principalUSD[r];
+    if (!(S.flags[r] & (TR_FLOATING | TR_CP))) sum += S.principalLocal[r];
   }
   return sum;
 }
@@ -110,7 +110,7 @@ function creditDurationYears(v2: V2World, comp: Company): number {
     if (S.flags[r] & (TR_FLOATING | TR_CP)) continue;
     count++;
     const tenorYears = Math.max(0.5, (S.maturityWeek[r] - S.originationWeek[r]) / 52);
-    weighted += tenorYears * S.principalUSD[r];
+    weighted += tenorYears * S.principalLocal[r];
   }
   if (count === 0 || totalFixed <= 0) return 3.5;
   return Math.max(1.0, Math.min(8.0, (weighted / totalFixed) * 0.75));
@@ -189,7 +189,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const priorOasById = new Map(regionCompanies.map((c) => [c.id, c.oasSpreadBps]));
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
-      outstandingUSD: fixedDebtOf(c),
+      outstandingLocal: fixedDebtOf(c),
       tradableFloatUSD: fixedDebtOf(c),
       currentStat: c.oasSpreadBps,
       statKind: 'YIELD_LIKE',
@@ -232,7 +232,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         const issuerId = issuerIdOf(v2, h.instrumentId); // 13b: a row names a tranche or its issuer
         if (!issuerIdsThisRegion.has(issuerId)) return false;
         // A book trades PAR amounts. This reads the value because nothing marks credit yet;
-        // when the mark lands it reads `faceUSD`, or a price move looks like a trade.
+        // when the mark lands it reads `faceLocal`, or a price move looks like a trade.
         currentHoldingByCompany.set(issuerId, (currentHoldingByCompany.get(issuerId) ?? 0) + h.quantityOrNotionalUSD);
         return true;
       });
@@ -405,7 +405,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     });
 
     const priorDealerInventoryById = new Map<string, number>();
-    (reg.bankingSector.corpBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.companyId, p.inventoryUSD));
+    (reg.bankingSector.corpBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.companyId, p.inventoryLocal));
 
     // ETF: the index funds tracking this book's benchmarks. A fund posts a SIZE with no
     // reservation level — its benchmark weight at whatever the market is asking — which is the
@@ -528,7 +528,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
             : undefined;
           splitAcrossTranches(v2, issuerId, 'CORP_BOND', newHoldingUSD, primary).forEach((t) => {
             // Written in par space; `credit-marking` prices it before anything reads a value.
-            if (t.usd > 1) newCorpHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceUSD: t.usd, units: t.usd });
+            if (t.usd > 1) newCorpHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: t.usd, faceLocal: t.usd, units: t.usd });
           });
         }
       }
@@ -553,9 +553,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         deskCapacityUSD: bookCapacityUSD,
       }),
       BOOK);
-    const newDealerInventory: { companyId: string; inventoryUSD: number }[] = [];
-    deskViewByCompany.forEach((inventoryUSD, companyId) => {
-      if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ companyId, inventoryUSD });
+    const newDealerInventory: { companyId: string; inventoryLocal: number }[] = [];
+    deskViewByCompany.forEach((inventoryLocal, companyId) => {
+      if (Math.abs(inventoryLocal) > 1) newDealerInventory.push({ companyId, inventoryLocal });
     });
     reg.bankingSector = { ...reg.bankingSector, corpBondDealerInventory: newDealerInventory };
 

@@ -53,7 +53,7 @@ function fixedMarketValueUSD(v2: V2World, comp: Company, curve: NelsonSiegelPara
       couponPerPeriod: Number.isNaN(S.couponRate[r]) ? 0 : S.couponRate[r],
       periods: years, ratePerPeriod: discount, redemptionPerFace: 1,
     });
-    sum += S.principalUSD[r] * Math.max(0, pricePerDollar);
+    sum += S.principalLocal[r] * Math.max(0, pricePerDollar);
   }
   return sum;
 }
@@ -66,7 +66,7 @@ function floatingMarketValueUSD(v2: V2World, comp: Company): number {
   let sum = 0;
   for (const r of ladderRowsOf(v2, comp.id)) {
     if ((S.flags[r] & INDEXABLE_EXCLUDED) || !(S.flags[r] & TR_FLOATING)) continue;
-    sum += S.principalUSD[r] * Math.max(0, pricePerDollar);
+    sum += S.principalLocal[r] * Math.max(0, pricePerDollar);
   }
   return sum;
 }

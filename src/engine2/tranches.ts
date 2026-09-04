@@ -28,7 +28,7 @@ export const TR_REFI_INITIATED = 16;
 
 export interface TrancheStore {
   cap: number;
-  principalUSD: Float64Array;
+  principalLocal: Float64Array;
   couponRate: Float64Array;        // NaN = absent
   floatingMarginBps: Float64Array; // NaN = absent
   paymentsPerYear: Float64Array;   // NaN = absent
@@ -82,7 +82,7 @@ export function newTrancheStore(): TrancheStore {
   const cap = 1 << 13;
   return {
     cap,
-    principalUSD: new Float64Array(cap),
+    principalLocal: new Float64Array(cap),
     couponRate: new Float64Array(cap),
     floatingMarginBps: new Float64Array(cap),
     paymentsPerYear: new Float64Array(cap),
@@ -110,7 +110,7 @@ function growTranches(S: TrancheStore): void {
   const cap = S.cap * 2;
   const gF = (old: Float64Array) => { const a = new Float64Array(cap); a.set(old); return a; };
   const gI = (old: Int32Array) => { const a = new Int32Array(cap); a.set(old); return a; };
-  S.principalUSD = gF(S.principalUSD); S.couponRate = gF(S.couponRate);
+  S.principalLocal = gF(S.principalLocal); S.couponRate = gF(S.couponRate);
   S.floatingMarginBps = gF(S.floatingMarginBps); S.paymentsPerYear = gF(S.paymentsPerYear);
   S.paymentAnchorWeek = gF(S.paymentAnchorWeek);
   S.originationWeek = gI(S.originationWeek); S.maturityWeek = gI(S.maturityWeek);
@@ -126,7 +126,7 @@ function growTranches(S: TrancheStore): void {
 /** A freed row carries nothing a scan could mistake for a live tranche. */
 function freeRow(S: TrancheStore, r: number): void {
   if (S.rowByIdRef.get(S.idRef[r]) === r) S.rowByIdRef.delete(S.idRef[r]);
-  S.callProt[r] = undefined; S.flags[r] = 0; S.bankRef[r] = -1; S.issuerRef[r] = -1; S.principalUSD[r] = 0;
+  S.callProt[r] = undefined; S.flags[r] = 0; S.bankRef[r] = -1; S.issuerRef[r] = -1; S.principalLocal[r] = 0;
   S.next[r] = S.freeHead; S.freeHead = r;
 }
 
@@ -151,7 +151,7 @@ function slotFor(S: TrancheStore, firmRow: number): number {
 }
 
 function writeRow(S: TrancheStore, r: number, v2: V2World, t: DebtTranche): void {
-  S.principalUSD[r] = t.principalUSD;
+  S.principalLocal[r] = t.principalLocal;
   S.couponRate[r] = t.couponRate === undefined ? Number.NaN : t.couponRate;
   S.floatingMarginBps[r] = t.floatingMarginBps === undefined ? Number.NaN : t.floatingMarginBps;
   S.paymentsPerYear[r] = t.paymentsPerYear === undefined ? Number.NaN : t.paymentsPerYear;
@@ -204,7 +204,7 @@ export function syncLadderRows(v2: V2World, companyId: string, ladder: DebtTranc
 /** The canonical projection both representations reduce to for the sync check. */
 function canonical(t: DebtTranche): string {
   return [
-    t.principalUSD, t.rateType === 'FLOATING' ? 1 : 0,
+    t.principalLocal, t.rateType === 'FLOATING' ? 1 : 0,
     t.couponRate ?? 'x', t.floatingMarginBps ?? 'x',
     t.originationWeek, t.maturityWeek,
     t.seniority === 'SUBORDINATED' ? 1 : 0,
@@ -219,7 +219,7 @@ function canonical(t: DebtTranche): string {
 function canonicalRow(S: TrancheStore, v2: V2World, r: number): string {
   const f = S.flags[r];
   return [
-    S.principalUSD[r], f & TR_FLOATING ? 1 : 0,
+    S.principalLocal[r], f & TR_FLOATING ? 1 : 0,
     Number.isNaN(S.couponRate[r]) ? 'x' : S.couponRate[r],
     Number.isNaN(S.floatingMarginBps[r]) ? 'x' : S.floatingMarginBps[r],
     S.originationWeek[r], S.maturityWeek[r],
@@ -322,7 +322,7 @@ export function materializeTranche(v2: V2World, r: number): DebtTranche {
   const f = S.flags[r];
   const t: DebtTranche = {
     id: v2.internedStrings[S.idRef[r]],
-    principalUSD: S.principalUSD[r],
+    principalLocal: S.principalLocal[r],
     rateType: f & TR_FLOATING ? 'FLOATING' : 'FIXED',
     originationWeek: S.originationWeek[r],
     maturityWeek: S.maturityWeek[r],
@@ -376,7 +376,7 @@ export const trancheWireOf = (v2: V2World, r: number): number => v2.tranches.wir
  *  syncs (O4 lived on that drift). The facility row on the ladder IS the loan, seen from the
  *  lender: one scan of the store, in row order. */
 export interface FacilityRow {
-  row: number; borrowerId: string; bankTicker: string; trancheId: string; principalUSD: number;
+  row: number; borrowerId: string; bankTicker: string; trancheId: string; principalLocal: number;
   /** The tranche's floating margin; a facility with none stated rides the 350bp the mirror used. */
   marginBps: number; originationWeek: number; maturityWeek: number;
 }
@@ -384,7 +384,7 @@ function facilityRowOf(v2: V2World, r: number): FacilityRow {
   const S = v2.tranches;
   return {
     row: r, borrowerId: v2.internedStrings[S.issuerRef[r]], bankTicker: v2.internedStrings[S.bankRef[r]],
-    trancheId: v2.internedStrings[S.idRef[r]], principalUSD: S.principalUSD[r],
+    trancheId: v2.internedStrings[S.idRef[r]], principalLocal: S.principalLocal[r],
     marginBps: Number.isNaN(S.floatingMarginBps[r]) ? 350 : S.floatingMarginBps[r],
     originationWeek: S.originationWeek[r], maturityWeek: S.maturityWeek[r],
   };
@@ -396,7 +396,7 @@ export function facilityRowsOf(v2: V2World, bankTicker: string): FacilityRow[] {
   const out: FacilityRow[] = [];
   if (ref === undefined) return out;
   for (let r = 0; r < S.used; r++) {
-    if ((S.flags[r] & TR_FACILITY) && S.bankRef[r] === ref && S.issuerRef[r] >= 0 && S.principalUSD[r] > 0.01) out.push(facilityRowOf(v2, r));
+    if ((S.flags[r] & TR_FACILITY) && S.bankRef[r] === ref && S.issuerRef[r] >= 0 && S.principalLocal[r] > 0.01) out.push(facilityRowOf(v2, r));
   }
   return out;
 }
@@ -406,13 +406,13 @@ export function facilityBookOf(v2: V2World, bankTicker: string): number {
   const ref = v2.internedIdByString.get(bankTicker);
   if (ref === undefined) return 0;
   let usd = 0;
-  for (let r = 0; r < S.used; r++) if ((S.flags[r] & TR_FACILITY) && S.bankRef[r] === ref && S.issuerRef[r] >= 0) usd += S.principalUSD[r];
+  for (let r = 0; r < S.used; r++) if ((S.flags[r] & TR_FACILITY) && S.bankRef[r] === ref && S.issuerRef[r] >= 0) usd += S.principalLocal[r];
   return usd;
 }
 /** The facilities on one borrower's ladder — the same rows seen from the borrower. */
 export function facilitiesOfBorrower(v2: V2World, companyId: string): FacilityRow[] {
   const S = v2.tranches;
-  return ladderRowsOf(v2, companyId).filter((r) => (S.flags[r] & TR_FACILITY) && S.bankRef[r] >= 0 && S.principalUSD[r] > 0.01).map((r) => facilityRowOf(v2, r));
+  return ladderRowsOf(v2, companyId).filter((r) => (S.flags[r] & TR_FACILITY) && S.bankRef[r] >= 0 && S.principalLocal[r] > 0.01).map((r) => facilityRowOf(v2, r));
 }
 
 /** §5-FINALIZATION 13b — AN INSTRUMENT'S ISSUER. A register row names either a company (equity,
@@ -460,6 +460,6 @@ export const isTrancheId = (v2: V2World, instrumentId: string): boolean => {
 export function ladderTotalUSD(v2: V2World, companyId: string): number {
   const S = v2.tranches;
   let total = 0;
-  for (const r of ladderRowsOf(v2, companyId)) total += S.principalUSD[r];
+  for (const r of ladderRowsOf(v2, companyId)) total += S.principalLocal[r];
   return total;
 }

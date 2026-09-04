@@ -19,7 +19,7 @@ export interface HistoricalBenchmarkRecord {
 }
 
 export interface Portfolio {
-  cashUSD: number;
+  cashLocal: number;
   startingCapitalUSD: number;
   navUSD: number;
   previousNavUSD: number;

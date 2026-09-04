@@ -62,7 +62,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       const exposureByIssuer = new Map<string, number>();
       // Step 10: the bank's exposure to a name is its facility rows on that name's ladder.
       facilityRowsOf(ctx.v2, bank.ticker).forEach((l) => {
-        exposureByIssuer.set(l.borrowerId, (exposureByIssuer.get(l.borrowerId) ?? 0) + Math.max(0, l.principalUSD));
+        exposureByIssuer.set(l.borrowerId, (exposureByIssuer.get(l.borrowerId) ?? 0) + Math.max(0, l.principalLocal));
       });
       const party: DerivativeParty = { kind: 'BANK', ticker: bank.ticker };
       exposureByIssuer.forEach((exposureUSD, issuerId) => {
@@ -70,7 +70,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
         if (!issuer || issuer.region !== regionId || !isActiveCompany(issuer)) return;
         const needUSD = protectionNeedUSD({
           exposureUSD,
-          bankEquityUSD: sheet.bankEquityUSD,
+          bankEquityLocal: sheet.bankEquityLocal,
           alreadyHedgedUSD: standing.coverUSD('CDS', 'a', `BANK:${bank.ticker}`, issuerId),
         });
         if (needUSD <= 1) return;
@@ -91,7 +91,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       const floatUSD = demand.reduce((a, d) => a + d.usd, 0);
       return {
         id: cdsInstrumentId(regionId, c.id),
-        outstandingUSD: floatUSD,
+        outstandingLocal: floatUSD,
         tradableFloatUSD: floatUSD,
         // Opens at the issuer's own cleared cash spread — the alternative a seller is pricing
         // against — and moves from there on this book's own supply and demand. The BASIS between
@@ -216,8 +216,8 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
         const hedgedUSD = d.usd * filledShare;
         if (hedgedUSD <= 1) return;
         writtenBySeller.forEach((writtenUSD, participantId) => {
-          const notionalUSD = hedgedUSD * (writtenUSD / totalWrittenUSD);
-          if (notionalUSD <= 1) return;
+          const notional = hedgedUSD * (writtenUSD / totalWrittenUSD);
+          if (notional <= 1) return;
           const seller: DerivativeParty = participantId.startsWith('CDSDESK-')
             ? { kind: 'BANK', ticker: participantId.slice('CDSDESK-'.length) }
             : { kind: 'INSTITUTION', id: participantId };
@@ -227,7 +227,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
             regionId,
             a: d.party,
             b: seller,
-            notionalUSD: Math.round(notionalUSD),
+            notional: Math.round(notional),
             strike: Number(clearedBps.toFixed(1)),
             referenceId: issuer.id,
             termKey: '',

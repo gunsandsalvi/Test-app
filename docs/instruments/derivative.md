@@ -78,7 +78,7 @@ are given the ids `N1`–`N3` here, in the order they are written; the tree is u
 | D1 two named counterparties, asset to one and liability to the other | `src/domain/derivatives/contract.ts:DerivativeContract` | ✅ |
 | **D1.a FORBID no derivative with one side** | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` | ❌ |
 | **D1.b VERIFY Σ mark-to-market = 0, exactly** | — | ❌ |
-| D2 a notional, in a unit, generally not exchanged | `src/domain/derivatives/contract.ts:notionalUSD` | ✅ |
+| D2 a notional, in a unit, generally not exchanged | `src/domain/derivatives/contract.ts:notional` | ✅ |
 | D2.a the notional is not the exposure | `src/domain/derivatives/registry.ts:standingPfeChargeUSD` | ⚠️ |
 | D3 an observable underlying priced elsewhere | `src/domain/derivatives/profile.ts:DerivativeMarketView` | ✅ |
 | **D3.a FORBID no underlying that only exists inside the derivative** | `src/engine/macro/evolution.ts:evolveCommodity` | ⚠️ |

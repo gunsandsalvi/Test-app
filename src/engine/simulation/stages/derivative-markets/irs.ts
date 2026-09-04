@@ -94,7 +94,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const rwaUSD = loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.ticker));
-      const absorbableUSD = Math.max(0, sheet.bankEquityUSD - rwaUSD * BANK_WORKING_CAPITAL_RATIO);
+      const absorbableUSD = Math.max(0, sheet.bankEquityLocal - rwaUSD * BANK_WORKING_CAPITAL_RATIO);
       const bookByTenor = new Map<SwapTenorKey, number>();
       Object.entries(sheet.sovereignBondHoldingsByBond ?? {}).forEach(([bondId, usd]) => {
         const years = tenorYearsOf(bondId);
@@ -125,8 +125,8 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       let interestUSD = 0;
       for (const r of ladderRowsOf(v2g, comp.id)) {
         const isFloating = (TS.flags[r] & TR_FLOATING) !== 0;
-        if (isFloating) floatingUSD += TS.principalUSD[r];
-        interestUSD += TS.principalUSD[r]
+        if (isFloating) floatingUSD += TS.principalLocal[r];
+        interestUSD += TS.principalLocal[r]
           * (!isFloating
             ? (Number.isNaN(TS.couponRate[r]) ? 0.05 : TS.couponRate[r])
             : reg.policyRate + ((Number.isNaN(TS.floatingMarginBps[r]) ? 200 : TS.floatingMarginBps[r])) / 10000);
@@ -156,7 +156,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       const zeroRate = reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]] ?? reg.policyRate;
       instruments.push({
         id: swapInstrumentId(regionId, k),
-        outstandingUSD: totalUSD,
+        outstandingLocal: totalUSD,
         tradableFloatUSD: totalUSD,
         currentStat: (reg.swapParRateByTenor?.[k] ?? zeroRate) * 10000,
         statKind: 'YIELD_LIKE',
@@ -224,15 +224,15 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
         const hedgedUSD = d.usd * fundedShare;
         if (hedgedUSD <= 1) return;
         takenByEntity.forEach((takenUSD, entityId) => {
-          const notionalUSD = hedgedUSD * (takenUSD / totalTakenUSD);
-          if (notionalUSD <= 1) return;
+          const notional = hedgedUSD * (takenUSD / totalTakenUSD);
+          if (notional <= 1) return;
           struck.push({
             id: `${regionId}-IRS-${k}-${week}-${seq++}`,
             classId: 'IRS',
             regionId,
             a: d.party,
             b: { kind: 'INSTITUTION', id: entityId },
-            notionalUSD: Math.round(notionalUSD),
+            notional: Math.round(notional),
             strike: parByTenor[k],
             referenceId: '',
             termKey: k,
