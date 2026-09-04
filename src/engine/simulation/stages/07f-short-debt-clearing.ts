@@ -333,11 +333,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         participants.push({ id: treasuryParticipantId(comp.ticker), currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
       });
 
-      const priorDealerInventory = new Map<string, number>();
-      (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => {
-        if (billIds.has(p.bondId)) priorDealerInventory.set(p.bondId, p.inventoryLocal);
-      });
-
       // PUB2b: a maturing bill rolls back into bills, so the CB's book keeps its shape rather
       // than drifting up the curve. Same size-with-no-reservation order as in 07c; read above,
       // because whether it bids also decides whether its book is part of the float.
@@ -391,7 +386,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           (outstandingByBond.get(b.key) ?? 0) - (heldFaceByBill.get(b.key) ?? 0));
       });
 
-      const result = clearFinancialAsset(instruments, [...participants, ...deskParticipants], priorDealerInventory, {
+      const result = clearFinancialAsset(instruments, [...participants, ...deskParticipants], {
         dealerSpreadBps: DEALER_SPREAD_BPS,
         // OWN7: the float here is a stock these participants already hold, so an unsold
         // position stays with its holder rather than falling to a dealer nobody names.
@@ -667,15 +662,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             ladderRowsOf(ctx.v2, govIssuer.id).filter((r) => ctx.v2.tranches.principalLocal[r] > 0.01));
         });
       }
-      // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the
-      // same regional array as bonds under their own keys, and the bond rows pass through.
-      const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
-      const bondDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !billIds.has(p.bondId));
-      const billDealerRows = activeBills.map((b) => ({
-        bondId: b.key,
-        inventoryLocal: deskViewById.get(b.key) ?? 0,
-      })).filter((r) => Math.abs(r.inventoryLocal) > 1);
-      reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: [...bondDealerRows, ...billDealerRows] };
+      // G3a: the desks' own bill inventory, owned by the banks that took it — register rows
+      // (§3.13-BOOK d3d); the bond rows on the same book are 07c's and do not move here.
+      applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
     }
 
     // ---- Commercial paper: a real book (CP), ONE INSTRUMENT PER PIECE OF PAPER ----
@@ -1106,7 +1095,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       setTradableFloat(cpInstruments, heldByInstitutionsLocal, cpDeskHeldLocal);
 
       const cpAllParticipants = [...cpParticipants, ...cpDeskParticipants];
-      const cpResult = clearFinancialAsset(cpInstruments, cpAllParticipants, new Map(), {
+      const cpResult = clearFinancialAsset(cpInstruments, cpAllParticipants, {
         dealerSpreadBps: DESK_SPREAD_BPS_BY_BOOK[CP_BOOK],
         // OWN7: the float here is a stock these participants already hold, so an unsold
         // position stays with its holder rather than falling to a dealer nobody names.

@@ -115,7 +115,7 @@ export function ownershipCoverage(
     materializeBook(v2o1, c.id).forEach(add);
     const bs = c.bankBalanceSheet; if (!bs || c.isDefaulted) return;
     // §9.13-CREDIT row 5 — THE DESKS, READ OFF THE BANKS THAT CARRY THEM. This used to take the
-    // three REGIONAL arrays, which are a derived roll-up (`regionalDeskView`) that keeps only the
+    // three REGIONAL arrays, a derived roll-up (deleted, §3.13-BOOK d3e) that kept only the
     // money — so the check read one representation for the corporate books and another for CP,
     // and neither could report a face. A desk carries its book AT MARKET, so its face is `units`,
     // and O6 has always read the per-bank books; now both sides of the O family agree.

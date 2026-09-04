@@ -122,27 +122,15 @@ export interface BankingSector {
   // 02b-bank-diversification.ts's applyCentralBankFacilities.
   srfBorrowingLocal: number;
   onRrpLendingLocal: number;
-  // Wall Street: real corporate-bond dealer inventory — the banking sector's shared secondary-
-  // market trading book (banks sit in the middle of the real institutional-entity clearing
-  // auction, absorbing client order imbalance onto their own book rather than the market simply
-  // failing to clear). §3.13: one position per PIECE OF PAPER this region's banks are currently
-  // long/short against a flat book — the same key the register and the auction use, since 07b
-  // clears per tranche. A genuine balance-sheet line updated only by real trade fills, not a
-  // formula. See stages/07b-corporate-bond-clearing.ts.
-  corpBondDealerInventory: { instrumentId: InstrumentId; inventoryLocal: number }[];
   // §3.13-BOOK d3b: A BANK'S OWN SOVEREIGN BOOK IS REGISTER ROWS. `sovereignBondHoldingsByBond`
   // (a value per bond, no quantity) and `sovereignBondHoldingsLocal` (its stored total) are
   // deleted; the bank's `GOV_BOND` rows live on its own register book under the `BANK` party,
   // read by `sovereign-register.ts:bankSovereignPositions` / `bankSovereignBookLocal`. The
   // regional aggregate that shares this type carries no book either — a regional figure is the
-  // sum of the named banks' rows.
-  // Real dealer inventory for the sovereign-bond clearing auction, by tenor bucket — the same
-  // shared-regional-dealer-desk role banks play for corporate bonds (corpBondDealerInventory),
-  // distinct from banks' own real investment-portfolio holdings (the register rows above).
-  sovBondDealerInventory: { bondId: InstrumentId; inventoryLocal: number }[];
-  // Same shared-regional-dealer-desk role for leveraged loans, keyed by the PIECE OF PAPER for
-  // the same reason the bond book is (§3.13 row 3). See 07d-leveraged-loan-clearing.ts.
-  loanDealerInventory: { instrumentId: InstrumentId; inventoryLocal: number }[];
+  // sum of the named banks' rows. §3.13-BOOK d3e: the same is true of the desks — the three
+  // regional roll-ups (`corpBondDealerInventory`, `sovBondDealerInventory`, `loanDealerInventory`)
+  // that 02b rebuilt each week off the desks' rows are deleted; a regional desk view is
+  // `desk-register.ts:regionalDeskViewOf`, read when wanted.
   /**
    * WS6 — this bank's overnight general-collateral repo book, struck fresh each week by
    * stages/repo-clearing.ts and matured (principal AND interest, as explicit flows) at the
@@ -176,11 +164,9 @@ export interface BankingSector {
   /** XB2b: the FX forward desk's live book — inventory, margin held, and notional written. */
   fxDealerBook?: FxDealerBook;
   /**
-   * G3a — THIS bank's own market-making inventory, by book. The three arrays above
-   * (`corpBondDealerInventory`, `sovBondDealerInventory`, `loanDealerInventory`) are now the
-   * derived regional SUM of these, kept for the readers that want one aggregate; this is the
-   * owned position, sized by the bank's own leverage headroom, funded out of its own reserves,
-   * and decided by a schedule it posts in the auction. See domain/dealer-desk.ts.
+   * G3a — THIS bank's own market-making inventory, by book: the owned position, sized by the
+   * bank's own leverage headroom, funded out of its own reserves, and decided by a schedule it
+   * posts in the auction. See domain/dealer-desk.ts.
    */
   /** §3.13-BOOK d3d: the desk's PAPER is register rows on the bank's SECURITIES book
    *  (`engine/desk-register.ts`, the `BANK_SECURITIES` party); what stays on the sheet is the

@@ -498,7 +498,7 @@ export function runRegionalRepoSession(
     }
     if (participants.length === 0) return { clearedBps: args.currentBps, lentByParty: new Map<string, number>(), totalLentLocal: 0 };
 
-    const result = clearFinancialAsset([instrument], participants, new Map(), {
+    const result = clearFinancialAsset([instrument], participants, {
       // Bilateral GC at one rate — no desk in the middle taking a spread out of it.
       dealerSpreadBps: 0,
       // Overnight money reprices to the corridor the week policy moves; the corridor — the

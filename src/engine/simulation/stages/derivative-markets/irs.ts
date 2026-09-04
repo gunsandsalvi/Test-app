@@ -200,7 +200,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
     });
 
-    const result = clearFinancialAsset(instruments, participants, new Map(), {
+    const result = clearFinancialAsset(instruments, participants, {
       // Bilateral, cleared through the same house as every other book; the desks' spread on it
       // is DER's next slice, with the CDS and option books that share the machinery.
       dealerSpreadBps: 0,

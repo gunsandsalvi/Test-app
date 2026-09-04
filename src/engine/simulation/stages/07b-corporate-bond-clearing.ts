@@ -448,9 +448,6 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       priceAtSpread, demandStaging: DS,
     });
 
-    const priorDealerInventoryById = new Map<InstrumentId, number>();
-    (reg.bankingSector.corpBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.instrumentId, p.inventoryLocal));
-
     // ETF: the index funds tracking this book's benchmarks. A fund posts a SIZE with no
     // reservation level — its benchmark weight at whatever the market is asking — which is the
     // one demand shape the engine could not previously express and a large real force in credit.
@@ -522,7 +519,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     setTradableFloat(instruments, heldByInstitutionsLocal, deskHeldLocal);
 
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
-    const result = clearFinancialAsset(instruments, allParticipants, priorDealerInventoryById, {
+    const result = clearFinancialAsset(instruments, allParticipants, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       // OWN7: the float here is a stock these participants already hold, so an unsold
       // position stays with its holder rather than falling to a dealer nobody names.
@@ -577,7 +574,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Apply: each desk's inventory, onto the bank that carried it. The regional array is now
     // the DERIVED sum of the named desks — nothing decides off it (G3a).
-    const deskViewByInstrument = applyDealerDeskFills({
+    applyDealerDeskFills({
       piById, ctx, banks: regionBanks, book: BOOK, instruments, result,
       // Only ids this session priced reach here (`applyDealerDeskFills` tests `clearedIds` before
       // every call); par is the answer for anything else, which is what a book nobody printed is
@@ -607,11 +604,6 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         // rather than re-striking a coupon off a curve this book has already moved past.
         termsOf: (o) => primaryTermsById.get(primaryTrancheId(o.issuerId, o.purpose, week)),
       });
-    const newDealerInventory: { instrumentId: InstrumentId; inventoryLocal: number }[] = [];
-    deskViewByInstrument.forEach((inventoryLocal, instrumentId) => {
-      if (Math.abs(inventoryLocal) > 1) newDealerInventory.push({ instrumentId, inventoryLocal });
-    });
-    reg.bankingSector = { ...reg.bankingSector, corpBondDealerInventory: newDealerInventory };
 
     // SETL6: the book's whole cash side, through the clearing house.
     const entityIds = new Set(bookEntities.map((e) => e.id));

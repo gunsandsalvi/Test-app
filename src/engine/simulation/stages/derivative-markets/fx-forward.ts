@@ -299,7 +299,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       };
       // Undamped: both sides are genuinely elastic here, so the level is the market's, and a
       // damper would be the only thing that could print instead of it.
-      const result = clearFinancialAsset([instrument], participants, new Map(), { dealerSpreadBps: 0});
+      const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0});
       const basisBps = Math.max(0, result.newStatById.get(instrumentId) ?? 0);
       clearedBasisBps.set(key, basisBps);
       result.newParticipantHoldings.forEach((byInstrument, entityId) => {

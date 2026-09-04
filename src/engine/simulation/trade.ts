@@ -2,7 +2,6 @@ import { GameState, Position } from '../../types';
 import { random } from '../rng';
 import { DESK_BOOK_BY_ASSET_TYPE } from '../dealers';
 import { DESK_BOOK_KIND } from '../../domain/dealer-desk';
-import { regionalDeskViewOf } from '../desk-register';
 import { transferHolding } from '../ledger/holdings-ledger';
 import { newWireJournal, setActiveWireJournal, setActiveWireWorld } from '../ledger/wire';
 import { wireWorldOf } from '../ledger/wire-world';
@@ -15,7 +14,6 @@ import { DERIVATIVE_CLASSES } from '../../domain/derivatives/registry';
 import { DerivativeClassId } from '../../domain/derivatives/contract';
 import { equityInstrumentId } from '../../domain/instrument-keys';
 import { asInstrumentId, type InstrumentId } from '../../domain/ids';
-import { banksOf } from '../../domain/company';
 
 /** The player's legacy position types onto the registry's classes; anything the registry does
  *  not know is charged at the FX forward's add-on, which is what every derivative paid before. */
@@ -120,23 +118,6 @@ export function executeTrade(
       // A3.6: the desk pays for inventory from the bank's account and the fee lands on it.
       adjustBankReserves(v2, bank.id, -inventoryDeltaLocal + incomeLocal);
 
-      // The region's view of that book, kept in step for the readers that want one aggregate.
-      const region = updatedRegions[posData.region];
-      if (region) {
-        // §3.13: both credit books are keyed by the PAPER — 07b and 07d clear per tranche — so
-        // the shared walk hands back ids and each line names its own.
-        const view = (b: string) => Array.from(regionalDeskViewOf(
-          ensureV2(state), banksOf(updatedCompanies, posData.region).map((c) => c.id), DESK_BOOK_KIND[b]
-        ).entries()).filter(([, usd]) => Math.abs(usd) > 1);
-        updatedRegions[posData.region] = {
-          ...region,
-          bankingSector: {
-            ...region.bankingSector,
-            corpBondDealerInventory: view('corporate bond').map(([instrumentId, inventoryLocal]) => ({ instrumentId, inventoryLocal })),
-            loanDealerInventory: view('leveraged loan').map(([instrumentId, inventoryLocal]) => ({ instrumentId, inventoryLocal })),
-          },
-        };
-      }
     }
   }
 

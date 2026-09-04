@@ -1076,10 +1076,8 @@ export function registerNativeKernel(fn: typeof nativeKernel): void { nativeKern
 export function clearFinancialAsset(
   instruments: ClearingInstrument[],
   participants: ClearingParticipant[],
-  priorDealerInventoryById: Map<string, number>,
   params: ClearingParams
 ): ClearingResult {
-  void priorDealerInventoryById;
   const nDense = instruments.length;
   const denseHold = ensureDenseScratch(nDense * participants.length);
   const myEpoch = denseEpoch;

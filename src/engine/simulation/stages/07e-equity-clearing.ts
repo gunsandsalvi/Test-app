@@ -453,7 +453,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     });
 
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants, ...(householdParticipant ? [householdParticipant] : [])];
-    const result = clearFinancialAsset(instruments, allParticipants, new Map(), {
+    const result = clearFinancialAsset(instruments, allParticipants, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       // OWN7: the float here is a stock these participants already hold, so an unsold
       // position stays with its holder rather than falling to a dealer nobody names.

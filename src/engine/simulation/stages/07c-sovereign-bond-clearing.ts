@@ -22,7 +22,7 @@
  * Foreign and central-bank (QE) holdings stay passive/residual this slice, same scoping as
  * corporate bonds' slice 1.
  *
- * Banks also collectively play the dealer role (sovBondDealerInventory) exactly as they do for
+ * Banks also play the dealer role (their desks' register rows) exactly as they do for
  * corporate bonds — real primary-dealer market-making, distinct from their own real portfolio
  * holdings above.
  *
@@ -502,9 +502,6 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       return { id: bank.ticker, currentHoldingsByInstrumentId: currentByBond, demandByInstrumentId };
     });
 
-    const priorDealerInventoryById = new Map<string, number>();
-    (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.bondId, p.inventoryLocal));
-
     // G3a: each bank's govvie desk, distinct from the investment book it also runs above.
     const deskParticipants = buildDealerDeskParticipants({
       ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
@@ -516,7 +513,6 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const result = clearFinancialAsset(
       instruments,
       participants,
-      priorDealerInventoryById,
       {
         dealerSpreadBps: DEALER_SPREAD_BPS,
         // OWN7: the float here is a stock these participants already hold, so an unsold
@@ -647,18 +643,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       reg.centralBankSheet.lastOpenMarketPurchasesLocal = Math.round(filled);
     }
 
-    // Apply: the desks' inventory, owned by the banks that took it. This auction prices the
-    // BONDS only — the bill rows (07f's book) pass through, the same partition the
-    // banks' own holdings above obey.
-    const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
-    // Rows this auction did not price pass through: the bills, which are 07f's book.
-    const billDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !ownInstrumentIds.has(p.bondId));
-    const newDealerInventory: { bondId: InstrumentId; inventoryLocal: number }[] = [];
-    deskViewById.forEach((inventoryLocal, instrumentId) => {
-      // The desk's row names the BOND (the field is still called bondId; it is the id now).
-      if (Math.abs(inventoryLocal) > 1) newDealerInventory.push({ bondId: instrumentId, inventoryLocal });
-    });
-    reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: [...newDealerInventory, ...billDealerRows] };
+    // Apply: the desks' inventory, owned by the banks that took it — register rows (§3.13-BOOK
+    // d3d), and only the rows of the names this auction priced move: the bill rows are 07f's.
+    applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
 
     // SETL6: the book's whole cash side, through the clearing house. The central bank's leg is
     // named and settles to nothing — it pays with reserves it creates, which is what makes an

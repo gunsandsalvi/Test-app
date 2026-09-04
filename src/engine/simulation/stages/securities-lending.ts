@@ -421,7 +421,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       return;
     }
 
-    const result = clearFinancialAsset(instruments, participants, new Map(), {
+    const result = clearFinancialAsset(instruments, participants, {
       // Bilateral between named holders and named funds; no dealer stands between them.
       dealerSpreadBps: 0,
     });

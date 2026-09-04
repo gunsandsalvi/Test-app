@@ -209,7 +209,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
 
       if (participants.length === 0) return;
 
-      const result = clearFinancialAsset(instruments, participants, new Map(), {
+      const result = clearFinancialAsset(instruments, participants, {
         // Bilateral between named hedgers, desks and funds; nobody stands between them yet.
         dealerSpreadBps: 0,
       });

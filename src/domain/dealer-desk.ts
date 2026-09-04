@@ -151,17 +151,3 @@ export function dealerDeskCapacityLocal(args: {
   ));
 }
 
-/** The regional view a UI (and the pre-G3 readers) still want: every desk's position in one
- *  book, summed by name. Derived — no one writes it, and nothing may decide off it. */
-export function regionalDeskView(
-  /** §3.13-BOOK d3d: each desk's rows in the book (`deskRowsOf`), one array per bank. */
-  positionsByBank: readonly (readonly DealerDeskPosition[])[],
-): Map<InstrumentId, number> {
-  const byInstrument = new Map<InstrumentId, number>();
-  positionsByBank.forEach((positions) => {
-    positions.forEach((p) => {
-      byInstrument.set(p.instrumentId, (byInstrument.get(p.instrumentId) ?? 0) + p.inventoryLocal);
-    });
-  });
-  return byInstrument;
-}

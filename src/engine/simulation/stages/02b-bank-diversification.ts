@@ -31,8 +31,6 @@ import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
-import { DESK_BOOK_KIND } from '../../../domain/dealer-desk';
-import { regionalDeskViewOf } from '../../desk-register';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { sovereignCouponByBond } from '../../../domain/government';
 import { payHoldersCash } from './shared-helpers';
@@ -68,9 +66,6 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     itemizedHoldings: [],
     srfBorrowingLocal: bs.srfBorrowingLocal * share,
     onRrpLendingLocal: bs.onRrpLendingLocal * share,
-    corpBondDealerInventory: [],
-    sovBondDealerInventory: [],
-    loanDealerInventory: [],
     repoLentLocal: bs.repoLentLocal * share,
     repoBorrowedLocal: bs.repoBorrowedLocal * share,
     repoEncumberedCollateralLocal: bs.repoEncumberedCollateralLocal * share,
@@ -497,11 +492,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // one source of truth, now genuinely derived from real per-bank state instead of the
     // other way around.
     const sumField = (f: (s: BankingSector) => number) => newSheets.reduce((s, { sheet }) => s + f(sheet), 0);
-    // The region's view of one dealer book — every named desk's position, summed by name.
-    // §3.13-BOOK d3d: read off the desks' register rows, by the book's KIND.
-    const deskView = (book: string) =>
-      Array.from(regionalDeskViewOf(ctx.v2, newSheets.map(({ bank }) => bank.id), DESK_BOOK_KIND[book]).entries())
-        .filter(([, usd]) => Math.abs(usd) > 1);
     const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.id)) + bankSovereignBookLocal(ctx.v2, bank.id) + bankReservesOf(ctx.v2, bank.id);
     const totalAssets = newSheets.reduce((s, e) => s + assetsOf(e), 0);
     const weightedAvg = (f: (s: BankingSector) => number) =>
@@ -533,16 +523,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // §3.13-BOOK d3b: the aggregate carries no sovereign book — `regionBankSovereignValueRecord`
       // is the regional read, off the banks' register rows.
       // Dealer inventory is now OWNED, one desk per named bank (domain/dealer-desk.ts).
-      // These three arrays are the derived regional view of those desks and nothing decides off
-      // them — the books that clear later this week overwrite them with their own session's
-      // result, and a desk's position is only ever written by the bank that took it.
-      corpBondDealerInventory: deskView('corporate bond').map(([instrumentId, inventoryLocal]) => ({ instrumentId, inventoryLocal })),
-      sovBondDealerInventory: [
-        // §3.13-SOV row 3: the desk row names the BOND (the field is still called bondId).
-        // The bills and the bonds share one register kind, so one read covers both books.
-        ...deskView('sovereign bond').map(([instrumentId, inventoryLocal]) => ({ bondId: instrumentId, inventoryLocal })),
-      ],
-      loanDealerInventory: deskView('leveraged loan').map(([instrumentId, inventoryLocal]) => ({ instrumentId, inventoryLocal })),
       // The region's overnight book is the sum of the named banks' real positions. The
       // RATE is one market print per region and lives on reg.repoRateAnnual — never a second
       // copy on any sheet.

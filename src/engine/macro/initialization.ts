@@ -466,9 +466,6 @@ function buildRegion(regionId: RegionId): Region {
     itemizedHoldings: [],
     srfBorrowingLocal: 0,
     onRrpLendingLocal: 0,
-    corpBondDealerInventory: [],
-    sovBondDealerInventory: [],
-    loanDealerInventory: [],
     // WS6: overnight positions are struck weekly and mature at the next session, so a cold
     // start opens with an empty book — the same shape the weekly engine produces (§7.4).
     repoLentLocal: 0,

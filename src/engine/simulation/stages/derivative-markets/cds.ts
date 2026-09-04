@@ -200,7 +200,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
 
     if (participants.length === 0) return;
 
-    const result = clearFinancialAsset(instruments, participants, new Map(), {
+    const result = clearFinancialAsset(instruments, participants, {
       // Bilateral between named desks and funds; the clearing house takes no fee on it yet.
       dealerSpreadBps: 0,
     });

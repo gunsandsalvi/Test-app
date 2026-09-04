@@ -555,11 +555,8 @@ export function evolveBankingSector(
     // G3c: the rate this bank actually decided to pay, published so nothing else has to
     // guess at it (the money fund read `policyRate x 0.45` — a second copy of a retired number).
     depositRateAnnual: Number(depositRate.toFixed(6)),
-    corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],
     // CAL: carried, never written here — the calendar owns this balance on both books.
     sovereignAccruedCouponLocal: prevBanking.sovereignAccruedCouponLocal ?? 0,
-    sovBondDealerInventory: prevBanking.sovBondDealerInventory || [],
-    loanDealerInventory: prevBanking.loanDealerInventory || [],
   };
   // §5-WIRES A3.6c-iii: the household line after this evolution's two flows (the loan interest
   // debited, the deposit interest credited), TO THE DOLLAR — the stated rounding the field carried.

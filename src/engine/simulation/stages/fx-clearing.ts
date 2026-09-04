@@ -342,7 +342,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       return;
     }
 
-    const result = clearFinancialAsset([instrument], participants, new Map(), {
+    const result = clearFinancialAsset([instrument], participants, {
       dealerSpreadBps: 0,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `fx:${id}`));

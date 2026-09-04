@@ -509,15 +509,14 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d3e. **THE REGIONAL DESK ROLL-UPS DIE.** `bankingSector.sovBondDealerInventory`,
-        `corpBondDealerInventory` and `loanDealerInventory` are a second representation of the
-        desks' register rows — 02b rebuilds them every week off `regionalDeskViewOf` and, its own
-        comment says, nothing decides off them. Every reader asks `desk-register.ts` instead, the
-        three fields and `domain/dealer-desk.ts:regionalDeskView` are deleted, and 02b's rebuild
-        loses the three lines. With them goes the last seat-keyed desk read: the accrual and
-        corporate-action passes key a desk's holdings by its clearing seat (`<ticker>::DESK`) and
-        cross back to the party through `holderPayee`'s desk arm; keyed by the BANK off the rows,
-        the arm goes. Byte-identical.
+    d3f. **THE ACCRUAL LEDGER'S DESK KEY IS THE BOOK.** `holderAccruedInterestLocal` (state) and
+        the corporate-action split key a desk by its clearing SEAT (`<ticker>::DESK`,
+        `dealerDeskParticipantId`) and cross back to the party through `holderPayee`'s desk arm
+        — a ticker→id lookup, by elimination. The key becomes the desk's register BOOK id
+        (`deskBookId`), as an institution's key is its book id, and the payee is what
+        `registerBooks` says for that book: the arm, `dealerDeskTicker` at the five readers
+        (`shared-helpers`, `O8`'s accrued-interest arm, `bank-resolution`'s re-key, the three
+        books' accrual writes) and `bookDeskIncome`'s by-ticker map go. Byte-identical.
     d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
        share and contract gets a row: kind, issuer, **currency**, issued units, and nothing else.
        Terms stay in the class store, so the index copies no quantity and cannot drift.
@@ -1726,6 +1725,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d3e — THE REGIONAL DESK ROLL-UPS DIE.** `bankingSector.corpBondDealerInventory`,
+`sovBondDealerInventory` and `loanDealerInventory` are deleted, with `domain/dealer-desk.ts:
+regionalDeskView`. They were a second representation of the desks' register rows: 02b rebuilt
+them each week off the rows, the four flow books rewrote them after their fills (07c and 07f
+partitioning one array between bills and bonds), `trade.ts` rebuilt two after a player fill, and
+the seed's stock reconciliation read one — always empty at the seed. Their one decision-side
+reader was the clearing engine's `priorDealerInventoryById` parameter, which `void`ed it: the
+parameter is deleted from `clearFinancialAsset` and its fourteen callers, and
+`applyDealerDeskFills` returns nothing (its regional view was only ever fed back into the arrays).
+`regionalDeskViewOf` stays as the read for anything that wants a regional view. Byte-identical.
+The seat-keyed accrual ledger the d3d entry named is its own step, d3f, inserted after this one.
+Gates green; no run.
 
 **13-BOOK d3d — THE DESKS' INVENTORIES ARE REGISTER ROWS.** `BankingSector.dealerDeskInventory`
 is deleted, and with it the last holder class outside the register. A desk's paper is rows on the

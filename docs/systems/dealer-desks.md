@@ -195,8 +195,9 @@ own equity supports, less what its other desks already carry, floored by the lev
 and its cash is `bankReservesOf` above the bank's own deposit buffer. It is **not** derived from
 the residual imbalance: the flow books pass `unsoldStaysWithHolder: true`
 (`07b:482`, `07c`, `07d:440`, `07e:456`, `07f:354,905`), which rations both sides and leaves
-`out.dealerInventory = 0` by construction, and `reg.bankingSector.corpBondDealerInventory` is now
-`regionalDeskView` — a *derived read* of what owned desks hold (`07b:568-572`), not a residual.
+`out.dealerInventory = 0` by construction, and the regional dealer arrays that used to hold that
+residual are gone (§9.13-BOOK d3e): a regional view of what owned desks hold is a *read* of their
+register rows (`regionalDeskViewOf`), never a store.
 
 So D4.a follows: a desk at zero capacity simply stops posting, the level has to move to find real
 holders, and if it cannot, the auction fails. F1 is the same fact. This is the shape every other

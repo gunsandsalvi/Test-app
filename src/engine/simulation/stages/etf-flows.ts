@@ -733,7 +733,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     });
     if (participants.length === 0) return;
 
-    const result = clearFinancialAsset([instrument], participants, new Map(), {
+    const result = clearFinancialAsset([instrument], participants, {
       // The AP's own spread is its capacity constraint, already priced above; the book itself has
       // no separate dealer standing in it.
       dealerSpreadBps: 0,

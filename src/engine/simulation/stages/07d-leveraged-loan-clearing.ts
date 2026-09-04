@@ -30,7 +30,7 @@
  * its bonds lives where it belongs — in what a first-lien holder's economics ask for, not in a
  * fixed multiple between two statistics.
  *
- * Banks play the dealer role (loanDealerInventory) exactly as they do for corporate bonds — real
+ * Banks play the dealer role (their desks' register rows) exactly as they do for corporate bonds — real
  * market-making on the syndicated/traded portion, distinct from a bank's own real business loan
  * book (businessLoanBookLocal), which is driven by real lending activity, not a portfolio
  * allocation decision this engine models.
@@ -389,9 +389,6 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       priceAtSpread, demandStaging: DS,
     });
 
-    const priorDealerInventoryById = new Map<string, number>();
-    (reg.bankingSector.loanDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.instrumentId, p.inventoryLocal));
-
     // ETF: the index funds tracking this book's benchmarks. A fund posts a SIZE with no
     // reservation level — its benchmark weight at whatever the market is asking — which is the
     // one demand shape the engine could not previously express and a large real force in credit.
@@ -457,7 +454,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     setTradableFloat(instruments, heldByInstitutionsLocal, deskHeldLocal);
 
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
-    const result = clearFinancialAsset(instruments, allParticipants, priorDealerInventoryById, {
+    const result = clearFinancialAsset(instruments, allParticipants, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       // OWN7: the float here is a stock these participants already hold, so an unsold position
       // stays with its holder rather than falling to a dealer nobody names.
@@ -498,7 +495,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Apply: real dealer inventory, owned by the desks that took it; the regional array is the
     // derived sum (G3a).
-    const deskViewByInstrument = applyDealerDeskFills({
+    applyDealerDeskFills({
       piById, ctx, banks: regionBanks, book: BOOK, instruments, result,
       unitPriceOf: (id) => clearedPriceById.get(id) ?? 1,
     });
@@ -530,11 +527,6 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
           return t ? { couponRate: t.marginBps / 10000, maturityWeek: t.maturityWeek } : undefined;
         },
       });
-    const newDealerInventory: { instrumentId: InstrumentId; inventoryLocal: number }[] = [];
-    deskViewByInstrument.forEach((inventoryLocal, instrumentId) => {
-      if (Math.abs(inventoryLocal) > 1) newDealerInventory.push({ instrumentId, inventoryLocal });
-    });
-    reg.bankingSector = { ...reg.bankingSector, loanDealerInventory: newDealerInventory };
 
     // SETL6: the book's whole cash side, through the clearing house.
     const entityIds = new Set(bookEntities.map((e) => e.id));

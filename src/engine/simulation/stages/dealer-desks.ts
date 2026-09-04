@@ -16,7 +16,7 @@ import { Company, RegionId } from '../../../types';
 import {
   dealerDeskCapacityLocal, dealerDeskParticipantId, dealerDeskTicker, DESK_BOOK_KIND,
 } from '../../../domain/dealer-desk';
-import { deskRowsOf, deskGrossLocal, regionalDeskViewOf, bankBookAssetsLocal, type DeskRow } from '../../desk-register';
+import { deskRowsOf, deskGrossLocal, bankBookAssetsLocal, type DeskRow } from '../../desk-register';
 import { LeadBankCandidate } from '../../../domain/primary-market';
 import { leverageHeadroomLocal, BASEL_MIN_LEVERAGE_RATIO } from '../../macro/banking';
 import { ClearingInstrument, ClearingParticipant, ClearingResult, ParticipantDemand } from './financial-clearing-engine';
@@ -187,17 +187,15 @@ export function applyDealerDeskFills(args: {
   /** int flip — participant index by id; when present the desk fills read the dense
    *  holdings matrix and the lazy map is never materialized for this book. */
   piById?: Map<string, number>;
-}): Map<InstrumentId, number> {
+}): void {
   const { ctx, banks, book, result } = args;
   const unitPrice = (id: InstrumentId) => Math.max(1e-9, args.unitPriceOf ? args.unitPriceOf(id) : 1);
   const kind = DESK_BOOK_KIND[book] ?? defect(`desk book '${book}' names no register kind — its fills cannot be wired`);
   const inUnits = args.unitPriceOf !== undefined;
   const clearedIds = new Set(args.instruments.map((i) => i.id));
-  const bankIds: string[] = [];
   banks.forEach((bank) => {
     const sheet = sheetOf(ctx, bank);
     if (!sheet) return;
-    bankIds.push(bank.id);
     const deskId = dealerDeskParticipantId(bank.ticker);
     const dpi = args.piById?.get(deskId);
     if (args.piById !== undefined && dpi === undefined) return;
@@ -293,7 +291,6 @@ export function applyDealerDeskFills(args: {
         markToMarketLocal, `desk mark-to-market: ${book}`, bank.ticker),
     });
   });
-  return regionalDeskViewOf(ctx.v2, bankIds, kind, clearedIds.size > 0 && kind === 'GOV_BOND' ? clearedIds : undefined);
 }
 
 /** The dealer capacity live in one book across a region's banks — what a new deal can be
