@@ -55,7 +55,7 @@ import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementLocal, institutionSpendableLocal, PartyRef } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, PrimaryTake, participantPartyOf } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, PrimaryTake, participantPartyOf, parHoldingRow, writeBackClearedFills } from './book-settlement';
 import { clearedBookDelta, transferHolding } from '../../ledger/holdings-ledger';
 import { wireCentralBankFills } from './central-bank-demand';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
@@ -896,11 +896,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         });
       });
 
-      const cpHoldingRow = (instrumentId: InstrumentId, faceLocal: number): ItemizedHolding =>
-        // Written in PAR space, as every other credit book's fills are: the row carries the FACE
-        // it holds and the cash leg paid the cleared price for it. What the register is WORTH is
-        // `face × price` — §3.13's item 4, which cannot land one book at a time (§9.13 part 3).
-        ({ instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalLocal: faceLocal, units: faceLocal });
+      const cpHoldingRow = parHoldingRow('COMMERCIAL_PAPER', regionId);
 
       // ---- 2. THE BOOK. Every live piece of this region's commercial paper, plus the deals
       // brought this week — each with its own remaining life and its own price.
@@ -1166,26 +1162,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // ---- 4. APPLY. The rows name the TRANCHE the auction priced — there is nothing left to
       // split: the issuer-level split file is deleted with this book, its last caller.
       const cpPiById = new Map(cpAllParticipants.map((pp, pi) => [pp.id, pi]));
-      cpEntities.forEach((entity) => {
-        const pi = cpPiById.get(entity.id);
-        const claimed = heldByTrancheByEntity.get(entity.id);
-        const rows: ItemizedHolding[] = [];
-        if (pi !== undefined) {
-          const base = pi * cpResult.nInstruments;
-          for (let bi = 0; bi < cpResult.nInstruments; bi++) {
-            const faceLocal = cpResult.holdingsMatrix[base + bi];
-            if (faceLocal > 1) rows.push(cpHoldingRow(papers[bi].id, faceLocal));
-          }
-        }
-        // A stage may only rewrite what it CLEARED (§7.34): a claimed row this book did not price
-        // — paper that has run off, standing at whatever the borrower's cash could not reach —
-        // survives the session, and so does every row of an entity that got no seat at all.
-        if (claimed) claimed.forEach((faceLocal, instrumentId) => {
-          if (!(faceLocal > 1)) return;
-          if (pi !== undefined && cpFaceById.has(instrumentId)) return;
-          rows.push(cpHoldingRow(instrumentId, faceLocal));
-        });
-        store.append(entity.id, rows);
+      writeBackClearedFills({
+        store, entities: cpEntities, piById: cpPiById, claimedByEntity: heldByTrancheByEntity,
+        result: cpResult, instrumentIdOfColumn: (bi) => papers[bi].id,
+        priced: cpFaceById, row: cpHoldingRow,
       });
 
       cpIssuers.forEach((iss) => {

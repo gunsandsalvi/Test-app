@@ -434,9 +434,6 @@ written from here):
     **C. THE SECOND ANSWERS — DONE, all five, in §9.**
 
     **D. THE RULES WRITTEN MORE THAN ONCE — collapse, and the branding then becomes small.**
-    D2. The "may only rewrite what it CLEARED" write-back loop: 3 copies × ~22 lines, the largest
-        verbatim block in the set.
-    D3. The `ItemizedHolding` row builder: 6 copies (3 named, 3 inline) + 2 in one file for shares.
     D4. The float build, both halves: 5 + 5 copies.
     D5. The credit demand build: 2 copies × ~80 lines, and **07b applies a sub-investment-grade
         factor that 07d does not**. One copy carries a rule the other lost.
@@ -1653,6 +1650,26 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ D2+D3 — THE LARGEST VERBATIM BLOCK, AND THE ROW IT BUILDS.** Three books wrote the
+"may only rewrite what it CLEARED" write-back loop word for word: fills out of the holdings
+matrix, then every CLAIMED row the session did not price, carried forward. The rule it encodes is
+§7.34's, and it is not obvious — two kinds of claimed row survive a session and both would
+otherwise vanish with no cash leg: paper this book did not price (a claim on a tranche that has
+retired, standing at whatever the borrower's cash could not reach), and every row of an entity
+that got no seat at all, which sold nothing and must keep everything. Rebuilding a book from
+fills alone is what deleted 26.6B of bank bills in week 1 the last time a stage did it. A rule
+that subtle, written three times, is three chances to lose it. `writeBackClearedFills` in
+`book-settlement.ts` states it once.
+
+D3 goes with it because it is the same loop's inner line: the fill ROW, in PAR space — the row
+carries the FACE and the cash leg paid the cleared price for it. `parHoldingRow` is now the one
+builder, so when §3.13's item 4 finally lands the mark, there is one place that has to change
+instead of eight. 07c's write-back stays where it is: it rebuilds a BANK'S SHEET rather than
+register rows, which is a different shape and a different store.
+
+Code lines 56 in, 62 out — the helper's own comment is longer than the block it replaced, because
+the rule needed writing down properly once.
 
 **13-READ D1 — THE PARTICIPANT ID GRAMMAR GETS AN OWNER.** A clearing book names its bidders by
 string, and those strings encode WHO the bidder is. Six books each wrote the translation back to a

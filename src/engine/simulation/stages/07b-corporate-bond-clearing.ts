@@ -70,7 +70,7 @@
 
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
 import { InstrumentId } from '../../../domain/ids';
-import { GameState, RegionId, ItemizedHolding, Company, PrimaryOffering } from '../../../types';
+import { GameState, RegionId, Company, PrimaryOffering } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY, issuerIdOf, trancheScheduleOf, trancheIdOf } from '../../../engine2/tranches';
 import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
@@ -93,7 +93,7 @@ import {
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetLocal } from './institutional-balance-sheet';
 import { institutionUnsettledLessCollateralLocal, institutionSpendableLocal, PartyRef } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, participantPartyOf } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, participantPartyOf, parHoldingRow, writeBackClearedFills } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
@@ -666,35 +666,10 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // SCALE C1: the entities here ARE the store's working copies, and the fill rows are appended
     // to the store for the single write-back after 07e. SETL6: the cash leg is settled below as
     // payment instructions, not mutated here.
-    const holdingRow = (instrumentId: InstrumentId, faceLocal: number): ItemizedHolding =>
-      // Written in PAR space, as the sovereign's fills are (§9.13-SOV row 4): the row carries the
-      // FACE it holds and the cash leg above paid the cleared price for it. What the register is
-      // WORTH is `face × price`, and `P5` measures the gap until the mark lands — §3.13's item 4,
-      // which cannot land one book at a time (§9.13 part 3).
-      ({ instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalLocal: faceLocal, units: faceLocal });
-    bookEntities.forEach((entity) => {
-      const pi = piById.get(entity.id);
-      const claimed = claimedByEntity.get(entity.id);
-      const newCorpHoldings: ItemizedHolding[] = [];
-      if (pi !== undefined) {
-        const base = pi * result.nInstruments;
-        for (let bi = 0; bi < result.nInstruments; bi++) {
-          const faceLocal = result.holdingsMatrix[base + bi];
-          if (faceLocal > 1) newCorpHoldings.push(holdingRow(bonds[bi].id, faceLocal));
-        }
-      }
-      // A stage may only rewrite what it CLEARED (§7.34 / the WS5 bug). Two kinds of claimed row
-      // survive this session untouched, and both would otherwise vanish with no cash leg:
-      //   · paper this book did not price — a claim on a tranche that has retired, standing at
-      //     whatever the borrower's cash could not reach this week and claimed again next week;
-      //   · every row of an entity that ended up with no seat in the auction at all (an index
-      //     fund with nothing investable), which sold nothing and must therefore keep everything.
-      if (claimed) claimed.forEach((faceLocal, instrumentId) => {
-        if (!(faceLocal > 1)) return;
-        if (pi !== undefined && bondFaceById.has(instrumentId)) return;
-        newCorpHoldings.push(holdingRow(instrumentId, faceLocal));
-      });
-      store.append(entity.id, newCorpHoldings);
+    const holdingRow = parHoldingRow('CORP_BOND', regionId);
+    writeBackClearedFills({
+      store, entities: bookEntities, piById, claimedByEntity, result,
+      instrumentIdOfColumn: (bi) => bonds[bi].id, priced: bondFaceById, row: holdingRow,
     });
 
     // Apply: each desk's inventory, onto the bank that carried it. The regional array is now

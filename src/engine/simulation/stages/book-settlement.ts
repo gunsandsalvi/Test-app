@@ -45,6 +45,7 @@ import { banksOf } from '../../../domain/company';
 import { bankTickerOfParticipant, treasuryTickerOfParticipant, householdRegionOfParticipant } from '../../../domain/participant-keys';
 import { dealerDeskPartyOf } from './dealer-desks';
 import { CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
+import type { ItemizedHolding } from '../../../domain/banking';
 
 /** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
 export interface FeeDesk { ticker: string; share: number }
@@ -137,6 +138,71 @@ export function accruedOnFills(
  * The accrual walks name their holders the same way (`shared-helpers:applyHolderInterestAccruals`,
  * `sovereign-calendar:accrueSovereignHolders`), so a balance moved here is a balance they find.
  */
+/**
+ * §3.13-READ D3 — A FILL ROW, IN PAR SPACE. Six named copies and two inline ones wrote this
+ * object literal, and every one of them said the same thing: the row carries the FACE it holds,
+ * and the cash leg beside it paid the cleared price for that face. What the register is WORTH is
+ * `face × price`, which `P5` measures until the mark lands (§3.13's item 4, which cannot land one
+ * book at a time). Written once, it stays that way when the mark does land.
+ */
+export function parHoldingRow(
+  instrumentType: ItemizedHolding['instrumentType'],
+  issuerRegion: RegionId
+): (instrumentId: InstrumentId, faceLocal: number) => ItemizedHolding {
+  return (instrumentId, faceLocal) =>
+    ({ instrumentId, instrumentType, issuerRegion, quantityOrNotionalLocal: faceLocal, units: faceLocal });
+}
+
+/**
+ * §3.13-READ D2 — WRITE THIS SESSION'S FILLS BACK, AND ONLY WHAT IT CLEARED (§7.34, the WS5 bug).
+ *
+ * Three books wrote this loop verbatim — the largest duplicated block in the set. Two kinds of
+ * CLAIMED row survive a session untouched, and both would otherwise vanish with no cash leg:
+ *
+ *   · **Paper this book did not price** — a claim on a tranche that has retired, standing at
+ *     whatever the borrower's cash could not reach this week and claimed again next week.
+ *   · **Every row of an entity that got no seat in the auction at all** (an index fund with
+ *     nothing investable): it sold nothing, so it must keep everything.
+ *
+ * A claimed row the book DID price is the one case the fill replaces, because the fill is the
+ * whole truth about that position now. Rebuilding a book from fills alone is what deleted 26.6B
+ * of bank bills in week 1 the last time a stage did it.
+ */
+export function writeBackClearedFills(args: {
+  store: { append: (entityId: string, rows: ItemizedHolding[]) => void };
+  entities: readonly { id: string }[];
+  /** Each entity's row in the clearing result, absent if it had no seat. */
+  piById: ReadonlyMap<string, number>;
+  /** What each entity held coming in, by instrument. */
+  claimedByEntity: ReadonlyMap<string, ReadonlyMap<InstrumentId, number>>;
+  result: { nInstruments: number; holdingsMatrix: ArrayLike<number> };
+  /** The instrument this session priced in each column of the matrix. */
+  instrumentIdOfColumn: (column: number) => InstrumentId;
+  /** Whether this session priced an instrument — a claimed row it priced is replaced by the fill. */
+  priced: { has: (instrumentId: InstrumentId) => boolean };
+  row: (instrumentId: InstrumentId, faceLocal: number) => ItemizedHolding;
+}): void {
+  const { store, entities, piById, claimedByEntity, result, instrumentIdOfColumn, priced, row } = args;
+  entities.forEach((entity) => {
+    const pi = piById.get(entity.id);
+    const claimed = claimedByEntity.get(entity.id);
+    const rows: ItemizedHolding[] = [];
+    if (pi !== undefined) {
+      const base = pi * result.nInstruments;
+      for (let i = 0; i < result.nInstruments; i++) {
+        const faceLocal = result.holdingsMatrix[base + i];
+        if (faceLocal > 1) rows.push(row(instrumentIdOfColumn(i), faceLocal));
+      }
+    }
+    if (claimed) claimed.forEach((faceLocal, instrumentId) => {
+      if (!(faceLocal > 1)) return;
+      if (pi !== undefined && priced.has(instrumentId)) return;
+      rows.push(row(instrumentId, faceLocal));
+    });
+    store.append(entity.id, rows);
+  });
+}
+
 export function participantPartyOf(args: {
   regionId: RegionId;
   /** The institutions this book admitted, by their own entity ids. */
