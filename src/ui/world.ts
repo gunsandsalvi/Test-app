@@ -10,13 +10,14 @@ import { GameState, Company, InstitutionalEntity, Region, RegionId } from '../ty
 import { loanBooksOf } from '../domain/banking';
 import { entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../engine/ledger/accounts';
 import { spendableDepositsOf } from '../domain/banking';
-import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/world';
+import { V2World, ensureV2, rowOf, ringFill, revHistFill, regionOf as regionCodeOf, typeOf, instrumentRefOf } from '../engine2/world';
 import { bookHeadOf, instrumentIdAt } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
 import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
 import { facilityBookOf, facilitiesOfBorrower, issuerIdOf, trancheRowOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../engine2/tranches';
 import { registerBooks } from '../engine/ledger/holdings-ledger';
 import { forEachSovereignPosition } from '../engine/sovereign-register';
+import { asInstrumentId } from '../domain/ids';
 
 export type { ObjectRef, ObjectType, ObjectLabel, Series } from './types';
 export { refKey, sameRef } from './types';
@@ -177,8 +178,8 @@ export function bookOf(world: World, entityId: string): RegisterRow[] {
     out.push({
       holderId: entityId,
       instrumentId: instrumentIdAt(world.v2, r),
-      instrumentType: world.v2.internedStrings[H.typeRef[r]],
-      region: world.v2.internedStrings[H.regionRef[r]],
+      instrumentType: typeOf(world.v2, H.typeRef[r]),
+      region: regionCodeOf(world.v2, H.regionRef[r]),
       usd: H.qtyLocal[r],
       shares: H.shares[r],
     });
@@ -199,8 +200,8 @@ export function bookOf(world: World, entityId: string): RegisterRow[] {
  */
 export function holdersOf(world: World, instrumentId: string): RegisterRow[] {
   const out: RegisterRow[] = [];
-  const ref = world.v2.internedIdByString.get(instrumentId);
-  if (ref === undefined) return out;
+  const ref = instrumentRefOf(world.v2, asInstrumentId(instrumentId));
+  if (ref < 0) return out;
   const H = world.v2.holdings;
   registerBooks(world.state.institutionalEntities.map((e) => e.id)).forEach((b) => {
     for (let r = bookHeadOf(world.v2, b.id); r >= 0; r = H.next[r]) {
@@ -208,8 +209,8 @@ export function holdersOf(world: World, instrumentId: string): RegisterRow[] {
       out.push({
         holderId: b.id,
         instrumentId: instrumentIdAt(world.v2, r),
-        instrumentType: world.v2.internedStrings[H.typeRef[r]],
-        region: world.v2.internedStrings[H.regionRef[r]],
+        instrumentType: typeOf(world.v2, H.typeRef[r]),
+        region: regionCodeOf(world.v2, H.regionRef[r]),
         usd: H.qtyLocal[r],
         shares: H.shares[r],
       });

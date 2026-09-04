@@ -56,6 +56,7 @@ import { facilityBookOf } from '../../../engine2/tranches';
 
 import { fxSpotInstrumentId } from '../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../domain/ids';
+import { regionOf } from '../../../engine2/world';
 const REGIONS = REGION_IDS;
 
 const pairKey = (base: RegionId, quote: RegionId) => `${base}/${quote}`;
@@ -95,7 +96,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   ctx.updatedInstitutionalEntities.forEach((e) => {
     const heldNow: Record<string, number> = {};
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = HFX.next[r]) {
-      const issuer = ctx.v2.internedStrings[HFX.regionRef[r]];
+      const issuer = regionOf(ctx.v2, HFX.regionRef[r]);
       if (!issuer || issuer === e.region) continue;
       heldNow[issuer] = (heldNow[issuer] ?? 0) + HFX.qtyLocal[r];
     }
@@ -477,7 +478,7 @@ export function recordForeignHoldingsSnapshot(ctx: WeeklyStepContext): void {
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     const byRegion: Record<string, number> = {};
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
-      const issuer = ctx.v2.internedStrings[H.regionRef[r]];
+      const issuer = regionOf(ctx.v2, H.regionRef[r]);
       if (!issuer || issuer === e.region) continue;
       byRegion[issuer] = (byRegion[issuer] ?? 0) + H.qtyLocal[r];
     }

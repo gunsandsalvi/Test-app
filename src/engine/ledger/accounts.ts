@@ -44,7 +44,7 @@ import { Company } from '../../domain/company';
 import { GovDebtTranche } from '../../domain/region-macro';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { DepositLines } from '../../domain/banking';
-import { V2World, ensureV2, CURRENCY_ID, currencyOfId, internAccount, accountRefOf, internPartyKey, partyKeyRefOf } from '../../engine2/world';
+import { V2World, ensureV2, CURRENCY_ID, currencyOfId, internAccount, accountRefOf, internPartyKey, partyKeyRefOf, partyKeyOf } from '../../engine2/world';
 import { newRefColumn, type AccountRef } from '../../engine2/refs';
 
 // ---------------------------------------------------------------------------------------------
@@ -255,7 +255,7 @@ export const householdDepositsOf = (v2: V2World, region: RegionId): number =>
 function sectorDepositsAt(v2: V2World, bankTicker: string, kind: 'SEGMENT' | 'HOUSEHOLD', currency: CurrencyCode): number {
   let total = 0;
   v2.accounts.bankRowsByParty.forEach((byBank, partyRef) => {
-    if (!v2.internedStrings[partyRef].startsWith(kind + ':')) return;
+    if (!partyKeyOf(v2, partyRef).startsWith(kind + ':')) return;
     byBank.forEach((r, slot) => {
       if (!slot.startsWith(bankTicker + '|')) return;
       total += convert(v2.accounts.balance[r], currencyOfId(v2.accounts.currencyId[r]), currency, v2.fx);
@@ -339,7 +339,7 @@ export function adjustSectorRow(v2: V2World, party: PartyRef, bankTicker: string
 /** A bank leaves (resolved, merged): every sector party's row at it joins its row at the assuming bank. */
 export function moveSectorRowsToBank(v2: V2World, fromTicker: string, toTicker: string): void {
   v2.accounts.bankRowsByParty.forEach((byBank, partyRef) => {
-    const party = partyFromKey(v2.internedStrings[partyRef]);
+    const party = partyFromKey(partyKeyOf(v2, partyRef));
     if (!party) return;
     // Each money moves to the same money at the assuming bank: an assumed deposit does not
     // change what it is denominated in, and converting one here would book an FX gain nobody made.

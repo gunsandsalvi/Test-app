@@ -1,6 +1,6 @@
 
 import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
-import { stashSeedRevenueHistory, drainSeedRevenueHistories, drainSeedRings, peekSeedRing } from '../../engine2/world';
+import { stashSeedRevenueHistory, drainSeedRevenueHistories, drainSeedRings, peekSeedRing, typeRefOf } from '../../engine2/world';
 import { getSimulationDate } from '../formatters';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
@@ -417,8 +417,8 @@ function openSeededMirrors(state: GameState): void {
     REGION_IDS.forEach((regionId) => {
       const heldShares = new Map<string, number>();
       const H = v2.holdings;
-      const equityRef = v2.internedIdByString.get('EQUITY');
-      if (equityRef !== undefined) {
+      const equityRef = typeRefOf(v2, 'EQUITY');
+      if (equityRef >= 0) {
         for (const e of state.institutionalEntities ?? []) {
           for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
             if (H.typeRef[r] !== equityRef) continue;

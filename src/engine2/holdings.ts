@@ -14,8 +14,8 @@
  */
 
 import { ItemizedHolding } from '../domain/banking';
-import { asInstrumentId, type InstrumentId } from '../domain/ids';
-import { V2World, rowOf, internType, internInstrument, internRegion } from './world';
+import type { InstrumentId } from '../domain/ids';
+import { V2World, rowOf, internType, internInstrument, internRegion, instrumentOf, regionOf, typeOf } from './world';
 import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type TypeRef, type RegionRef } from './refs';
 
 export interface HoldingStore {
@@ -60,7 +60,12 @@ export interface HoldingStore {
  */
 export type ReadonlyHoldingStore = {
   readonly [K in keyof HoldingStore]:
-    HoldingStore[K] extends Float64Array ? Readonly<Float64Array>
+    // §3.13-BOOK slice (b): a ref column keeps its SPACE through the readonly view. This branch
+    // must come first — `RefColumn<B>` is assignable to `Int32Array` (its elements are numbers),
+    // so the branch below would silently demote every ref back to a bare integer and undo the
+    // whole point of the column type on every read path that goes through the view.
+    HoldingStore[K] extends RefColumn<infer B> ? RefColumn<B>
+    : HoldingStore[K] extends Float64Array ? Readonly<Float64Array>
     : HoldingStore[K] extends Int32Array ? Readonly<Int32Array>
     : HoldingStore[K] extends Set<string> ? ReadonlySet<string>
     : HoldingStore[K];
@@ -302,7 +307,7 @@ export function markBookDirty(v2: V2World, entityId: string): void {
  * function to make TRUE rather than twenty-seven to find.
  */
 export function instrumentIdAt(v2: V2World, r: number): InstrumentId {
-  return asInstrumentId(v2.internedStrings[mutableHoldings(v2).instrRef[r]]);
+  return instrumentOf(v2, mutableHoldings(v2).instrRef[r]);
 }
 
 /** The entity's book as objects — the WEEK-END VIEW once rows are the authority: one linear
@@ -316,8 +321,8 @@ export function materializeBook(v2: V2World, entityId: string): ItemizedHolding[
       // §3.13-BOOK slice (a): the row's ref becomes an INSTRUMENT id here — the admission that
       // `instrRef` names an instrument, which slice (b) makes true by splitting the intern table.
       instrumentId: instrumentIdAt(v2, r),
-      instrumentType: v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'],
-      issuerRegion: v2.internedStrings[H.regionRef[r]] as ItemizedHolding['issuerRegion'],
+      instrumentType: typeOf(v2, H.typeRef[r]) as ItemizedHolding['instrumentType'],
+      issuerRegion: regionOf(v2, H.regionRef[r]) as ItemizedHolding['issuerRegion'],
       quantityOrNotionalLocal: H.qtyLocal[r],
       units: Number.isNaN(H.units[r]) ? (Number.isNaN(sh) ? H.qtyLocal[r] : sh) : H.units[r],
     };
@@ -341,7 +346,7 @@ function canonical(h: ItemizedHolding): string {
 function canonicalRow(v2: V2World, r: number): string {
   const H = mutableHoldings(v2);
   const sh = H.shares[r];
-  return `${v2.internedStrings[H.typeRef[r]]}|${v2.internedStrings[H.instrRef[r]]}|${v2.internedStrings[H.regionRef[r]]}|${H.qtyLocal[r]}|${Number.isNaN(sh) ? 'x' : sh}|${H.units[r]}`;
+  return `${typeOf(v2, H.typeRef[r])}|${instrumentOf(v2, H.instrRef[r])}|${regionOf(v2, H.regionRef[r])}|${H.qtyLocal[r]}|${Number.isNaN(sh) ? 'x' : sh}|${H.units[r]}`;
 }
 
 /** HOLDINGS_SYNC_CHECK=1 — throw on the first entity whose rows disagree with its book. */

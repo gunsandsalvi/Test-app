@@ -21,7 +21,7 @@ import { InstitutionalEntity, ItemizedHolding } from '../../types';
 import { Table } from './table';
 import { INSTRUMENT_IDS, ENTITY_IDS } from './intern';
 import { REGION_IDS } from '../../domain/geography';
-import { V2World, internType } from '../../engine2/world';
+import { V2World, internType, instrumentOf } from '../../engine2/world';
 import { bookHeadOf } from '../../engine2/holdings';
 
 /** v2-intern-id → INSTRUMENT_IDS id. Both pools assign ids in first-sight order and never reuse
@@ -202,7 +202,7 @@ export class HoldingsTable {
         if (code === undefined) continue;
         const ref = H.instrRef[r];
         let iid = instrMemo[ref];
-        if (iid === undefined) { iid = INSTRUMENT_IDS.id(v2.internedStrings[ref]); instrMemo[ref] = iid; }
+        if (iid === undefined) { iid = INSTRUMENT_IDS.id(instrumentOf(v2, ref)); instrMemo[ref] = iid; }
         entityRow[at] = e;
         instrumentId[at] = iid;
         instrumentType[at] = code;

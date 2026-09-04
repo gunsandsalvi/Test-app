@@ -22,7 +22,7 @@
  * `structuredClone(state)` carries the book into battery replays by value.
  */
 
-import { V2World, internPartyKey } from './world';
+import { V2World, internPartyKey, partyKeyOf } from './world';
 import { SUBUNIT_INDEX, SUBUNITS, NSUB } from './state';
 import { newRefColumn, type RefColumn, type PartyKeyRef } from './refs';
 
@@ -207,7 +207,7 @@ export function forEachContract(
   if (!head || !order) return;
   for (const su of order) {
     for (let r = head[su]; r >= 0; r = T.next[r]) {
-      fn(r, v2.internedStrings[T.supplierRef[r]], v2.internedStrings[T.customerRef[r]], SUBUNITS[su]);
+      fn(r, partyKeyOf(v2, T.supplierRef[r]), partyKeyOf(v2, T.customerRef[r]), SUBUNITS[su]);
     }
   }
 }

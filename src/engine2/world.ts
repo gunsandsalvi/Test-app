@@ -22,7 +22,7 @@ import { newPriceStore, PriceStore } from './prices';
 import { CurrencyCode, CURRENCY_CODES } from '../domain/geography';
 import { FxTable, PARITY_FX } from '../domain/currency';
 import { asInstrumentId, type InstrumentId } from '../domain/ids';
-import { newRefColumn, type RefColumn, type InstrRef, type EntityRef, type RegionRef, type TypeRef, type TickerRef, type AccountRef, type PartyKeyRef } from './refs';
+import { newRefColumn, NO_REF, type RefColumn, type InstrRef, type EntityRef, type RegionRef, type TypeRef, type TickerRef, type AccountRef, type PartyKeyRef } from './refs';
 
 export interface V2World {
   /** Company id -> table row. Rows are addressing only — order carries no economics. */
@@ -95,14 +95,14 @@ export interface PersistentAccounts {
    *  because it was paid in yen. */
   homeByPartyRef: Map<PartyKeyRef, number>;
   /** A3.3 — a sector party's rows, one per (bank, currency): party key id → `TICKER|CUR` → row. */
-  bankRowsByParty: Map<number, Map<string, number>>;
+  bankRowsByParty: Map<PartyKeyRef, Map<string, number>>;
 }
 
 export function newPersistentAccounts(): PersistentAccounts {
   const cap = 1 << 12;
   return {
     n: 0, keyRef: newRefColumn<AccountRef>(cap), balance: new Float64Array(cap), currencyId: new Int8Array(cap),
-    rowByKeyRef: new Map<AccountRef, number>(), rowsByPartyRef: new Map<PartyKeyRef, number[]>(), homeByPartyRef: new Map<PartyKeyRef, number>(), bankRowsByParty: new Map(),
+    rowByKeyRef: new Map<AccountRef, number>(), rowsByPartyRef: new Map<PartyKeyRef, number[]>(), homeByPartyRef: new Map<PartyKeyRef, number>(), bankRowsByParty: new Map<PartyKeyRef, Map<string, number>>(),
   };
 }
 
@@ -217,13 +217,14 @@ export const internPartyKey = (v2: V2World, key: string): PartyKeyRef => internS
  * see `stringRef` above for the 0.43B that cost — so these exist separately and every one of them
  * can miss.
  */
-export const instrumentRefOf = (v2: V2World, id: InstrumentId): InstrRef => stringRef(v2, id) as InstrRef;
-export const entityRefOf = (v2: V2World, id: string): EntityRef => stringRef(v2, id) as EntityRef;
-export const regionRefOf = (v2: V2World, id: string): RegionRef => stringRef(v2, id) as RegionRef;
-export const typeRefOf = (v2: V2World, tag: string): TypeRef => stringRef(v2, tag) as TypeRef;
-export const tickerRefOf = (v2: V2World, ticker: string): TickerRef => stringRef(v2, ticker) as TickerRef;
-export const accountRefOf = (v2: V2World, key: string): AccountRef => stringRef(v2, key) as AccountRef;
-export const partyKeyRefOf = (v2: V2World, key: string): PartyKeyRef => stringRef(v2, key) as PartyKeyRef;
+const lookup = (v2: V2World, s: string): number => v2.internedIdByString.get(s) ?? NO_REF;
+export const instrumentRefOf = (v2: V2World, id: InstrumentId): InstrRef => lookup(v2, id) as InstrRef;
+export const entityRefOf = (v2: V2World, id: string): EntityRef => lookup(v2, id) as EntityRef;
+export const regionRefOf = (v2: V2World, id: string): RegionRef => lookup(v2, id) as RegionRef;
+export const typeRefOf = (v2: V2World, tag: string): TypeRef => lookup(v2, tag) as TypeRef;
+export const tickerRefOf = (v2: V2World, ticker: string): TickerRef => lookup(v2, ticker) as TickerRef;
+export const accountRefOf = (v2: V2World, key: string): AccountRef => lookup(v2, key) as AccountRef;
+export const partyKeyRefOf = (v2: V2World, key: string): PartyKeyRef => lookup(v2, key) as PartyKeyRef;
 
 /** Decode, per space. Each is where a ref becomes a string again, and the only place that claim
  *  is made — `instrumentOf` is the one that also crosses into the branded id space. */
@@ -232,6 +233,8 @@ export const entityOf = (v2: V2World, ref: EntityRef): string => v2.internedStri
 export const regionOf = (v2: V2World, ref: RegionRef): string => v2.internedStrings[ref];
 export const typeOf = (v2: V2World, ref: TypeRef): string => v2.internedStrings[ref];
 export const tickerOf = (v2: V2World, ref: TickerRef): string => v2.internedStrings[ref];
+export const partyKeyOf = (v2: V2World, ref: PartyKeyRef): string => v2.internedStrings[ref];
+export const accountKeyOf = (v2: V2World, ref: AccountRef): string => v2.internedStrings[ref];
 
 const REV_CAP = 13;
 

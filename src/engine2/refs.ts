@@ -76,3 +76,17 @@ export const newRefColumn = <B extends number>(cap: number, fill = 0): RefColumn
  * a real ref because no intern function can return it.
  */
 export const ABSENT_REF = -1 as InstrRef & EntityRef & RegionRef & TypeRef & TickerRef & AccountRef & PartyKeyRef;
+
+/**
+ * THE UNKNOWN REF — what a LOOKUP answers when a string has never been interned.
+ *
+ * It is deliberately NOT `ABSENT_REF`. Those are two different facts — "this row names nothing"
+ * versus "this name has never been seen" — and they were the same integer, because `stringRef`
+ * answered -1 and `freeBookRow` writes -1. Under one numbering that collision is unreachable
+ * (freed rows are unlinked from their chain, so no walk visits them), which is exactly the kind of
+ * thing that stops being unreachable later: a lookup that missed would then equal a freed row, and
+ * `H.typeRef[r] !== equityRef` would treat the freed row as equity.
+ *
+ * Both are negative, so every guard is `< 0` and no site has to know which it got.
+ */
+export const NO_REF = -2 as InstrRef & EntityRef & RegionRef & TypeRef & TickerRef & AccountRef & PartyKeyRef;

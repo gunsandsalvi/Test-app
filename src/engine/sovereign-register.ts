@@ -28,7 +28,7 @@
  */
 
 import { GameState, RegionId } from '../types';
-import { V2World } from '../engine2/world';
+import { V2World, typeRefOf, regionRefOf } from '../engine2/world';
 import { bookHeadOf, instrumentIdAt } from '../engine2/holdings';
 import { isActiveCompany } from '../domain/company';
 import { holdingClassOf } from '../domain/assets';
@@ -60,12 +60,12 @@ export function forEachSovereignPosition(
   visit: (p: SovereignPosition) => void
 ): void {
   const H = v2.holdings;
-  const govRef = v2.internedIdByString.get('GOV_BOND');
-  const regRef = v2.internedIdByString.get(regionId);
+  const govRef = typeRefOf(v2, 'GOV_BOND');
+  const regRef = regionRefOf(v2, regionId);
 
   // 1. THE REGISTER — the institutions and the household sector, whatever books it holds today
   //    (`registerBooks` is the one statement of that, §9.13-EQUITY).
-  if (govRef !== undefined && regRef !== undefined) {
+  if (govRef >= 0 && regRef >= 0) {
     registerBooks((state.institutionalEntities ?? []).filter((e) => !e.isDefaulted).map((e) => e.id))
       .forEach((b) => {
         for (let r = bookHeadOf(v2, b.id); r >= 0; r = H.next[r]) {

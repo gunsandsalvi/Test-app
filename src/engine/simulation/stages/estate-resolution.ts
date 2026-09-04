@@ -40,6 +40,7 @@ import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { cashOf } from '../../ledger/accounts';
 import { facilitiesOfBorrower, issuerIdOf } from '../../../engine2/tranches';
 import type { InstrumentId } from '../../../domain/ids';
+import { regionOf, typeOf } from '../../../engine2/world';
 
 /** How many resolutions the realised recovery rate averages over before it displaces the prior. */
 export const RECOVERY_HISTORY_LENGTH = 24;
@@ -424,8 +425,8 @@ function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Es
     rows.forEach((r) => {
       const leftLocal = H.qtyLocal[r];
       if (!(leftLocal > 0)) return;
-      const type = index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
-      const region = index.v2.internedStrings[H.regionRef[r]] as RegionId;
+      const type = typeOf(index.v2, H.typeRef[r]) as ItemizedHolding['instrumentType'];
+      const region = regionOf(index.v2, H.regionRef[r]) as RegionId;
       const id = instrumentIdAt(index.v2, r);
       transferHolding(index.v2, { kind: 'INSTITUTION', id: holderId }, { kind: 'CLEARING_HOUSE', region },
         { instrumentType: type, instrumentId: id, issuerRegion: region, valueLocal: leftLocal,
@@ -475,7 +476,7 @@ function reduceHolding(
         // is a fraction of a row, so the paper in it is that same fraction of the row's own units.
         const rowUnits = Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r];
         const takeUnits = H.qtyLocal[r] > 0 ? rowUnits * (takeLocal / H.qtyLocal[r]) : 0;
-        if (takeLocal > 0) takes.push({ type: index.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], region: index.v2.internedStrings[H.regionRef[r]] as RegionId, usd: takeLocal, units: takeUnits, id: instrumentIdAt(index.v2, r) });
+        if (takeLocal > 0) takes.push({ type: typeOf(index.v2, H.typeRef[r]) as ItemizedHolding['instrumentType'], region: regionOf(index.v2, H.regionRef[r]) as RegionId, usd: takeLocal, units: takeUnits, id: instrumentIdAt(index.v2, r) });
       }
       // The holder's paper goes to the region's clearing house (the register side);
       // the dead issuer's ladder retires the same face against the house (the ladder side), so the
@@ -543,7 +544,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
     for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
       // A row names a tranche or its issuer; the claim is on the issuer either way.
       if (issuerIdOf(ctx.v2, instrumentIdAt(ctx.v2, r)) !== comp.id) continue;
-      const instrumentType = ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
+      const instrumentType = typeOf(ctx.v2, H.typeRef[r]) as ItemizedHolding['instrumentType'];
       // A CREDIT claim is on FACE and an EQUITY claim is the residual on what the shares are
       // worth, so the two take different lanes of the same row on purpose.
       const usd = instrumentType === 'EQUITY'

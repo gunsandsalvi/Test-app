@@ -23,7 +23,7 @@ import { institutionProfile } from '../../../../domain/institution-profiles';
 import { InstitutionalEntity } from '../../../../domain/institutions';
 import { hedgedAsFixedIncome } from '../../../../domain/assets';
 import { bookHeadOf } from '../../../../engine2/holdings';
-import { V2World } from '../../../../engine2/world';
+import { V2World, regionOf, typeOf } from '../../../../engine2/world';
 import { pay, pendingSettlementLocal } from '../settlement';
 import { isActiveCompany } from '../../../../domain/company';
 import { invoiceCurrencyOf } from '../../../../domain/invoice-currency';
@@ -55,9 +55,9 @@ function hedgeableExposureByRegion(v2: V2World, entity: InstitutionalEntity): Ma
   const out = new Map<RegionId, number>();
   const H = v2.holdings;
   for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
-    const issuer = v2.internedStrings[H.regionRef[r]] as RegionId;
+    const issuer = regionOf(v2, H.regionRef[r]) as RegionId;
     if (!issuer || issuer === entity.region) continue;
-    const type = v2.internedStrings[H.typeRef[r]];
+    const type = typeOf(v2, H.typeRef[r]);
     const ratio = type === 'EQUITY' ? equityHedgeRatioFor(entity.entityType, entity.hedgeFundStrategy)
       : hedgedAsFixedIncome(type) ? HEDGE_RATIO_FIXED_INCOME : 0;
     if (ratio <= 0) continue;

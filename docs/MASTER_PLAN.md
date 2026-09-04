@@ -466,11 +466,14 @@ written from here):
        borrowers rather than paper. Slice (d) decides which way that resolves — the field splits
        by asset class, or a credit index states tranches.
     b. **SPLIT THE INTERN TABLE** — one ref space per id kind, so an instrument ref cannot be a
-       region ref by construction. **Step one is done, in §9** (the spaces are TYPES and the
-       numbering is untouched). **Step two is open:** give each space its own array, which
-       renumbers. Until it does, the one table holds ~15 type tags and 5 region codes mixed among
-       thousands of instrument ids, so *"enumerate every instrument"* has no answer — which is
-       exactly what (d) needs, so this is a prerequisite and not polish.
+       region ref by construction. **Steps one and two are done, in §9**: the spaces are TYPES,
+       and all 78 sites that reached past the doors into `internedStrings`/`internedIdByString`
+       now go through them, so the whole table is behind 15 functions in `world.ts` and the
+       numbering is still shared and unmoved. **Step three is the split itself:** give each space
+       its own array, which renumbers — and is now a change to those 15 functions rather than to
+       78 sites. Until it lands, the one table holds ~15 type tags and 5 region codes mixed among
+       thousands of instrument ids, so *"enumerate every instrument"* has no answer, which is
+       exactly what (d) needs.
     c. **THE ENTITY REGISTRY** — one store; `PartyRef` becomes a VIEW of it rather than a parallel
        union; the ByTicker maps collapse; `O8`'s party arm widens from the derivatives book to
        every party-keyed store.
@@ -1554,6 +1557,31 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (b) step two — THE INTERN TABLE GETS A DOOR, AND EVERYTHING USES IT.** Step one
+typed the ref columns; 78 sites still reached straight past them into `internedStrings[ref]` and
+`internedIdByString.get(s)`, and every one of those would have silently read the wrong table the
+moment the numbering diverged. So they are routed first, while the table is still shared and
+nothing can move: 57 decode sites became `typeOf` / `regionOf` / `instrumentOf` / `entityOf` /
+`tickerOf` / `partyKeyOf` (a rename per space, same table, same string), and 21 lookups became
+`typeRefOf` / `instrumentRefOf` / `tickerRefOf` / `regionRefOf`, their `=== undefined` guards
+becoming `< 0`. Zero remain outside `world.ts`.
+
+Three things it turned up. **`shared-helpers.ts` had ONE lookup helper serving two spaces** — a
+type tag and an instrument id, combined into a pair key — which is precisely what the split exists
+to stop; it is now two named lookups and a `pairOf` that says the composite is deliberate.
+**`ReadonlyHoldingStore` and `ReadonlyTrancheStore` were demoting every ref column back to
+`Int32Array`**, because `RefColumn<B>` is assignable to `Int32Array` and the mapped type's
+`Int32Array` branch matched first — so the brand died on every read that went through the readonly
+view, which is most of them. And **`10-mergers` twice built a ref from a company's ENTITY id and
+compared it against `instrRef`** to find rows holding that company's equity: the equity crossing
+again, working only because the two strings are equal, and now rejected by the compiler until it
+says `equityInstrumentId`.
+
+Also separated: `NO_REF` (-2, "this name was never interned") from `ABSENT_REF` (-1, "this row
+names nothing"). They were the same integer, and the collision is unreachable only because freed
+rows are unlinked from their chains — the kind of thing that stops being unreachable later, when a
+missed lookup would equal a freed row and a walk would read it as real. Gates green; no run.
 
 **13-BOOK slice (a) — THE ID SPACES BECOME TYPES, AND THE KEY GRAMMAR BECOMES ONE FILE.**
 `domain/ids.ts` states the three spaces a string can name — `EntityId`, `InstrumentId`, `Ticker` —

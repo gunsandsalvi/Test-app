@@ -10,7 +10,7 @@ import { defect } from '../../../domain/defect';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { transferHolding, registerBooks } from '../../ledger/holdings-ledger';
 import { bookPnL } from '../../ledger/bank-book';
-import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
+import { revHistLen, revHistAt, rowOf, V2World, regionOf, typeOf, typeRefOf, instrumentRefOf } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
 import { getHoldingsTable } from './register-index';
 import { INSTRUMENT_IDS } from '../../columns/intern';
@@ -161,7 +161,8 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { cashOf, entityCashOf, obligationCurrencyOf } from '../../ledger/accounts';
-import type { InstrumentId } from '../../../domain/ids';
+import { asInstrumentId, type InstrumentId } from '../../../domain/ids';
+import type { TypeRef, InstrRef } from '../../../engine2/refs';
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
 export const RECOVERY_PRIOR_WEIGHT = 8;
@@ -482,30 +483,35 @@ export function applyPendingCorporateActionSettlements(
   // integer key. An instrument never interned has no rows and drops out here.
   const v2 = ctx.v2;
   const H = v2.holdings;
-  const refOf = (t: string): number | undefined => v2.internedIdByString.get(t);
+  // §3.13-BOOK slice (b): this was ONE helper serving two spaces — a type tag and an instrument
+  // id — which is exactly what the ref split exists to stop. The pair key below is a legitimate
+  // COMPOSITE of the two, and it stays valid only while an instrument ref fits in 22 bits.
+  const pairOf = (t: TypeRef, i: InstrRef): number => t * 0x400000 + i;
   // An instrument is a tranche or its issuer; the issuer's ticker is one read either way.
   const issuerTickerOf = (instrumentId: string): string | undefined => ctx.issuerTickerById?.get(issuerIdOf(v2, instrumentId));
-  const pairKeyOf = (r: number): number => H.typeRef[r] * 0x400000 + H.instrRef[r];
+  const pairKeyOf = (r: number): number => pairOf(H.typeRef[r], H.instrRef[r]);
   const toPairs = (byType: Map<string, Map<string, number>>): Map<number, number> => {
     const out = new Map<number, number>();
     byType.forEach((byId, type) => {
-      const t = refOf(type);
-      if (t === undefined) return;
+      const t = typeRefOf(v2, type);
+      if (t < 0) return;
       byId.forEach((v, id) => {
-        const i = refOf(id);
-        if (i !== undefined) out.set(t * 0x400000 + i, v);
+        const i = instrumentRefOf(v2, asInstrumentId(id));
+        if (i >= 0) out.set(pairOf(t, i), v);
       });
     });
     return out;
   };
   const ratioByPair = toPairs(pendingByType);
   const owedByPair = toPairs(pendingCashByType);
-  const equityRef = refOf('EQUITY') ?? -2;
+  const equityRef = typeRefOf(v2, 'EQUITY');
   // A replaced tranche: its retired rows become rows of the replacement, with no cash.
   const replacedNewIdByPair = new Map<number, InstrumentId>();
   ctx.pendingHolderReplacements?.forEach((newId, key) => {
-    const at = key.indexOf(':'); const t = refOf(key.slice(0, at)); const i = refOf(key.slice(at + 1));
-    if (t !== undefined && i !== undefined) replacedNewIdByPair.set(t * 0x400000 + i, newId);
+    const at = key.indexOf(':');
+    const t = typeRefOf(v2, key.slice(0, at));
+    const i = instrumentRefOf(v2, asInstrumentId(key.slice(at + 1)));
+    if (t >= 0 && i >= 0) replacedNewIdByPair.set(pairOf(t, i), newId);
   });
 
   // THE DESKS ARE HOLDERS OF RECORD TOO. A retirement or placement scales a named desk's
@@ -602,13 +608,13 @@ export function applyPendingCorporateActionSettlements(
   if (hasCash && ctx.updatedCompanies) {
     const companyById = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
     pendingCashByType.forEach((byId, type) => {
-      const t = refOf(type);
-      if (t === undefined) return;
+      const t = typeRefOf(v2, type);
+      if (t < 0) return;
       const deskByInstrument = deskByInstrumentByType.get(type);
       byId.forEach((owedLocal, instrumentId) => {
-        const i = refOf(instrumentId);
-        if (i === undefined) return;
-        const k = t * 0x400000 + i;
+        const i = instrumentRefOf(v2, asInstrumentId(instrumentId));
+        if (i < 0) return;
+        const k = pairOf(t, i);
         const registerLocal = totalByPair.get(k) ?? 0;
         const issuerId = t === equityRef ? instrumentId : issuerIdOf(v2, instrumentId);
         const issuer = companyById.get(issuerId);
@@ -703,7 +709,7 @@ export function applyPendingCorporateActionSettlements(
             payer: { kind: 'COMPANY', ticker: issuerTicker },
             payee: entity.payee,
             amount: shareLocal,
-            currency: currencyOf(v2.internedStrings[H.regionRef[r]] as RegionId),
+            currency: currencyOf(regionOf(v2, H.regionRef[r]) as RegionId),
             reason: H.typeRef[r] === equityRef ? 'dividend to holder of record' : 'security payment to holder of record',
           });
           touched = true;
@@ -750,14 +756,14 @@ export function applyPendingCorporateActionSettlements(
             payer: { kind: 'COMPANY', ticker: principalIssuerTicker },
             payee: entity.payee,
             amount: principalCashLocal,
-            currency: currencyOf(v2.internedStrings[H.regionRef[r]] as RegionId),
+            currency: currencyOf(regionOf(v2, H.regionRef[r]) as RegionId),
             reason: 'principal redeemed to holder of record',
           }
           : {
             payer: entity.payee,
             payee: { kind: 'COMPANY', ticker: principalIssuerTicker },
             amount: -principalCashLocal,
-            currency: currencyOf(v2.internedStrings[H.regionRef[r]] as RegionId),
+            currency: currencyOf(regionOf(v2, H.regionRef[r]) as RegionId),
             reason: 'placement paid by holder of record',
           });
       } else if (principalCashLocal !== 0) {
@@ -769,10 +775,10 @@ export function applyPendingCorporateActionSettlements(
       // and unlinks what empties).
       {
         const id = instrumentIdAt(v2, r);
-        const type = v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
+        const type = typeOf(v2, H.typeRef[r]) as ItemizedHolding['instrumentType'];
         const key = `${type}|${id}`;
         let a = actions.get(key);
-        if (!a) { a = { type, id, region: v2.internedStrings[H.regionRef[r]] as RegionId, retiredLocal: 0, retiredSh: 0, placedLocal: 0, placedSh: 0, anyShares: false }; actions.set(key, a); }
+        if (!a) { a = { type, id, region: regionOf(v2, H.regionRef[r]) as RegionId, retiredLocal: 0, retiredSh: 0, placedLocal: 0, placedSh: 0, anyShares: false }; actions.set(key, a); }
         const dLocal = H.qtyLocal[r] * (effectiveRatio - 1);
         const dSh = Number.isNaN(H.shares[r]) ? Number.NaN : H.shares[r] * (effectiveRatio - 1);
         if (!Number.isNaN(dSh)) a.anyShares = true;
@@ -785,8 +791,8 @@ export function applyPendingCorporateActionSettlements(
     // The replacement's rows — what the called tranche's rows shed, placed on the same
     // holders under the new id (its issuer's wire put it at the house, `replacement issue`).
     [...actions.values()].forEach((a) => {
-      const t = refOf(a.type), i = refOf(a.id);
-      if (t === undefined || i === undefined) return;
+      const t = typeRefOf(v2, a.type), i = instrumentRefOf(v2, a.id);
+      if (t < 0 || i < 0) return;
       const newId = replacedNewIdByPair.get(t * 0x400000 + i);
       if (newId === undefined || !(a.retiredLocal > 0)) return;
       const key = `${a.type}|${newId}`;

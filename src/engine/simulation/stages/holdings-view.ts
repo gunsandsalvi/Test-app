@@ -21,7 +21,7 @@
  * the real books, or it does not exist.
  */
 
-import { ensureV2 } from '../../../engine2/world';
+import { ensureV2, regionOf, typeOf } from '../../../engine2/world';
 import { ladderRowsOf, ensureLaddersSynced, facilityRowsOf, materializeGovLadder } from '../../../engine2/tranches';
 import { bookHeadOf, ensureBooksSynced, instrumentIdAt } from '../../../engine2/holdings';
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
@@ -75,12 +75,12 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
     lent += (e.repoLentLocal ?? 0) + (e.rrpLentLocal ?? 0);
     liabilities += (e.beneficiaryLiabilityLocal ?? 0) + (e.mmfSharesOutstandingLocal ?? 0);
     for (let r = bookHeadOf(v2a, e.id); r >= 0; r = Ha.next[r]) {
-      const type = v2a.internedStrings[Ha.typeRef[r]] as ItemizedHolding['instrumentType'];
+      const type = typeOf(v2a, Ha.typeRef[r]) as ItemizedHolding['instrumentType'];
       const sh = Ha.shares[r];
       const h: ItemizedHolding = {
         instrumentId: instrumentIdAt(v2a, r),
         instrumentType: type,
-        issuerRegion: v2a.internedStrings[Ha.regionRef[r]] as ItemizedHolding['issuerRegion'],
+        issuerRegion: regionOf(v2a, Ha.regionRef[r]) as ItemizedHolding['issuerRegion'],
         quantityOrNotionalLocal: Ha.qtyLocal[r],
         units: Number.isNaN(Ha.units[r]) ? Ha.qtyLocal[r] : Ha.units[r],
       };
@@ -180,12 +180,12 @@ export function measuredForeignOwnershipAllRegions(state: GameState): Record<Reg
       const tref = H.typeRef[r];
       let key = keyByTypeRef[tref];
       if (key === undefined) {
-        const t = v2.internedStrings[tref] as ItemizedHolding['instrumentType'];
+        const t = typeOf(v2, tref) as ItemizedHolding['instrumentType'];
         const cls = isVehicleClaim(t) ? undefined : holdingClassOf(t);
         key = keyByTypeRef[tref] = (cls ? ({ EQUITY: 'equity', SOVEREIGN: 'sovBond', CREDIT: 'corpBond' } as const)[cls as 'EQUITY' | 'SOVEREIGN' | 'CREDIT'] : undefined) ?? false;
       }
       if (!key) continue;
-      const issuer = v2.internedStrings[H.regionRef[r]] as RegionId;
+      const issuer = regionOf(v2, H.regionRef[r]) as RegionId;
       const v = H.qtyLocal[r];
       accFor(held, issuer)[key] += v;
       if (e.region !== issuer) accFor(foreign, issuer)[key] += v;
@@ -272,12 +272,12 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     for (let r = bookHeadOf(v2hv, e.id); r >= 0; r = Hmo.next[r]) {
-      const a = acc(v2hv.internedStrings[Hmo.regionRef[r]] as RegionId);
+      const a = acc(regionOf(v2hv, Hmo.regionRef[r]) as RegionId);
       if (!a) continue;
       const tref = Hmo.typeRef[r];
       let key = keyByTypeRef[tref];
       if (key === undefined) {
-        const t = v2hv.internedStrings[tref] as ItemizedHolding['instrumentType'];
+        const t = typeOf(v2hv, tref) as ItemizedHolding['instrumentType'];
         const cls = isVehicleClaim(t) ? undefined : holdingClassOf(t);
         key = keyByTypeRef[tref] = (cls ? ({ EQUITY: 'equity', SOVEREIGN: 'sovBond', CREDIT: 'corpBond' } as const)[cls as 'EQUITY' | 'SOVEREIGN' | 'CREDIT'] : undefined) ?? false;
       }

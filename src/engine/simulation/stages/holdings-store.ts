@@ -30,7 +30,7 @@
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
 import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, markBookDirty, instrumentIdAt } from '../../../engine2/holdings';
-import { V2World } from '../../../engine2/world';
+import { V2World, instrumentRefOf } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 import { clearedBookDelta, registerBooks, BookEntry } from '../../ledger/holdings-ledger';
@@ -85,8 +85,8 @@ export class HoldingsStore {
           + ' — the store pairs them by position and cannot tell which row is which');
       }
       for (let i = 0; i < rows.length; i++) {
-        const iRef = v2.internedIdByString.get(rows[i].instrumentId);
-        if (iRef !== undefined && H.instrRef[rowIds[i]] !== iRef) {
+        const iRef = instrumentRefOf(v2, rows[i].instrumentId);
+        if (iRef >= 0 && H.instrRef[rowIds[i]] !== iRef) {
           defect(`${entity.id}[${i}] pairs ${rows[i].instrumentId} with register row`
             + ` ${instrumentIdAt(v2, rowIds[i])} — the book and the chain have diverged`);
         }

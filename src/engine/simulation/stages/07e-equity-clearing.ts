@@ -53,6 +53,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
 import { equityInstrumentId } from '../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../domain/ids';
+import { typeRefOf } from '../../../engine2/world';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
@@ -311,8 +312,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       let hhTotalValueLocal = 0;
       {
         const H = ctx.v2.holdings;
-        const equityRef = ctx.v2.internedIdByString.get('EQUITY');
-        for (let r = equityRef === undefined ? -1 : bookHeadOf(ctx.v2, householdBookId(regionId)); r >= 0; r = H.next[r]) {
+        const equityRef = typeRefOf(ctx.v2, 'EQUITY');
+        for (let r = equityRef < 0 ? -1 : bookHeadOf(ctx.v2, householdBookId(regionId)); r >= 0; r = H.next[r]) {
           if (H.typeRef[r] !== equityRef) continue;
           const companyId = instrumentIdAt(ctx.v2, r);
           const hhShares = Number.isNaN(H.shares[r]) ? 0 : H.shares[r];

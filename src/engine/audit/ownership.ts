@@ -5,7 +5,7 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, sum } from './types';
 import { marketCapOf } from '../../domain/company';
-import { ensureV2 } from '../../engine2/world';
+import { ensureV2, entityOf, regionOf, tickerOf, typeRefOf } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
 import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf } from '../../engine2/tranches';
 import { materializeBook, instrumentIdAt } from '../../engine2/holdings';
@@ -94,8 +94,8 @@ function o2(state: GameState, week: number): AuditFinding[] {
   {
     const v2o2 = ensureV2(state);
     const H = v2o2.holdings;
-    const equityRef = v2o2.internedIdByString.get('EQUITY');
-    if (equityRef !== undefined) {
+    const equityRef = typeRefOf(v2o2, 'EQUITY');
+    if (equityRef >= 0) {
       REGION_IDS.forEach((region) => {
         for (let r = bookHeadOf(v2o2, householdBookId(region)); r >= 0; r = H.next[r]) {
           if (H.typeRef[r] !== equityRef || Number.isNaN(H.shares[r])) continue;
@@ -162,9 +162,9 @@ function o4(state: GameState, week: number): AuditFinding[] {
   let orphanLoans = 0, orphanLocal = 0, lenderless = 0, lenderlessLocal = 0;
   for (let r = 0; r < S.used; r++) {
     if (!(S.flags[r] & TR_FACILITY) || S.bankRef[r] < 0 || S.issuerRef[r] < 0 || !(S.principalLocal[r] > 0.01)) continue;
-    const c = byId.get(v2.internedStrings[S.issuerRef[r]]);
+    const c = byId.get(entityOf(v2, S.issuerRef[r]));
     if (!c || !(isActiveCompany(c) || openEstates.has(c.id))) { orphanLoans++; orphanLocal += S.principalLocal[r]; }
-    const b = bankByTicker.get(v2.internedStrings[S.bankRef[r]]);
+    const b = bankByTicker.get(tickerOf(v2, S.bankRef[r]));
     if (!b || !b.bankBalanceSheet || !isActiveCompany(b)) { lenderless++; lenderlessLocal += S.principalLocal[r]; }
   }
   if (orphanLoans) out.push({ family: 'O', check: 'O4 every facility has a live borrower', week, usd: orphanLocal, message: `${orphanLoans} facilities (${B(orphanLocal)}) sit on the ladders of firms that are gone or dead with no open estate` });
@@ -188,13 +188,13 @@ function o6(state: GameState, week: number): AuditFinding[] {
     if (c.mergerAcquired) return;
     for (const r of ladderRowsOf(v2, c.id)) { const k = kindOfFlags(S.flags[r]); if (k) add(issued, `${c.region}|${k}`, S.principalLocal[r]); }
   });
-  const kindRefs = new Map(KINDS.map((k) => [v2.internedIdByString.get(k), k] as const));
+  const kindRefs = new Map(KINDS.map((k) => [typeRefOf(v2, k), k] as const));
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
       const k = kindRefs.get(H.typeRef[r]); if (!k) continue;
       // The ladders below carry FACE; `units` is the register's own.
-      add(held, `${v2.internedStrings[H.regionRef[r]]}|${k}`, Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]);
+      add(held, `${regionOf(v2, H.regionRef[r])}|${k}`, Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]);
     }
   });
   const DESK_BOOKS: Record<string, typeof KINDS[number]> = { 'corporate bond': 'CORP_BOND', 'leveraged loan': 'LEVERAGED_LOAN', 'commercial paper': 'COMMERCIAL_PAPER' };

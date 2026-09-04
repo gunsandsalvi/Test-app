@@ -26,8 +26,9 @@
  */
 
 import { InputLot } from '../domain/company';
-import { V2World, rowOf, internString } from './world';
+import { V2World, rowOf, internPartyKey, partyKeyOf } from './world';
 import { SUBUNITS, SUBUNIT_INDEX, NSUB } from './state';
+import { newRefColumn, type RefColumn, type PartyKeyRef } from './refs';
 
 export interface LotStore {
   /** Lot rows (parallel columns); `next` chains a (firm, sub-unit) holding in FIFO order. */
@@ -35,7 +36,7 @@ export interface LotStore {
   units: Float64Array;
   priceLocal: Float64Array;
   acquiredWeek: Int32Array;
-  sellerId: Int32Array;
+  sellerId: RefColumn<PartyKeyRef>;
   next: Int32Array;
   freeHead: number;
   /** How many rows have ever been handed out (free-listed rows stay inside this bound). */
@@ -69,7 +70,7 @@ export function newLotStore(): LotStore {
     units: new Float64Array(cap),
     priceLocal: new Float64Array(cap),
     acquiredWeek: new Int32Array(cap),
-    sellerId: new Int32Array(cap),
+    sellerId: newRefColumn<PartyKeyRef>(cap),
     next: new Int32Array(cap).fill(-1),
     freeHead: -1,
     used: 0,
@@ -89,7 +90,7 @@ function growLots(L: LotStore): void {
   L.units = g(L.units, (n) => new Float64Array(n));
   L.priceLocal = g(L.priceLocal, (n) => new Float64Array(n));
   L.acquiredWeek = g(L.acquiredWeek, (n) => new Int32Array(n));
-  L.sellerId = g(L.sellerId, (n) => new Int32Array(n));
+  L.sellerId = g(L.sellerId, (n) => newRefColumn<PartyKeyRef>(n));
   const next = new Int32Array(cap).fill(-1);
   next.set(L.next);
   L.next = next;
@@ -139,7 +140,7 @@ export function pushLot(
   L.units[r] = unitsHeld;
   L.priceLocal[r] = unitPriceLocal;
   L.acquiredWeek[r] = acquiredWeek | 0;
-  L.sellerId[r] = internString(v2, sellerKey);
+  L.sellerId[r] = internPartyKey(v2, sellerKey);
   L.next[r] = -1;
   if (L.tail[slot] >= 0) {
     L.next[L.tail[slot]] = r;
@@ -336,7 +337,7 @@ export function materializeInputInventory(v2: V2World, companyId: string): Recor
     const lots: InputLot[] = [];
     for (let r = L.head[slot]; r >= 0; r = L.next[r]) {
       lots.push({
-        sellerId: v2.internedStrings[L.sellerId[r]],
+        sellerId: partyKeyOf(v2, L.sellerId[r]),
         unitsHeld: L.units[r],
         unitPriceLocal: L.priceLocal[r],
         acquiredWeek: L.acquiredWeek[r],

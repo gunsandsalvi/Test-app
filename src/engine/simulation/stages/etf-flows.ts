@@ -28,7 +28,7 @@ import { entityCashOf, householdDepositsOf, obligationCurrencyOf } from '../../l
 import { transferHolding, issueHolding, retireHolding, markHolding } from '../../ledger/holdings-ledger';
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
-import { internType } from '../../../engine2/world';
+import { internType, regionOf, typeOf } from '../../../engine2/world';
 import { pay, institutionSpendableLocal } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { mandatePctOf } from '../../../domain/institutions';
@@ -582,7 +582,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
             if (!(Math.abs(qty) > 0.0001)) continue;
             const sh = H.shares[r];
             const instrumentId = instrumentIdAt(ctx.v2, r);
-            const instrumentType = ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
+            const instrumentType = typeOf(ctx.v2, H.typeRef[r]) as ItemizedHolding['instrumentType'];
             const key = `${instrumentType}|${instrumentId}`;
             const seen = byInstrument.get(key);
             if (seen) {
@@ -594,7 +594,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
             const out: ItemizedHolding = {
               instrumentId,
               instrumentType,
-              issuerRegion: ctx.v2.internedStrings[H.regionRef[r]] as ItemizedHolding['issuerRegion'],
+              issuerRegion: regionOf(ctx.v2, H.regionRef[r]) as ItemizedHolding['issuerRegion'],
               quantityOrNotionalLocal: qty,
               // §9.13-CREDIT row 5: the slice's QUANTITY is the row's own units scaled, not its
               // money — the two are the same number only while the paper marks at par.

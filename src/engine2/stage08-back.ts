@@ -55,7 +55,7 @@ import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
 import { ladderRowsOf, materializeTranche, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY, trancheIdOf } from './tranches';
 import { issueTranche, retireTranche, commitLadder } from '../engine/ledger/tranche-ledger';
-import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World } from './world';
+import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World, tickerOf } from './world';
 import { totalInputValueLocal } from './lots';
 import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../domain/primary-market';
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/stated';
@@ -1764,7 +1764,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
                 // asset on another (measured: PGNX +292.7M of prepay credit against a −4.1M
                 // loan move, identity −151.8M). Step 10: the asset half is the ladder row
                 // `retireTranche` reduces below; the lender's book is a read of it.
-                const bankTicker = v2.internedStrings[TS.bankRef[rTr]];
+                const bankTicker = tickerOf(v2, TS.bankRef[rTr]);
                 facilityRepaidByBank.set(bankTicker,
                   (facilityRepaidByBank.get(bankTicker) ?? 0) + repaid);
                 facilityRepaidLocal += repaid;

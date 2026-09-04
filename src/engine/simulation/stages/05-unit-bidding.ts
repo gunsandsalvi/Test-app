@@ -36,7 +36,7 @@ import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputInten
 import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryLocal, fullStaffingCapHeads } from '../../../domain/company';
 import { WeeklyStepContext, CompanyWeekUpdate } from './context';
-import { revHistLen, revHistAt, rowOf, V2World, ensureV2 } from '../../../engine2/world';
+import { revHistLen, revHistAt, rowOf, V2World, ensureV2, partyKeyOf } from '../../../engine2/world';
 import { deliverGoods, receiveInputLot, settleOutputInventory, setOutputStock, consumeGoods } from '../../ledger/goods-ledger';
 import { contractRows, relinkChain, formContractRow, endOfWeekCompact } from '../../../engine2/contracts';
 import { random, beginEntityScope, endEntityScope } from '../../rng';
@@ -55,6 +55,7 @@ import { realizedAnnualVol } from '../../../domain/volatility';
 import { weeklyWageBillLocal, getBaseAnnualWageLocal } from '../../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { cashOf } from '../../ledger/accounts';
+import { type PartyKeyRef } from '../../../engine2/refs';
 
 /** SCALE / DECLARED RELABEL: decimal rounding by arithmetic
  *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
@@ -531,7 +532,7 @@ function clearBook(
  * spans every region so the foreign leg of one struck in the world book still settles.
  */
 interface WeekResolution {
-  resolveRef: (refId: number) => Company | undefined;
+  resolveRef: (refId: PartyKeyRef) => Company | undefined;
   /** partyId per firm, computed once per week (was two string-map probes per payment leg). */
   pidOf: (comp: Company) => number;
   /** The firm's CompanyWeekUpdate record, ensured once per firm per week (same identity the
@@ -1650,7 +1651,7 @@ function runSubUnitMarkets(
   const contractUnitsByCustomer = new Map<string, number>();
   MARKET_REGION_IDS.forEach(regionId => {
     survivingRows[regionId].forEach(r => {
-      const key = v2.internedStrings[CT.customerRef[r]];
+      const key = partyKeyOf(v2, CT.customerRef[r]);
       contractUnitsByCustomer.set(key, (contractUnitsByCustomer.get(key) ?? 0) + CT.qtyPerWeek[r]);
     });
   });
@@ -2513,7 +2514,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   const wk: WeekResolution = {
     resolveRef: (refId) => {
       if (refCompCache.has(refId)) return refCompCache.get(refId);
-      const comp = lookup.byKey.get(v2.internedStrings[refId]);
+      const comp = lookup.byKey.get(partyKeyOf(v2, refId));
       refCompCache.set(refId, comp);
       return comp;
     },

@@ -15,7 +15,7 @@
  *   markHolding     — a change of VALUE with no change of quantity: no wire (a mark is not a move;
  *                     P retires it when value becomes price × quantity by construction)
  */
-import { V2World, internType, internInstrument } from '../../engine2/world';
+import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
 import {
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows, instrumentIdAt } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
@@ -319,7 +319,7 @@ export function scaleHoldings(
     // §9.13-CREDIT row 5: a corporate action scales the QUANTITY, and the value follows from it.
     // Reading only the value left the ratio applied to the money and not to the face.
     units += (Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r]) * Math.abs(1 - ratio);
-    region = v2.internedStrings[H.regionRef[r]] as RegionId;
+    region = regionOf(v2, H.regionRef[r]) as RegionId;
   }
   if (!(valueLocal > 0) || !region) return 0;
   const spec: HoldingSpec = { instrumentType, instrumentId, issuerRegion: region, valueLocal, units, shares: anyShares ? shares : undefined };
@@ -407,7 +407,7 @@ export function markBookToMarket(
   const H = mutableHoldings(v2);
   let rows = 0, deltaLocal = 0;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
-    const instrumentType = v2.internedStrings[H.typeRef[r]];
+    const instrumentType = typeOf(v2, H.typeRef[r]);
     if (Number.isNaN(H.units[r])) H.units[r] = H.qtyLocal[r];
     const unitsHeld = H.units[r];
     if (!(Math.abs(unitsHeld) > 0)) continue;

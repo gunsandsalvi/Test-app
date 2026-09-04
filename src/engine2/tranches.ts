@@ -17,7 +17,7 @@
 import { DebtTranche } from '../domain/company';
 import { GovDebtTrancheView } from '../domain/region-macro';
 import { govTrancheView } from '../domain/government';
-import { V2World, rowOf, internInstrument, internTicker, internEntity } from './world';
+import { V2World, rowOf, internInstrument, internTicker, internEntity, entityOf, instrumentOf, tickerOf, tickerRefOf, instrumentRefOf } from './world';
 import { InstrumentId, asInstrumentId } from '../domain/ids';
 import { forgetClearedPrice } from './prices';
 import { defect } from '../domain/defect';
@@ -57,10 +57,10 @@ export interface TrancheStore {
   synced: Set<string>;
   /** §5-FINALIZATION 13b: the live row of a tranche id (interned) — an instrument resolves to its
    *  issuer in one read (`issuerIdOf`). Maintained by the row writer and the row freer only. */
-  rowByIdRef: Map<number, number>;
+  rowByIdRef: Map<InstrRef, number>;
   /** 13b: the ISSUER of every tranche id ever written — permanent, so a register row of a tranche
    *  retired this week still names its issuer at the paying agent (the row index above is live). */
-  issuerRefByIdRef: Map<number, number>;
+  issuerRefByIdRef: Map<InstrRef, EntityRef>;
 }
 
 /**
@@ -71,7 +71,10 @@ export interface TrancheStore {
  */
 export type ReadonlyTrancheStore = {
   readonly [K in keyof TrancheStore]:
-    TrancheStore[K] extends Float64Array ? Readonly<Float64Array>
+    // §3.13-BOOK slice (b): first, for the reason on `ReadonlyHoldingStore` — a ref column that
+    // falls through to the `Int32Array` branch loses its space.
+    TrancheStore[K] extends RefColumn<infer B> ? RefColumn<B>
+    : TrancheStore[K] extends Float64Array ? Readonly<Float64Array>
     : TrancheStore[K] extends Int32Array ? Readonly<Int32Array>
     : TrancheStore[K] extends Uint8Array ? Readonly<Uint8Array>
     : TrancheStore[K] extends Set<string> ? ReadonlySet<string>
@@ -101,8 +104,8 @@ export function newTrancheStore(): TrancheStore {
     next: new Int32Array(cap).fill(-1),
     freeHead: -1,
     used: 0,
-    rowByIdRef: new Map(),
-    issuerRefByIdRef: new Map(),
+    rowByIdRef: new Map<InstrRef, number>(),
+    issuerRefByIdRef: new Map<InstrRef, EntityRef>(),
     head: new Int32Array(0),
     tail: new Int32Array(0),
     synced: new Set<string>(),
@@ -232,7 +235,7 @@ function canonicalRow(S: TrancheStore, v2: V2World, r: number): string {
     S.originationWeek[r], S.maturityWeek[r],
     f & TR_SUBORDINATED ? 1 : 0,
     f & TR_CP ? 1 : 0, f & TR_FACILITY ? 1 : 0,
-    S.bankRef[r] < 0 ? 'x' : v2.internedStrings[S.bankRef[r]], v2.internedStrings[S.idRef[r]],
+    S.bankRef[r] < 0 ? 'x' : tickerOf(v2, S.bankRef[r]), instrumentOf(v2, S.idRef[r]),
     Number.isNaN(S.paymentsPerYear[r]) ? 'x' : S.paymentsPerYear[r],
     Number.isNaN(S.paymentAnchorWeek[r]) ? 'x' : S.paymentAnchorWeek[r],
     f & TR_REFI_INITIATED ? 1 : 0,
@@ -339,7 +342,7 @@ export function materializeTranche(v2: V2World, r: number): DebtTranche {
   if (!Number.isNaN(S.floatingMarginBps[r])) t.floatingMarginBps = S.floatingMarginBps[r];
   if (f & TR_CP) t.isCommercialPaper = true;
   if (f & TR_FACILITY) t.isBankFacility = true;
-  if (S.bankRef[r] >= 0) t.facilityBankTicker = v2.internedStrings[S.bankRef[r]];
+  if (S.bankRef[r] >= 0) t.facilityBankTicker = tickerOf(v2, S.bankRef[r]);
   if (S.callProt[r]) t.callProtection = S.callProt[r];
   if (!Number.isNaN(S.paymentsPerYear[r])) t.paymentsPerYear = S.paymentsPerYear[r];
   if (!Number.isNaN(S.paymentAnchorWeek[r])) t.paymentAnchorWeek = S.paymentAnchorWeek[r];
@@ -390,8 +393,8 @@ export interface FacilityRow {
 function facilityRowOf(v2: V2World, r: number): FacilityRow {
   const S = v2.tranches;
   return {
-    row: r, borrowerId: v2.internedStrings[S.issuerRef[r]], bankTicker: v2.internedStrings[S.bankRef[r]],
-    trancheId: v2.internedStrings[S.idRef[r]], principalLocal: S.principalLocal[r],
+    row: r, borrowerId: entityOf(v2, S.issuerRef[r]), bankTicker: tickerOf(v2, S.bankRef[r]),
+    trancheId: instrumentOf(v2, S.idRef[r]), principalLocal: S.principalLocal[r],
     marginBps: Number.isNaN(S.floatingMarginBps[r]) ? 350 : S.floatingMarginBps[r],
     originationWeek: S.originationWeek[r], maturityWeek: S.maturityWeek[r],
   };
@@ -399,9 +402,9 @@ function facilityRowOf(v2: V2World, r: number): FacilityRow {
 /** Every live facility a bank has lent, across every borrower's ladder. */
 export function facilityRowsOf(v2: V2World, bankTicker: string): FacilityRow[] {
   const S = v2.tranches;
-  const ref = v2.internedIdByString.get(bankTicker);
+  const ref = tickerRefOf(v2, bankTicker);
   const out: FacilityRow[] = [];
-  if (ref === undefined) return out;
+  if (ref < 0) return out;
   for (let r = 0; r < S.used; r++) {
     if ((S.flags[r] & TR_FACILITY) && S.bankRef[r] === ref && S.issuerRef[r] >= 0 && S.principalLocal[r] > 0.01) out.push(facilityRowOf(v2, r));
   }
@@ -410,8 +413,8 @@ export function facilityRowsOf(v2: V2World, bankTicker: string): FacilityRow[] {
 /** The bank's facility book: Σ face of every facility it has lent. */
 export function facilityBookOf(v2: V2World, bankTicker: string): number {
   const S = v2.tranches;
-  const ref = v2.internedIdByString.get(bankTicker);
-  if (ref === undefined) return 0;
+  const ref = tickerRefOf(v2, bankTicker);
+  if (ref < 0) return 0;
   let usd = 0;
   for (let r = 0; r < S.used; r++) if ((S.flags[r] & TR_FACILITY) && S.bankRef[r] === ref && S.issuerRef[r] >= 0) usd += S.principalLocal[r];
   return usd;
@@ -426,13 +429,13 @@ export function facilitiesOfBorrower(v2: V2World, companyId: string): FacilityRo
  *  and the credit kinds until the writers flip to tranche ids) or a TRANCHE; either way the
  *  issuer is one read: the tranche's row carries its issuer, any other id is the issuer itself. */
 export function trancheRowOf(v2: V2World, instrumentId: string): number | undefined {
-  const ref = v2.internedIdByString.get(instrumentId);
-  return ref === undefined ? undefined : v2.tranches.rowByIdRef.get(ref);
+  const ref = instrumentRefOf(v2, asInstrumentId(instrumentId));
+  return ref < 0 ? undefined : v2.tranches.rowByIdRef.get(ref);
 }
 /**
  * §3.13-BOOK slice (a) — THE ONE PLACE A STORE REF BECOMES AN INSTRUMENT ID.
  *
- * `v2.internedStrings[S.idRef[r]]` was written out at every call site that wanted a tranche's id —
+ * `instrumentOf(v2, S.idRef[r])` was written out at every call site that wanted a tranche's id —
  * an array read whose result was a bare `string`, so nothing could tell it apart from a ticker, a
  * region or a company id. It is one accessor now, and it is the ADMISSION point: this is where the
  * model takes the intern table's word for it that ref `idRef[r]` names an instrument. Slice (b)
@@ -440,14 +443,14 @@ export function trancheRowOf(v2: V2World, instrumentId: string): number | undefi
  * and countably, instead of in eleven places invisibly.
  */
 export function trancheIdOf(v2: V2World, r: number): InstrumentId {
-  return asInstrumentId(v2.internedStrings[v2.tranches.idRef[r]]);
+  return instrumentOf(v2, v2.tranches.idRef[r]);
 }
 
 export function issuerIdOf(v2: V2World, instrumentId: string): string {
-  const ref = v2.internedIdByString.get(instrumentId);
-  if (ref === undefined) return instrumentId;
+  const ref = instrumentRefOf(v2, asInstrumentId(instrumentId));
+  if (ref < 0) return instrumentId;
   const iss = v2.tranches.issuerRefByIdRef.get(ref);
-  return iss !== undefined && iss >= 0 ? v2.internedStrings[iss] : instrumentId;
+  return iss !== undefined && iss >= 0 ? entityOf(v2, iss) : instrumentId;
 }
 /** 13b: a tranche id that has been written to the store at some point — live or retired. */
 /**
@@ -473,8 +476,8 @@ export function trancheScheduleOf(S: ReadonlyTrancheStore, r: number): { periodW
 }
 
 export const isTrancheId = (v2: V2World, instrumentId: string): boolean => {
-  const ref = v2.internedIdByString.get(instrumentId);
-  return ref !== undefined && v2.tranches.issuerRefByIdRef.has(ref);
+  const ref = instrumentRefOf(v2, asInstrumentId(instrumentId));
+  return ref >= 0 && v2.tranches.issuerRefByIdRef.has(ref);
 };
 
 /** §5-WIRES D: the ladder's face on the live rows — total debt as a read. */

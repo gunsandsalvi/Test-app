@@ -13,7 +13,7 @@ import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
 import { reassignConsignments } from './goods-arrival';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
-import { ensureV2, revHistSeed, rowOf, ringCopyRow, internType, internEntity } from '../../../engine2/world';
+import { ensureV2, revHistSeed, rowOf, ringCopyRow, internType, typeOf, internInstrument, instrumentRefOf } from '../../../engine2/world';
 import { materializeLadder, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
 import { rebuildLadder } from '../../ledger/tranche-ledger';
 import { pay } from './settlement';
@@ -162,7 +162,11 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     // BEFORE the parent's price steps down (the stake fraction reads the pre-split register).
     // holdings flip: row walk for the stake read (the push and sync below stay on objects).
     const Hs = ctx.v2.holdings;
-    const parentRef = internEntity(ctx.v2, parent.id);
+    // §3.13-BOOK slice (b): the rows wanted are the ones holding the parent's EQUITY, and an
+    // equity is keyed by its issuer's own id — so this is the same string it always was, now
+    // saying which space it is read in. Built from the entity id, the compiler rejected it
+    // against `instrRef`, which is exactly the crossing `instrument-keys.ts` exists to count.
+    const parentRef = internInstrument(ctx.v2, equityInstrumentId(parent.id));
     const equityRefS = internType(ctx.v2, 'EQUITY');
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.isDefaulted) return;
@@ -264,7 +268,9 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   let institutionalTenderLocal = 0;
   // holdings flip: row walk for the tender stake read.
   const Ht = ctx.v2.holdings;
-  const targetRef = internEntity(ctx.v2, target.id);
+  // §3.13-BOOK slice (b): the target's EQUITY, keyed by the target's own id — see the note in
+  // `applyStakeSaleProceeds` above.
+  const targetRef = internInstrument(ctx.v2, equityInstrumentId(target.id));
   const equityRefT = internType(ctx.v2, 'EQUITY');
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
@@ -413,8 +419,9 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     // W2: the exchange is two wires per holder — the target's paper back to the target
     // (retired), the acquirer's paper out to the holder (issued) — never a re-key in place.
     const H = ctx.v2.holdings;
-    const targetIdRef = ctx.v2.internedIdByString.get(target.id);
-    if (targetIdRef !== undefined) {
+    // §3.13-BOOK slice (b): the target's EQUITY again — this ref is compared against `instrRef`.
+    const targetIdRef = instrumentRefOf(ctx.v2, equityInstrumentId(target.id));
+    if (targetIdRef >= 0) {
       const equityRefR = internType(ctx.v2, 'EQUITY');
       const corpBondRef = internType(ctx.v2, 'CORP_BOND');
       const levLoanRef = internType(ctx.v2, 'LEVERAGED_LOAN');
@@ -429,7 +436,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           if (H.instrRef[r] !== targetIdRef && issuerIdOf(ctx.v2, rowId) !== target.id) continue;
           const t = H.typeRef[r];
           if (t !== equityRefR && t !== corpBondRef && t !== levLoanRef && t !== cpRef) continue;
-          swaps.push({ type: ctx.v2.internedStrings[t] as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], units: Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r], id: rowId });
+          swaps.push({ type: typeOf(ctx.v2, t) as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], units: Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r], shares: Number.isNaN(H.shares[r]) ? undefined : H.shares[r], id: rowId });
         }
         if (swaps.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };
@@ -468,7 +475,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           const newId = newIdByOldTrancheId.get(rowId);
           if (newId === undefined || newId === rowId || H.instrRef[r] === targetIdRef) continue;
           if (issuerIdOf(ctx.v2, rowId) === target.id) continue; // exchanged above
-          rekeys.push({ type: ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], units: Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r], id: rowId, newId });
+          rekeys.push({ type: typeOf(ctx.v2, H.typeRef[r]) as ItemizedHolding['instrumentType'], valueLocal: H.qtyLocal[r], units: Number.isNaN(H.units[r]) ? H.qtyLocal[r] : H.units[r], id: rowId, newId });
         }
         if (rekeys.length === 0) return;
         const holder = { kind: 'INSTITUTION' as const, id: e.id };
