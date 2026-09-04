@@ -27,6 +27,8 @@ import { DealerDeskInventory } from '../../../domain/dealer-desk';
 import { pay, pendingSettlementLocal, PartyRef } from './settlement';
 import { cashOf } from '../../ledger/accounts';
 import { transferHolding, HoldingKind } from '../../ledger/holdings-ledger';
+import type { EntityId } from '../../../domain/ids';
+import type { InstrumentId } from '../../../domain/ids';
 
 export function reconcileHolderPrincipal(args: {
   ctx: WeeklyStepContext;
@@ -42,7 +44,8 @@ export function reconcileHolderPrincipal(args: {
    *  its own money. */
   issuerOfInstrument: Map<string, Company>;
   /** Institutions' positions by (entityId → instrumentId → face) — scaled IN PLACE. */
-  holdingsByEntity: Map<string, Map<string, number>>;
+  /** §3.13-BOOK (c2b): holder → instrument → face. */
+  holdingsByEntity: Map<EntityId, Map<InstrumentId, number>>;
   /** The banks whose desks may hold this book's paper. */
   banks: Company[];
   /** The desk book name ('leveraged loan', 'corporate bond', ...). */

@@ -21,6 +21,7 @@ import type { BackAShardOut } from './back-worker.ts';
 import { partyId, partyTableSize, partyRefsFrom } from '../engine/ledger/party';
 import { internReason, reasonTableSize, reasonTextsFrom } from '../engine/simulation/stages/settlement';
 import { WeeklyStepContext } from '../engine/simulation/stages/context';
+import { asEntityId } from '../domain/ids';
 
 interface PoolWorker {
   worker: import('worker_threads').Worker;
@@ -114,7 +115,7 @@ function preInternBackA(L: BackLanes): void {
       partyId({ kind: 'BANK', ticker: bank });
       partyId({ kind: 'BANK_CREDIT', ticker: bank });
     }
-    if (L.hasVehicle[i] === 1) partyId({ kind: 'INSTITUTION', id: L.companyId[i] });
+    if (L.hasVehicle[i] === 1) partyId({ kind: 'INSTITUTION', id: asEntityId(L.companyId[i]) });
   }
 }
 

@@ -9,6 +9,8 @@
 
 import { RegionId, Industry } from '../../types';
 import { defect } from '../../domain/defect';
+import type { EntityId } from '../../domain/ids';
+import { asEntityId } from '../../domain/ids';
 
 export type PartyRef =
   | { kind: 'COMPANY'; ticker: string }
@@ -28,7 +30,10 @@ export type PartyRef =
    *  dealer and the fee-earning desks settle against it, so it is flat by construction: a
    *  non-zero net is a leg some book forgot to name, reported rather than absorbed. */
   | { kind: 'CLEARING_HOUSE'; region: RegionId }
-  | { kind: 'INSTITUTION'; id: string }
+  /** §3.13-BOOK slice (c2b): the ONE arm keyed by an entity id rather than a ticker — an
+   *  institution has no ticker the ledger uses, and this is the inconsistency `c-then` ends by
+   *  making `PartyRef` a VIEW of the entity store rather than a parallel union. */
+  | { kind: 'INSTITUTION'; id: EntityId }
   /** SEG1 — a private-sector segment pool: the mass of small firms below naming resolution.
    *  Its balance is `cashLocal` on the region's `SmePool`, held across the region's
    *  banks pro-rata by market share (small firms bank everywhere; there is no house bank). */
@@ -108,7 +113,8 @@ export function partyFromKey(key: string): PartyRef | undefined {
     case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES':
       return { kind, ticker: rest } as PartyRef;
     case 'INSTITUTION':
-      return { kind: 'INSTITUTION', id: rest };
+      // §3.13-BOOK (c2b): the key's tail IS the entity id — `partyKey` wrote it from one.
+      return { kind: 'INSTITUTION', id: asEntityId(rest) };
     case 'SEGMENT': {
       const at = rest.indexOf(':');
       return at < 0 ? undefined

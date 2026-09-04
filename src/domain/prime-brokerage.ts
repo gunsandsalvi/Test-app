@@ -21,6 +21,7 @@
  */
 
 import { RegionId } from './geography';
+import type { EntityId } from './ids';
 
 export interface PrimeBrokerageLine {
   id: string;
@@ -28,7 +29,8 @@ export interface PrimeBrokerageLine {
   /** The named bank whose balance sheet this line sits on. */
   brokerTicker: string;
   /** The fund borrowing on it. */
-  fundId: string;
+  /** §3.13-BOOK (c2b): the hedge fund this line is extended to. */
+  fundId: EntityId;
   drawnLocal: number;
   /** The share of posted collateral the broker will not lend against, this week. */
   haircutRate: number;

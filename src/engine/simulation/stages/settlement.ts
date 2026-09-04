@@ -49,6 +49,7 @@ import { PaymentCategory, categoryOfReason } from '../../ledger/payment-category
 import { assertNever } from '../../../domain/defect';
 import { banksOf } from '../../../domain/company';
 import type { Company, InstitutionalEntity } from '../../../types';
+import type { EntityId } from '../../../domain/ids';
 
 export interface PaymentInstruction {
   payer: PartyRef;
@@ -356,7 +357,7 @@ export function pendingSettlementLocal(ctx: WeeklyStepContext, party: PartyRef):
  * array (the lending stage rebuilds the array when it writes).
  */
 const collateralHeldByBook = new WeakMap<object, Map<string, number>>();
-export function stockLoanCollateralHeldLocal(ctx: WeeklyStepContext, entityId: string): number {
+export function stockLoanCollateralHeldLocal(ctx: WeeklyStepContext, entityId: EntityId): number {
   let heldLocal = 0;
   for (const reg of Object.values(ctx.updatedRegions)) {
     const book = reg?.securityLoanBook;
@@ -377,14 +378,14 @@ export function stockLoanCollateralHeldLocal(ctx: WeeklyStepContext, entityId: s
 
 /** What an institution can put behind a bid this week: its balance, plus what settlement already
  *  owes it, less the stock-loan collateral it is only holding. Never negative. */
-export function institutionSpendableLocal(ctx: WeeklyStepContext, entity: { id: string }, withPending = true): number {
+export function institutionSpendableLocal(ctx: WeeklyStepContext, entity: { id: EntityId }, withPending = true): number {
   const pendingLocal = withPending ? pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: entity.id }) : 0;
   return Math.max(0, entityCashOf(ctx.v2, entity) + pendingLocal - stockLoanCollateralHeldLocal(ctx, entity.id));
 }
 
 /** The pending figure the class-budget rule takes, with the held collateral netted as if it were
  *  already owed — which it is. */
-export function institutionUnsettledLessCollateralLocal(ctx: WeeklyStepContext, entityId: string): number {
+export function institutionUnsettledLessCollateralLocal(ctx: WeeklyStepContext, entityId: EntityId): number {
   return pendingSettlementLocal(ctx, { kind: 'INSTITUTION', id: entityId }) - stockLoanCollateralHeldLocal(ctx, entityId);
 }
 

@@ -22,6 +22,7 @@
 
 import { RegionId } from './geography';
 import { EstateClaimType } from './assets';
+import type { EntityId } from './ids';
 
 /** Where a claim sits in the waterfall. Lower is paid first. */
 export const CLAIM_SENIORITY = {
@@ -31,7 +32,7 @@ export const CLAIM_SENIORITY = {
 } as const;
 
 export type ClaimHolder =
-  | { kind: 'INSTITUTION'; id: string }
+  | { kind: 'INSTITUTION'; id: EntityId }
   | { kind: 'BANK'; ticker: string }
   | { kind: 'COMPANY'; ticker: string };
 
@@ -52,7 +53,8 @@ export interface EstateAssets {
 }
 
 export interface Estate {
-  companyId: string;
+  /** §3.13-BOOK (c2b): the firm whose estate this is. */
+  companyId: EntityId;
   ticker: string;
   regionId: RegionId;
   openedWeek: number;

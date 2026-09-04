@@ -17,12 +17,14 @@
  */
 
 import { RegionId } from './geography';
+import type { EntityId } from './ids';
 
 export interface EtfFund {
   /** The index this fund tracks — its constituents and weights are that index's. */
   indexId: string;
   /** The asset manager that runs it and collects the fee. */
-  sponsorEntityId: string;
+  /** §3.13-BOOK (c2b): the asset manager that runs the fund. */
+  sponsorEntityId: EntityId;
   /** Shares in issue. Creations and redemptions are the ONLY things that change this. */
   sharesOutstanding: number;
   /** Annual expense ratio, accrued weekly out of fund assets to the sponsor. */

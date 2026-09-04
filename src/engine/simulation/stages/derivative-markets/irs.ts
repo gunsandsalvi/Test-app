@@ -39,6 +39,8 @@ import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
 import { swapInstrumentId } from '../../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../../domain/ids';
+import { isKnownEntity } from '../../../../domain/ids';
+import type { EntityId } from '../../../../domain/ids';
 /** Swaps are struck for their tenor and run to it — there is no secondary market here yet. */
 
 /**
@@ -166,6 +168,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
     });
     if (instruments.length === 0) return;
 
+    const irsEntityIds = new Set(regionEntities.map((e) => e.id));
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       // How much duration it is short: a liability-matched book's assets are shorter than its
@@ -211,9 +214,13 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       const clearedBps = result.newStatById.get(instrumentId);
       if (clearedBps === undefined) return;
       parByTenor[k] = Number((clearedBps / 10000).toFixed(6));
-      const takenByEntity = new Map<string, number>();
+      const takenByEntity = new Map<EntityId, number>();
       let totalTakenLocal = 0;
-      result.newParticipantHoldings.forEach((byInstrument, entityId) => {
+      // §3.13-BOOK (c2b): the engine keys fills by PARTICIPANT id, a different space; the
+      // book's own admitted set is what proves this one names an institution.
+      result.newParticipantHoldings.forEach((byInstrument, participantId) => {
+        if (!isKnownEntity(irsEntityIds, participantId)) return;
+        const entityId = participantId;
         const usd = byInstrument.get(instrumentId) ?? 0;
         if (usd <= 1) return;
         takenByEntity.set(entityId, usd);

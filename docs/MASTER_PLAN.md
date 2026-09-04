@@ -524,7 +524,7 @@ written from here):
        PARTICIPANT id (`DESK-<ticker>`) or from a REGION, and a WRONG brand is worse than none — it
        is a lie the compiler then enforces. So c2 is:
          · **c2a** `Company.id` alone — **DONE, in §9.**
-         · **c2b** `InstitutionalEntity.id` and `PartyRef`'s INSTITUTION arm.
+         · **c2b** `InstitutionalEntity.id` and `PartyRef`'s INSTITUTION arm — **DONE, in §9.**
          · **c2c** the stages, one file at a time.
        Each small enough that every site is read rather than pattern-matched. The measurement that
        says this is necessary: 128 `ByTicker` maps and 756 `.ticker` references are the real size of
@@ -1626,6 +1626,39 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c2b) — THE INSTITUTION'S ID, `PartyRef`'S INSTITUTION ARM, AND FOUR SIBLING
+UNIONS.** `InstitutionalEntity.id` alone opened at 11 errors. Branding `PartyRef`'s INSTITUTION arm
+with it took that to 62 — which is the right size, because that arm is the ONE party kind keyed by
+an entity id rather than a ticker, and it is what `c-then` ends by making `PartyRef` a VIEW of the
+entity store instead of a parallel union. The four sibling unions went with it (`RepoParty`,
+`DerivativeParty`, `LendingParty`, the estate's), because each declares itself structurally the
+ledger's own arms and would otherwise have drifted from them the week after.
+
+**Every fix was at a SOURCE, not a cast at a leaf.** Eleven fields that hold entity ids and were
+still `string` are branded: a supply relationship's two ends, a PE sponsor's `portfolioCompanyIds`
+and `lpCommitments[].lpEntityId`, an ETF's `sponsorEntityId`, a household's `etfShares[].fundId`, a
+prime-brokerage line's `fundId`, a primary offering's `issuerId`, a firm's `ownership.peSponsorId`,
+an estate's `companyId`, and `SecurityLoan.instrumentId` (as the INSTRUMENT it is). Roughly thirty
+`Map<string, …>` declarations that key by holder or issuer say so now.
+
+**THE THIRD AND FOURTH CROSSINGS SURFACED.** c2a found equity's; this found the FUND SHARE's — the
+register keys an ETF's or a PE fund's interest by the fund ENTITY, so a row's instrument id is an
+entity id there too (`etfShareFundId`). And the PE fund's was avoidable rather than intrinsic: its
+ENTITY id was being minted by `instrument-keys.ts:peFundInterestId` — the constructor for the
+instrument standing in for the constructor of the thing that ISSUES it. `peFundEntityId` is the
+entity's now and the interest key derives from it.
+
+**AND THE PARTICIPANT SPACE HELD.** The plan's warning — that the compiler cannot tell an entity id
+from a participant id (`<ticker>::DESK`, `CDSDESK-`, `CONS-`) — is exactly what four sites hit, and
+none of them got a brand. Three are narrowed by ELIMINATION at the point the desk arms have already
+been excluded, and `securities-lending` and `irs` narrow through `isKnownEntity(bookEntityIds, id)`
+— membership of the set the book itself admitted, which is a runtime check the code was already
+doing, now spent as the compiler's evidence. `holderPayee` keeps a `string` parameter and says why:
+its argument spans two id spaces and the entity arm is only reached once the desk arm is refused.
+
+Sixteen unproven admissions in `src`, eight of them the constructors in `entity-keys.ts`. Zero
+errors, five gates green, and the tree was red only between commits.
 
 **13-BOOK slice (c2a) — `Company.id` IS AN `EntityId`, AND 13-READ IS WHY IT FIT.** The first
 attempt at (c) branded `Company.id` and `InstitutionalEntity.id` together and reached ~70

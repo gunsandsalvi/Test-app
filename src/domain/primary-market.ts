@@ -90,7 +90,8 @@ export interface PrimaryOffering {
    */
   peDeal?: {
     kind: 'LBO' | 'TAKE_PRIVATE' | 'RECAP' | 'IPO';
-    sponsorId: string;
+    /** §3.13-BOOK (c2b): the PE sponsor bringing the deal. */
+    sponsorId: EntityId;
     /** LBO and TAKE_PRIVATE: the sponsor's equity cheque, paid from dry powder at settlement. */
     equityLocal?: number;
     /** TAKE_PRIVATE: what the sponsor pays each public shareholder to tender. */

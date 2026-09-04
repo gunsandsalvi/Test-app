@@ -42,6 +42,7 @@ import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { typeOf, V2World } from '../../../engine2/world';
+import type { EntityId } from '../../../domain/ids';
 
 /** The fund's annual expense ratio — a structural primitive like the deposit beta; G6/BP make
  * fees competitive between funds. */
@@ -242,7 +243,7 @@ export function settleCorporateSweepBooks(books: Map<RegionId, CorporateSweepBoo
  */
 export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   const feeByRegion = new Map<RegionId, number>();
-  const feePayerByRegion = new Map<RegionId, string>();
+  const feePayerByRegion = new Map<RegionId, EntityId>();
   // WHO THE NEW SHARES ARE ISSUED TO. This paid the yield by growing
   // `mmfSharesOutstandingLocal` and credited NO holder, so the fund's liability rose every week
   // while every holder's asset stood still: a one-sided flow (rule 5), measured at 2.5% of the

@@ -11,6 +11,7 @@ import { BankingSectorView, AssetOwnershipShares } from './banking';
 import { InstitutionalSector } from './institutions';
 import { CategoryDemandState, SupplyRelationship } from './market-microstructure';
 import type { DebtTranche } from './company';
+import type { EntityId } from './ids';
 
 export type WealthTier = 'BOTTOM_50' | 'NEXT_40' | 'TOP_9' | 'TOP_1';
 
@@ -222,7 +223,8 @@ export interface HouseholdState {
   /** Listed shares households really hold — the float institutions do not, marked at 07e's prices. */
   directEquityLocal: number;
   /** Index-fund shares, created through the real AP mechanism and marked at the fund's NAV. */
-  etfShares: { fundId: string; shares: number }[];
+  /** §3.13-BOOK (c2b): the fund is an entity; its SHARES are an instrument keyed by it. */
+  etfShares: { fundId: EntityId; shares: number }[];
   /**
    * §7.281 — THE DIRECT-EQUITY SELL CHANNEL's announcement. The liquidity ladder's next rung
    * after deposits and fund shares: the slice of a household shortfall neither could cover,

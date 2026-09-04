@@ -43,6 +43,7 @@ import { cashOf, openingCashOf, entityCashOf, poolCashOf, obligationCurrencyOf }
 import { issueHolding } from '../../ledger/holdings-ledger';
 import { bumpRegister } from './register-index';
 import { equityInstrumentId, birthFacilityTrancheId } from '../../../domain/instrument-keys';
+import type { EntityId } from '../../../domain/ids';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -183,7 +184,7 @@ export function dryPowderLocal(
 function callCapitalLocal(
   ctx: WeeklyStepContext,
   lpById: ReadonlyMap<string, InstitutionalEntity>,
-  sponsorId: string,
+  sponsorId: EntityId,
   requestedLocal: number
 ): number {
   const sponsor = ctx.updatedInstitutionalEntities.find((e) => e.id === sponsorId);
@@ -229,7 +230,7 @@ function callCapitalLocal(
  * The cash returns pro rata to drawn capital and reduces it, which is what a recallable
  * distribution really is: the commitment becomes available to deploy again.
  */
-function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountLocal: number): void {
+function distributeToLps(ctx: WeeklyStepContext, sponsorId: EntityId, amountLocal: number): void {
   const sponsor = ctx.updatedInstitutionalEntities.find((e) => e.id === sponsorId);
   if (!sponsor?.peFund || !(amountLocal > 0)) return;
   const totalDrawnLocal = sponsor.peFund.lpCommitments.reduce((a, c) => a + Math.max(0, c.drawnLocal), 0);

@@ -112,7 +112,7 @@ import { computeExpenditureGdpLocal, GOV_PROCUREMENT_SHARE_OF_SPENDING, computeH
 import { seedInstitutionTotalAssetsLocal } from '../../domain/institutions';
 import { equityInstrumentId, peFundInterestId, equityIssuerId } from '../../domain/instrument-keys';
 import type { InstrumentId } from '../../domain/ids';
-import { governmentIssuer, indexFundEntityId, moneyFundEntityId } from '../../domain/entity-keys';
+import { governmentIssuer, indexFundEntityId, moneyFundEntityId, peFundEntityId } from '../../domain/entity-keys';
 
 /**
  * Build a world. The same seed always builds the same world and, stepped the same number of
@@ -1524,7 +1524,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     for (let fundIdx = 0; fundIdx < 2; fundIdx++) {
       const portfolio = sponsorable.filter((_, i) => i % 2 === fundIdx);
       if (portfolio.length === 0) continue;
-      const fundId = peFundInterestId(regionId, fundIdx + 1);
+      // §3.13-BOOK (c2b): the FUND is an entity; its LP interest is the instrument keyed by it.
+      const fundId = peFundEntityId(regionId, fundIdx + 1);
       const investedLocal = Math.round(portfolio.reduce((a, f) => a + stakeValue(f), 0));
       // Real funds keep ~a third of commitments undrawn — the dry powder HC6 calls.
       const committedLocal = Math.round(investedLocal / 0.65);
@@ -1561,7 +1562,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       lps.forEach(e => {
         const interestLocal = Math.round(investedLocal * (lpWeights.get(e.id)! / lpWeightSum));
         if (interestLocal > 1) {
-          e.itemizedHoldings.push({ instrumentId: fundId, instrumentType: 'PE_FUND_INTEREST', issuerRegion: regionId, quantityOrNotionalLocal: interestLocal, units: interestLocal });
+          e.itemizedHoldings.push({ instrumentId: peFundInterestId(regionId, fundIdx + 1), instrumentType: 'PE_FUND_INTEREST', issuerRegion: regionId, quantityOrNotionalLocal: interestLocal, units: interestLocal });
         }
       });
     }

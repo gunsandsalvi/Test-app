@@ -484,7 +484,7 @@ export interface Company {
    * companies the real register is the share-ownership model (WS4) — this block is only
    * meaningful while listingStatus is PRIVATE.
    */
-  ownership?: { founderPct: number; peSponsorId?: string; peSponsorPct?: number;
+  ownership?: { founderPct: number; peSponsorId?: EntityId; peSponsorPct?: number;
     /** HC6: week the sponsor acquired it — the hold period an exit decision reads. */
     acquiredWeek?: number;
     /** HC7: the EV/EBITDA the sponsor PAID — the basis an exit is measured against. */

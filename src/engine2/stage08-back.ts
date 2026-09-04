@@ -570,7 +570,7 @@ function runCashWalk(args: {
         boundaryTraceByFirm.set(boundaryTraceKey, (boundaryTraceByFirm.get(boundaryTraceKey) ?? 0) + nonAuctionReceiptsLocal);
       }
       if (hasVehicle) {
-        post('operating receipts drawn from the vehicle', nonAuctionReceiptsLocal, { kind: 'INSTITUTION', id: companyId });
+        post('operating receipts drawn from the vehicle', nonAuctionReceiptsLocal, { kind: 'INSTITUTION', id: asEntityId(companyId) });
       }
       // ...and the costs of running the whole business beyond what was bought as real units:
       // wages, services, and the unsettled share of capex. Settled purchases already left as
@@ -624,7 +624,7 @@ function runCashWalk(args: {
       // remainder moves no cash, exactly like its receipts twin.
       const opexBeyondWagesLocal = Math.max(0, opexOutflowLocal - wagesPaidLocal);
       if (hasVehicle) {
-        post('operating costs borne by the vehicle', -opexBeyondWagesLocal, { kind: 'INSTITUTION', id: companyId });
+        post('operating costs borne by the vehicle', -opexBeyondWagesLocal, { kind: 'INSTITUTION', id: asEntityId(companyId) });
       }
       // IND16: WAREHOUSING HAS A SELLER NOW. This was a declared boundary frontier — "warehousing,
       // unmodelled seller" — because nothing in the model held goods for anybody. The distribution

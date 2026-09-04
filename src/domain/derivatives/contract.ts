@@ -14,6 +14,7 @@
  */
 
 import { RegionId, CurrencyCode } from '../geography';
+import type { EntityId } from '../ids';
 
 /**
  * The subset of the ledger's parties that can stand on a bilateral derivative. The arms are
@@ -23,7 +24,7 @@ import { RegionId, CurrencyCode } from '../geography';
 export type DerivativeParty =
   | { kind: 'COMPANY'; ticker: string }
   | { kind: 'BANK'; ticker: string }
-  | { kind: 'INSTITUTION'; id: string };
+  | { kind: 'INSTITUTION'; id: EntityId };
 
 export function derivativePartyKey(p: DerivativeParty): string {
   return `${p.kind}:${p.kind === 'INSTITUTION' ? p.id : p.ticker}`;
@@ -42,7 +43,7 @@ export function derivativePartyKey(p: DerivativeParty): string {
  */
 export const bankPartyKey = (ticker: string): string => derivativePartyKey({ kind: 'BANK', ticker });
 export const companyPartyKey = (ticker: string): string => derivativePartyKey({ kind: 'COMPANY', ticker });
-export const institutionPartyKey = (id: string): string => derivativePartyKey({ kind: 'INSTITUTION', id });
+export const institutionPartyKey = (id: EntityId): string => derivativePartyKey({ kind: 'INSTITUTION', id });
 
 /** The classes the registry knows. A new derivative adds a member here and a profile module. */
 export type DerivativeClassId = 'IRS' | 'CDS' | 'COMMODITY_FUTURE' | 'FX_FORWARD';

@@ -37,10 +37,12 @@ import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf } from '../../ledger/accounts';
 import type { InstrumentId } from '../../../domain/ids';
-import { sblInstrumentId, equityInstrumentId } from '../../../domain/instrument-keys';
+import { sblInstrumentId, equityInstrumentId, equityIssuerId } from '../../../domain/instrument-keys';
 import { ladderTotalLocal } from '../../../engine2/tranches';
+import type { EntityId } from '../../../domain/ids';
+import { asInstrumentId, isKnownEntity } from '../../../domain/ids';
 
-export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
+export const positionKey = (entityId: EntityId, companyId: EntityId) => `${entityId}|${companyId}`;
 
 
 const priceScratchSl: number[] = [];
@@ -62,32 +64,34 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       (c) => c.region === regionId && isActiveCompany(c) && isPubliclyListed(c)
         && c.sharesOutstanding > 0 && c.stockPrice > 0
     );
-    const companyById = new Map<string, Company>(listed.map((c) => [c.id, c]));
+    const companyById = new Map<EntityId, Company>(listed.map((c) => [c.id, c]));
     // A company that has left the register entirely still has to be found, to close the loans
     // written against it.
-    const anyCompanyById = new Map<string, Company>(
+    const anyCompanyById = new Map<EntityId, Company>(
       [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].map((c) => [c.id, c])
     );
 
     // What every entity can DELIVER today, swept ONCE. The store is walked per entity, not per
     // (entity, name) pair — the same discipline 07e keeps, and the difference between one pass
     // over the rows and one pass per name in the book.
-    const sharesByEntity = new Map<string, Map<string, number>>();
+    const sharesByEntity = new Map<EntityId, Map<EntityId, number>>();
     ctx.updatedInstitutionalEntities.forEach((e) => {
-      const byName = new Map<string, number>();
+      const byName = new Map<EntityId, number>();
       store.scan(e.id, 'EQUITY', (h) => {
-        const comp = companyById.get(h.instrumentId);
+        // §3.13-BOOK (c2b): an EQUITY row's instrument id is its issuer's — the crossing.
+        const issuerId = equityIssuerId(h.instrumentId);
+        const comp = companyById.get(issuerId);
         if (!comp) return false;
         const shares = h.quantityShares ?? h.quantityOrNotionalLocal / Math.max(0.01, comp.stockPrice);
-        byName.set(h.instrumentId, (byName.get(h.instrumentId) ?? 0) + shares);
+        byName.set(issuerId, (byName.get(issuerId) ?? 0) + shares);
         return false; // read-only: 07e claims these rows, not this stage
       });
       sharesByEntity.set(e.id, byName);
     });
-    const deliverable = (entityId: string, companyId: string): number =>
+    const deliverable = (entityId: EntityId, companyId: EntityId): number =>
       sharesByEntity.get(entityId)?.get(companyId) ?? 0;
     /** Move shares on the ledger AND in this stage's view of it, so both stay one fact. */
-    const deliver = (fromId: string, toId: string, companyId: string, shares: number, price: number) => {
+    const deliver = (fromId: EntityId, toId: EntityId, companyId: EntityId, shares: number, price: number) => {
       // THE DELIVERY IS AN INSTRUCTION. Both sides used to be written straight onto the store
       // with no wire, so shares moved between two books with nothing naming the move — the last
       // path in the tree that still did. The rows are the store's to write inside its window, so
@@ -114,8 +118,9 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     const live: SecurityLoan[] = [];
 
     priorBook.forEach((loan) => {
-      const comp = companyById.get(loan.instrumentId);
-      const issuer = comp ?? anyCompanyById.get(loan.instrumentId);
+      const loanIssuerId = equityIssuerId(loan.instrumentId);
+      const comp = companyById.get(loanIssuerId);
+      const issuer = comp ?? anyCompanyById.get(loanIssuerId);
       // The name is gone or defaulted. The lender was long it the whole time — that is what
       // lending means — so it takes the loss, the collateral goes back, and the shares the
       // borrower owes are worth nothing to return.
@@ -177,12 +182,12 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
 
       // A recalled borrower that has managed to buy the shares back delivers them and is out.
       if (loan.recalledWeek !== undefined) {
-        const have = deliverable(loan.borrower.id, loan.instrumentId);
+        const have = deliverable(loan.borrower.id, loanIssuerId);
         if (have >= loan.shares - 0.0001) {
           // It delivers what it HOLDS. The test above accepts a borrower a whisker short so a
           // loan does not hang on a fraction of a share, but handing over the loan's full size
           // out of a position that does not cover it moves shares that are not there.
-          deliver(loan.borrower.id, loan.lender.id, loan.instrumentId, Math.min(loan.shares, have), comp.stockPrice);
+          deliver(loan.borrower.id, loan.lender.id, loanIssuerId, Math.min(loan.shares, have), comp.stockPrice);
           if (loan.collateralLocal > 0) {
             pay(ctx, {
               payer: { kind: 'INSTITUTION', id: loan.lender.id },
@@ -195,7 +200,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           return;
         }
         // Still short of the shares: the obligation stands, and it is a purchase at any price.
-        const k = positionKey(loan.borrower.id, loan.instrumentId);
+        const k = positionKey(loan.borrower.id, loanIssuerId);
         ctx.buyInSharesByBorrower.set(k, (ctx.buyInSharesByBorrower.get(k) ?? 0) + loan.shares);
         live.push(loan);
         return;
@@ -215,25 +220,26 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     const lentByPair = new Map<string, number>();
     const strikeByPair = new Map<string, number>();
     live.forEach((l) => {
-      const k = positionKey(l.lender.id, l.instrumentId);
+      const k = positionKey(l.lender.id, equityIssuerId(l.instrumentId));
       lentByPair.set(k, (lentByPair.get(k) ?? 0) + l.shares);
       strikeByPair.set(k, Math.max(strikeByPair.get(k) ?? 0, l.lenderPositionAtStrike));
     });
     const soldByLender = new Map<string, number>();
     live.forEach((l) => {
-      const k = positionKey(l.lender.id, l.instrumentId);
+      const k = positionKey(l.lender.id, equityIssuerId(l.instrumentId));
       if (soldByLender.has(k)) return;
-      const positionNow = deliverable(l.lender.id, l.instrumentId) + (lentByPair.get(k) ?? 0);
+      const positionNow = deliverable(l.lender.id, equityIssuerId(l.instrumentId)) + (lentByPair.get(k) ?? 0);
       soldByLender.set(k, Math.max(0, (strikeByPair.get(k) ?? 0) - positionNow));
     });
     live.forEach((loan) => {
       if (loan.recalledWeek !== undefined) { carried.push(loan); return; }
-      const k = positionKey(loan.lender.id, loan.instrumentId);
+      const loanIssuerId = equityIssuerId(loan.instrumentId);
+      const k = positionKey(loan.lender.id, loanIssuerId);
       const deficit = soldByLender.get(k) ?? 0;
       if (deficit <= 0.0001) { carried.push(loan); return; }
       const recalledShares = Math.min(loan.shares, deficit);
       soldByLender.set(k, deficit - recalledShares);
-      const bk = positionKey(loan.borrower.id, loan.instrumentId);
+      const bk = positionKey(loan.borrower.id, loanIssuerId);
       ctx.buyInSharesByBorrower.set(bk, (ctx.buyInSharesByBorrower.get(bk) ?? 0) + recalledShares);
       const share = recalledShares / loan.shares;
       carried.push({
@@ -252,7 +258,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       }
     });
 
-    const priceOf = (companyId: string) => companyById.get(companyId)?.stockPrice ?? 0;
+    const priceOf = (instrumentId: string) => companyById.get(equityIssuerId(asInstrumentId(instrumentId)))?.stockPrice ?? 0;
     if (listed.length === 0) {
       publishBook(ctx, reg, carried, lastFee, priceOf);
       return;
@@ -277,7 +283,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       (e) => e.region === regionId && !e.isDefaulted
         && (hedgeFundStrategyProfile(e)?.shortsEquity ?? false)
     );
-    const borrowDemandByCompany = new Map<string, { fundId: string; shares: number }[]>();
+    const borrowDemandByCompany = new Map<EntityId, { fundId: EntityId; shares: number }[]>();
     shortFunds.forEach((fund) => {
       const mandate = mandateWeightForIssuer(fund.entityType, fund.region, regionId, mcapByRegion);
       if (!(mandate > 0)) return;
@@ -288,7 +294,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       // put on more of one than it can fund — its own cash, what this week's settlement already
       // owes it, and whatever its prime broker still has open to it.
       let fundableLocal = institutionSpendableLocal(ctx, fund) + Math.max(0, fund.primeBrokerageAvailableLocal ?? 0);
-      const wants: { companyId: string; shares: number }[] = [];
+      const wants: { companyId: EntityId; shares: number }[] = [];
       listed.forEach((c) => {
         const fair = c.isDefaulted ? 0 : fairValuePerShare({
           annualEarningsLocal: c.netIncome,
@@ -310,7 +316,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
         });
         // What it is already short stays short; this is the INCREMENT it wants on top.
         const already = carried.reduce((a, l) => (
-          l.instrumentId === c.id && l.borrower.id === fund.id ? a + l.shares : a), 0);
+          equityIssuerId(l.instrumentId) === c.id && l.borrower.id === fund.id ? a + l.shares : a), 0);
         const incremental = wantShares - already;
         if (incremental > 0) wants.push({ companyId: c.id, shares: incremental });
       });
@@ -368,18 +374,24 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       }
     });
 
-    const lentAlreadyByEntity = new Map<string, Map<string, number>>();
+    const lentAlreadyByEntity = new Map<EntityId, Map<EntityId, number>>();
     carried.forEach((l) => {
-      const byName = lentAlreadyByEntity.get(l.lender.id) ?? new Map<string, number>();
-      byName.set(l.instrumentId, (byName.get(l.instrumentId) ?? 0) + l.shares);
+      const byName = lentAlreadyByEntity.get(l.lender.id) ?? new Map<EntityId, number>();
+      const lentIssuerId = equityIssuerId(l.instrumentId);
+      byName.set(lentIssuerId, (byName.get(lentIssuerId) ?? 0) + l.shares);
       lentAlreadyByEntity.set(l.lender.id, byName);
     });
 
+    // §3.13-BOOK (c2b): every participant in this book IS an institution, and this set is what
+    // proves it when a fill comes back keyed by the clearing engine's own participant id —
+    // which is a DIFFERENT space (a desk's is `<ticker>::DESK`) and stays a plain string until
+    // slice (c2c) reaches the stages.
+    const lenderIds = new Set(ctx.updatedInstitutionalEntities.map((e) => e.id));
     const participants: ClearingParticipant[] = [];
     ctx.updatedInstitutionalEntities.forEach((entity) => {
       if (entity.isDefaulted) return;
       const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
-      const alreadyLent = lentAlreadyByEntity.get(entity.id) ?? new Map<string, number>();
+      const alreadyLent = lentAlreadyByEntity.get(entity.id) ?? new Map<EntityId, number>();
       const current = new Map<InstrumentId, number>();
       const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       borrowNames.forEach((c) => {
@@ -427,9 +439,11 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       if (clearedBps === undefined) return;
       lastFee[c.id] = Number(clearedBps.toFixed(1));
 
-      const newLendingByLender = new Map<string, number>();
+      const newLendingByLender = new Map<EntityId, number>();
       let totalNewShares = 0;
-      result.newParticipantHoldings.forEach((byInstrument, lenderId) => {
+      result.newParticipantHoldings.forEach((byInstrument, participantId) => {
+        if (!isKnownEntity(lenderIds, participantId)) return;
+        const lenderId = participantId;
         const nowLent = byInstrument.get(instrumentId) ?? 0;
         const wasLent = lentAlreadyByEntity.get(lenderId)?.get(c.id) ?? 0;
         const delta = nowLent - wasLent;
@@ -443,7 +457,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       if (totalNewShares <= 0.0001) return;
       // The lender's whole position in the name BEFORE any of this week's deliveries, captured
       // once: lending it out again must not look like a sale next week.
-      const positionAtStrike = new Map<string, number>();
+      const positionAtStrike = new Map<EntityId, number>();
       newLendingByLender.forEach((_shares, lenderId) => {
         positionAtStrike.set(lenderId,
           deliverable(lenderId, c.id) + (lentAlreadyByEntity.get(lenderId)?.get(c.id) ?? 0));
@@ -475,7 +489,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           const loan: SecurityLoan = {
             id: `${regionId}-SBL-${c.id}-${ctx.nextWeek}-${seq++}`,
             regionId,
-            instrumentId: c.id,
+            instrumentId: equityInstrumentId(c.id),
             lender: { kind: 'INSTITUTION', id: lenderId },
             borrower: { kind: 'INSTITUTION', id: d.fundId },
             shares,
@@ -506,7 +520,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     publishBook(ctx, reg, nextBook, lastFee, priceOf);
     // Short interest, as a measurement of the book rather than a number anyone stated.
     borrowNames.forEach((c) => {
-      const onLoan = nextBook.reduce((a, l) => (l.instrumentId === c.id ? a + l.shares : a), 0);
+      const onLoan = nextBook.reduce((a, l) => (equityIssuerId(l.instrumentId) === c.id ? a + l.shares : a), 0);
       c.shortInterestShares = Number(onLoan.toFixed(2));
     });
   });
@@ -542,7 +556,7 @@ function publishBook(
  */
 function publishLent(ctx: WeeklyStepContext, book: SecurityLoan[]): void {
   book.forEach((l) => {
-    const k = positionKey(l.lender.id, l.instrumentId);
+    const k = positionKey(l.lender.id, equityIssuerId(l.instrumentId));
     ctx.lentSharesByLender.set(k, (ctx.lentSharesByLender.get(k) ?? 0) + l.shares);
   });
 }

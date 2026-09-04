@@ -48,8 +48,9 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 
-import { etfShareInstrumentId, etfShareRegisterId } from '../../../domain/instrument-keys';
+import { etfShareInstrumentId, etfShareRegisterId, etfShareFundId } from '../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../domain/ids';
+import type { EntityId } from '../../../domain/ids';
 /** An entity's money for one asset class, from its own mandate weights. */
 function classAppetiteLocal(ctx: WeeklyStepContext, entity: InstitutionalEntity, def: IndexDefinition): number {
   return Math.max(0, institutionTotalAssetsLocal(ctx, entity)) * mandatePctOf(entity.assetAllocationTarget, def.assetClass);
@@ -86,7 +87,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   if (funds.length === 0) return;
 
   // ---- 1. The sponsor's fee, out of the fund's assets. A real flow between two named books. ----
-  const navByFundId = new Map<string, number>();
+  const navByFundId = new Map<EntityId, number>();
   funds.forEach((fund) => {
     const navLocal = fundNavLocal(ctx.v2, fund);
     // A fee is paid FROM CASH THE FUND HAS. Charging the full ratio into a
@@ -117,7 +118,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     (e) => institutionProfile(e.entityType).investsInEtfs && !e.isDefaulted
   );
   /** fundId -> investorId -> desired dollars */
-  const desiredByFund = new Map<string, Map<string, number>>();
+  const desiredByFund = new Map<EntityId, Map<EntityId, number>>();
   funds.forEach((f) => desiredByFund.set(f.id, new Map()));
 
   investors.forEach((investor) => {
@@ -191,7 +192,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // the region's listed market is actually throwing off, less what a deposit pays. When cash pays
   // more than equities earn, households stop buying equities. That is the channel G1b is missing,
   // and it is the same shape WS7 already uses for the deposit-versus-money-fund split.
-  const householdDemandByFund = new Map<string, number>();
+  const householdDemandByFund = new Map<EntityId, number>();
   REGION_IDS.forEach((region) => {
     const reg = ctx.updatedRegions[region];
     const hs = reg?.householdState;
@@ -277,32 +278,34 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // A region's dealers have ONE balance sheet between them, so the week's baskets compete for it.
   // Allocating the whole regional capacity to every fund independently would let ten funds each
   // spend the same dollar of dealer equity.
-  const netFlowByFund = new Map<string, number>();
-  const householdExecutedByFund = new Map<string, { spentLocal: number; navPerShare: number }>();
-  const holdingsDeltaByInvestor = new Map<string, Map<string, number>>();
+  const netFlowByFund = new Map<EntityId, number>();
+  const householdExecutedByFund = new Map<EntityId, { spentLocal: number; navPerShare: number }>();
+  const holdingsDeltaByInvestor = new Map<EntityId, Map<EntityId, number>>();
   /** Redeemer id -> fund id -> the value of the basket the fund owes it this week. */
-  const inKindRedemptionsByInvestor = new Map<string, Map<string, number>>();
+  const inKindRedemptionsByInvestor = new Map<EntityId, Map<EntityId, number>>();
 
   /** What each investor wants to move in each fund, and the fund's net — computed before any
    *  execution, because the AP capacity split depends on the whole week's demand at once. */
-  const flowPlanByFund = new Map<string, {
-    navPerShare: number; carryPricePerShare: number; wantDelta: Map<string, number>;
+  const flowPlanByFund = new Map<EntityId, {
+    navPerShare: number; carryPricePerShare: number; wantDelta: Map<EntityId, number>;
     grossCreateLocal: number; grossRedeemLocal: number; householdLocal: number;
   }>();
   // One pass over the investors' books instead of a `.find` per investor PER FUND — the same
   // first-match-wins row each per-fund scan used to stop at (per-item scans in per-item loops:
   // the anti-pattern, found here by the SCALE profile at ~17 ms/week).
   // First-match-wins share counts read off the rows.
-  const etfShareRowByInvestor = new Map<string, Map<string, number>>();
+  const etfShareRowByInvestor = new Map<EntityId, Map<EntityId, number>>();
   const investorById = new Map(investors.map((i) => [i.id, i]));
   {
     const H = ctx.v2.holdings;
     const etfShareRef0 = internType(ctx.v2, 'ETF_SHARE');
     investors.forEach((inv) => {
-      let rows: Map<string, number> | undefined;
+      let rows: Map<EntityId, number> | undefined;
       for (let r = bookHeadOf(ctx.v2, inv.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== etfShareRef0) continue;
-        const fundId = instrumentIdAt(ctx.v2, r);
+        // §3.13-BOOK (c2b): the register keys a fund's SHARES by the fund itself, so this row's
+        // instrument id IS an entity id — the ETF's half of the crossing equity has too.
+        const fundId = etfShareFundId(instrumentIdAt(ctx.v2, r));
         if (!rows) { rows = new Map(); etfShareRowByInvestor.set(inv.id, rows); }
         if (!rows.has(fundId)) {
           const sh = H.shares[r];
@@ -319,8 +322,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // was budgeted once per fund, and the overdrafts that produced are the harness's largest
   // remaining violation family (traced one of them; the reconcile plug was quietly paying
   // for it every week). A running budget is what every other book in this model gives a bidder.
-  const budgetRemainingByInvestor = new Map<string, number>();
-  const budgetOf = (inv: { id: string }): number => {
+  const budgetRemainingByInvestor = new Map<EntityId, number>();
+  const budgetOf = (inv: { id: EntityId }): number => {
     const existing = budgetRemainingByInvestor.get(inv.id);
     if (existing !== undefined) return existing;
     const opening = institutionSpendableLocal(ctx, inv);
@@ -337,7 +340,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       : ETF_INCEPTION_NAV_PER_SHARE;
 
     // What each investor holds today, in dollars at the current NAV.
-    const heldByInvestor = new Map<string, number>();
+    const heldByInvestor = new Map<EntityId, number>();
     investors.forEach((inv) => {
       const held = etfShareRowByInvestor.get(inv.id)?.get(fund.id);
       if (held !== undefined) heldByInvestor.set(inv.id, held * navPerShare);
@@ -346,7 +349,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // Gross flow both ways, netted — an AP only has to carry the net basket.
     let grossCreateLocal = 0;
     let grossRedeemLocal = 0;
-    const wantDeltaByInvestor = new Map<string, number>();
+    const wantDeltaByInvestor = new Map<EntityId, number>();
     const ids = new Set([...desired.keys(), ...heldByInvestor.keys()]);
     ids.forEach((id) => {
       const investor = investorById.get(id);
@@ -384,7 +387,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
 
   // Split each region's dealer capacity across the funds competing for it, by the size of the net
   // basket each one needs carried.
-  const capacityByFund = new Map<string, number>();
+  const capacityByFund = new Map<EntityId, number>();
   REGION_IDS.forEach((region) => {
     const regionFunds = funds.filter((f) => f.region === region);
     const demandLocal = regionFunds.reduce((a, f) => a + Math.abs(netFlowByFund.get(f.id) ?? 0), 0);
@@ -432,7 +435,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const householdCashFillRatio = householdLocal < 0
       ? Math.min(1, fundCashAvailableLocal / Math.max(1, -householdLocal))
       : 1;
-    const executedByInvestor = new Map<string, number>();
+    const executedByInvestor = new Map<EntityId, number>();
     wantDeltaByInvestor.forEach((deltaLocal, id) => {
       // The netted part always clears; only the imbalance is rationed.
       const nettedShare = Math.abs(netLocal) > 0
@@ -490,7 +493,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         // IN KIND: the basket goes out, not money. Recorded here and delivered in one pass below,
         // because the fund's own book has to be sliced once for every redeemer at once rather
         // than shrunk under each of them in turn.
-        const byFund = inKindRedemptionsByInvestor.get(id) ?? new Map<string, number>();
+        const byFund = inKindRedemptionsByInvestor.get(id) ?? new Map<EntityId, number>();
         byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + -executedLocal);
         inKindRedemptionsByInvestor.set(id, byFund);
       } else {
@@ -506,7 +509,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         });
       }
       const shares = executedLocal / navPerShare;
-      const byFund = holdingsDeltaByInvestor.get(id) ?? new Map<string, number>();
+      const byFund = holdingsDeltaByInvestor.get(id) ?? new Map<EntityId, number>();
       byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + shares);
       holdingsDeltaByInvestor.set(id, byFund);
     });
@@ -531,14 +534,14 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // 15% of every line, and each redeemer's slice is a real position it now holds. Nothing is
   // created and nothing is sold — this is the transfer that makes an in-kind redemption need no
   // cash, and it is why an ETF cannot be run on the way an open-ended fund can. ----
-  const inKindOwedByFund = new Map<string, number>();
+  const inKindOwedByFund = new Map<EntityId, number>();
   inKindRedemptionsByInvestor.forEach((byFund) => {
     byFund.forEach((usd, fundId) => inKindOwedByFund.set(fundId, (inKindOwedByFund.get(fundId) ?? 0) + usd));
   });
   if (inKindOwedByFund.size > 0) {
     const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
     let delivered = false;
-    const fundAssetsLocal = new Map<string, number>();
+    const fundAssetsLocal = new Map<EntityId, number>();
     // The cash the slice loop has NOT yet promised. The payments below settle at the
     // close, so `fund.cashLocal` never falls between redeemers — while `share` renormalizes
     // against the SHRUNKEN total. Two 40%-of-the-fund redeemers therefore took 0.4 + 0.667 of
@@ -546,7 +549,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // slice double-promised), and the fund settled overdrawn by the excess — the steady
     // 0.13–0.19B weekly overdraft on exactly the funds whose redemptions are chronic (the
     // small-cap ETFs, 34x at reference). One local balance, decremented as it is promised.
-    const remainingCashByFund = new Map<string, number>();
+    const remainingCashByFund = new Map<EntityId, number>();
     inKindOwedByFund.forEach((_owed, fundId) => {
       const fund = entityById.get(fundId);
       if (!fund) return;
@@ -656,14 +659,16 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // ~1,600 rows is 3.2M row visits a week to read a few thousand positions. One pass, indexed by
   // fund, gives every fund its own holders directly.
   // holdings flip: row walk — a non-ETF row costs one int compare.
-  const etfSharesByFundByInvestor = new Map<string, Map<string, number>>();
+  const etfSharesByFundByInvestor = new Map<EntityId, Map<EntityId, number>>();
   {
     const H = ctx.v2.holdings;
     const etfShareRef = internType(ctx.v2, 'ETF_SHARE');
     ctx.updatedInstitutionalEntities.forEach((e) => {
       for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
         if (H.typeRef[r] !== etfShareRef) continue;
-        const fundId = instrumentIdAt(ctx.v2, r);
+        // §3.13-BOOK (c2b): the register keys a fund's SHARES by the fund itself, so this row's
+        // instrument id IS an entity id — the ETF's half of the crossing equity has too.
+        const fundId = etfShareFundId(instrumentIdAt(ctx.v2, r));
         let byInvestor = etfSharesByFundByInvestor.get(fundId);
         if (!byInvestor) { byInvestor = new Map(); etfSharesByFundByInvestor.set(fundId, byInvestor); }
         const sh = H.shares[r];
@@ -680,7 +685,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const instrumentId = etfShareInstrumentId(fund.id);
 
     // What the investors hold between them, and what each of them wants to hold.
-    const heldSharesByInvestor = new Map<string, number>();
+    const heldSharesByInvestor = new Map<EntityId, number>();
     const heldOfThisFund = etfSharesByFundByInvestor.get(fund.id);
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.id === fund.id) return;

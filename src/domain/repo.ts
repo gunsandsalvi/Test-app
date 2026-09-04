@@ -20,10 +20,11 @@
 
 import { RegionId } from './geography';
 import type { InstrumentId } from './ids';
+import type { EntityId } from './ids';
 
 export type RepoParty =
   | { kind: 'BANK'; ticker: string }
-  | { kind: 'INSTITUTION'; id: string }
+  | { kind: 'INSTITUTION'; id: EntityId }
   /** The standing facility. A posted-rate seat in the auction, and a real counterparty here. */
   | { kind: 'CENTRAL_BANK' };
 

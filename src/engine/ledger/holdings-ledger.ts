@@ -21,7 +21,7 @@ import {
 import { ItemizedHolding } from '../../domain/banking';
 import { PartyRef } from './party';
 import { REGION_IDS } from '../../domain/geography';
-import { InstrumentId } from '../../domain/ids';
+import { InstrumentId, EntityId, asEntityId } from '../../domain/ids';
 import { wire, AssetKind, ASSET_KINDS } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { RegionId } from '../../domain/geography';
@@ -102,7 +102,10 @@ export function issuerOfHoldingRow(
   // A tranche resolves to its issuer; anything else — equity, a fund's own shares — is its own
   // issuer, so those two resolve exactly as they did before.
   const ticker = tickerByEntityId.get(issuerIdOf(v2, h.instrumentId));
-  return ticker ? { kind: 'COMPANY', ticker } : { kind: 'INSTITUTION', id: h.instrumentId };
+  // §3.13-BOOK (c2b): no ticker resolved, so the row names something the company table does not
+  // carry — a fund share, keyed on the register by the fund ENTITY itself. That crossing is why
+  // an instrument id can stand here, and slice (d)'s registry is what removes the need.
+  return ticker ? { kind: 'COMPANY', ticker } : { kind: 'INSTITUTION', id: asEntityId(h.instrumentId) };
 }
 
 /**
@@ -116,7 +119,7 @@ export function issuerOfHoldingRow(
  * sector free shares. The institutions come first and in the order given, so a caller that still
  * needs to rebuild its entity array off the same flags can index straight into them.
  */
-export function registerBooks(entityIds: readonly string[]): { id: string; payee: PartyRef }[] {
+export function registerBooks(entityIds: readonly EntityId[]): { id: string; payee: PartyRef }[] {
   return [
     ...entityIds.map((id) => ({ id, payee: { kind: 'INSTITUTION' as const, id } })),
     ...REGION_IDS.map((region) => ({ id: householdBookId(region), payee: { kind: 'HOUSEHOLD' as const, region } })),

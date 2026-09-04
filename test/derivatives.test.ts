@@ -14,6 +14,7 @@ import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, standingPfeChargeLocal, 
   from '../src/domain/derivatives/registry';
 import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivatives/hedging';
 import { StandingBook } from '../src/domain/derivatives/standing-book';
+import { asEntityId } from '../src/domain/ids';
 
 const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView => ({
   week: 10,
@@ -31,7 +32,7 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
 
 const base = (over: Partial<DerivativeContract>): DerivativeContract => ({
   id: 'c', classId: 'IRS', regionId: 'USA', currency: 'USD',
-  a: { kind: 'BANK', ticker: 'AAA' }, b: { kind: 'INSTITUTION', id: 'INS1' },
+  a: { kind: 'BANK', ticker: 'AAA' }, b: { kind: 'INSTITUTION', id: asEntityId('INS1') },
   notional: 1_000_000, strike: 0.05, referenceId: '', termKey: 's5',
   struckWeek: 0, maturityWeek: 260, ...over,
 });
@@ -92,7 +93,7 @@ test('FX forward: the holder short the foreign currency gains when it falls; the
 test('one capacity budget across every class: what the CDS desk wrote consumes what the FX desk can write', () => {
   const book: DerivativeContract[] = [
     base({ classId: 'CDS', a: { kind: 'BANK', ticker: 'HEDGER' }, b: { kind: 'BANK', ticker: 'DESK' }, notional: 100 }),
-    base({ classId: 'FX_FORWARD', a: { kind: 'INSTITUTION', id: 'X' }, b: { kind: 'BANK', ticker: 'DESK' }, notional: 500 }),
+    base({ classId: 'FX_FORWARD', a: { kind: 'INSTITUTION', id: asEntityId('X') }, b: { kind: 'BANK', ticker: 'DESK' }, notional: 500 }),
     base({ classId: 'IRS', a: { kind: 'BANK', ticker: 'DESK' }, notional: 1000, maturityWeek: 5 }), // matured: no charge
   ];
   const charged = standingPfeChargeLocal(book, 'BANK:DESK', 10);
@@ -140,7 +141,7 @@ test('every registered class states both roles and admissible facts — the comp
 
 test('the standing-book index answers exactly what the per-participant walks answered, and follows a strike', () => {
   const me = { kind: 'BANK', ticker: 'ME' } as const;
-  const you = { kind: 'INSTITUTION', id: 'YOU' } as const;
+  const you = { kind: 'INSTITUTION' as const, id: asEntityId('YOU') };
   const book: DerivativeContract[] = [
     base({ id: '1', a: me, b: you, notional: 10, termKey: 's5' }),
     base({ id: '2', a: me, b: you, notional: 20, termKey: 's10' }),

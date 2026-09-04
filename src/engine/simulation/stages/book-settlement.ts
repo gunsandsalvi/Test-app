@@ -46,6 +46,8 @@ import { bankTickerOfParticipant, treasuryTickerOfParticipant, householdRegionOf
 import { dealerDeskPartyOf } from './dealer-desks';
 import { CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import type { ItemizedHolding } from '../../../domain/banking';
+import { isKnownEntity } from '../../../domain/ids';
+import type { EntityId } from '../../../domain/ids';
 
 /** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
 export interface FeeDesk { ticker: string; share: number }
@@ -206,7 +208,7 @@ export function writeBackClearedFills(args: {
 export function participantPartyOf(args: {
   regionId: RegionId;
   /** The institutions this book admitted, by their own entity ids. */
-  entityIds: ReadonlySet<string>;
+  entityIds: ReadonlySet<EntityId>;
   /** The banks whose market-making desks this book built. */
   deskTickers: Set<string>;
   /** 07c only: banks that bid under their plain ticker rather than `bankParticipantId`. */
@@ -214,7 +216,9 @@ export function participantPartyOf(args: {
 }): (participantId: string) => PartyRef | undefined {
   const { regionId, entityIds, deskTickers, bankTickers } = args;
   return (id: string): PartyRef | undefined => {
-    if (entityIds.has(id)) return { kind: 'INSTITUTION', id };
+    // §3.13-BOOK (c2b): membership of the admitted set is what PROVES this string is an entity
+    // id — `isKnownEntity` is that proof written as a narrowing, from slice (a).
+    if (isKnownEntity(entityIds, id)) return { kind: 'INSTITUTION', id };
     if (id === CENTRAL_BANK_PARTICIPANT_ID) return { kind: 'CENTRAL_BANK', region: regionId };
     if (householdRegionOfParticipant(id) !== undefined) return { kind: 'HOUSEHOLD', region: regionId };
     const bank = bankTickerOfParticipant(id);

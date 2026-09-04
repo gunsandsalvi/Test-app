@@ -187,7 +187,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       const sumGaps = rows.reduce((a, [, d]) => a + d, 0);
       const grossGaps = rows.reduce((a, [, d]) => a + Math.abs(d), 0);
       console.log(`  [w5-trace] w${week}: ${rows.length} books off their wires, net ${sumGaps.toFixed(1)} vs the kind-level ${gaps.map(([k, g]) => `${k} ${g.toFixed(1)}`).join(',')}, gross ${grossGaps.toFixed(0)} — ` + rows.slice(0, 6).map(([hk, d]) => {
-        const id = hk.split('|')[0]; const e = byId.get(id);
+        const id = asEntityId(hk.split('|')[0]); const e = byId.get(id); // key is `<holder>|<kind>`
         return `${e ? `${e.entityType}:${e.ticker ?? id}` : `GONE:${id}`} ${d.toFixed(1)}`;
       }).join(' | '));
     }

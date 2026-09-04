@@ -42,6 +42,7 @@ import { facilityBookOf } from '../../../../engine2/tranches';
 import { commodityFutureInstrumentId } from '../../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../../domain/ids';
 import type { EntityId } from '../../../../domain/ids';
+import { asEntityId } from '../../../../domain/ids';
 /** A firm's annual interest bill, from the coverage ratio its own statements already carry. */
 function annualInterestOf(c: Company): number {
   const coverage = c.interestCoverage;
@@ -240,9 +241,10 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       const strike = Number(clearedPrice.toFixed(2));
 
       boughtByParticipant.forEach((units, participantId) => {
+        // §3.13-BOOK (c2b): see cds.ts — a participant id is its own space.
         const longParty: DerivativeParty = participantId.startsWith('CONS-')
           ? { kind: 'COMPANY', ticker: participantId.slice('CONS-'.length) }
-          : { kind: 'INSTITUTION', id: participantId };
+          : { kind: 'INSTITUTION', id: asEntityId(participantId) };
         sellers.forEach((s) => {
           const size = units * ((s.units * fillShare) / Math.max(1e-9, totalBoughtUnits));
           if (size <= 0.0001) return;

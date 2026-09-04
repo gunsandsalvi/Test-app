@@ -61,5 +61,15 @@ export const asTicker = (s: string): Ticker => s as Ticker;
  * PLAIN OBJECTS are a smell: a `Map<InstrumentId, T>` needs none of this. Slice (e) removes the
  * remaining ones (`sovereignBondHoldingsByBond` is the last of them).
  */
+/**
+ * §3.13-BOOK slice (c2b) — MEMBERSHIP IS THE PROOF. A clearing book holds a set of the entity ids
+ * it admitted; a participant string that is IN that set is an entity id, and the set is what says
+ * so. Written as a narrowing rather than a cast, this is the one shape that turns a runtime check
+ * the code was already doing into the compiler's evidence — which is the difference between a
+ * brand that means something and `as EntityId` sprinkled at the call sites.
+ */
+export const isKnownEntity = (known: ReadonlySet<EntityId>, id: string): id is EntityId =>
+  known.has(id as EntityId);
+
 export const instrumentEntries = <T,>(rec: Record<string, T> | undefined): [InstrumentId, T][] =>
   Object.entries(rec ?? {}) as [InstrumentId, T][];

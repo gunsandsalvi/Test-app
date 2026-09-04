@@ -368,7 +368,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // what `O7` counts.
     const store = ctx.holdingsStore!;
     const bondFaceById = new Map(bonds.map((b) => [b.id, b.faceLocal]));
-    const claimedByEntity = new Map<string, Map<InstrumentId, number>>();
+    const claimedByEntity = new Map<EntityId, Map<InstrumentId, number>>();
     bookEntities.forEach((entity) => {
       const claimed = new Map<InstrumentId, number>();
       store.scan(entity.id, 'CORP_BOND', (h) => {

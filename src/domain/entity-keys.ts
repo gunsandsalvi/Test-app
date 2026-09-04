@@ -62,3 +62,13 @@ export const indexFundEntityId = (indexId: string): EntityId => asEntityId(`${in
  *  readable and two spins in different weeks are two firms. */
 export const spinOffEntityId = (parentId: EntityId, week: number): EntityId =>
   asEntityId(`${parentId}-SPIN-${week}`);
+
+/**
+ * §3.13-BOOK slice (c2b) — A PE FUND, AS AN ENTITY. Its id was minted by
+ * `instrument-keys.ts:peFundInterestId` and then used as the fund's own entity id — the
+ * constructor for the INSTRUMENT standing in for the constructor of the thing that issues it.
+ * That is the same crossing equity and ETF shares have, but here it was avoidable: a fund is an
+ * entity first, and the LP interest is keyed BY it.
+ */
+export const peFundEntityId = (regionId: RegionId, fundIndex: number): EntityId =>
+  asEntityId(`${regionId}_PEFUND_${fundIndex}`);

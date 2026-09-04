@@ -84,7 +84,12 @@ export interface InstitutionalEntity {
   /** This entity's board: the two preference primitives (domain/preferences.ts). */
   management?: import('./preferences').Preferences;
   financialStatementProfile?: FinancialStatementProfile;
-  id: string;
+  /**
+   * §3.13-BOOK slice (c2b) — THE INSTITUTION'S IDENTITY, in the same space a firm's now lives in.
+   * `PartyRef`'s INSTITUTION arm keys by this, and so does every register book head, so branding
+   * it is what lets the compiler refuse a ticker or a participant id where a holder belongs.
+   */
+  id: EntityId;
   name: string;
   ticker: string;
   region: RegionId;
@@ -193,7 +198,8 @@ export interface InstitutionalEntity {
   peFund?: {
     /** §3.13-BOOK slice (c2a): the firms this sponsor owns. */
     portfolioCompanyIds: EntityId[];
-    lpCommitments: { lpEntityId: string; committedLocal: number; drawnLocal: number }[];
+    /** §3.13-BOOK (c2b): each limited partner is an institution. */
+    lpCommitments: { lpEntityId: EntityId; committedLocal: number; drawnLocal: number }[];
   };
   /**
    * ETF only: the fund's index, its sponsor, its share count and the residual the authorised

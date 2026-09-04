@@ -30,6 +30,7 @@
 
 import { asInstrumentId, asEntityId, type InstrumentId, type EntityId } from './ids';
 import type { RegionId } from './geography';
+import { peFundEntityId } from './entity-keys';
 
 /**
  * A company's listed equity. The id IS the issuer's id — see the header: this is the crossing,
@@ -92,6 +93,14 @@ export const etfShareInstrumentId = (fundId: string): InstrumentId => asInstrume
  * `etfShareInstrumentId` — this is the second of the two keys, not a second instrument.
  */
 export const etfShareRegisterId = (fundId: string): InstrumentId => asInstrumentId(fundId);
+
+/**
+ * §3.13-BOOK slice (c2b) — AND BACK: the fund behind a register ETF_SHARE row. The register keys
+ * a fund's shares by the FUND, so reading that row's instrument id as an entity id is correct and
+ * is the second crossing branding exposed (the first was equity's, `equityIssuerId`). Slice (d)
+ * deletes one of the ETF share's two keys and this goes with it.
+ */
+export const etfShareFundId = (instrumentId: InstrumentId): EntityId => asEntityId(instrumentId);
 
 /** One region's overnight repo book: a single instrument whose price is the overnight rate. */
 export const repoOvernightInstrumentId = (regionId: RegionId): InstrumentId =>
@@ -160,7 +169,7 @@ export const sblInstrumentId = (regionId: RegionId, companyId: string): Instrume
  * used to lose by reusing the holder's own entity id (`ids.ts` header).
  */
 export const peFundInterestId = (regionId: RegionId, fundIndex: number): InstrumentId =>
-  asInstrumentId(`${regionId}_PEFUND_${fundIndex}`);
+  asInstrumentId(peFundEntityId(regionId, fundIndex));
 
 /**
  * The facility draw an overdraft is converted into. `suffix` distinguishes the two sweeps that

@@ -18,6 +18,8 @@ import { bookHeadOf } from '../../engine2/holdings';
 import type { Company, InstitutionalEntity } from '../../types';
 import { equityIssuerId } from '../../domain/instrument-keys';
 import { asEntityId } from '../../domain/ids';
+import type { Ticker } from '../../domain/ids';
+import type { EntityId } from '../../domain/ids';
 
 /** Which of O1's four buckets a ladder row falls in. `BANK_FACILITY` is absent, not zero: it is
  *  on the lending bank's loan book and O4 is the check that tests it there. */
@@ -383,7 +385,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
   // 2. A contract's parties and its reference resolve in the space each is supposed to be in.
   let deadParty = 0, deadRef = 0;
   (state.derivativesBook ?? []).forEach((c) => {
-    ([c.a, c.b] as { kind: string; ticker?: string; id?: string }[]).forEach((p) => {
+    ([c.a, c.b] as { kind: string; ticker?: Ticker | string; id?: EntityId }[]).forEach((p) => {
       const ok = p.kind === 'INSTITUTION' ? entityIds.has(p.id!) : tickers.has(p.ticker!);
       if (!ok) deadParty++;
     });
@@ -404,7 +406,10 @@ function o8(state: GameState, week: number): AuditFinding[] {
       const id = h.instrumentId;
       // §3.13-BOOK (c2a): a listed company's equity is keyed by the company itself, so this
       // arm crosses the instrument space into the entity space — named, and now countable.
-      const known = isTrancheId(v2, id) || companyIds.has(equityIssuerId(id)) || entityIds.has(id);
+      // §3.13-BOOK (c2b): the last arm is the FUND-SHARE crossing — an ETF's or a PE fund's
+      // interest is keyed by the fund ENTITY on the register, so an instrument id that names
+      // nothing else is checked against the entity table. Slice (d)'s index ends the guessing.
+      const known = isTrancheId(v2, id) || companyIds.has(equityIssuerId(id)) || entityIds.has(asEntityId(id));
       if (!known) { unresolvable++; unresolvableLocal += h.quantityOrNotionalLocal ?? 0; }
     });
   });

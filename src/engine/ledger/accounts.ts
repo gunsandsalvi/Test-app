@@ -46,6 +46,7 @@ import { InstitutionalEntity } from '../../domain/institutions';
 import { DepositLines } from '../../domain/banking';
 import { V2World, ensureV2, CURRENCY_ID, currencyOfId, internAccount, accountRefOf, internPartyKey, partyKeyRefOf, partyKeyOf, type PersistentAccounts } from '../../engine2/world';
 import { newRefColumn, type AccountRef } from '../../engine2/refs';
+import { asEntityId } from '../../domain/ids';
 
 /** The ledger's own handle on the money store. Nothing else may hold one — see `ReadonlyAccounts`
  *  in `world.ts` for what it is protecting and why this store is the one that must be protected. */
@@ -407,8 +408,11 @@ export function moveBankReserves(v2: V2World, fromTicker: string, toTicker: stri
 }
 
 /** An institutional entity's cash, in its own money: its accounts, converted (A3.2). */
-export function entityCashOf(v2: V2World, e: Pick<InstitutionalEntity, 'id'>): number {
-  return ownMoneyBalanceOf(v2, { kind: 'INSTITUTION', id: e.id });
+/** §3.13-BOOK (c2b): keyed by BOOK id, which is an entity's for an institution and
+ *  `householdBookId(region)` for the household sector — `registerBooks` hands both, and the
+ *  account store answers either. Not narrowed to `EntityId` for that reason. */
+export function entityCashOf(v2: V2World, e: { id: string }): number {
+  return ownMoneyBalanceOf(v2, { kind: 'INSTITUTION', id: asEntityId(e.id) });
 }
 
 // ---- A3.5 — THE TREASURY'S ACCOUNT IS ONE ROW. Its balance at the central bank and the

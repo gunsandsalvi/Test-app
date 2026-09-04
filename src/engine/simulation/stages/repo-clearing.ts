@@ -59,7 +59,7 @@ import {
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 
 import { repoOvernightInstrumentId, repoTermInstrumentId } from '../../../domain/instrument-keys';
-import { instrumentEntries, type InstrumentId } from '../../../domain/ids';
+import { instrumentEntries, type InstrumentId, asEntityId } from '../../../domain/ids';
 import { bankParticipantId, bankTickerOfParticipant, repoInstitutionSeatId, repoInstitutionIdOfSeat } from '../../../domain/participant-keys';
 /** The zero curve's own points, at the tenors they are quoted for — a curve HAS points, and this
  *  is the one place that says where they sit. Not a grouping of holdings: nothing is keyed by it. */
@@ -584,7 +584,9 @@ export function runRegionalRepoSession(
           ? { kind: 'CENTRAL_BANK' }
           : lenderBank !== undefined
             ? { kind: 'BANK', ticker: lenderBank }
-            : { kind: 'INSTITUTION', id: repoInstitutionIdOfSeat(pid) ?? pid };
+            // §3.13-BOOK (c2b): the seat's tail IS the entity id — `repoInstitutionSeatId`
+            // wrote it from one; a seat that parses as neither is the CB's, handled above.
+            : { kind: 'INSTITUTION', id: asEntityId(repoInstitutionIdOfSeat(pid) ?? pid) };
         newContracts.push({
           id: `${regionId}-REPO-${week}-${contractSeq++}`,
           regionId,

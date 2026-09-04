@@ -783,7 +783,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // What each institution holds, by the paper it names. A row written before this book cleared
       // per tranche may still name its ISSUER; it resolves through `issuerIdOf` like any other and
       // is repaid below as a claim on paper this session does not price.
-      const heldByTrancheByEntity = new Map<string, Map<InstrumentId, number>>();
+      const heldByTrancheByEntity = new Map<EntityId, Map<InstrumentId, number>>();
       cpEntities.forEach((entity) => {
         const byTranche = new Map<InstrumentId, number>();
         store.scan(entity.id, 'COMMERCIAL_PAPER', (h) => {

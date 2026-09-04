@@ -23,7 +23,6 @@ import { bankRwaLocal, BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-prici
 import { heldInShares } from '../../../domain/assets';
 import { dealerDeskParticipantId, dealerDeskTicker } from '../../../domain/dealer-desk';
 
-
 /**
  * The default trigger, defined once. A company defaults the week its cash goes negative while
  * its coverage sits below this floor (see stage 08's check, which imports this constant, and
@@ -161,9 +160,10 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { cashOf, entityCashOf, obligationCurrencyOf } from '../../ledger/accounts';
-import { asInstrumentId, type InstrumentId } from '../../../domain/ids';
+import { asInstrumentId, type InstrumentId, asEntityId } from '../../../domain/ids';
 import type { TypeRef, InstrRef } from '../../../engine2/refs';
 import { equityIssuerId } from '../../../domain/instrument-keys';
+
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
 export const RECOVERY_PRIOR_WEIGHT = 8;
@@ -183,7 +183,6 @@ export function creditRecoveryRate(reg?: { realisedRecoveryRates?: number[] }): 
 export function getRatingBucket(rating: string): 'IG' | 'HY' {
   return ['AAA', 'AA', 'A', 'BBB'].includes(rating) ? 'IG' : 'HY';
 }
-
 
 export function computeOccupationDemand(companies: Company[], privateSegments: SmePool[], regionId: RegionId, governmentEmployment?: number): Record<string, number> {
   const demand: Record<string, number> = {
@@ -406,11 +405,14 @@ function deskHoldingsByInstrument(
 
 /** The payee behind a holder key on the register's accrual ledger: an institution, or a bank's
  *  securities desk where the key names one. */
+/** §3.13-BOOK (c2b): the argument spans TWO id spaces — a desk's participant id
+ *  (`<ticker>::DESK`) or a holder's entity id — so it stays a string, and the entity arm is
+ *  reached only by ELIMINATION, once `dealerDeskTicker` has said this is not a desk. */
 function holderPayee(holderId: string): import('./settlement').PartyRef {
   const ticker = dealerDeskTicker(holderId);
   return ticker !== undefined
     ? { kind: 'BANK_SECURITIES', ticker }
-    : { kind: 'INSTITUTION', id: holderId };
+    : { kind: 'INSTITUTION', id: asEntityId(holderId) };
 }
 
 /**

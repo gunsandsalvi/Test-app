@@ -37,14 +37,20 @@
 
 import { RegionId } from './geography';
 import { CurrencyCode } from './geography';
+import type { EntityId } from './ids';
+import type { InstrumentId } from './ids';
 
-export type LendingParty = { kind: 'INSTITUTION'; id: string };
+export type LendingParty = { kind: 'INSTITUTION'; id: EntityId };
 
 export interface SecurityLoan {
   id: string;
   regionId: RegionId;
-  /** The company whose shares are on loan — the same key 07e's equity book prices. */
-  instrumentId: string;
+  /**
+   * The company whose shares are on loan — the same key 07e's equity book prices, which is the
+   * company's own id (§3.13-BOOK slice (a)'s equity crossing). Typed as the INSTRUMENT it is;
+   * readers that want the issuer cross back through `equityIssuerId`.
+   */
+  instrumentId: InstrumentId;
   lender: LendingParty;
   borrower: LendingParty;
   shares: number;

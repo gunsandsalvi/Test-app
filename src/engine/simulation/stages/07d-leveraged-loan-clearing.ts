@@ -317,7 +317,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // repaid by its borrower below rather than re-keyed onto its other loans.
     const store = ctx.holdingsStore!;
     const loanFaceById = new Map(loans.map((l) => [l.id, l.faceLocal]));
-    const claimedByEntity = new Map<string, Map<InstrumentId, number>>();
+    const claimedByEntity = new Map<EntityId, Map<InstrumentId, number>>();
     bookEntities.forEach((entity) => {
       const claimed = new Map<InstrumentId, number>();
       store.scan(entity.id, 'LEVERAGED_LOAN', (h) => {

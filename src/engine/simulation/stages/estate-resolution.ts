@@ -41,6 +41,7 @@ import { cashOf } from '../../ledger/accounts';
 import { facilitiesOfBorrower, issuerIdOf } from '../../../engine2/tranches';
 import type { InstrumentId } from '../../../domain/ids';
 import { regionOf, typeOf } from '../../../engine2/world';
+import type { EntityId } from '../../../domain/ids';
 
 /** How many resolutions the realised recovery rate averages over before it displaces the prior. */
 export const RECOVERY_HISTORY_LENGTH = 24;
@@ -81,16 +82,18 @@ interface EstateIndex {
   /** `entityId -> instrumentId -> the rows of that entity's book holding it`. Built once for the
    *  holders that actually have a claim, which is what turns a per-claim SCAN of a whole book
    *  into a lookup: ~300 institutions were being re-scanned by ~11,000 claims a week. */
-  rowsByEntityInstrument: Map<string, Map<string, number[]>>;
+  /** §3.13-BOOK (c2b): holder → ISSUER → the register rows carrying that issuer's paper. The
+   *  inner key is an entity id, not an instrument's: a claim in a workout is on the BORROWER. */
+  rowsByEntityInstrument: Map<EntityId, Map<EntityId, number[]>>;
   /** Entities whose book was written, so the sub-$1 compaction runs once each at the end. */
   touchedEntityIds: Set<string>;
 }
 
 function buildEstateIndex(ctx: WeeklyStepContext): EstateIndex {
-  const entityById = new Map<string, InstitutionalEntity>();
+  const entityById = new Map<EntityId, InstitutionalEntity>();
   ctx.updatedInstitutionalEntities.forEach((e) => entityById.set(e.id, e));
   const bankByTicker = new Map<string, Company>();
-  const companyById = new Map<string, Company>();
+  const companyById = new Map<EntityId, Company>();
   ctx.updatedCompanies.forEach((c) => {
     companyById.set(c.id, c);
     if (c.bankBalanceSheet) bankByTicker.set(c.ticker, c);
@@ -104,7 +107,7 @@ function buildEstateIndex(ctx: WeeklyStepContext): EstateIndex {
 
 /** The claim holders' books, indexed by instrument — built once, for the holders that need it. */
 function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
-  const needed = new Set<string>();
+  const needed = new Set<EntityId>();
   estates.forEach((e) => {
     if (e.closedWeek !== undefined) return;
     e.claims.forEach((c) => { if (c.holder.kind === 'INSTITUTION') needed.add(c.holder.id); });
@@ -115,7 +118,7 @@ function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
     const e = index.entityById.get(id);
     if (!e) return;
     const H = index.v2.holdings;
-    const byInstrument = new Map<string, number[]>();
+    const byInstrument = new Map<EntityId, number[]>();
     for (let r = bookHeadOf(index.v2, id); r >= 0; r = H.next[r]) {
       // Keyed by the ISSUER — a row names a tranche or its issuer; a claim is on the issuer.
       const issuerId = issuerIdOf(index.v2, instrumentIdAt(index.v2, r));
@@ -449,7 +452,7 @@ function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Es
  */
 function reduceHolding(
   ctx: WeeklyStepContext, index: EstateIndex, claim: EstateClaim,
-  companyId: string, amountLocal: number, isLoss: boolean
+  companyId: EntityId, amountLocal: number, isLoss: boolean
 ): void {
   if (claim.holder.kind === 'INSTITUTION') {
     // The holder is looked up, its rows for THIS issuer are looked up, and only those are
