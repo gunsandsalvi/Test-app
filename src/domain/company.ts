@@ -4,7 +4,7 @@
  *  output inventories it holds. No parallel firm type anywhere (§7.33). */
 
 import { riskAversionOf } from './preferences';
-import { InstrumentId } from './ids';
+import { InstrumentId, type EntityId } from './ids';
 import { RegionId } from './geography';
 import { defect } from './defect';
 import { Industry } from './industry';
@@ -262,7 +262,13 @@ export interface Company {
   managementFeeRate?: number;
   insurancePremiumsWrittenLocal?: number;
   insuranceClaimsPaidLocal?: number;
-  id: string;
+  /**
+   * §3.13-BOOK slice (c2a) — THE FIRM'S IDENTITY, IN THE ENTITY ID SPACE. Branded so the compiler
+   * refuses a ticker, a participant id or a region where a firm's id belongs. Every writer of it
+   * goes through a named constructor in `domain/entity-keys.ts` (§3.13-READ D11 put them there),
+   * so the brand is applied where the id is MINTED rather than cast at a read.
+   */
+  id: EntityId;
   ticker: string;
   name: string;
   region: RegionId;

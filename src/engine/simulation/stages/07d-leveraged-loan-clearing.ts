@@ -70,6 +70,7 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { buildCreditDemandParticipants } from './credit-demand';
+import type { EntityId } from '../../../domain/ids';
 
 /**
  * Senior-secured first-lien loans trade at a real, structural discount to the same issuer's
@@ -142,7 +143,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // existing borrowers can never price a debut. Without this the offering sat in the queue
     // forever: the instrument was never in the book, so it was never priced, settled or pulled
     // (measured: 767 offering-weeks of LBO financings stuck, zero deals done).
-    const offeringsByIssuerId = new Map<string, PrimaryOffering>();
+    const offeringsByIssuerId = new Map<EntityId, PrimaryOffering>();
     ctx.primaryOfferingsWorking.forEach((o) => {
       if (o.region === regionId && o.instrumentType === 'LEVERAGED_LOAN') offeringsByIssuerId.set(o.issuerId, o);
     });

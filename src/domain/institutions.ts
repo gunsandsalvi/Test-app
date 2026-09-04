@@ -4,6 +4,7 @@
 import { RegionId } from './geography';
 import { ItemizedHolding } from './banking';
 import { FinancialStatementProfile } from './company';
+import type { EntityId } from './ids';
 
 export interface InstitutionalSector {
   corpBondHoldingsLocal: number;
@@ -190,7 +191,8 @@ export interface InstitutionalEntity {
    * budget machinery as any other real payment.
    */
   peFund?: {
-    portfolioCompanyIds: string[];
+    /** §3.13-BOOK slice (c2a): the firms this sponsor owns. */
+    portfolioCompanyIds: EntityId[];
     lpCommitments: { lpEntityId: string; committedLocal: number; drawnLocal: number }[];
   };
   /**

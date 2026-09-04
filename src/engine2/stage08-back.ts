@@ -62,6 +62,7 @@ import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/st
 import { trancheWeekAccrual } from './front-core';
 import { maintenanceBridgeTrancheId, liquidityRevolverTrancheId, maturityRevolverTrancheId, calledRefinanceTrancheId } from '../domain/instrument-keys';
 import type { InstrumentId } from '../domain/ids';
+import { asEntityId } from '../domain/ids';
 
 /**
  * SCALE / DECLARED RELABEL (the user's drift acceptance, 2026-09-01): decimal rounding by
@@ -1514,7 +1515,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       const revolverAllInAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
       enqueueOffering({
         id: `PO-${L8.companyId[row]}-${nextWeek}-REFI`,
-        issuerId: L8.companyId[row],
+        issuerId: asEntityId(L8.companyId[row]),
         issuerTicker: L8.ticker[row],
         region: L8.region[row],
         instrumentType: refinanceAsFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
@@ -1688,7 +1689,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         const revolverAllInAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
         enqueueOffering({
           id: `PO-${L8.companyId[row]}-${nextWeek}-MAINT`,
-          issuerId: L8.companyId[row],
+          issuerId: asEntityId(L8.companyId[row]),
           issuerTicker: L8.ticker[row],
           region: L8.region[row],
           instrumentType: asFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
@@ -1821,7 +1822,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       );
       enqueueOffering({
         id: `PO-${L8.companyId[row]}-${nextWeek}-OPP`,
-        issuerId: L8.companyId[row],
+        issuerId: asEntityId(L8.companyId[row]),
         issuerTicker: L8.ticker[row],
         region: L8.region[row],
         instrumentType: 'CORP_BOND',

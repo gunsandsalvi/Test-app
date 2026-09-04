@@ -9,6 +9,7 @@ import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey, regi
 import { isTrancheKind } from '../../domain/assets';
 import { ensureV2 } from '../../engine2/world';
 import { issuerIdOf } from '../../engine2/tranches';
+import { asEntityId } from '../../domain/ids';
 
 export function auditWires(prev: AuditSnapshot | undefined, state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
@@ -129,13 +130,13 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
         const [rg, sb] = key.split('|');
         let receipts = 0;
         const byId = new Map(state.companies.map((c) => [c.id, c]));
-        Object.entries((state as { lotReceiptsTrace?: Record<string, number> }).lotReceiptsTrace ?? {}).forEach(([k, u]) => { const [cid, s2] = k.split('|'); if (s2 === sb && byId.get(cid)?.region === rg) receipts += u; });
+        Object.entries((state as { lotReceiptsTrace?: Record<string, number> }).lotReceiptsTrace ?? {}).forEach(([k, u]) => { const [cid, s2] = k.split('|'); if (s2 === sb && byId.get(asEntityId(cid))?.region === rg) receipts += u; });
         if (rg === 'USA' && sb === 'electricity') {
           const byTicker = new Map(state.companies.map((c) => [c.ticker, c]));
           const inBy: Record<string, number> = {}; const reasonsBy: Record<string, Set<string>> = {};
           Object.entries(w.goodsInByTicker ?? {}).forEach(([k, u]) => { const [tk, s2, rs] = k.split('|'); if (s2 !== sb) return; const c = byTicker.get(tk); if (c?.region !== rg) return; inBy[tk] = (inBy[tk] ?? 0) + u; (reasonsBy[tk] ??= new Set()).add(rs); });
           const recBy: Record<string, number> = {};
-          Object.entries((state as { lotReceiptsTrace?: Record<string, number> }).lotReceiptsTrace ?? {}).forEach(([k, u]) => { const [cid, s2] = k.split('|'); if (s2 !== sb) return; const c = byId.get(cid); if (c?.region === rg) recBy[c.ticker] = (recBy[c.ticker] ?? 0) + u; });
+          Object.entries((state as { lotReceiptsTrace?: Record<string, number> }).lotReceiptsTrace ?? {}).forEach(([k, u]) => { const [cid, s2] = k.split('|'); if (s2 !== sb) return; const c = byId.get(asEntityId(cid)); if (c?.region === rg) recBy[c.ticker] = (recBy[c.ticker] ?? 0) + u; });
           const rows = Object.keys({ ...inBy, ...recBy }).map((tk) => [tk, (inBy[tk] ?? 0) - (recBy[tk] ?? 0)] as [string, number]).filter(([, d]) => Math.abs(d) > 1).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
           const kinds = Object.entries(w.goodsInByTicker ?? {}).filter(([k]) => k.startsWith(`${rg}|${sb}|KIND:`)).map(([k, u]) => `${k.split('KIND:')[1]} ${u.toFixed(1)}`).join(', ');
           console.log(`  [goods-kind-trace] in by holder kind: ${kinds}; in transit now: ${(state.goodsInTransit ?? []).filter((s2) => s2.subUnitId === sb).length} consignments`);

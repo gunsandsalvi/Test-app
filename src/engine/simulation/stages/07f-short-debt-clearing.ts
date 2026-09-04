@@ -75,6 +75,7 @@ import { commercialPaperTrancheId } from '../../../domain/instrument-keys';
 import { governmentIssuer } from '../../../domain/entity-keys';
 import { forEachSovereignPosition } from '../../sovereign-register';
 import { bankParticipantId, treasuryParticipantId } from '../../../domain/participant-keys';
+import type { EntityId } from '../../../domain/ids';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
@@ -894,7 +895,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // brought this week — each with its own remaining life and its own price.
       type CpPaper = {
         id: InstrumentId;
-        issuerId: string;
+        issuerId: EntityId;
         /** Face outstanding — 0 for a deal that has not priced yet. */
         faceLocal: number;
         /** This week's offering ON THIS PAPER — non-zero only for the primary. */

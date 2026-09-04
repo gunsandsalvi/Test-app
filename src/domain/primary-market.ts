@@ -18,6 +18,7 @@
 import { RegionId } from './geography';
 import { PrimaryOfferingType } from './assets';
 import { asInstrumentId, type InstrumentId } from './ids';
+import type { EntityId } from './ids';
 
 export type PrimaryOfferingInstrumentType = PrimaryOfferingType;
 
@@ -47,7 +48,8 @@ export type PrimaryOfferingPurpose =
 
 export interface PrimaryOffering {
   id: string;
-  issuerId: string;
+  /** §3.13-BOOK slice (c2a): the firm or treasury bringing the deal. */
+  issuerId: EntityId;
   issuerTicker: string;
   region: RegionId;
   instrumentType: PrimaryOfferingInstrumentType;

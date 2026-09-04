@@ -99,6 +99,7 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { buildCreditDemandParticipants } from './credit-demand';
+import type { EntityId } from '../../../domain/ids';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['corporate bond'];
@@ -187,7 +188,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // WS8: this week's primary offerings in THIS book — new fixed-rate paper priced alongside
     // the outstanding stock. The issuer's walk-away rides on the instrument; the engine
     // re-solves without the offering when it is pulled.
-    const offeringsByIssuerId = new Map<string, PrimaryOffering>();
+    const offeringsByIssuerId = new Map<EntityId, PrimaryOffering>();
     ctx.primaryOfferingsWorking.forEach((o) => {
       if (o.region === regionId && o.instrumentType === 'CORP_BOND') offeringsByIssuerId.set(o.issuerId, o);
     });

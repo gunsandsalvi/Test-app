@@ -16,6 +16,8 @@ import { materializeGovLadder } from '../../engine2/tranches';
 import { isTrancheKind } from '../../domain/assets';
 import { bookHeadOf } from '../../engine2/holdings';
 import type { Company, InstitutionalEntity } from '../../types';
+import { equityIssuerId } from '../../domain/instrument-keys';
+import { asEntityId } from '../../domain/ids';
 
 /** Which of O1's four buckets a ladder row falls in. `BANK_FACILITY` is absent, not zero: it is
  *  on the lending bank's loan book and O4 is the check that tests it there. */
@@ -387,7 +389,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
     });
     // A CDS names the issuer it is written on by COMPANY ID; the futures and FX classes name a
     // commodity or a region, which are their own spaces and are not company keys.
-    if (c.classId === 'CDS' && !companyIds.has(c.referenceId)) deadRef++;
+    if (c.classId === 'CDS' && !companyIds.has(asEntityId(c.referenceId))) deadRef++;
   });
   if (deadParty > 0) out.push({ family: 'O', check: 'O8 one thing, one key: contract parties', week, usd: deadParty, message: `${deadParty} contract party references resolve to nothing — a ticker used where an id belongs, or the other way round` });
   if (deadRef > 0) out.push({ family: 'O', check: 'O8 one thing, one key: contract references', week, usd: deadRef, message: `${deadRef} CDS name a reference entity that is no company id — the credit is written on a key that resolves in no store` });
@@ -400,7 +402,9 @@ function o8(state: GameState, week: number): AuditFinding[] {
   state.institutionalEntities.forEach((e) => {
     materializeBook(v2, e.id).forEach((h) => {
       const id = h.instrumentId;
-      const known = isTrancheId(v2, id) || companyIds.has(id) || entityIds.has(id);
+      // §3.13-BOOK (c2a): a listed company's equity is keyed by the company itself, so this
+      // arm crosses the instrument space into the entity space — named, and now countable.
+      const known = isTrancheId(v2, id) || companyIds.has(equityIssuerId(id)) || entityIds.has(id);
       if (!known) { unresolvable++; unresolvableLocal += h.quantityOrNotionalLocal ?? 0; }
     });
   });

@@ -30,6 +30,7 @@ import { buildBackLanes } from '../../../engine2/stage08-lanes';
 import { trustCompanyStore, checkCompanyStore, syncCompanyRow } from '../../../engine2/company-store';
 import { backWorkerCount, dispatchBackA, collectBackA } from '../../../engine2/back-pool';
 import type { BackAShardOut } from '../../../engine2/back-worker';
+import type { EntityId } from '../../../domain/ids';
 
 /** SCALE / DECLARED RELABEL (§7.304, the drift acceptance): decimal rounding by arithmetic
  *  instead of a string round-trip; ULP-edge differences from toFixed accepted. */
@@ -39,7 +40,7 @@ const roundN = (v: number, pow: number) => Math.round(v * pow) / pow;
 /** SCALE: the supply list's own derived indexes, memoised on the array that produced them. */
 interface GroupedSupply {
   byCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeLocal: number; relationshipStrength: number }[]>;
-  categoriesBySupplier: Map<string, Set<string>>;
+  categoriesBySupplier: Map<EntityId, Set<string>>;
 }
 const groupedSupplyByList = new WeakMap<object, GroupedSupply>();
 
@@ -59,9 +60,9 @@ function groupSupplyRelationships(
     if (memo) return memo;
   }
   const byCustomer = new Map<string, never[]>() as unknown as GroupedSupply['byCustomer'];
-  const categoriesBySupplier = new Map<string, Set<string>>();
+  const categoriesBySupplier = new Map<EntityId, Set<string>>();
   lists.forEach((list) => {
-    (list as { customerCompanyId: string; supplierCompanyId: string; category: string }[]).forEach((rel) => {
+    (list as { customerCompanyId: EntityId; supplierCompanyId: EntityId; category: string }[]).forEach((rel) => {
       const existing = byCustomer.get(rel.customerCompanyId);
       if (existing) existing.push(rel as never); else byCustomer.set(rel.customerCompanyId, [rel as never]);
       let set = categoriesBySupplier.get(rel.supplierCompanyId);

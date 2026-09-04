@@ -28,7 +28,7 @@
  * of the job.
  */
 
-import { asInstrumentId, type InstrumentId } from './ids';
+import { asInstrumentId, asEntityId, type InstrumentId, type EntityId } from './ids';
 import type { RegionId } from './geography';
 
 /**
@@ -36,6 +36,19 @@ import type { RegionId } from './geography';
  * not a fix for it. Callers pass the company id they already hold.
  */
 export const equityInstrumentId = (companyId: string): InstrumentId => asInstrumentId(companyId);
+
+/**
+ * §3.13-BOOK slice (c2a) — THE SAME CROSSING, READ THE OTHER WAY. Branding `Company.id` made the
+ * return direction visible too: four sites take an instrument id off a register row and ask a map
+ * keyed by COMPANY id about it, which is the identical collision seen from the other side and was
+ * previously invisible because both were `string`. Naming it does not fix it either — slice (e)'s
+ * one position book does — but `grep -c equityIssuerId` now counts the return legs the way
+ * `equityInstrumentId` counts the outbound ones.
+ *
+ * The caller must already know the instrument IS a listed equity. Nothing here can check that: on
+ * this side of slice (d) there is no instrument registry to ask.
+ */
+export const equityIssuerId = (instrumentId: InstrumentId): EntityId => asEntityId(instrumentId);
 
 /** One region's single-name credit default swap on one reference issuer. */
 export const cdsInstrumentId = (regionId: RegionId, issuerId: string): InstrumentId =>

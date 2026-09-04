@@ -110,7 +110,7 @@ import { decomposeGovernmentSpending, governmentObligationsWeeklyLocal } from '.
 import { marketCapOf, totalDebtOf } from '../../domain/company';
 import { computeExpenditureGdpLocal, GOV_PROCUREMENT_SHARE_OF_SPENDING, computeHouseholdDisposableIncomeLocal, UNEMPLOYMENT_REPLACEMENT_RATE } from '../bootstrap/national-accounts';
 import { seedInstitutionTotalAssetsLocal } from '../../domain/institutions';
-import { equityInstrumentId, peFundInterestId } from '../../domain/instrument-keys';
+import { equityInstrumentId, peFundInterestId, equityIssuerId } from '../../domain/instrument-keys';
 import type { InstrumentId } from '../../domain/ids';
 import { governmentIssuer, indexFundEntityId, moneyFundEntityId } from '../../domain/entity-keys';
 
@@ -651,7 +651,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           const nameLocal = shareLocal * equityFillRatio * (c.outstandingLocal / totalEquityCandidatesLocal);
           // SHARES are the quantity; the dollars are shares x price, which is why the division
           // happens once and both fields read the same number.
-          const shares = nameLocal / Math.max(0.01, equityPriceById.get(c.id) ?? 1);
+          // §3.13-BOOK (c2a): the candidate is an INSTRUMENT and the price map is keyed by ISSUER —
+          // a listed equity's id is its issuer's, which is the crossing this names.
+          const shares = nameLocal / Math.max(0.01, equityPriceById.get(equityIssuerId(c.id)) ?? 1);
           return {
             instrumentId: c.id,
             instrumentType: c.type,
@@ -1062,7 +1064,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         let freedLocal = 0;
         e.itemizedHoldings = e.itemizedHoldings.map((h) => {
           if (h.instrumentType !== 'EQUITY' || !h.quantityShares) return h;
-          const held = heldById.get(h.instrumentId) ?? 0; const issued = issuedById.get(h.instrumentId) ?? 0;
+          // §3.13-BOOK (c2a): the row names an EQUITY, and a listed equity's id is its issuer's.
+          const issuerId = equityIssuerId(h.instrumentId);
+          const held = heldById.get(issuerId) ?? 0; const issued = issuedById.get(issuerId) ?? 0;
           if (!(issued > 0) || held <= issued) return h;
           const keep = issued / held;
           freedLocal += h.quantityOrNotionalLocal * (1 - keep);

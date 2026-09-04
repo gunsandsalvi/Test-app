@@ -163,6 +163,7 @@ import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { cashOf, entityCashOf, obligationCurrencyOf } from '../../ledger/accounts';
 import { asInstrumentId, type InstrumentId } from '../../../domain/ids';
 import type { TypeRef, InstrRef } from '../../../engine2/refs';
+import { equityIssuerId } from '../../../domain/instrument-keys';
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
 export const RECOVERY_PRIOR_WEIGHT = 8;
@@ -610,7 +611,9 @@ export function applyPendingCorporateActionSettlements(
         if (i < 0) return;
         const k = pairOf(t, i);
         const registerLocal = totalByPair.get(k) ?? 0;
-        const issuerId = t === equityRef ? instrumentId : issuerIdOf(v2, instrumentId);
+        // §3.13-BOOK (c2a): an EQUITY row's instrument id IS its issuer's; anything else asks
+        // the tranche store. Two spaces, one line, and now it says which is which.
+        const issuerId = t === equityRef ? equityIssuerId(asInstrumentId(instrumentId)) : issuerIdOf(v2, instrumentId);
         const issuer = companyById.get(issuerId);
         const issuerTicker = issuerTickerOf(issuerId);
         // Every desk holds the named instrument itself — the action names one piece of paper and

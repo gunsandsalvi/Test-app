@@ -523,7 +523,7 @@ written from here):
        each had to be partly reverted, because the compiler cannot tell an ENTITY id from a
        PARTICIPANT id (`DESK-<ticker>`) or from a REGION, and a WRONG brand is worse than none — it
        is a lie the compiler then enforces. So c2 is:
-         · **c2a** `Company.id` alone, reading every site.
+         · **c2a** `Company.id` alone — **DONE, in §9.**
          · **c2b** `InstitutionalEntity.id` and `PartyRef`'s INSTITUTION arm.
          · **c2c** the stages, one file at a time.
        Each small enough that every site is read rather than pattern-matched. The measurement that
@@ -1626,6 +1626,36 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c2a) — `Company.id` IS AN `EntityId`, AND 13-READ IS WHY IT FIT.** The first
+attempt at (c) branded `Company.id` and `InstitutionalEntity.id` together and reached ~70
+outstanding errors across 30 files with the tree red throughout. This one, `Company.id` alone,
+opened at **28 errors across 18 files** and closed with every site READ rather than pattern-matched
+— because the ground was already cleared: D11 gave every writer of an entity id a named
+constructor, D10 did the same for the party keys, and the ids the compiler now had to account for
+were minted in five places instead of everywhere.
+
+**Sixteen sites, and the compiler found the interesting ones.** Five errors were `InstrumentId`
+flowing into an `EntityId` — every one of them THE EQUITY CROSSING, which slice (a) named in the
+outbound direction (`equityInstrumentId`: a company's listed equity is keyed by the company). The
+brand made the RETURN direction visible for the first time: four sites take an instrument id off a
+register row and ask a company-keyed map about it. `equityIssuerId` names those, so
+`grep -c equityIssuerId` now counts the return legs the way `equityInstrumentId` counts the
+outbound ones — which is the size of what slice (e)'s one position book has to end.
+
+**`entityOf` returns the brand now**, as `instrumentOf` already did — the entity intern table holds
+entity ids by construction, so the admission belongs at the door rather than at each read. That one
+change cleared six errors on its own. **And `issuerIdOf`'s FALLBACK became visible with it**: an id
+the tranche store has never seen is handed back AS its own issuer. For a listed equity that is
+correct and is the crossing; for anything else it is a lie the caller cannot detect, and it is
+exactly what slice (d)'s instrument registry ends — with an index of instances, "an id nothing
+issued" has an answer other than "itself". Written down at the site.
+
+**Five more fields are branded because the compiler asked**: a supply relationship's two ends, a PE
+sponsor's `portfolioCompanyIds`, a primary offering's `issuerId`, 07f's CP instrument issuer, and
+the two credit books' `offeringsByIssuerId` key. `spinOffEntityId` joins `entity-keys.ts` — a
+carve-out's id was still a template literal in `10-mergers`. Sixteen unproven admissions remain in
+all, seven of them the constructors in `entity-keys.ts` itself, which is where an admission belongs.
 
 **13-READ D13 (the safe half) — AND THE STEP'S OWN TEST: −164 CODE LINES.** The seed's three
 house-bank passes share one rule now. It has a subtlety that is the reason its two halves cannot be

@@ -46,6 +46,7 @@ import { trancheClearedPricePerFace } from '../../credit-price';
 import { isTrancheKind, holdingClassOf } from '../../../domain/assets';
 import { isActiveCompany } from '../../../domain/company';
 import type { InstrumentId } from '../../../domain/ids';
+import { equityIssuerId } from '../../../domain/instrument-keys';
 
 export function markRegisterToMarket(state: GameState, ctx: WeeklyStepContext): void {
   const week = ctx.nextWeek;
@@ -69,7 +70,7 @@ export function markRegisterToMarket(state: GameState, ctx: WeeklyStepContext): 
     if (isTrancheKind(instrumentType) || holdingClassOf(instrumentType) === 'SOVEREIGN') {
       p = trancheClearedPricePerFace(ctx.v2, instrumentId);
     } else if (instrumentType === 'EQUITY') {
-      const c = companyById.get(instrumentId);
+      const c = companyById.get(equityIssuerId(instrumentId)); // §3.13-BOOK (c2a): the crossing
       // A company that has left the market has no price to mark at, and a delisted or defaulted
       // name's shares are the estate's business — the row is left alone rather than zeroed here.
       p = c && isActiveCompany(c) && c.stockPrice > 0 ? c.stockPrice : undefined;

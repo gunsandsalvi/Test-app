@@ -21,7 +21,7 @@ import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
 import { newPriceStore, ReadonlyPriceStore } from './prices';
 import { CurrencyCode, CURRENCY_CODES } from '../domain/geography';
 import { FxTable, PARITY_FX } from '../domain/currency';
-import { asInstrumentId, type InstrumentId } from '../domain/ids';
+import { asInstrumentId, type InstrumentId, asEntityId, type EntityId } from '../domain/ids';
 import { newRefColumn, NO_REF, type RefColumn, type InstrRef, type EntityRef, type RegionRef, type TypeRef, type TickerRef, type AccountRef, type PartyKeyRef } from './refs';
 
 export interface V2World {
@@ -284,7 +284,10 @@ export const partyKeyRefOf = (v2: V2World, key: string): PartyKeyRef => look(v2.
 /** Decode, per space. Each is where a ref becomes a string again, and the only place that claim
  *  is made — `instrumentOf` is the one that also crosses into the branded id space. */
 export const instrumentOf = (v2: V2World, ref: InstrRef): InstrumentId => asInstrumentId(v2.refs.instruments.strings[ref]);
-export const entityOf = (v2: V2World, ref: EntityRef): string => v2.refs.entities.strings[ref];
+/** §3.13-BOOK slice (c2a): the ENTITY door returns the brand, as the instrument door already
+ *  did. The table holds entity ids by construction — `internEntity` is the only writer — so the
+ *  admission is here, once, rather than at each of the reads that go on to key a company map. */
+export const entityOf = (v2: V2World, ref: EntityRef): EntityId => asEntityId(v2.refs.entities.strings[ref]);
 export const regionOf = (v2: V2World, ref: RegionRef): string => v2.refs.regions.strings[ref];
 export const typeOf = (v2: V2World, ref: TypeRef): string => v2.refs.types.strings[ref];
 export const tickerOf = (v2: V2World, ref: TickerRef): string => v2.refs.tickers.strings[ref];

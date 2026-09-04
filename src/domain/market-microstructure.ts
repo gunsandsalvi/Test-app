@@ -3,6 +3,7 @@
 
 import { RegionId } from './geography';
 import { VIEW_CATEGORY_INPUT_REQUIREMENTS, VIEW_CAPEX_SUPPLIER_WEIGHTS } from './industry-registry';
+import type { EntityId } from './ids';
 
 export interface UnitBid {
   companyId?: string;
@@ -25,8 +26,9 @@ export interface UnitOffer {
 }
 
 export interface SupplyContract {
-  supplierCompanyId: string;
-  customerCompanyId: string;
+  /** §3.13-BOOK slice (c2a): both ends of a supply relationship are FIRMS. */
+  supplierCompanyId: EntityId;
+  customerCompanyId: EntityId;
   subUnitId: string;
   priceLocal: number;
   quantityUnitsPerWeek: number;
@@ -160,8 +162,9 @@ export function createSeedCategoryDemandState(
 export const CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<string, number>>> = VIEW_CATEGORY_INPUT_REQUIREMENTS;
 
 export interface SupplyRelationship {
-  supplierCompanyId: string;
-  customerCompanyId: string;
+  /** §3.13-BOOK slice (c2a): both ends of a supply relationship are FIRMS. */
+  supplierCompanyId: EntityId;
+  customerCompanyId: EntityId;
   category: string;
   weeklyVolumeLocal: number;
   relationshipStrength: number;

@@ -41,6 +41,7 @@ import { facilityBookOf } from '../../../../engine2/tranches';
 
 import { commodityFutureInstrumentId } from '../../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../../domain/ids';
+import type { EntityId } from '../../../../domain/ids';
 /** A firm's annual interest bill, from the coverage ratio its own statements already carry. */
 function annualInterestOf(c: Company): number {
   const coverage = c.interestCoverage;
@@ -70,7 +71,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
     const producers = firms.filter((c) => c.producedCommodityId === comm.id);
     // The natural LONG: firms whose recipes draw the sub-unit this commodity is a share of. Its
     // exposure is what it will actually spend on the input, off its own product mix.
-    const consumerExposureLocal = new Map<string, number>();
+    const consumerExposureLocal = new Map<EntityId, number>();
     if (linkage) {
       firms.forEach((c) => {
         const spendLocal = (c.productLines || []).reduce((a, line) => {

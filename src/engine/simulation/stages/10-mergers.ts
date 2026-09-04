@@ -34,6 +34,7 @@ import { derivativesBookOf } from './derivative-lifecycle';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { assumedDebtTrancheId, acquiredTrancheId, equityInstrumentId } from '../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../domain/ids';
+import { spinOffEntityId } from '../../../domain/entity-keys';
 
 /**
  * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
@@ -134,7 +135,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     // structuredClone: a shallow spread would SHARE every nested array/object with the parent,
     // and the first later mutation of either book would corrupt the other.
     const spin: typeof parent = structuredClone(parent);
-    spin.id = `${parent.id}-SPIN-${ctx.nextWeek}`;
+    spin.id = spinOffEntityId(parent.id, ctx.nextWeek);
     spin.ticker = ticker;
     spin.name = `${parent.name} (${line.subUnitId} spin-off)`;
     spin.productLines = [{ ...line, revenueShare: 1 }];

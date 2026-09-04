@@ -57,3 +57,8 @@ export const moneyFundEntityId = (regionId: RegionId, index = 1): EntityId =>
   asEntityId(`${regionId}_MMF_${index}`);
 /** The fund that tracks one index; the index's own id is the stem, so the pair is readable. */
 export const indexFundEntityId = (indexId: string): EntityId => asEntityId(`${indexId}_ETF`);
+
+/** A carve-out spun out of a parent this week — the parent's id is the stem, so the lineage is
+ *  readable and two spins in different weeks are two firms. */
+export const spinOffEntityId = (parentId: EntityId, week: number): EntityId =>
+  asEntityId(`${parentId}-SPIN-${week}`);

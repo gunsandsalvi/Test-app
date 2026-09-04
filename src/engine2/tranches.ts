@@ -20,6 +20,8 @@ import { GovDebtTrancheView } from '../domain/region-macro';
 import { govTrancheView } from '../domain/government';
 import { V2World, rowOf, internInstrument, internTicker, internEntity, entityOf, instrumentOf, tickerOf, tickerRefOf, instrumentRefOf } from './world';
 import { InstrumentId, asInstrumentId } from '../domain/ids';
+import { equityIssuerId } from '../domain/instrument-keys';
+import type { EntityId } from '../domain/ids';
 import { forgetClearedPrice } from './prices';
 import { defect } from '../domain/defect';
 import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type TickerRef, type EntityRef } from './refs';
@@ -448,11 +450,20 @@ export function trancheIdOf(v2: V2World, r: number): InstrumentId {
   return instrumentOf(v2, v2.tranches.idRef[r]);
 }
 
-export function issuerIdOf(v2: V2World, instrumentId: string): string {
+/**
+ * §3.13-BOOK slice (c2a) — WHO ISSUED THIS PAPER, in the entity id space.
+ *
+ * The fallback is the interesting half and branding it made it visible: an id the tranche store
+ * has never seen is handed back AS its own issuer. For a listed EQUITY that is correct and is the
+ * crossing `equityInstrumentId` names — a company's equity is keyed by the company. For anything
+ * else it is a lie the caller cannot detect, and it is what slice (d)'s instrument registry ends:
+ * with an index of instances, "an id nothing issued" has an answer other than "itself".
+ */
+export function issuerIdOf(v2: V2World, instrumentId: string): EntityId {
   const ref = instrumentRefOf(v2, asInstrumentId(instrumentId));
-  if (ref < 0) return instrumentId;
+  if (ref < 0) return equityIssuerId(asInstrumentId(instrumentId));
   const iss = v2.tranches.issuerRefByIdRef.get(ref);
-  return iss !== undefined && iss >= 0 ? entityOf(v2, iss) : instrumentId;
+  return iss !== undefined && iss >= 0 ? entityOf(v2, iss) : equityIssuerId(asInstrumentId(instrumentId));
 }
 /** 13b: a tranche id that has been written to the store at some point — live or retired. */
 /**

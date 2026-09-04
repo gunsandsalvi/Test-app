@@ -152,7 +152,7 @@ import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
 import { DERIVATIVE_CLASSES } from '../src/domain/derivatives/registry';
 import { auditWeek, auditSeed, auditSummary, AuditFinding } from '../src/engine/audit';
 import { ownershipCoverage } from '../src/engine/audit/ownership';
-import { instrumentEntries, type InstrumentId } from '../src/domain/ids';
+import { instrumentEntries, type InstrumentId, asEntityId } from '../src/domain/ids';
 
 interface Violation {
   week: number;
@@ -253,7 +253,7 @@ function printOwnershipTraces(state: GameState, week: number): void {
     const byId = new Map(state.companies.map((c) => [c.id, c]));
     const rows: string[] = [];
     heldByIssuer.forEach((v, key) => {
-      const id = key.split('|')[0];
+      const id = asEntityId(key.split('|')[0]); // the key is `<issuer>|<class>`
       const c = byId.get(id);
       if (!c || v.usd <= 0) return;
       const ladderLocal = (c.debtTranches ?? [])

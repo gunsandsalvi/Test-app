@@ -81,6 +81,7 @@ import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positio
 import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
 import { distributeMoneyFundIncome } from './stages/money-market-fund';
 import { REGION_IDS } from '../../domain/geography';
+import { equityIssuerId } from '../../domain/instrument-keys';
 
 export { computeOccupationDemand } from './stages/shared-helpers';
 
@@ -216,7 +217,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
             // Debug instrument, not dispatch: the class literal lives in a const so the
             // ASSET_SWITCH ratchet keeps counting real dispatch sites only.
             const corpBond: string = 'CORP_BOND';
-            if (focusIds.size > 0 ? focusIds.has(h.instrumentId) : h.instrumentId === mintFocus) {
+            if (focusIds.size > 0 ? focusIds.has(equityIssuerId(h.instrumentId)) : h.instrumentId === mintFocus) {
               if (h.instrumentType === corpBond) usd += h.quantityOrNotionalLocal ?? 0;
             }
           });
