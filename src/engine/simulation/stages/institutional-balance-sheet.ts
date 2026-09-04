@@ -36,7 +36,7 @@ import { institutionProfile } from '../../../domain/institution-profiles';
 import { bookHeadOf } from '../../../engine2/holdings';
 import { RegionId, InstitutionalEntity, Company, GameState } from '../../../types';
 import { institutionTotalAssetsLocal as totalAssetsRead } from '../../../domain/institutions';
-import { V2World, ensureV2 } from '../../../engine2/world';
+import { V2World, ensureV2, typeOf } from '../../../engine2/world';
 import { isActiveCompany } from '../../../domain/company';
 import { mandatePctOf } from '../../../domain/institutions';
 import { publicComparableEvMultiple } from './pe-lifecycle';
@@ -169,10 +169,20 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
  * book, not a half-settled one. Replaces `markInstitutionalBooks`, the week-end mark that every
  * sizing pass read a week stale.
  */
-export function institutionBookLocal(v2: V2World, entityId: string): number {
+export function institutionBookLocal(
+  v2: V2World,
+  entityId: string,
+  /** §3.13-READ C2: an optional class filter, so a caller that wants one SLICE of the book — the
+   *  paper that carries rate duration, the bills a money fund holds — walks the rows too instead
+   *  of falling back to `itemizedHoldings.filter(...)`, which is the week's opening positions. */
+  includeType?: (instrumentType: string) => boolean
+): number {
   let holdingsLocal = 0;
   const H = v2.holdings;
-  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) holdingsLocal += H.qtyLocal[r];
+  for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) {
+    if (includeType && !includeType(typeOf(v2, H.typeRef[r]))) continue;
+    holdingsLocal += H.qtyLocal[r];
+  }
   return holdingsLocal;
 }
 

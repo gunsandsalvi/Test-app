@@ -165,10 +165,18 @@ export interface WeeklyStepContext {
     smePoolFlowsByPool: Map<string, Map<string, number>>;
     householdFlowsByRegion: Map<string, Map<string, number>>;
   };
-  /** SCALE C1 — the week's holdings, swept once and shared by the five clearing books; present
-   * only between the store's build (before 07b) and its write-back (after 07e). While it is
-   * set, entity `itemizedHoldings` arrays are stale week-start snapshots: read positions
-   * through the store. */
+  /**
+   * SCALE C1 — the week's holdings, swept once and shared by the five clearing books; present
+   * only between the store's build (before 07b) and its write-back (after 07e).
+   *
+   * §3.13-READ C2 — AND THE STALENESS OUTLASTS THE HANDLE. This note used to say the entity
+   * `itemizedHoldings` arrays are stale week-start snapshots "while it is set", which is where
+   * two stages went wrong by reading them after the write-back. `finalizeHoldingsStore` drops the
+   * handle; it does NOT refresh the arrays. The only site that does is `core.ts:459`, at the very
+   * END of the week. So the arrays are the week's OPENING positions from the store's build until
+   * the week closes, whether or not this field is set — every stage from `holdings-store` (269)
+   * onwards must read positions through the ROWS.
+   */
   /** DRV — THE ONE DERIVATIVE BOOK: every bilateral contract of every class, the week's working
    * copy (derivative-lifecycle.ts owns every read and write; market stages strike into it). */
   derivativesBook?: import('../../../domain/derivatives/contract').DerivativeContract[];

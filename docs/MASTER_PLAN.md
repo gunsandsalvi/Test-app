@@ -432,9 +432,6 @@ written from here):
     **B. THE DEAD CODE — DONE, in §9. −188 lines.**
 
     **C. THE SECOND ANSWERS — rule 19 conversions, each naming its read.**
-    C2. Book totals off stale arrays → `institutionBookLocal`. `irs.ts:174` is confirmed stale (it
-        mixes a live read and a stale one in one subtraction); the other three are pre-store and
-        want a row walk rather than the helper.
     C3. `aggregateRegionalHoldings` inlines `materializeBook` field for field.
     C4. `audit/prices.ts:p8` re-derives a sovereign price where a print now exists — its own
         docstring says it goes green when the register carries the mark. Run the audit and decide.
@@ -1665,6 +1662,27 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ C2 — THE STALENESS OUTLASTS THE HANDLE, AND THAT IS WHAT THE NOTE GOT WRONG.**
+`context.ts` said entity `itemizedHoldings` arrays are stale week-start snapshots *"while
+`holdingsStore` is set"* — between the store's build before 07b and its write-back after 07e. That
+is not what happens. `finalizeHoldingsStore` drops the HANDLE; the only site that refreshes the
+arrays is `core.ts:459`, at the very END of the week. So the arrays hold the week's OPENING
+positions from stage 269 until the week closes, and a stage that waited for the handle to clear
+before reading them read exactly the same stale data. The note is corrected, and it is now the
+whole window it names.
+
+Two stages were inside it. **`irs.ts` mixed the two epochs in ONE SUBTRACTION**: it summed the
+rate-carrying paper off the array and subtracted it from `institutionTotalAssetsLocal`, which
+reads the store — so every bond an entity bought or sold in the four credit books, ten to fourteen
+stages earlier, presented as duration gap it had not opened, and the fund took a swap against it.
+**And `money-market-fund` quoted its net yield at stage 391** off the bill book it held before 07f
+traded bills at 273 — comfortably past the write-back, which is exactly the reading the old note
+invited. Both walk rows now. `institutionBookLocal` grew an optional class filter so the slice
+case has somewhere to go other than back to `.filter()` on the array.
+
+The other two `itemizedHoldings` readers are FINE and stay: `institutional-income` runs at 265 and
+`prime-brokerage` at 247, both before the store is built, where the array is the current book.
 
 **13-READ C1 — SEVEN ENGINE READERS WERE PRICING ON LAST WEEK'S LEVERAGE.** `totalDebtOf` sums
 `Company.debtTranches`, and `core.ts:450` rebuilds that array from the tranche store ONCE a week,

@@ -32,7 +32,7 @@ import { entityCashOf } from '../../ledger/accounts';
 import { pay } from './settlement';
 import { isDiscountBill } from '../../../domain/government';
 import { holdingClassOf } from '../../../domain/assets';
-import { bookHeadOf } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { GovDebtTrancheView } from '../../../domain/region-macro';
 import { Company, InstitutionalEntity, Region, RegionId } from '../../../types';
@@ -41,6 +41,7 @@ import { computeSovereignBookAnnualYield, ON_RRP_SPREAD_BPS } from '../../macro/
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
+import { typeOf, V2World } from '../../../engine2/world';
 
 /** The fund's annual expense ratio — a structural primitive like the deposit beta; G6/BP make
  * fees competitive between funds. */
@@ -58,7 +59,7 @@ export function findRegionMmf(entities: InstitutionalEntity[], regionId: RegionI
  * fund quotes the floor its first dollar would earn (the RRP), net of fee — the honest opening
  * quote, and the reason the market can bootstrap itself when that beats the deposit rate.
  */
-export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashLocal: number, reg: Region, week: number, govLadder: GovDebtTrancheView[]): number {
+export function quoteMmfNetYieldAnnual(v2: V2World, entity: InstitutionalEntity, cashLocal: number, reg: Region, week: number, govLadder: GovDebtTrancheView[]): number {
   const rrpRateAnnual = Math.max(0, reg.policyRate - ON_RRP_SPREAD_BPS / 10000);
   const repoRateAnnual = reg.repoRateAnnual ?? rrpRateAnnual;
 
@@ -71,14 +72,20 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, cashLocal: n
       .filter((t) => isDiscountBill(t.tenorAtIssuanceYears) && t.principalLocal > 0)
       .map((t) => [t.id, Math.max(1 / 52, (t.maturityWeek - week) / 52)] as const)
   );
+  // §3.13-READ C2: THE ROWS, NOT THE ARRAY. `itemizedHoldings` is the week's OPENING positions
+  // from the store's build (stage 269) until the week closes at `core.ts:459` — the write-back
+  // drops the store HANDLE, it does not refresh the arrays. This quote runs at stage 391, so it
+  // was pricing the fund's yield on the book it held before 07f traded bills at 273.
   const billByTenor: Record<string, number> = {};
   let billLocal = 0;
-  entity.itemizedHoldings.forEach((h) => {
-    if (holdingClassOf(h.instrumentType) !== 'SOVEREIGN') return;
-    if (!billTenorById.has(h.instrumentId)) return;
-    billByTenor[h.instrumentId] = (billByTenor[h.instrumentId] ?? 0) + h.quantityOrNotionalLocal;
-    billLocal += h.quantityOrNotionalLocal;
-  });
+  const H = v2.holdings;
+  for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
+    if (holdingClassOf(typeOf(v2, H.typeRef[r])) !== 'SOVEREIGN') continue;
+    const id = instrumentIdAt(v2, r);
+    if (!billTenorById.has(id)) continue;
+    billByTenor[id] = (billByTenor[id] ?? 0) + H.qtyLocal[r];
+    billLocal += H.qtyLocal[r];
+  }
   const billYieldAnnual = billLocal > 0
     ? computeSovereignBookAnnualYield(billByTenor, reg.zeroRates, (id) => billTenorById.get(id))
     : 0;
@@ -145,7 +152,7 @@ export function divertHouseholdSavingsToMmf(
 export function refreshMmfQuotes(regionId: RegionId, reg: Region, ctx: WeeklyStepContext): void {
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.region !== regionId || e.entityType !== 'MONEY_MARKET_FUND' || e.isDefaulted) return e;
-    return { ...e, mmfNetYieldAnnual: Number(quoteMmfNetYieldAnnual(e, entityCashOf(ctx.v2, e), reg, ctx.nextWeek, materializeGovLadder(ctx.v2, e.region)).toFixed(6)) };
+    return { ...e, mmfNetYieldAnnual: Number(quoteMmfNetYieldAnnual(ctx.v2, e, entityCashOf(ctx.v2, e), reg, ctx.nextWeek, materializeGovLadder(ctx.v2, e.region)).toFixed(6)) };
   });
 }
 

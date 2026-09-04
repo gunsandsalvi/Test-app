@@ -34,7 +34,7 @@ import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
 import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
 import { strikeDerivatives } from '../derivative-lifecycle';
-import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
+import { institutionTotalAssetsLocal, institutionBookLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
 import { swapInstrumentId } from '../../../../domain/instrument-keys';
@@ -171,9 +171,11 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       // How much duration it is short: a liability-matched book's assets are shorter than its
       // claims, and the gap is what it will take synthetically when the cash market cannot
       // supply it. Sized by the book itself, never by a share anyone chose.
-      const bondBookLocal = (entity.itemizedHoldings || [])
-        .filter((h) => carriesRateDuration(h.instrumentType))
-        .reduce((a, h) => a + (h.quantityOrNotionalLocal ?? 0), 0);
+      // §3.13-READ C2: THE ROWS. This read `itemizedHoldings` — the week's OPENING positions —
+      // and subtracted it from `institutionTotalAssetsLocal`, which reads the store. One
+      // subtraction, two epochs: every bond the entity bought or sold in 07b/07c/07d/07f, ten to
+      // fourteen stages earlier, showed up as duration gap it had not actually opened.
+      const bondBookLocal = institutionBookLocal(ctx.v2, entity.id, carriesRateDuration);
       const alreadyReceivingLocal = standing.coverLocal('IRS', 'b', `INSTITUTION:${entity.id}`);
       const durationGapLocal = Math.max(0, institutionTotalAssetsLocal(ctx, entity) - bondBookLocal - alreadyReceivingLocal);
       if (durationGapLocal <= 0) return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
