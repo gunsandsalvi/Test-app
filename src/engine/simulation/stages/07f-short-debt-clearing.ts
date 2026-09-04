@@ -72,7 +72,7 @@ import {
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { commercialPaperTrancheId } from '../../../domain/instrument-keys';
-import { governmentEntityId } from '../../../domain/entity-keys';
+import { governmentIssuer } from '../../../domain/entity-keys';
 import { forEachSovereignPosition } from '../../sovereign-register';
 import { bankParticipantId, treasuryParticipantId } from '../../../domain/participant-keys';
 
@@ -657,7 +657,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           if (row === undefined) return;
           const takeLocal = Math.min(unplacedLocal, ctx.v2.tranches.principalLocal[row]);
           if (!(takeLocal > 0)) return;
-          const govIssuer = { id: governmentEntityId(regionId), ticker: governmentEntityId(regionId), region: regionId, kind: 'GOVERNMENT' as const };
+          const govIssuer = governmentIssuer(regionId);
           retireTranche(ctx.v2, govIssuer, row, takeLocal, 'bill issuance withdrawn');
           commitLadder(ctx.v2, govIssuer,
             ladderRowsOf(ctx.v2, govIssuer.id).filter((r) => ctx.v2.tranches.principalLocal[r] > 0.01));

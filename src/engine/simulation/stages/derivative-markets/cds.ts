@@ -23,7 +23,7 @@ import { RegionId, Company } from '../../../../types';
 import { ensureV2 } from '../../../../engine2/world';
 import { institutionProfile } from '../../../../domain/institution-profiles';
 import { CDS_TENOR_WEEKS, protectionNeedLocal } from '../../../../domain/derivatives/classes/cds';
-import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
+import { DerivativeContract, DerivativeParty, bankPartyKey } from '../../../../domain/derivatives/contract';
 import { deskNotionalCapacityLocal } from '../../../../domain/derivatives/registry';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { isActiveCompany } from '../../../../domain/company';
@@ -83,7 +83,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
         const needLocal = protectionNeedLocal({
           exposureLocal,
           bankEquityLocal: sheet.bankEquityLocal,
-          alreadyHedgedLocal: standing.coverLocal('CDS', 'a', `BANK:${bank.ticker}`, issuerId),
+          alreadyHedgedLocal: standing.coverLocal('CDS', 'a', bankPartyKey(bank.ticker), issuerId),
         });
         if (needLocal <= 1) return;
         const list = hedgeDemandByIssuer.get(issuerId) ?? [];
@@ -134,7 +134,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
       const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       const capacityLocal = deskNotionalCapacityLocal(
-        leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeLocal(`BANK:${bank.ticker}`), 'CDS');
+        leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeLocal(bankPartyKey(bank.ticker)), 'CDS');
       if (!(capacityLocal > 0)) return;
       referenceIssuers.forEach((c) => {
         const annualPd = pdByIssuerId.get(c.id)!;

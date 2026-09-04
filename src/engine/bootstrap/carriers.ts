@@ -36,6 +36,7 @@ import { RATING_OAS_SPREADS } from '../pricing';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../equity-valuation';
 import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financing';
 import { generateUniqueTicker, generateUniqueName } from './firms';
+import { carrierEntityId } from '../../domain/entity-keys';
 
 /**
  * How many carrier firms each region gets. Shipping is a concentrated industry everywhere — a
@@ -315,7 +316,7 @@ function buildCarrierCompany(
   }).toFixed(2));
 
   const __c = {
-    id: `${region}_CAR_${ticker}`,
+    id: carrierEntityId(region, ticker),
     ticker,
     name,
     region,

@@ -33,7 +33,7 @@ import {
   HEDGE_RATIO_FIXED_INCOME, equityHedgeRatioFor, FX_FORWARD_TENOR_WEEKS,
 } from '../../../../domain/derivatives/classes/fx-forward';
 import { hedgeToleranceBps } from '../../../../domain/derivatives/hedging';
-import { DerivativeContract, DerivativeParty, derivativePartyKey } from '../../../../domain/derivatives/contract';
+import { DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../../domain/derivatives/contract';
 import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal } from '../../../../domain/derivatives/registry';
 import { FxDealerBook, emptyFxDealerBook } from '../../../../domain/dealer-derivatives';
 import { leverageHeadroomLocal } from '../../../macro/banking';
@@ -136,7 +136,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     desks.set(c.ticker, {
       book: emptyFxDealerBook(),
       headroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.ticker), facilityBookOf(ctx.v2, c.ticker)),
-      chargedPfeLocal: standing.pfeChargeLocal(`BANK:${c.ticker}`),
+      chargedPfeLocal: standing.pfeChargeLocal(bankPartyKey(c.ticker)),
       marginReceivedLocal: 0,
     });
   });

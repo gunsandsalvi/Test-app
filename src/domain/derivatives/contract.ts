@@ -29,6 +29,21 @@ export function derivativePartyKey(p: DerivativeParty): string {
   return `${p.kind}:${p.kind === 'INSTITUTION' ? p.id : p.ticker}`;
 }
 
+/**
+ * §3.13-READ D10 — THE KEY, BY KIND, and never by hand.
+ *
+ * Ten sites built this string with a template literal — `` `BANK:${ticker}` ``,
+ * `` `COMPANY:${ticker}` ``, `` `INSTITUTION:${entity.id}` `` — rather than calling
+ * `derivativePartyKey`. Every one of them was asking the standing book how much cover a party
+ * ALREADY has, and the standing book answers a key it does not recognise with **zero**, not an
+ * error. So a single character wrong in any of the ten reads as "this party has hedged nothing"
+ * and the party hedges again on top of what it already has, silently and every week. A format
+ * whose failure mode is a plausible number is a format that needs a constructor.
+ */
+export const bankPartyKey = (ticker: string): string => derivativePartyKey({ kind: 'BANK', ticker });
+export const companyPartyKey = (ticker: string): string => derivativePartyKey({ kind: 'COMPANY', ticker });
+export const institutionPartyKey = (id: string): string => derivativePartyKey({ kind: 'INSTITUTION', id });
+
 /** The classes the registry knows. A new derivative adds a member here and a profile module. */
 export type DerivativeClassId = 'IRS' | 'CDS' | 'COMMODITY_FUTURE' | 'FX_FORWARD';
 

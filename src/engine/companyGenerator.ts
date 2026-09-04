@@ -17,6 +17,7 @@ import { random } from './rng';
 import { seedLoanBookLocal } from './macro/initialization';
 import { corporateTrancheId } from '../domain/instrument-keys';
 import { asInstrumentId } from '../domain/ids';
+import { companyEntityId, privateCompanyEntityId } from '../domain/entity-keys';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
@@ -617,7 +618,7 @@ export function generateInitialCompanies(
         // AUM. Modelled as the same fee-revenue profile with the real fee/AUM ratio inverted.
         aumLocal: financialStatementProfile === 'ASSET_MANAGER' ? tmpl.revBase * (tmpl.institutionalRole === 'HEDGE_FUND' ? 20 : 60) : undefined,
         managementFeeRate: financialStatementProfile === 'ASSET_MANAGER' ? (tmpl.institutionalRole === 'HEDGE_FUND' ? 0.0225 : 0.0075) : undefined,
-        id: `${region}_${tmpl.ticker}`,
+        id: companyEntityId(region, tmpl.ticker),
         ticker: tmpl.ticker,
         name: tmpl.name,
         region,
@@ -800,7 +801,7 @@ export function generateInitialCompanies(
                 ? `${region}_${newTicker}` + t.id.slice(parent.id.length)
                 : `${newTicker}-${t.id}`),
         })),
-        id: `${region}_${newTicker}`,
+        id: companyEntityId(region, newTicker),
         ticker: newTicker,
         name: newName,
         employeeCount: newEmployeeCount,
@@ -1288,7 +1289,7 @@ export function generatePrivateCompanies(
     const grossPPELocal = Math.round(revBase * ppeIntensity / 0.65);
 
     const pc = {
-      id: `${region}_PRV_${ticker}`,
+      id: privateCompanyEntityId(region, ticker),
       ticker, name, region, sector,
       listingStatus: 'PRIVATE',
       // HC8: the pool this firm was carved from — births read it to find the right pool,

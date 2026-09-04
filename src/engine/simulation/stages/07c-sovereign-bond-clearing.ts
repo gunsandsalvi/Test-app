@@ -77,7 +77,7 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 import { instrumentEntries, asInstrumentId, type InstrumentId } from '../../../domain/ids';
-import { governmentEntityId } from '../../../domain/entity-keys';
+import { governmentIssuer } from '../../../domain/entity-keys';
 import { sovereignHeldByBond } from '../../sovereign-register';
 
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
@@ -709,7 +709,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       if (row === undefined) return;
       const takeLocal = Math.min(unplacedLocal, ctx.v2.tranches.principalLocal[row]);
       if (!(takeLocal > 0)) return;
-      const govIssuer = { id: governmentEntityId(regionId), ticker: governmentEntityId(regionId), region: regionId, kind: 'GOVERNMENT' as const };
+      const govIssuer = governmentIssuer(regionId);
       retireTranche(ctx.v2, govIssuer, row, takeLocal, 'sovereign issuance withdrawn');
       commitLadder(ctx.v2, govIssuer,
         ladderRowsOf(ctx.v2, govIssuer.id).filter((r) => ctx.v2.tranches.principalLocal[r] > 0.01));

@@ -25,7 +25,7 @@ import {
   futuresTermKey,
 } from '../../../../domain/derivatives/classes/commodity-future';
 import { hedgeConcessionPerUnit } from '../../../../domain/derivatives/hedging';
-import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
+import { DerivativeContract, DerivativeParty, bankPartyKey, companyPartyKey } from '../../../../domain/derivatives/contract';
 import { deskNotionalCapacityLocal } from '../../../../domain/derivatives/registry';
 import { COMMODITY_CATEGORY_LINKAGE } from '../../../../domain/instruments';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../../domain/market-microstructure';
@@ -102,7 +102,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
           riskAversion: riskAversionOf(c.management),
         });
         const units = hedgeLocal / spot
-          - standing.coverUnits('COMMODITY_FUTURE', 'b', `COMPANY:${c.ticker}`, comm.id, termKey);
+          - standing.coverUnits('COMMODITY_FUTURE', 'b', companyPartyKey(c.ticker), comm.id, termKey);
         if (units > 0.0001) sellers.push({ party: { kind: 'COMPANY', ticker: c.ticker }, units });
       });
       const hedgeFloatUnits = sellers.reduce((a, s) => a + s.units, 0);
@@ -122,7 +122,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         banks.forEach((bank) => {
           const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
           const capacityLocal = deskNotionalCapacityLocal(
-            leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeLocal(`BANK:${bank.ticker}`), 'COMMODITY_FUTURE');
+            leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeLocal(bankPartyKey(bank.ticker)), 'COMMODITY_FUTURE');
           const units = capacityLocal / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
           if (units > 0.0001) {
             sellers.push({ party: { kind: 'BANK', ticker: bank.ticker }, units });
@@ -173,7 +173,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         participants.push({
           id: `CONS-${c.ticker}`,
           currentHoldingsByInstrumentId: new Map([[id,
-            standing.coverUnits('COMMODITY_FUTURE', 'a', `COMPANY:${c.ticker}`, comm.id, termKey)]]),
+            standing.coverUnits('COMMODITY_FUTURE', 'a', companyPartyKey(c.ticker), comm.id, termKey)]]),
           demandByInstrumentId,
         });
       });

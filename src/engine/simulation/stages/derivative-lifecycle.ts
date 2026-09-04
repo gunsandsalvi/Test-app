@@ -21,7 +21,7 @@
 import { GameState, RegionId } from '../../../types';
 
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
-import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey } from '../../../domain/derivatives/contract';
+import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../domain/derivatives/contract';
 import { DerivativeMarketView } from '../../../domain/derivatives/profile';
 import { derivativeProfile } from '../../../domain/derivatives/registry';
 import { StandingBook } from '../../../domain/derivatives/standing-book';
@@ -69,7 +69,7 @@ export function standingBookOf(ctx: WeeklyStepContext, state: GameState): Standi
 
 /** A desk's standing PFE charge against the one budget, off the live book (registry.ts). */
 export function deskStandingPfeChargeLocal(ctx: WeeklyStepContext, state: GameState, ticker: string): number {
-  return standingBookOf(ctx, state).pfeChargeLocal(`BANK:${ticker}`);
+  return standingBookOf(ctx, state).pfeChargeLocal(bankPartyKey(ticker));
 }
 
 type PartyState = 'ALIVE' | 'DEFAULTED' | 'GONE';

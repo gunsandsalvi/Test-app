@@ -112,7 +112,7 @@ import { computeExpenditureGdpLocal, GOV_PROCUREMENT_SHARE_OF_SPENDING, computeH
 import { seedInstitutionTotalAssetsLocal } from '../../domain/institutions';
 import { equityInstrumentId, peFundInterestId } from '../../domain/instrument-keys';
 import type { InstrumentId } from '../../domain/ids';
-import { governmentEntityId } from '../../domain/entity-keys';
+import { governmentIssuer, indexFundEntityId, moneyFundEntityId } from '../../domain/entity-keys';
 
 /**
  * Build a world. The same seed always builds the same world and, stepped the same number of
@@ -391,7 +391,7 @@ function openSeededMirrors(state: GameState): void {
     (Object.keys(state.regions) as RegionId[]).forEach((regionId) => {
       const ladder = seedGovLadderOf(state.regions[regionId]);
       if (!ladder.length) return;
-      seedLadder(v2, { id: governmentEntityId(regionId), ticker: governmentEntityId(regionId), region: regionId, kind: 'GOVERNMENT' }, ladder);
+      seedLadder(v2, governmentIssuer(regionId), ladder);
     });
     const tickerById = new Map(state.companies.map((c) => [c.id, c.ticker]));
     const issuerOfHolding = (h: ItemizedHolding): PartyRef => issuerOfHoldingRow(v2, h, tickerById);
@@ -1494,7 +1494,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // yield-gap flow build its book; its bills/repo/RRP deployment rides the sleeve machinery
     // every entity already has.
     institutionalEntities.push({
-      id: `${regionId}_MMF_1`,
+      id: moneyFundEntityId(regionId),
       name: `${regionId} Government Money Market Fund`,
       ticker: `MMF1`,
       region: regionId,
@@ -1532,7 +1532,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const sponsor = regionManagers[i % regionManagers.length];
         const expenseClass = def.assetClass;
         institutionalEntities.push({
-          id: `${def.id}_ETF`,
+          id: indexFundEntityId(def.id),
           name: `${def.name} Index Fund`,
           ticker: `${def.id.replace(/_/g, '').slice(0, 5)}X`,
           region: regionId,

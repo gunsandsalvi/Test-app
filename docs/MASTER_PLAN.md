@@ -439,10 +439,6 @@ written from here):
         §5 says to collapse from.
     D9. Lookup maps rebuilt from the same source: **38 construction sites**, including three alive
         in one scope in `wires.ts` and two rebuilt inside a `forEach`. Home: memoised on `ctx`.
-    D10. `derivativePartyKey` hand-built 10×; `repoLenderParty` 3×; `partyRegionOf` twice in one
-        file; the government issuer LITERAL 4× (the constructor was extracted, the object was not).
-    D11. Entity id templates still inline: `${region}_${ticker}` ×4 (one with a `_PRV_` infix),
-        `_MMF_1`, `_ETF` — three lines from a PE fund that already uses its constructor.
     D12. The C+I+G → Leontief seed, 3 copies, **divergent by accident** — the file's own comment
         says "the reason the same fix has to be made three times is itself the defect".
     D13. The seed's bank-assignment pass, written 3× because two ran too early — its own comment
@@ -1645,6 +1641,30 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ D10+D11 — A KEY WHOSE FAILURE MODE IS A PLAUSIBLE NUMBER.** Ten sites built a
+derivative party key with a template literal — `` `BANK:${ticker}` ``, `` `COMPANY:${ticker}` ``,
+`` `INSTITUTION:${entity.id}` `` — instead of calling `derivativePartyKey`. Every one of them was
+asking the standing book **how much cover this party already has**, and the standing book answers
+a key it does not recognise with ZERO rather than an error. So one character wrong in any of the
+ten reads as "this party has hedged nothing", and the party hedges again on top of what it already
+holds — silently, and every week. `bankPartyKey`, `companyPartyKey` and `institutionPartyKey` are
+the constructors now. (`domain/repo.ts` keeps its own grammar deliberately: it spells the
+institution arm `INST:` where the derivative book spells it `INSTITUTION:`, and they are keys into
+two different books.)
+
+`repoLenderParty` and `partyRegionOf` turn out to be single definitions with several CALLERS, not
+copies — the survey miscounted them, and they are fine as they are. What was real in D10's last
+clause is the **government issuer OBJECT**, written four times: the same `{ id, ticker, region,
+kind }` literal calling `governmentEntityId(regionId)` TWICE inside each one, in the three stages
+that retire sovereign paper and in the seed. Slice (c1) extracted the id and left the thing built
+around it — which is what a constructor that makes half a value gets you. `governmentIssuer` makes
+the whole one.
+
+D11 is the rest of the entity id grammar: a named firm, a carve-out private firm, a carrier, a
+region's money fund, an index's tracking fund. Each was a template literal in whichever file
+created the entity, and each is a key into the register, the accounts and the party table — the
+same argument that made the treasury's worth naming. `entity-keys.ts` holds all five.
 
 **13-READ D7 — THE HARNESS RECONCILED A BANK THAT NO LONGER EXISTS.** `isActiveCompany` is one
 line, and it was written out longhand six times — three in `src`, three in the harness — plus five

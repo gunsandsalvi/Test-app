@@ -28,7 +28,7 @@ import { carriesRateDuration } from '../../../../domain/assets';
 import {
   SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, repricingLossLocal,
 } from '../../../../domain/derivatives/classes/irs';
-import { DerivativeContract, DerivativeParty } from '../../../../domain/derivatives/contract';
+import { DerivativeContract, DerivativeParty, bankPartyKey, companyPartyKey, institutionPartyKey } from '../../../../domain/derivatives/contract';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from '../financial-clearing-engine';
 import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
@@ -110,7 +110,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
         if (lossLocal <= absorbableLocal) return;
         // Hedge the notional whose repricing loss is the excess — the rest it can carry.
         const wantedLocal = ((lossLocal - absorbableLocal) / Math.max(1e-9, lossLocal)) * bookLocal;
-        const alreadyPayingLocal = standing.coverLocal('IRS', 'a', `BANK:${bank.ticker}`, undefined, k);
+        const alreadyPayingLocal = standing.coverLocal('IRS', 'a', bankPartyKey(bank.ticker), undefined, k);
         const hedgeLocal = Math.max(0, wantedLocal - alreadyPayingLocal);
         if (!(hedgeLocal > 0)) return;
         payDemandByTenor.get(k)!.push({ party: { kind: 'BANK', ticker: bank.ticker }, usd: hedgeLocal });
@@ -140,7 +140,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       if (shockCostLocal <= headroomLocal) return;
       const wantedLocal = Math.min(floatingLocal, ((shockCostLocal - headroomLocal) / Math.max(1e-9, shockCostLocal)) * floatingLocal);
       // Floating corporate debt is short-dated relative to the curve; it hedges at the 5-year.
-      const alreadyPayingLocal = standing.coverLocal('IRS', 'a', `COMPANY:${comp.ticker}`, undefined, 's5');
+      const alreadyPayingLocal = standing.coverLocal('IRS', 'a', companyPartyKey(comp.ticker), undefined, 's5');
       const hedgeLocal = Math.max(0, wantedLocal - alreadyPayingLocal);
       if (!(hedgeLocal > 0)) return;
       payDemandByTenor.get('s5')!.push({ party: { kind: 'COMPANY', ticker: comp.ticker }, usd: hedgeLocal });
@@ -176,7 +176,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       // subtraction, two epochs: every bond the entity bought or sold in 07b/07c/07d/07f, ten to
       // fourteen stages earlier, showed up as duration gap it had not actually opened.
       const bondBookLocal = institutionBookLocal(ctx.v2, entity.id, carriesRateDuration);
-      const alreadyReceivingLocal = standing.coverLocal('IRS', 'b', `INSTITUTION:${entity.id}`);
+      const alreadyReceivingLocal = standing.coverLocal('IRS', 'b', institutionPartyKey(entity.id));
       const durationGapLocal = Math.max(0, institutionTotalAssetsLocal(ctx, entity) - bondBookLocal - alreadyReceivingLocal);
       if (durationGapLocal <= 0) return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
       SWAP_TENORS.forEach((k) => {
