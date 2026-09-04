@@ -1,4 +1,5 @@
 import { entityCashOf, householdDepositsOf, obligationCurrencyOf } from '../../ledger/accounts';
+import { defect } from '../../../domain/defect';
 /**
  * ETF FLOWS — who buys the index, how the shares come into existence, and what the dealers do
  * about the gap.
@@ -49,7 +50,8 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 
-import { etfShareInstrumentId, etfShareRegisterId, etfShareFundId } from '../../../domain/instrument-keys';
+import { etfShareId } from '../../../domain/instrument-keys';
+import { instrumentIssuerOf } from '../../../engine2/instruments';
 import type { InstrumentId } from '../../../domain/ids';
 import type { EntityId } from '../../../domain/ids';
 /** An entity's money for one asset class, from its own mandate weights. */
@@ -306,7 +308,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         if (H.typeRef[r] !== etfShareRef0) continue;
         // §3.13-BOOK (c2b): the register keys a fund's SHARES by the fund itself, so this row's
         // instrument id IS an entity id — the ETF's half of the crossing equity has too.
-        const fundId = etfShareFundId(instrumentIdAt(ctx.v2, r));
+        // §3.13-BOOK dIII: the fund behind a share is the index's issuer, not a cast of the id.
+        const fundId = instrumentIssuerOf(ctx.v2, instrumentIdAt(ctx.v2, r)) ?? defect(`ETF share row ${instrumentIdAt(ctx.v2, r)} names no fund on the instrument index`);
         if (!rows) { rows = new Map(); etfShareRowByInvestor.set(inv.id, rows); }
         if (!rows.has(fundId)) {
           const sh = H.shares[r];
@@ -669,7 +672,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         if (H.typeRef[r] !== etfShareRef) continue;
         // §3.13-BOOK (c2b): the register keys a fund's SHARES by the fund itself, so this row's
         // instrument id IS an entity id — the ETF's half of the crossing equity has too.
-        const fundId = etfShareFundId(instrumentIdAt(ctx.v2, r));
+        const fundId = instrumentIssuerOf(ctx.v2, instrumentIdAt(ctx.v2, r)) ?? defect(`ETF share row ${instrumentIdAt(ctx.v2, r)} names no fund on the instrument index`);
         let byInvestor = etfSharesByFundByInvestor.get(fundId);
         if (!byInvestor) { byInvestor = new Map(); etfSharesByFundByInvestor.set(fundId, byInvestor); }
         const sh = H.shares[r];
@@ -683,7 +686,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     if (!plan) return;
     const navPerShare = plan.navPerShare;
     if (!(navPerShare > 0)) return;
-    const instrumentId = etfShareInstrumentId(fund.id);
+    // §3.13-BOOK dIII: the book clears the share under the ONE key the register holds it by.
+    const instrumentId = etfShareId(fund.id);
 
     // What the investors hold between them, and what each of them wants to hold.
     const heldSharesByInvestor = new Map<EntityId, number>();
@@ -777,10 +781,10 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         // the holder to the fund — the ledger writes the rows.
         const fundParty = { kind: 'INSTITUTION' as const, id: fundId };
         const holderParty = { kind: 'INSTITUTION' as const, id: entity.id };
-        // The REGISTER's key, not the book's — see `etfShareRegisterId`. Writing the clearing
+        // The share's ONE key (`etfShareId`, §3.13-BOOK dIII). Writing the clearing
         // key here would put this fund's rows in a second key space that the index above and
         // the re-mark below cannot see.
-        const spec = { instrumentType: 'ETF_SHARE' as const, instrumentId: etfShareRegisterId(fundId), issuerRegion: fund.region, valueLocal: Math.abs(shares) * navPerShare, shares: Math.abs(shares) };
+        const spec = { instrumentType: 'ETF_SHARE' as const, instrumentId: etfShareId(fundId), issuerRegion: fund.region, valueLocal: Math.abs(shares) * navPerShare, shares: Math.abs(shares) };
         if (shares > 1e-6) issueHolding(ctx.v2, fundParty, holderParty, spec, 'etf creation: shares issued');
         else if (shares < -1e-6) retireHolding(ctx.v2, holderParty, fundParty, spec, 'etf redemption: shares retired');
       });

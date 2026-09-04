@@ -4,11 +4,12 @@
  * asset kinds: a holding's change is the replay of its wires.
  */
 import { GameState } from '../../types';
+import { instrumentIssuerOf } from '../../engine2/instruments';
+import { asInstrumentId } from '../../domain/ids';
 import { AuditFinding, B } from './types';
 import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey, registerQtyByKind } from './snapshot';
 import { isTrancheKind } from '../../domain/assets';
 import { ensureV2 } from '../../engine2/world';
-import { issuerIdOf } from '../../engine2/tranches';
 import { asEntityId, asTicker } from '../../domain/ids';
 import { EntityIndex, buildEntityIndex } from '../ledger/entity-index';
 
@@ -65,7 +66,9 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       const byIssuer = new Map<string, number>();
       Object.entries(w.houseNetUSDByAsset ?? {}).forEach(([ak, n]) => {
         if (!ak.startsWith(k + '|')) return;
-        const iss = issuerIdOf(v2w, ak.slice(k.length + 1));
+        // A money or goods leg names no issuer; it nets under its own asset.
+        const asset = ak.slice(k.length + 1);
+        const iss = instrumentIssuerOf(v2w, asInstrumentId(asset)) ?? asset;
         byIssuer.set(iss, (byIssuer.get(iss) ?? 0) + n);
       });
       const topIss = [...byIssuer.entries()].filter(([, n]) => Math.abs(n) > 1e5).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 8);

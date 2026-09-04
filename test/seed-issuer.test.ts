@@ -25,6 +25,7 @@ import { seedLadder } from '../src/engine/ledger/tranche-ledger';
 import { newWireJournal, setActiveWireJournal, setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { issuerOfHoldingRow } from '../src/engine/ledger/holdings-ledger';
+import { registerCompanyEquity, registerFundShares } from '../src/engine/ledger/instrument-ledger';
 import type { ItemizedHolding } from '../src/domain/banking';
 import { asEntityId, asInstrumentId, asTicker } from '../src/domain/ids';
 
@@ -62,10 +63,12 @@ test('the issuer of a corporate tranche is its company, not the tranche itself',
   assert.equal(issuerIdOf(v2, id) as string, 'USA_ACME');
 });
 
-test('an instrument that is not a tranche is its own issuer', () => {
+test('an equity is issued by the company the index says declared it, and an undeclared id by nobody', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
-  // Equity and fund shares are keyed by the entity that issued them, so the read is the identity —
-  // which is why the fix could not change how those two seed.
+  // §3.13-BOOK dIII: the read is the instrument index's issuer, never the id read back as one —
+  // an equity is keyed by its issuer's id, but the index is what says so.
+  assert.throws(() => issuerIdOf(v2, 'USA_ACME'), /on no instrument index/);
+  registerCompanyEquity(v2, { id: asEntityId('USA_ACME'), region: 'USA' });
   assert.equal(issuerIdOf(v2, 'USA_ACME') as string, 'USA_ACME');
 });
 
@@ -88,6 +91,8 @@ test('a seeded CORPORATE BOND row is issued by its company, not by a party that 
 
 test('a seeded FUND SHARE row is still issued by the fund itself', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  // §3.13-BOOK dIII: the fund's share is declared on the index with the fund as its issuer.
+  registerFundShares(v2, { id: asEntityId('USA_ETF_1'), region: 'USA', entityType: 'ETF' });
   // §3.13-BOOK (c-then-2): `issuerOfHoldingRow` takes the ENTITY INDEX now, not a `Map<id, ticker>`
   // mirror of it — and since (c-then-3b) the party it returns names the issuer by ENTITY id, so
   // a one-firm index is all this needs and the assertion below is on the id, not the ticker.

@@ -13,7 +13,7 @@ import { writeInstrumentRow, instrumentRefRegistered, instrumentKindOf, instrume
 import { ABSENT_REF, type InstrRef } from '../../engine2/refs';
 import type { InstrumentId, EntityId } from '../../domain/ids';
 import { currencyOf, type CurrencyCode, type RegionId } from '../../domain/geography';
-import { equityInstrumentId, etfShareRegisterId } from '../../domain/instrument-keys';
+import { equityInstrumentId, etfShareId } from '../../domain/instrument-keys';
 import { defect } from '../../domain/defect';
 import type { AssetKind } from './wire';
 import type { InstitutionalEntityType } from '../../domain/institutions';
@@ -60,13 +60,13 @@ export function registerCompanyEquity(v2: V2World, c: { id: EntityId; region: Re
 
 /** A fund's shares, for the fund kinds whose shares are an instrument on the register: an ETF's,
  *  a money-market fund's and a private-equity fund's interest, all keyed by the fund's own id
- *  (the wire's convention; `peFundInterestId` is the fund's entity id verbatim). */
+ *  (the wire's convention; `etfShareId` and `peFundInterestId` are the fund's entity id verbatim). */
 export function registerFundShares(v2: V2World, e: { id: EntityId; region: RegionId; entityType: InstitutionalEntityType }): InstrRef | undefined {
   const kind: InstrumentKind | undefined = e.entityType === 'ETF' ? 'ETF_SHARE'
     : e.entityType === 'MONEY_MARKET_FUND' ? 'MMF_SHARE'
       : e.entityType === 'PRIVATE_EQUITY' ? 'PE_FUND_INTEREST' : undefined;
   if (kind === undefined) return undefined;
-  return registerInstrument(v2, { id: etfShareRegisterId(e.id), kind, issuer: e.id, currency: currencyOf(e.region) });
+  return registerInstrument(v2, { id: etfShareId(e.id), kind, issuer: e.id, currency: currencyOf(e.region) });
 }
 
 /** §3.13-BOOK dII — A BOOK THE ADAPTER MINTS AN ID FOR, declared where it is built: kind and

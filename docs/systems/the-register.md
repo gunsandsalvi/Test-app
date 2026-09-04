@@ -89,7 +89,7 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a holding is holder + instrument + quantity | `src/engine2/holdings.ts:HoldingStore` · `src/domain/banking.ts:ItemizedHolding` | ✅ |
 | A1.a the holder exists and can be paid | `src/engine/ledger/holdings-ledger.ts:holderIdOf` | ✅ |
-| A1.b the instrument is one the issuer issued | `src/engine/ledger/instrument-ledger.ts:registerInstrument` · `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
+| A1.b the instrument is one the issuer issued | `src/engine/ledger/instrument-ledger.ts:registerInstrument` · `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | A1.c the quantity is in the instrument's own unit | `src/engine2/holdings.ts:HoldingStore` | ✅ |
 | A2 a holding is a claim on a named issuer | `src/engine2/instruments.ts:instrumentIssuerOf` · `src/engine2/holdings.ts:pushBookRow` | ✅ |
 | A2.a it pays to whoever the register says holds it, then | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
@@ -120,8 +120,8 @@ checked by `scripts/check-atlas.sh`.
 | E3 a default converts the holding into a recovery claim | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | E4 a split, buyback or new issue moves both sides at once | `src/engine/ledger/holdings-ledger.ts:scaleHoldings` | ✅ |
 | E5 VERIFY every register event moves money or says why not | `src/engine/ledger/holdings-ledger.ts:markHolding` | ✅ |
-| F1 an instrument has a stable identity for its whole life | `src/domain/ids.ts:InstrumentId` · `src/engine2/refs.ts:RefColumn` | ⚠️ |
-| F1.a two instruments with the same terms are still two | `src/domain/instrument-keys.ts:corporateTrancheId` | ⚠️ |
+| F1 an instrument has a stable identity for its whole life | `src/domain/ids.ts:InstrumentId` · `src/engine2/refs.ts:RefColumn` · `src/engine2/instruments.ts:InstrumentIndex` | ✅ |
+| F1.a two instruments with the same terms are still two | `src/domain/instrument-keys.ts:corporateTrancheId` | ✅ |
 | F2 a dead party leaves its holdings to a named successor | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | F3 VERIFY the register survives a week boundary unchanged | `src/engine/audit/wires.ts:auditWires` · `src/engine/audit/snapshot.ts:registerQtyByKind` | ✅ |
 
@@ -129,24 +129,17 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ⚠️ A1.b — O3 EXEMPTS A FUND SHARE WHOSE FUND IS GONE (found at §9.13-BOOK c-then-1)
+### ✅ A1.b — CLOSED: EVERY ROW NAMES AN INSTRUMENT THE INDEX HOLDS, AND A FUND SHARE NAMES ITS FUND (§9.13-BOOK dIII)
 
-The register keys a fund's shares by the **FUND'S OWN ENTITY ID** — `etfShareRegisterId` is the
-identity function, and `peFundInterestId` is the same — which is the two-keys conflation slice (a)
-found, seen from the other side. `audit/ownership.ts:o3` therefore passes any row whose instrument
-id resolves to an institution, and that line is right: a live fund share is not an orphan. Naming
-the crossing (`etfShareFundId`) made the NEXT line legible, and it is the finding:
-
-```
-if (ent.get(etfShareFundId(h.instrumentId))) return;                              // fund alive
-if (h.instrumentType === 'PE_FUND_INTEREST' || h.instrumentType === 'ETF_SHARE') return;
-```
-
-Both types are entity-id-keyed, so the first line already passes every fund share whose fund still
-exists. **The second line passes exactly the rest — a share of a fund that no longer exists**,
-which is the orphan A1.b asks O3 to find. Left as it stands (rule 11); it closes with slice (d),
-which deletes one of the ETF share's two keys and gives the row an instrument to be checked
-against.
+The register keys a fund's shares by the fund's own entity id (`etfShareId`, `peFundInterestId`),
+and `audit/ownership.ts:o3` used to pass any such row by TYPE — so a share of a fund that no longer
+existed was exactly the orphan A1.b asks O3 to find, and O3 exempted it (found at §9.13-BOOK
+c-then-1, where branding the entity index's key made the exemption legible). The instrument index
+declares every fund's share with the fund as its issuer, `issuerIdOf` reads the index and nothing
+else, and O3 asks whether the issuer the row's instrument names still exists: a share of a gone
+fund is an orphan now, like any other claim on nobody. The write side holds by construction —
+`registerInstrument` is where an instrument comes to exist, and the wire refuses an instrument the
+index does not hold.
 
 ### ❌ C3.a / C3.b — DELIVERY AND PAYMENT ARE TWO EVENTS, AND THE PAPER LEG IS THE LARGER ONE
 
@@ -179,7 +172,7 @@ because there is nothing for it to describe. It is the ownership-side twin of
 **§3 step 37-DVP**, . Medium: the two legs already exist and already name the same parties; what
 is missing is one settlement point that writes both or neither.
 
-### ⚠️ F1 — THE KEYING SIDE IS CLOSED: NINE REF COLUMNS, SEVEN SPACES, SEVEN NUMBERINGS
+### ✅ F1 — THE KEYING SIDE IS CLOSED: NINE REF COLUMNS, SEVEN SPACES, SEVEN NUMBERINGS
 
 A columnar store cannot hold a string, so every string a row names is an integer into an intern
 table: `H.instrRef`, `H.typeRef`, `H.regionRef`, `TS.idRef`, `TS.issuerRef`, `TS.bankRef`,
@@ -208,7 +201,7 @@ their chains.
 named. Under one table that question had no answer — ~15 type tags and 5 region codes sat mixed
 among thousands of ids — and it is the question slice (d)'s instrument index is built on.
 
-F1 stays `⚠️` overall for the reason below, which is about a key, not about the spaces.
+The one key it left open — the ETF share's second — closed at §9.13-BOOK dIII, below.
 
 ### ✅ A4 — CLOSED AT THE WRITE: EVERY OPENING CREDIT ROW NAMED AN ISSUER THAT DOES NOT EXIST, AND NOW IT COULD NOT
 
@@ -253,32 +246,21 @@ sets `wire-world.ts` kept for equity and shares are gone), and a coupon or corpo
 in the money the INSTRUMENT states. §9.13-BOOK dII added the books the adapters mint an id for
 — swap tenors, single-name CDS, spot pairs, basis books, futures, repo and stock-borrow books —
 declared where they are built, with no issuer (`registerBook`), and a private-equity fund's
-interest; a CONTRACT wire resolves against the index too. What the index does not yet hold: the
-ETF share's second key (dIII, which also ends `issuerIdOf`'s fallback), the issued share count
-(dIV).
+interest; a CONTRACT wire resolves against the index too. §9.13-BOOK dIII deleted the ETF share's
+second key and `issuerIdOf`'s fallback: an id the index does not hold is an id nothing issued, at
+the site. What the index does not yet hold: the issued share count (dIV).
 
-### ⚠️ F1 / F1.a — ONE INSTRUMENT, TWO KEYS: THE ETF SHARE
+### ✅ F1 / F1.a — CLOSED: THE ETF SHARE HAS ONE KEY (§9.13-BOOK dIII)
 
-§3.13-BOOK slice (a) gave the register three nominal id spaces (`domain/ids.ts`: `EntityId`,
-`InstrumentId`, `Ticker`) and put the whole instrument-key grammar in one file
-(`domain/instrument-keys.ts`), so a key can no longer be invented at a call site and the compiler
-refuses one space where another belongs. That is what re-marks F1 off `issueTranche`: identity is
-now a property of the id, not of the stage that happened to mint it.
-
-It also found what a comment could not. **`etf-flows.ts` clears a fund's shares under
-`ETFSHARE-<fund>` and writes the resulting positions under the fund's own ENTITY id.** The
-register's index, its weekly re-mark, and every holder's row use the second; the clearing book and
-its price use the first. One instrument, two keys — and nothing has broken only because no code has
-yet tried to join them. `banking.ts` has carried the sentence *"for ETF_SHARE: the fund entity's
-id"* in a field comment for the life of that field, and a comment cannot fail a build.
-
-Slice (a) deliberately did NOT unify them: these keys are persisted in the register, so changing
-one is a data migration, not a rename. Both are now named constructors — `etfShareInstrumentId`
-and `etfShareRegisterId` — sitting next to each other in one file, so the split is countable and
-slice (d) deletes one of them.
-
-F1.a drops to `⚠️` for the same reason: the grammar makes two same-terms instruments distinct
-wherever it is used, and the ETF pair is where it is not.
+§3.13-BOOK slice (a) gave the register three nominal id spaces (`domain/ids.ts`) and put the whole
+instrument-key grammar in one file (`domain/instrument-keys.ts`), and found what a comment could
+not: `etf-flows.ts` cleared a fund's shares under `ETFSHARE-<fund>` and wrote the resulting
+positions under the fund's own entity id — one instrument, two keys, unbroken only because nothing
+had tried to join them. Slice (a) deliberately did not unify them (persisted keys are a migration,
+not a rename) and named both. dIII deleted the book's: the auction clears the share under the key
+the register holds it by (`etfShareId`), the fund behind a share is a read of the instrument
+index's issuer rather than a cast of the id (`etfShareFundId` is gone), and F1.a holds everywhere
+the grammar is used.
 
 ### ❌ D4 — NOTHING RECORDS WHAT A POSITION COST
 

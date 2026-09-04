@@ -20,9 +20,8 @@ import { trancheKindOf } from '../domain/assets';
 import { GovDebtTrancheView } from '../domain/region-macro';
 import { govTrancheView } from '../domain/government';
 import { V2World, rowOf, internInstrument, internEntity, entityOf, entityRefOf, instrumentOf, instrumentRefOf } from './world';
-import { instrumentRefRegistered } from './instruments';
+import { instrumentIssuerOf, isRegisteredInstrument } from './instruments';
 import { InstrumentId, asInstrumentId } from '../domain/ids';
-import { equityIssuerId } from '../domain/instrument-keys';
 import type { EntityId } from '../domain/ids';
 import { forgetClearedPrice } from './prices';
 import { defect } from '../domain/defect';
@@ -376,21 +375,20 @@ export function trancheIdOf(v2: V2World, r: number): InstrumentId {
 /**
  * §3.13-BOOK slice (c2a) — WHO ISSUED THIS PAPER, in the entity id space.
  *
- * §3.13-BOOK (dI): the INSTRUMENT INDEX answers first — every tranche, every company's equity and
- * every fund's shares are declared there with their issuer. What is left below it is the fallback
- * branding made visible: an id the index has never seen is handed back AS its own issuer, which
- * is correct for a listed equity nobody declared and a lie for anything else. Slice (dII) declares
- * the minted contract and book ids, and the fallback goes with it.
+ * §3.13-BOOK dI–dIII: THE INSTRUMENT INDEX ANSWERS, and nothing else does. Every tranche, every
+ * company's equity, every fund's share and every book the adapters mint is declared there, so an
+ * id the index has never seen is an id nothing issued — a defect at the site, where this used to
+ * hand it back AS its own issuer (right for a listed equity, a lie for anything else, and
+ * undetectable either way). An instrument the index holds with NO issuer — a swap tenor, a pair —
+ * is a defect here too: the caller asked who owes a thing nobody owes.
  */
 export function issuerIdOf(v2: V2World, instrumentId: string): EntityId {
-  const ref = instrumentRefOf(v2, asInstrumentId(instrumentId));
-  if (ref < 0) return equityIssuerId(asInstrumentId(instrumentId));
-  if (instrumentRefRegistered(v2, ref)) {
-    const iss = v2.instruments.issuerRef[ref];
-    return iss === ABSENT_REF ? equityIssuerId(asInstrumentId(instrumentId)) : entityOf(v2, iss);
-  }
-  const iss = v2.tranches.issuerRefByIdRef.get(ref);
-  return iss !== undefined && iss >= 0 ? entityOf(v2, iss) : equityIssuerId(asInstrumentId(instrumentId));
+  const id = asInstrumentId(instrumentId);
+  const iss = instrumentIssuerOf(v2, id);
+  if (iss !== undefined) return iss;
+  return defect(isRegisteredInstrument(v2, id)
+    ? `${id} is an instrument nobody issued — it has no issuer to name`
+    : `${id} is on no instrument index — nothing issued it`);
 }
 /** 13b: a tranche id that has been written to the store at some point — live or retired. */
 /**

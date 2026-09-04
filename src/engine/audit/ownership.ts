@@ -18,7 +18,7 @@ import { holdingClassOf } from '../../domain/assets';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { isTrancheKind } from '../../domain/assets';
 import { bookHeadOf } from '../../engine2/holdings';
-import { equityIssuerId, etfShareFundId } from '../../domain/instrument-keys';
+import { equityIssuerId } from '../../domain/instrument-keys';
 import { asEntityId, asTicker } from '../../domain/ids';
 import { assertNever } from '../../domain/defect';
 import { partyFromKey } from '../ledger/party';
@@ -212,18 +212,11 @@ function o3(state: GameState, week: number): AuditFinding[] {
       // 13b: a tranche's row is live only while the tranche is (retired paper on a book is an orphan).
       if (c && isTrancheId(v2o3, h.instrumentId) && trancheRowOf(v2o3, h.instrumentId) === undefined) { orphan++; orphanLocal += v; return; }
       if (c) { if (c.mergerAcquired) { merged++; mergedLocal += v; } return; }
-      // §3.13-BOOK (c-then-1): THE FUND-SHARE CROSSING, NAMED. A fund's shares are keyed in the
-      // register by the FUND'S OWN ENTITY ID (`etfShareRegisterId`, and `peFundInterestId` the
-      // same way), so an instrument id that resolves to an institution is a live fund share, not
-      // an orphan. Branding the index's key found this line reading an `InstrumentId` out of an
-      // entity map; the cast is a no-op, so behaviour is unchanged — what changes is that the
-      // crossing is a named function slice (d) can delete rather than an implicit truth.
-      if (ent.get(etfShareFundId(h.instrumentId))) return;
-      // AND WHAT THIS SECOND LINE ACTUALLY EXEMPTS, now that the first one is legible: a fund
-      // share whose FUND IS GONE. Both types above are entity-id-keyed, so the line above already
-      // passes every one whose fund still exists — this one passes the rest, which is exactly the
-      // orphan O3 is here to find. Left as it stands (rule 11: not this step); recorded in §3.
-      if (h.instrumentType === 'PE_FUND_INTEREST' || h.instrumentType === 'ETF_SHARE') return;
+      // §3.13-BOOK dIII: a fund's share names its FUND on the instrument index, and a share
+      // whose fund is gone is an orphan — the one this check used to exempt by type
+      // (`the-register.md` A1.b), because the crossing was a cast of the id and nothing could
+      // say whether the entity it named was a fund that had ever existed.
+      if (ent.get(issuerIdOf(v2o3, h.instrumentId))) return;
       orphan++; orphanLocal += v;
     });
   });

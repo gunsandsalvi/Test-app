@@ -75,33 +75,13 @@ export const commodityFutureInstrumentId = (commodityId: string, tenorMonths: nu
   asInstrumentId(`FUT-${commodityId}-${tenorMonths}M`);
 
 /**
- * A fund's share class AS THE CLEARING BOOK NAMES IT.
- *
- * **This does not agree with the register, and slice (a) found that out rather than assuming it.**
- * `etf-flows.ts` clears the fund's shares under `ETFSHARE-<fund>` and writes the resulting
- * positions under the FUND'S OWN ENTITY ID (`etfShareRegisterId` below) — the register's index,
- * its re-mark, and every holder's row all use the second. One instrument, two keys, and the only
- * reason nothing has broken is that no code has yet tried to join the two.
- *
- * Which is the point of a global book: `banking.ts` has said "for ETF_SHARE: the fund entity's id"
- * in a comment for the whole life of the field, and a comment cannot fail. This pair can — slice
- * (d) deletes one of them, and until it does, every crossing is one of these two calls.
+ * A fund's share class: the fund's own entity id, verbatim — the register's key, and since
+ * §3.13-BOOK dIII the clearing book's too. Slice (a) found the book clearing the same share under
+ * a second key (`ETFSHARE-<fund>`) while every holder's row, the index and the re-mark used this
+ * one; that key is gone, and the fund behind a share is a read of the instrument index's issuer
+ * (`instrumentIssuerOf`), not a cast of the id.
  */
-export const etfShareInstrumentId = (fundId: string): InstrumentId => asInstrumentId(`ETFSHARE-${fundId}`);
-
-/**
- * The same share class AS THE REGISTER NAMES IT: the fund's entity id, verbatim. See the note on
- * `etfShareInstrumentId` — this is the second of the two keys, not a second instrument.
- */
-export const etfShareRegisterId = (fundId: string): InstrumentId => asInstrumentId(fundId);
-
-/**
- * §3.13-BOOK slice (c2b) — AND BACK: the fund behind a register ETF_SHARE row. The register keys
- * a fund's shares by the FUND, so reading that row's instrument id as an entity id is correct and
- * is the second crossing branding exposed (the first was equity's, `equityIssuerId`). Slice (d)
- * deletes one of the ETF share's two keys and this goes with it.
- */
-export const etfShareFundId = (instrumentId: InstrumentId): EntityId => asEntityId(instrumentId);
+export const etfShareId = (fundId: string): InstrumentId => asInstrumentId(fundId);
 
 /** One region's overnight repo book: a single instrument whose price is the overnight rate. */
 export const repoOvernightInstrumentId = (regionId: RegionId): InstrumentId =>

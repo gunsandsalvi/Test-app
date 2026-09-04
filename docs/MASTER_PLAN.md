@@ -512,12 +512,6 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    dIII. **THE ETF SHARE HAS ONE KEY.** `etfShareInstrumentId` (the clearing book's
-        `ETFSHARE-<fund>`) or `etfShareRegisterId` (the fund's own id) is deleted — the register
-        and the index keep one, the clearing book and its price move to it, and `etfShareFundId`
-        becomes a read of the index's issuer (`the-register.md` F1). With every instrument the
-        world names declared, `issuerIdOf`'s "an undeclared id is its own issuer" fallback goes:
-        an id the index does not hold is an id nothing issued, at the site.
     dIV. **THE ISSUED AMOUNT LIVES ON THE INDEX.** `Company.sharesOutstanding` moves to the index
         as issued units, one owner, which gives `O2` a real issued side (`the-register.md` B2);
         a tranche's is a read of its row. **Closes step 13's item 5** — the registry is what the
@@ -1725,6 +1719,22 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK dIII — THE ETF SHARE HAS ONE KEY, AND THE INDEX IS THE ONLY ISSUER READ.**
+`etfShareInstrumentId` (the clearing book's `ETFSHARE-<fund>`) is deleted: `etf-flows.ts` clears a
+fund's share under the key the register holds it by (`etfShareId`, the fund's own id, renamed from
+`etfShareRegisterId` now that it is the one), so the book's instrument, its participants' positions
+and the rows they settle to are one key. `etfShareFundId` — the fund behind a share as a cast of
+the id — is deleted too: the fund is the instrument index's issuer (`instrumentIssuerOf`), read
+where the ETF stage folds the holders' rows. With every instrument the register or a book names
+declared, `issuerIdOf` has no fallback: an id the index does not hold defects as "nothing issued
+it", and an instrument the index holds with no issuer (a swap tenor, a pair) defects as "nobody
+issued it" — where it used to hand either back AS its own issuer. `O3` no longer exempts a fund
+share by type: it asks whether the issuer the row's instrument names still exists, so a share of
+a gone fund is the orphan A1.b asked it to find (`the-register.md` A1.b, F1, F1.a close). `W2`'s
+trace nets a money or goods leg under its own asset rather than asking its issuer. Byte-identical
+in every number; the ETF book's instrument id changes string, which nothing persists across a
+run. Gates green; no run.
 
 **13-BOOK dIIb — A CONTRACT'S REFERENCE IS TYPED BY CLASS.** `DerivativeContract.referenceId:
 string` — an issuer's entity id (CDS), a commodity id (futures), a REGION (FX forward), `''` (swap),

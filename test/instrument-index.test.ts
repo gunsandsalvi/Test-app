@@ -90,3 +90,12 @@ test('a book the adapter mints is declared with no issuer, and a fund interest w
   assert.equal(instrumentKindOf(v2, peFundInterestId('UK', 1)), 'PE_FUND_INTEREST');
   assert.equal(instrumentIssuerOf(v2, peFundInterestId('UK', 1)), asEntityId(peFundInterestId('UK', 1)));
 });
+
+test('an id the index does not hold has no issuer to name, and a fund share names its fund', () => {
+  const v2 = world();
+  assert.throws(() => issuerIdOf(v2, 'NOBODY-ISSUED-THIS'), /on no instrument index/);
+  registerBook(v2, swapInstrumentId('USA', 's2'), 'IRS', 'USD');
+  assert.throws(() => issuerIdOf(v2, swapInstrumentId('USA', 's2')), /nobody issued/);
+  registerFundShares(v2, { id: asEntityId('INST-ETF-9'), region: 'USA', entityType: 'ETF' });
+  assert.equal(issuerIdOf(v2, 'INST-ETF-9'), asEntityId('INST-ETF-9'), 'the share is keyed by the fund and issued by it');
+});
