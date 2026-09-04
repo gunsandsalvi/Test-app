@@ -505,7 +505,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const billPoints = activeBills.map((b) => {
         const px = result.newStatById.get(b.key);
         const inst = billInstrumentById.get(b.key);
-        const traded = (inst?.tradableFloatLocal ?? 0) > 0 || (inst?.primaryOfferingLocal ?? 0) > 0;
+        // §3.21 — PLACED, not OFFERED; the same change as 07c. An undersubscribed bill auction
+        // that placed nothing has no clearing level, and the bill keeps the price it had.
+        const placedLocal = Math.max(0, result.primaryOutcomeById.get(b.key)?.marketTakeLocal ?? 0);
+        const traded = (inst?.tradableFloatLocal ?? 0) > 0 || placedLocal > 0;
         if (px !== undefined && traded && px > 0 && isFinite(px)) setClearedPrice(ctx.v2, b.key, px);
         return {
           tenorYears: b.years,

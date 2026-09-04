@@ -428,10 +428,6 @@ written from here):
     seed/audit paths, the remaining stages, and the derivations a store now answers.
 
     **A. THE LIVE DEFECTS — each is wrong today, in this order.**
-    A3. **The two halves of the model disagree about when a price is real.** §3.21 says print only
-        if something traded; 07b/07d/07f-CP test what was PLACED (`outcome.marketTakeLocal`),
-        07c/07f-bills test what was OFFERED (`inst.primaryOfferingLocal`). A sovereign whose
-        offering went entirely unplaced still deposits a print. Decide which reading is right, once.
     A4. **07f disagrees with itself about which banks exist** — `:179` filters `updatedCompanies`
         with `isActiveCompany`, `:768` filters `prevActiveFirms` without it, one region loop apart.
     A5. **Stock loans pay in the wrong money.** Five of six `pay()` legs re-derive the currency from
@@ -1686,6 +1682,16 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-READ A3 — THE FIVE BOOKS NOW AGREE ABOUT WHEN A PRICE IS REAL.** §3.21: a book with nothing
+to trade has no clearing level, and what comes back is the solver's bracket, so the instrument keeps
+the price it had. The three credit books tested what was PLACED (`outcome.marketTakeLocal`); the two
+sovereign books tested what was OFFERED (`primaryOfferingLocal`). The readings differ in exactly one
+state — nobody holds it, it is on offer, and nobody bought — and that state IS the rule's own
+definition of nothing to trade, so the offered reading contradicted the rule its comment cited and
+deposited a bracket artifact as a sovereign price. Both sovereign books now read PLACED. Narrow by
+construction (whenever any holder exists, both readings already agreed), and decided on the rule's
+wording rather than on a measurement, which rule 11 forbids here. Gates green; no run.
 
 **13-READ A2 — FOUR BUDGETS SPENT COLLATERAL THAT WAS NOT THEIRS.** `institutionSpendableLocal`
 nets the stock-loan collateral an entity is only HOLDING; four sites re-derived the rule inline and

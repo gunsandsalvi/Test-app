@@ -535,7 +535,12 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         const px = result.newStatById.get(b.id);
         if (px === undefined) return undefined;
         const inst = instrumentByIdSov.get(b.id);
-        const traded = (inst?.tradableFloatLocal ?? 0) > 0 || (inst?.primaryOfferingLocal ?? 0) > 0;
+        // §3.21, and the credit books' reading of it: what was PLACED, not what was OFFERED.
+        // The two differ in exactly one state — nobody holds the bond, it is on offer, and nobody
+        // bought — and that state is the rule's own definition of nothing to trade, so an
+        // offering that found no buyer used to deposit the solver's bracket as a price.
+        const placedLocal = Math.max(0, result.primaryOutcomeById.get(b.id)?.marketTakeLocal ?? 0);
+        const traded = (inst?.tradableFloatLocal ?? 0) > 0 || placedLocal > 0;
         // §3.21: a book with nothing to trade has no clearing level, and what comes back is the
         // numerical bracket. Such a bond KEEPS the price it had rather than taking that print.
         if (traded && px > 0 && isFinite(px)) setClearedPrice(ctx.v2, b.id, px);
