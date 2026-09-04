@@ -4,7 +4,9 @@ import { Company, RegionId, Region, Commodity, CompositeBenchmarkIndices, IndexM
 import { generate52WeekHistory } from './utils';
 import { getRegionPopulation, getRegionProductivityPerCapitaLocal, POPULATION_UNIT, PRODUCTIVITY_UNIT_USD } from '../bootstrap/population';
 import { RATING_OAS_SPREADS } from '../pricing';
-import { marketCapOf, totalDebtOf } from '../../domain/company';
+import { marketCapOf } from '../../domain/company';
+import { issuerCreditPointsOnCurve } from '../credit-price';
+import { faceWeightedSpreadBps, CreditCurvePoint } from '../../domain/credit-curve';
 
 // Index base level = a shared reference unit scaled by each region's generated economic size
 // (population x productivity, relative to the same reference primitives), not a quoted real
@@ -28,7 +30,9 @@ export function calculateCompositeIndices(
   prevIndices?: CompositeBenchmarkIndices,
   // II.5 — prices read the ring; absent (the seed call) the len-0 path is the same
   // `|| stockPrice` fallback the old length-1 seed array took.
-  v2?: import('../../engine2/world').V2World
+  v2?: import('../../engine2/world').V2World,
+  /** The week the cleared prices below were struck for — the credit cohorts read them at it. */
+  week = 0
 ): CompositeBenchmarkIndices {
   const prevPriceOf = (c: Company): number => {
     if (!v2) return c.stockPrice;
@@ -129,11 +133,25 @@ const getCapWeightedAvgPrice = (firms: Company[]) => {
   const igRatings: CreditRating[] = ['AAA', 'AA', 'A', 'BBB'];
   const hyRatings: CreditRating[] = ['BB', 'B', 'CCC', 'D'];
 
+  /**
+   * §3.13 — A COHORT'S SPREAD IS A STATISTIC OVER PAPER. It is face-weighted across every BOND
+   * these issuers have printed, each at the spread its OWN cleared price implies over its OWN
+   * remaining life — not one number per borrower weighted by the borrower's whole debt stack,
+   * which counted a borrower's loans and commercial paper into a bond index and gave every
+   * maturity of one name the same level. A cohort whose bonds have not printed keeps the
+   * generated fallback, which is what week zero is.
+   */
   const getDebtWeightedOas = (firms: Company[], ratings: CreditRating[], fallback: number) => {
-    const subset = firms.filter(c => ratings.includes(c.creditRating) && isActiveCompany(c));
-    if (subset.length === 0) return fallback;
-    const totalDebt = subset.reduce((sum, c) => sum + totalDebtOf(c), 0);
-    return Math.round(subset.reduce((sum, c) => sum + c.oasSpreadBps * (totalDebtOf(c) / Math.max(1, totalDebt)), 0));
+    if (!v2) return fallback;
+    const points: CreditCurvePoint[] = [];
+    firms.forEach((c) => {
+      if (!ratings.includes(c.creditRating) || !isActiveCompany(c)) return;
+      const curve = regions[c.region]?.zeroRates;
+      if (!curve) return;
+      points.push(...issuerCreditPointsOnCurve(v2, curve, c.id, week));
+    });
+    const weighted = faceWeightedSpreadBps(points);
+    return weighted === undefined ? fallback : Math.round(weighted);
   };
 
   const usIgOas = getDebtWeightedOas(usFirms, igRatings, IG_OAS_FALLBACK);

@@ -14,17 +14,19 @@ import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
 
 import { GameState, RegionId, Region } from '../../../types';
 import { currencyOf } from '../../../domain/geography';
-import { measuredWeeklyMove, measuredWeeklyBpsMove, medianOf } from '../../../domain/volatility';
+import { measuredWeeklyMove, medianOf } from '../../../domain/volatility';
 import { ringFill, rowOf } from '../../../engine2/world';
 import { computeSovereignRepoHaircuts } from './repo-clearing';
 import { PrimeBrokerageLine, maxDrawnLocal, drawnByFund, lentByBroker } from '../../../domain/prime-brokerage';
+import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay, pendingSettlementLocal } from './settlement';
 import { leverageHeadroomLocal } from '../../macro/banking';
 import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
-import { facilityBookOf } from '../../../engine2/tranches';
+import { facilityBookOf, ladderRowsOf } from '../../../engine2/tranches';
+import { weeklyPriceMoveOf } from '../../../engine2/prices';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { sovereignTenorResolver } from '../../../domain/government';
 
@@ -39,21 +41,31 @@ import { sovereignTenorResolver } from '../../../domain/government';
 /**
  * §5-CLOSE (user, 2026-09-02): THERE IS NO CAP TO READ A HAIRCUT OFF. A broker protects itself by
  * the move it has MEASURED the collateral make: equity, twice the region's median realised
- * weekly price move (the price ring); credit, twice the median realised weekly spread move in
- * bps over a five-year duration (the OAS ring) plus the repo desk's own five-year sovereign
- * haircut for the rate leg; sovereigns, the repo desk's blended protection. A collateral class
- * with no history yet has no measured move, and the broker lends against it unprotected —
- * which is what a broker with no history does, and what week 1 is.
+ * weekly price move (the price ring); credit, twice the median realised weekly PRICE move of the
+ * region's own bonds; sovereigns, the repo desk's blended protection. A collateral class with no
+ * history yet has no measured move, and the broker lends against it unprotected — which is what a
+ * broker with no history does, and what week 1 is.
+ *
+ * §3.13: the credit leg used to be a SPREAD move times a five-year duration plus the sovereign
+ * haircut for the rate leg — three steps to reach a number the bonds themselves now print. A
+ * bond's cleared price already contains its rate leg and its own duration, so the move it made is
+ * the protection the broker needs, with no assumed duration and no add-on.
  */
-const CREDIT_COLLATERAL_DURATION_YEARS = 5;
 function measuredHaircutsFor(ctx: WeeklyStepContext, regionId: RegionId, reg: Region): Record<string, number> {
   const v2 = ctx.v2;
   const scratch: number[] = [];
   const names = ctx.updatedCompanies.filter((c) => c.region === regionId && !c.isDefaulted && !c.isBankEntity);
   const priceMoves = names.filter((c) => c.listingStatus !== 'PRIVATE')
     .map((c) => measuredWeeklyMove(ringFill(v2.priceRing, rowOf(v2, c.id), scratch))).filter((v): v is number => v !== undefined);
-  const spreadMovesBps = names
-    .map((c) => measuredWeeklyBpsMove(ringFill(v2.oasRing, rowOf(v2, c.id), scratch))).filter((v): v is number => v !== undefined);
+  // Every bond of every name in the region, at the move its own price made last week.
+  const creditPriceMoves: number[] = [];
+  names.forEach((c) => {
+    for (const r of ladderRowsOf(v2, c.id)) {
+      if (!(v2.tranches.principalLocal[r] > 0)) continue;
+      const move = weeklyPriceMoveOf(v2, v2.internedStrings[v2.tranches.idRef[r]]);
+      if (move !== undefined) creditPriceMoves.push(move);
+    }
+  });
   // §3.13-SOV row 3: the broker's SCHEDULE is per asset class, so it needs one sovereign number
   // — the face-weighted haircut of the region's actual ladder, rather than the average of four
   // bucket labels or the five-year one standing in for the class.
@@ -67,7 +79,7 @@ function measuredHaircutsFor(ctx: WeeklyStepContext, regionId: RegionId, reg: Re
   });
   const sovBlended = sovFaceLocal > 0 ? sovWeightedLocal / sovFaceLocal : 0;
   const equity = 2 * (medianOf(priceMoves) ?? 0);
-  const credit = 2 * ((medianOf(spreadMovesBps) ?? 0) / 10000) * CREDIT_COLLATERAL_DURATION_YEARS + sovBlended;
+  const credit = 2 * (medianOf(creditPriceMoves) ?? 0);
   return { EQUITY: equity, CORP_BOND: credit, LEVERAGED_LOAN: credit, GOV_BOND: sovBlended, DEFAULT: Math.max(equity, credit, sovBlended) };
 }
 
@@ -149,7 +161,10 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
 
       // The price: what the broker's own money costs it, plus the return it needs on the capital
       // the exposure consumes. The uncollateralised sliver IS the haircut, so that is the weight.
-      const brokerSpreadBps = broker.oasSpreadBps > 0 ? broker.oasSpreadBps : WHOLESALE_FUNDING_SPREAD_BPS;
+      // §3.13: the front of the broker's OWN credit curve — a margin line is financed on the
+      // shortest money the broker itself can raise.
+      const brokerSpreadBps = issuerSpreadAtOnCurve(ctx.v2, reg.zeroRates, broker.id, ctx.nextWeek, 1 / 52)?.spreadBps
+        ?? WHOLESALE_FUNDING_SPREAD_BPS;
       const rateAnnual = reg.policyRate + brokerSpreadBps / 10000
         + quoteLoanMarginBps({
             annualDefaultProbability: 0,

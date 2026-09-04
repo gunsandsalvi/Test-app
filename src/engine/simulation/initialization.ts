@@ -63,7 +63,7 @@ const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42 };
 
 import { isActiveCompany, managedEntityIdsOf } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
-import { closeSeedMoney, seedOpeningAccruals } from '../bootstrap/close-seed';
+import { closeSeedMoney, seedOpeningAccruals, seedOpeningCreditPrices } from '../bootstrap/close-seed';
 import { centralBankAssetsLocal, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../domain/central-bank';
 import { reconcileEmploymentView } from './stages/labor-market';
 import { weeklyWageBillLocal } from '../bootstrap/labor-and-wages';
@@ -580,12 +580,8 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       outstandingLocal: marketCapOf(c)
     }));
 
-    // Keyed by company id (aggregated across that issuer's own tranches), not per-tranche —
-    // matches how the real corporate-bond clearing engine (07b-corporate-bond-clearing.ts)
-    // tracks a participant's exposure per issuer, since all of an issuer's tranches reprice
-    // together off one real cleared oasSpreadBps. A per-tranche key here would never match that
-    // stage's per-company lookups, silently resetting every entity's real starting position to
-    // zero on its very first real clearing week.
+    // §3.13: keyed by TRANCHE, which is what 07b now clears and what the register names, so the
+    // seed opens in exactly the shape the first clearing week reads (§7.4).
     // Real bonds are an issuer's FIXED-rate tranches only — floating tranches are real leveraged
     // loans, a genuinely different market with its own real clearing and its own candidate list
     // (loanCandidates below) — see 07b-corporate-bond-clearing.ts / 07d-leveraged-loan-clearing.ts.
@@ -1390,7 +1386,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
 
   // G3b: the dealers the player trades with ARE the named banks' desks.
   const dealers = dealersFromBanks((b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.ticker), companies);
-  const compositeIndices = calculateCompositeIndices(companies, regions, commodities);
+  const compositeIndices = calculateCompositeIndices(companies, regions, commodities, undefined, seedV2, 1);
   const recentIPOs: { ticker: string; name: string; category: string; week: number }[] = [];
   const recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueLocal: number }[] = [];
 
@@ -1710,6 +1706,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   const openingSovereignAccruals = new Map<string, number>();
   seedOpeningAccruals(regions, companies, institutionalEntities, seedV2, 1,
     openingHolderAccruals, openingSovereignAccruals);
+  // §3.13: and every seeded bond opens with a PRICE, so week 1's session prices each piece of
+  // paper from what its own aged cash flows are worth rather than from one spread per borrower.
+  seedOpeningCreditPrices(regions, companies, seedV2, 1);
 
   const state: GameState = {
     currentWeek: 1,

@@ -12,7 +12,7 @@
  * Instruments are each issuer's own FLOATING-rate tranches (the real leveraged loan; FIXED
  * tranches are real bonds, cleared separately in 07b-corporate-bond-clearing.ts). Fair value for
  * a loan is anchored on that same issuer's own real, already-cleared bond spread
- * (comp.oasSpreadBps, from 07b, which runs first) discounted for the loan's real senior-secured
+ * (its issuer's own cleared five-year bond point, from 07b, which runs first) discounted for the loan's real senior-secured
  * structural seniority — the same issuer's credit risk, priced at its own real technicals.
  *
  * Banks play the dealer role (loanDealerInventory) exactly as they do for corporate bonds — real
@@ -20,7 +20,7 @@
  * book (businessLoanBookLocal), which is driven by real lending activity, not a portfolio
  * allocation decision this engine models.
  *
- * Must run after 07b (so comp.oasSpreadBps is already real this week) and before stage 8, which
+ * Must run after 07b (so the issuer's bonds carry this week's cleared prices) and before stage 8, which
  * reads comp.leveragedLoan.discountMarginBps/pricePar as already-real, already-cleared values.
  */
 
@@ -29,7 +29,8 @@ import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_FACILITY, issuerIdOf } from '../../../engine2/tranches';
 import { splitAcrossTranches, primarySliceOf } from './register-split';
-import { primaryTrancheId } from '../../../domain/primary-market';
+import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
+import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { isActiveCompany } from '../../../domain/company';
 import {
   computeReservationSpreadBps,
@@ -92,6 +93,18 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
   // SCALE: same per-run memo and hoist as 07b — floatingDebtLocal walks the ladder per call and
   // nothing in this stage changes a ladder.
   const floatingDebtById = new Map<string, number>();
+  /** §3.13: the margin an issuer's own floating paper already carries, face-weighted — the quote
+   *  it has if the bond market has never printed it. */
+  const ladderMarginBps = (c: Company): number => {
+    const S = v2.tranches;
+    let face = 0, weighted = 0;
+    for (const r of ladderRowsOf(v2, c.id)) {
+      if (!(S.flags[r] & TR_FLOATING) || (S.flags[r] & TR_FACILITY) || !(S.principalLocal[r] > 0)) continue;
+      const m = Number.isNaN(S.floatingMarginBps[r]) ? 0 : S.floatingMarginBps[r];
+      face += S.principalLocal[r]; weighted += S.principalLocal[r] * m;
+    }
+    return face > 0 ? weighted / face : 0;
+  };
   const floatingDebtOf = (c: Company): number => {
     let v = floatingDebtById.get(c.id);
     if (v === undefined) { v = floatingDebtLocal(v2, c); floatingDebtById.set(c.id, v); }
@@ -134,7 +147,12 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // A newly drawn loan opens at the issuer's own credit, priced off its bonds at the senior
       // lien's discount — the same relationship the clearing below maintains thereafter — so it
       // enters the auction already consistent with the rest of that issuer's capital structure.
-      const openingMarginBps = Math.round(c.oasSpreadBps * SENIOR_LIEN_DISCOUNT);
+      // §3.13: a first-time loan issuer opens at what its OWN five-year bonds cost, discounted
+      // for the senior-secured lien. A borrower with no printed bonds has no such read, and the
+      // ladder's own margin is the quote it actually carries.
+      const openingMarginBps = Math.round(
+        (issuerSpreadAtOnCurve(v2, reg.zeroRates, c.id, ctx.nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
+          ?? ladderMarginBps(c)) * SENIOR_LIEN_DISCOUNT);
       c.leveragedLoan = {
         quotedMarginBps: openingMarginBps,
         referenceBenchmark:
@@ -233,8 +251,10 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     reconcileHolderPrincipal({
       ctx, regionId,
-      outstandingByIssuerId: new Map(regionCompanies.map((c) => [c.id, floatingDebtOf(c)])),
-      issuerById: new Map(regionCompanies.map((c) => [c.id, c])),
+      // Still keyed by ISSUER: this book clears one instrument per borrower until §3.13's next
+      // credit row moves it to the tranche, as 07b now is.
+      outstandingByInstrumentId: new Map(regionCompanies.map((c) => [c.id, floatingDebtOf(c)])),
+      issuerOfInstrument: new Map(regionCompanies.map((c) => [c.id, c])),
       holdingsByEntity: currentHoldingByCompanyByEntity,
       banks: regionBanks,
       deskBook: BOOK, instrumentType: 'LEVERAGED_LOAN',

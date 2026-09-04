@@ -20,6 +20,15 @@ import { PrimaryOfferingType } from './assets';
 
 export type PrimaryOfferingInstrumentType = PrimaryOfferingType;
 
+/**
+ * The tenor a new corporate term deal is brought at. It lived in `engine2/stage08-back.ts`, where
+ * the ISSUING half read it; §3.13 gave the PRICING half (07b, which strikes the coupon and clears
+ * the deal's price) the same need, and a tenor chosen in two places is two answers to one question
+ * (rule 4). A SHAPE parameter with a scheduled death — §3.30 replaces it with the issuer's own
+ * choice of where on its curve to fund.
+ */
+export const STANDARD_CORP_TENOR_YEARS = 5;
+
 /** §5-FINALIZATION 13b: the id of the tranche a priced offering becomes — one expression, so the
  *  register's primary rows (07x) and the ladder's row (stage 08) name the same paper. */
 export const primaryTrancheId = (issuerId: string, purpose: string, week: number): string => `${issuerId}-${purpose}-${week}`;

@@ -12,34 +12,55 @@ import { marketCapOf } from '../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { ensureV2 } from '../../engine2/world';
 import { isTrancheKind } from '../../domain/assets';
-import { trancheClearedPricePerFace } from '../credit-price';
-import { materializeGovLadder } from '../../engine2/tranches';
+import { trancheClearedPricePerFace, issuerSpreadAtOnCurve } from '../credit-price';
+import { materializeGovLadder, TR_SUBORDINATED } from '../../engine2/tranches';
 import { priceFromYield, zeroRateAt, COUPON_PERIOD_WEEKS } from '../../domain/pricing';
+import { STANDARD_CORP_TENOR_YEARS } from '../../domain/primary-market';
+import { CDS_TENOR_WEEKS } from '../../domain/derivatives/classes/cds';
 
 const RATING_RANK: Record<string, number> = { AAA: 0, AA: 1, A: 2, BBB: 3, BB: 4, B: 5, CCC: 6, D: 7 };
 
-/** P1 — seniority orders the spreads of one issuer: paper ≤ senior-secured loan ≤ senior bond ≤ subordinated. */
+/** The maturity every cross-name and cross-rank spread comparison is taken at: one point on each
+ *  issuer's own curve, so a ranking ranks credit and not tenor. Five years is where this model's
+ *  corporate paper is brought (`STANDARD_CORP_TENOR_YEARS`) and where its CDS strikes. */
+const P1_COMPARISON_TENOR_YEARS = STANDARD_CORP_TENOR_YEARS;
+
+/**
+ * P1 — seniority orders the spreads of one issuer: paper ≤ senior-secured loan ≤ senior bond ≤
+ * subordinated.
+ *
+ * §3.13: the two BOND legs are now read at the SAME MATURITY off that issuer's own cleared prices
+ * — a five-year senior against a five-year subordinated, which is the only comparison a seniority
+ * claim is about. It used to read one issuer-level number for the senior leg and a stored field
+ * for the junior one, so the test could not tell a rank difference from a maturity difference.
+ */
 function p1(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
+  const v2 = ensureV2(state);
   let inv = 0, n = 0; const examples: string[] = [];
   state.companies.forEach((c) => {
     if (!isActiveCompany(c) || c.isBankEntity) return;
-    const policy = state.regions[c.region]?.policyRate ?? 0;
-    const bond = c.oasSpreadBps;
-    if (!(bond > 0)) return;
+    const reg = state.regions[c.region];
+    if (!reg) return;
+    const policy = reg.policyRate ?? 0;
+    const at = (rank: number) => issuerSpreadAtOnCurve(v2, reg.zeroRates, c.id, week, P1_COMPARISON_TENOR_YEARS,
+      (flags) => ((flags & TR_SUBORDINATED) !== 0) === (rank === 1))?.spreadBps;
+    const bond = at(0);
+    if (bond === undefined || !(bond > 0)) return;
     const loan = c.leveragedLoan?.discountMarginBps;
     const cp = (c.debtTranches ?? []).find((t) => t.isCommercialPaper);
     const cpSpread = cp ? ((cp.couponRate ?? 0) - policy) * 1e4 : undefined;
     const facility = (c.debtTranches ?? []).find((t) => t.isBankFacility);
     const facSpread = facility?.floatingMarginBps;
-    const sub = (c.debtTranches ?? []).find((t) => t.seniority === 'SUBORDINATED' && t.rateType === 'FIXED');
-    const senior = (c.debtTranches ?? []).find((t) => t.seniority === 'SENIOR' && t.rateType === 'FIXED' && !t.isCommercialPaper);
+    const subSpread = at(1);
     n++;
     const bad: string[] = [];
     if (loan !== undefined && loan > bond * 1.05 + 25) bad.push(`loan ${loan}bp > bond ${bond}bp`);
     if (cpSpread !== undefined && cpSpread > bond + 25) bad.push(`paper ${cpSpread.toFixed(0)}bp > bond ${bond}bp`);
     if (facSpread !== undefined && facSpread > bond * 1.05 + 25) bad.push(`facility ${facSpread}bp > bond ${bond}bp`);
-    if (sub && senior && (sub.couponRate ?? 0) < (senior.couponRate ?? 0) - 1e-4) bad.push(`sub coupon ${pct(sub.couponRate ?? 0)} < senior ${pct(senior.couponRate ?? 0)}`);
+    // The real test, and the one §3.33 says must fail while the estate ignores subordination:
+    // the market should charge MORE for the junior claim on the same borrower at the same date.
+    if (subSpread !== undefined && subSpread < bond - 1e-6) bad.push(`sub ${subSpread.toFixed(0)}bp < senior ${bond.toFixed(0)}bp`);
     if (bad.length) { inv++; if (examples.length < 3) examples.push(`${c.ticker}: ${bad.join(', ')}`); }
   });
   if (inv > n * 0.05) out.push({ family: 'P', check: 'P1 seniority orders the spreads', week, usd: inv, message: `${inv} of ${n} issuers price a senior claim wider than a junior one (${examples.join(' | ')})` });
@@ -51,7 +72,17 @@ function p2(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   let wide = 0, n = 0;
   // Only names whose protection book CLEARED this week: a stale print is a quote, not a price.
-  state.companies.forEach((c) => { if (!isActiveCompany(c) || !(c.cdsSpreadBps > 0) || !(c.oasSpreadBps > 0) || c.cdsClearedWeek !== state.currentWeek) return; n++; if (Math.abs(c.cdsSpreadBps - c.oasSpreadBps) > Math.max(150, c.oasSpreadBps * 0.75)) wide++; });
+  const v2 = ensureV2(state);
+  state.companies.forEach((c) => {
+    const reg = state.regions[c.region];
+    if (!isActiveCompany(c) || !reg || !(c.cdsSpreadBps > 0) || c.cdsClearedWeek !== state.currentWeek) return;
+    // §3.13: the cash leg of a five-year basis is that issuer's own five-year bond, read off the
+    // price it cleared at. A name with no printed bond has no basis to test.
+    const cash = issuerSpreadAtOnCurve(v2, reg.zeroRates, c.id, week, CDS_TENOR_WEEKS / 52)?.spreadBps;
+    if (cash === undefined || !(cash > 0)) return;
+    n++;
+    if (Math.abs(c.cdsSpreadBps - cash) > Math.max(150, cash * 0.75)) wide++;
+  });
   if (wide > n * 0.1) out.push({ family: 'P', check: 'P2 CDS basis bounded', week, usd: wide, message: `${wide} of ${n} names carry a CDS more than 150bp or 75% away from the bond` });
   const closed = (state.estates ?? []).filter((e) => e.closedWeek !== undefined);
   if (closed.length >= 5) {
@@ -67,12 +98,19 @@ function p2(state: GameState, week: number): AuditFinding[] {
 function p3(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   REGION_IDS.forEach((r) => {
-    const cs = state.companies.filter((c) => c.region === r && isActiveCompany(c) && !c.isBankEntity && c.oasSpreadBps > 0);
+    const reg = state.regions[r];
+    if (!reg) return;
+    // §3.13: each name's representative level is the five-year point on its OWN credit curve —
+    // the same maturity for every name, so the ranking is a ranking of credit and not of tenor.
+    const cs = state.companies
+      .filter((c) => c.region === r && isActiveCompany(c) && !c.isBankEntity)
+      .map((c) => ({ c, oas: issuerSpreadAtOnCurve(ensureV2(state), reg.zeroRates, c.id, week, P1_COMPARISON_TENOR_YEARS)?.spreadBps ?? 0 }))
+      .filter((x) => x.oas > 0);
     if (cs.length < 20) return;
-    const rho = spearman(cs.map((c) => c.oasSpreadBps), cs.map((c) => RATING_RANK[c.creditRating] ?? 4));
+    const rho = spearman(cs.map((x) => x.oas), cs.map((x) => RATING_RANK[x.c.creditRating] ?? 4));
     if (rho < 0.5) out.push({ family: 'P', check: 'P3 spread ranks with rating', week, usd: rho, message: `${r}: Spearman(OAS, rating) = ${rho.toFixed(2)} over ${cs.length} names` });
-    const lev = cs.filter((c) => Number.isFinite(c.leverage));
-    const rhoL = spearman(lev.map((c) => c.oasSpreadBps), lev.map((c) => c.leverage));
+    const lev = cs.filter((x) => Number.isFinite(x.c.leverage));
+    const rhoL = spearman(lev.map((x) => x.oas), lev.map((x) => x.c.leverage));
     if (rhoL < 0.2) out.push({ family: 'P', check: 'P3 spread ranks with leverage', week, usd: rhoL, message: `${r}: Spearman(OAS, leverage) = ${rhoL.toFixed(2)} over ${lev.length} names` });
   });
   const dead = state.companies.filter((c) => c.isDefaulted && (c.stockPrice > 0.01 || marketCapOf(c) > 1e6));

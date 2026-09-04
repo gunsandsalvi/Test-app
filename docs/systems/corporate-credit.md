@@ -168,7 +168,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | C2 a book is built out of real demand | `src/engine/simulation/stages/financial-clearing-engine.ts:ParticipantDemand` | ✅ |
 | C2.a an indication is a schedule, not a quantity | `src/engine/simulation/stages/financial-clearing-engine.ts:setDemand` | ✅ |
 | C2.b the book's size and shape decide where it prices | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ✅ |
-| C3 it prices: one level struck | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ⚠️ |
+| C3 it prices: one level struck | `src/engine/simulation/stages/primary-settlement.ts:PricedOfferingOptions` | ✅ |
 | C4 the issuer's walk-away, and a pulled deal never existed | `src/engine/simulation/stages/corporate-financing.ts:walkAwayCostAnnual` | ✅ |
 | C5 allocation out of the book | `src/engine/simulation/stages/book-settlement.ts:primaryTakes` | ✅ |
 | C6 proceeds net of a fee that reaches the underwriter | `src/engine/simulation/stages/primary-settlement.ts:settlePricedOfferings` | ✅ |
@@ -176,7 +176,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | C7.a it can be left holding, as its own position | `src/domain/dealer-desk.ts:DealerDeskPosition` | ✅ |
 | C7.b VERIFY the fee and the risk are related | `src/domain/primary-market.ts:oneWeekPriceRiskBps` | ✅ |
 | D1 holders and buyers post schedules; who trades is the outcome | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:runCorporateBondClearingStage` | ✅ |
-| **D2 a PRICE clears (bond N7)** | — | ❌ |
+| **D2 a PRICE clears (bond N7)** | `src/engine2/prices.ts:setClearedPrice` | ⚠️ |
 | D3 a dealer intermediates, a real party | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
 | D3.a it quotes both sides out of its own inventory | `src/engine/simulation/stages/dealer-desks.ts:applyDealerDeskFills` | ✅ |
 | D3.b bounded by its balance sheet and capital | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
@@ -186,6 +186,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | D6 two legs in the same pass (N9.a) | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
 | D7 accrued interest transfers with the paper (N9.b) | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ⚠️ |
 | **D8 FORBID no derived measure may set the price (N7.b)** | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:pricePar` | ❌ |
+| D8 · bonds — the price is the primitive, the spread is read off it | `src/engine/credit-price.ts:trancheClearedSpreadBps` | ✅ |
 | E1 a register of holders (N8) | `src/engine2/holdings.ts:newHoldingStore` | ✅ |
 | E2 VERIFY Σ held = issued (N8.a) | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | **E3 the holder marks at the cleared price** | `src/engine/simulation/stages/credit-marking.ts:markCreditToMarket` | ❌ |
@@ -194,7 +195,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | E5 an economic reservation | `src/engine/simulation/stages/asset-allocation.ts:computeReservationSpreadBps` | ✅ |
 | E5.a its cost of funds | `src/engine/simulation/stages/asset-allocation.ts:entityRequiredReturn` | ✅ |
 | E5.b its expected loss — A4's assessment × LGD | `src/engine/simulation/stages/shared-helpers.ts:computeAnnualDefaultProbability` | ✅ |
-| E5.c the capital the position consumes | `src/engine/simulation/stages/asset-allocation.ts:spreadRiskCapitalChargeRate` | ✅ |
+| E5.c the capital the position consumes — at THIS paper's own duration | `src/engine/simulation/stages/asset-allocation.ts:spreadRiskCapitalChargeRate` | ✅ |
 | E5.d VERIFY it clears at the marginal reservation, with no floor | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ⚠️ |
 | E6 a leveraged holder is funded, and it can be withdrawn | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageStage` | ✅ |
 | E6.a a named liability to a named lender | `src/domain/repo.ts:RepoContract` | ✅ |
@@ -217,9 +218,9 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | G6 the holder books the loss, on a date | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | **G7 restructuring** | — | ❌ |
 | G8 a default is INFORMATION that moves other issuers | `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ✅ |
-| H1 the market has a level, from real prices and weights | `src/engine/simulation/stages/index-calculation.ts:runIndexCalculationStage` | ⚠️ |
+| H1 the market has a level, from real prices and weights | `src/engine/simulation/stages/index-calculation.ts:runIndexCalculationStage` | ✅ |
 | H2 VERIFY worse assessment trades wider | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
-| H3 VERIFY junior trades wider than senior in one issuer | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
+| H3 VERIFY junior trades wider than senior in one issuer | `src/domain/credit-curve.ts:spreadAtTenor` | ⚠️ |
 | H4 cash and synthetic separately cleared; the BASIS is real | `src/engine/simulation/stages/derivative-markets/cds.ts:CDS_MARKET` | ⚠️ |
 | **H4.a FORBID neither derived from the other** | `src/engine2/stage08-back.ts:newCdsSpreadBps` | ❌ |
 
@@ -227,22 +228,32 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-**76 nodes: 40 ✅, 25 ⚠️, 11 ❌.** Ordered by how much each changes, not by branch. The depth-2
+**77 nodes: 43 ✅, 24 ⚠️, 10 ❌** (re-marked at §9.13-CREDIT row 1, which moved D2 ❌→⚠️, C3 and
+H1 ⚠️→✅ and added D8's bond half ✅). Ordered by how much each changes, not by branch. The depth-2
 diff's findings all appear below under their new ids; nothing has been dropped in the renumbering.
 
-### ❌ D2 / D8 / E3 — CREDIT CLEARS A SPREAD, AND NOTHING IS EVER MARKED AT A PRICE
+### ⚠️ D2 / D8 / E3 — THE BOND BOOK CLEARS A PRICE NOW; THE LOAN AND PAPER BOOKS DO NOT
 
-`assets/index.ts:69-70` declares CORP_BOND and LEVERAGED_LOAN `quotedAs: 'SPREAD_LIKE'`; `07b:207`
-and `07d:195` both open their instruments with `statKind: 'YIELD_LIKE'`; and
-`financial-clearing-engine.ts:956` reads
-`const unitValueUSD = instruments[fi].statKind === 'PRICE_LIKE' ? shard.clearedStat[…] : 1` — so on
-every credit book a unit of par changes hands at **one dollar, by construction**. D2 has no code at
-all, which is the finding.
+**PARTLY CLOSED, §9.13-CREDIT row 1.** `07b` prices one instrument per TRANCHE, `statKind:
+'PRICE_LIKE'`, and deposits what it printed in `engine2/prices.ts` — so a corporate bond changes
+hands at its price and every spread in the model is read back off that price at the paper's own
+remaining life (`engine/credit-price.ts`). `Company.oasSpreadBps` is deleted: a borrower has a
+CREDIT CURVE (`domain/credit-curve.ts`) and not a spread, which is what makes two tranches of one
+name able to disagree.
 
-**KNOWN(13)**, and this tree is not the place to re-derive it. What the re-walk adds is three
-things the step should carry:
+What is still open under these three nodes, and why D2 is ⚠️ rather than ✅:
 
-1. **D8's FORBID is actively violated, not merely unmet.** `07d:472` writes
+- **`07d` (leveraged loans) and `07f` (bills and CP) still clear a spread per ISSUER**, so D8's
+  FORBID is still actively violated by `07d:pricePar` and the register still carries their paper
+  at par. That is §3.13's next credit row.
+- **E3 is unchanged**: `credit-marking` is still not wired in, and cannot be one book at a time
+  (§9.13 part 3). The bond book writes its fills in PAR space exactly as the sovereign does, and
+  `P5` measures the gap between the face carried and the price cleared — which is the finding, not
+  a defect of this row.
+
+What the original re-walk added, still standing:
+
+1. **D8's FORBID is actively violated on the LOAN book, not merely unmet.** `07d:472` writes
    `pricePar: Number((100 - (marginDeltaBps / 10000) * creditDuration * 100).toFixed(2))` — a price
    linearised out of the cleared discount margin. `index-calculation.ts:64` divides it by 100 and
    uses it as the loan index's price, and `12-portfolio:178` shows it to the player as
@@ -259,6 +270,9 @@ things the step should carry:
    (two comments mention it). The two fields step 13 leans on are declarations no code consumes,
    so the price/stat distinction lives only as a hard-coded `statKind` at each of the five clearing
    adapters. **Becomes part of §3 step 13:** the registry row has to be what the adapter reads.
+   STILL OPEN after row 1 — `assets/index.ts` now says CORP_BOND is `quotedAs: 'PRICE'` and 07b
+   says `statKind: 'PRICE_LIKE'` separately, which is the same two-representations defect the row
+   did not close.
 
 ### ⚠️ A2.a / B3 / G5 / G5.a / H3 — SENIORITY IS DECORATIVE, AND `SUBORDINATED` IS NEVER ISSUED
 
@@ -271,11 +285,13 @@ copies whatever the group already had. `tranches.ts:23`'s `TR_SUBORDINATED` bit 
 converted in both directions, and **never set**.
 
 So the field is a constant, and three nodes fall with it. G5.a ("a junior claim can recover nothing")
-has no junior debt to be about. H3 is unmeasurable: `prices.ts:33` looks for a
-`seniority === 'SUBORDINATED'` tranche to compare against, always finds `undefined`, and that arm of
-`P1` **has never once fired** — P1's 841–1073 breaching issuers are entirely its loan/CP/facility
-arms. Step 33 should say so: fixing the waterfall is necessary and not sufficient, because until
-something issues subordinated paper there is nothing for the waterfall to rank.
+has no junior debt to be about. H3 is unmeasurable: `P1`'s subordinated arm looks for a subordinated
+tranche to compare against and always finds none, and that arm **has never once fired** — P1's
+841–1073 breaching issuers are entirely its loan/CP/facility arms. Step 33 should say so: fixing the
+waterfall is necessary and not sufficient, because until something issues subordinated paper there is
+nothing for the waterfall to rank. §9.13-CREDIT row 1 changed WHAT that arm compares — a five-year
+senior against a five-year subordinated, both off their own cleared prices, so a rank difference can
+no longer be read as a maturity difference — and it still has nothing to compare.
 
 ### ❌ B2.a / B2.b / G1 / G2 — A CREDIT EVENT IS ONLY EVER A BALANCE-SHEET STATE
 

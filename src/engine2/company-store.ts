@@ -56,7 +56,7 @@ const F64_FIELDS = [
   'bornWeek', 'leverage', 'interestCoverage', 'recoveryRate', 'baselineRecoveryRate', 'stockPrice',
   'forwardPE', 'marketCap', 'dividendYield', 'baselineDividendYield', 'bankMarketShare',
   'bankRiskFactor', 'defaultedWeek', 'institutionalMarketShare', 'beta', 'seniorBondYield',
-  'oasSpreadBps', 'cdsSpreadBps', 'cdsBasisBps', 'shortInterestShares',
+  'cdsSpreadBps', 'cdsBasisBps', 'shortInterestShares',
   'inputSupplyConstraintFactor', 'recentFulfillmentEMA', 'deliveryReliability',
   'recurringRevenueBaseLocal', '_targetProductionUSD', 'bankResolvedWeek',
   'taxLossCarryforwardLocal', 'taxBasisPpeLocal', 'deferredTaxLiabilityLocal', 'lastWeekSalesLocal',

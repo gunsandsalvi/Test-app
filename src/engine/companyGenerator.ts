@@ -735,8 +735,10 @@ export function generateInitialCompanies(
         hedgeFundStrategy: tmpl.hedgeFundStrategy,
         beta: tmpl.beta,
         
+        // §3.13: what this issuer's five-year money cost at its LAST FILING. The seed has no
+        // filing behind it, so it opens at the rating table its own coupons were struck from —
+        // and from week 1 it is a read of the borrower's own printed paper.
         seniorBondYield: 0.05 + oasSpreadBps / 10000,
-        oasSpreadBps,
         cdsSpreadBps,
         inputSupplyConstraintFactor: 1.0,
         outputInventoryBySubUnit: {},
@@ -1330,9 +1332,8 @@ export function generatePrivateCompanies(
       creditRating: rating,
       isDefaulted: false,
       // Seeded from the same rating-keyed primitive the public bootstrap uses, so the name's
-      // first real clearing week (HC2) starts from a defensible level instead of zero and the
-      // weekly damper does not spend months walking it up from nothing.
-      oasSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
+      // first real clearing week (HC2) starts from a defensible level instead of zero.
+      // §3.13: its BONDS open with prices (`seedOpeningCreditPrices`), not the firm with a spread.
       cdsSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
       seniorBondYield: 0,
       dividendYield: 0, baselineDividendYield: 0,

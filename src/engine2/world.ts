@@ -18,6 +18,7 @@ import { newLotStore, ReadonlyLotStore } from './lots';
 import { ContractTable, newContractTable } from './contracts';
 import { newTrancheStore, ReadonlyTrancheStore } from './tranches';
 import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
+import { newPriceStore, PriceStore } from './prices';
 import { CurrencyCode, CURRENCY_CODES } from '../domain/geography';
 import { FxTable, PARITY_FX } from '../domain/currency';
 
@@ -36,6 +37,10 @@ export interface V2World {
   tranches: ReadonlyTrancheStore;
   /** §7.307 — the institutional register as rows (stage 1: a synced mirror of itemizedHoldings). */
   holdings: ReadonlyHoldingStore;
+  /** §3.13 — WHAT ONE UNIT OF AN INSTRUMENT LAST CLEARED AT (engine2/prices.ts). A position is
+   *  (asset, units) and its value is units × this; a market writes only what it cleared, and an
+   *  instrument no market printed has no entry rather than a par. */
+  prices: PriceStore;
   /** §4.C II.5 — revenue history as a 13-slot ring per firm row (the object field is DELETED:
    *  the weekly `[...slice(-12), x]` allocated a fresh array per firm per week, and the §7.320
    *  mid-loop-append trap lived in the aliasing; a ring has neither). Plain arrays, not SAB —
@@ -45,7 +50,6 @@ export interface V2World {
   /** §4.C II.5 — the other Company history rings (same clone-safety note as revRing). */
   priceRing: F64Ring;
   ratingRing: F64Ring;
-  oasRing: F64Ring;
   /** §5-WIRES A3 — THE PERSISTENT ACCOUNTS (engine/ledger/accounts.ts owns every read and
    *  write): one balance per party key interned in this world's string table, living week to
    *  week. Companies first (§7.384); the other kinds join per A3's list. Plain typed arrays and
@@ -132,10 +136,10 @@ export function ensureV2(state: V2Host): V2World {
     contracts: newContractTable(),
     tranches: newTrancheStore(),
     holdings: newHoldingStore(),
+    prices: newPriceStore(),
     revRing: { slots: new Float64Array(13 << 12), len: new Uint8Array(1 << 12), start: new Uint8Array(1 << 12), cap: 1 << 12 },
     priceRing: makeF64Ring(52, 1 << 12),
     ratingRing: makeF64Ring(16, 1 << 12),
-    oasRing: makeF64Ring(8, 1 << 12),
     accounts: newPersistentAccounts(),
     // Parity until the FX auction clears once — the only honest opening value, and one every
     // read must survive, since the audits and the UI can be asked about week 0.
@@ -327,17 +331,15 @@ export function ratingCodeOf(rating: string): number {
 export const ratingTextOf = (code: number): string => RATING_CODES[code];
 
 // §4.C II.5 — generalized seed stash: creation code runs before any GameState exists.
-const seedRingStash = new WeakMap<object, { price?: number[]; rating?: string[]; oas?: number[] }>();
-export function stashSeedRing(comp: object, kind: 'price' | 'rating' | 'oas', values: number[] | string[]): void {
+const seedRingStash = new WeakMap<object, { price?: number[]; rating?: string[] }>();
+export function stashSeedRing(comp: object, kind: 'price' | 'rating', values: number[] | string[]): void {
   const e = seedRingStash.get(comp) ?? {};
   if (kind === 'rating') e.rating = values as string[];
-  else if (kind === 'price') e.price = values as number[];
-  else e.oas = values as number[];
+  else e.price = values as number[];
   seedRingStash.set(comp, e);
 }
-export function peekSeedRing(comp: object, kind: 'price' | 'rating' | 'oas'): number[] | undefined {
-  const e = seedRingStash.get(comp);
-  return kind === 'price' ? e?.price : kind === 'oas' ? e?.oas : undefined;
+export function peekSeedRing(comp: object, kind: 'price'): number[] | undefined {
+  return seedRingStash.get(comp)?.[kind];
 }
 
 export function drainSeedRings(state: V2Host & { companies: { id: string }[] }): void {
@@ -348,7 +350,6 @@ export function drainSeedRings(state: V2Host & { companies: { id: string }[] }):
     const row = rowOf(v2, c.id);
     if (e.price) v2.priceRing = ringSeed(v2.priceRing, row, e.price);
     if (e.rating) v2.ratingRing = ringSeed(v2.ratingRing, row, e.rating.map(ratingCodeOf));
-    if (e.oas) v2.oasRing = ringSeed(v2.oasRing, row, e.oas);
     seedRingStash.delete(c);
   }
 }

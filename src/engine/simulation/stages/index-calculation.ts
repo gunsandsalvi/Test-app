@@ -1,4 +1,3 @@
-import { presentValuePerFace } from '../../../domain/pricing';
 /**
  * INDEX CALCULATION — run the membership and weighting rules over the market that exists this
  * week, and publish the level.
@@ -16,13 +15,13 @@ import { presentValuePerFace } from '../../../domain/pricing';
  *     earned. That is why the aggregate value is carried and the level is chained off it.
  */
 
-import { GameState, RegionId, Company } from '../../../types';
+import { GameState, Company } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY } from '../../../engine2/tranches';
+import { clearedPriceOf } from '../../../engine2/prices';
 import { WeeklyStepContext } from './context';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { isInvestmentGrade } from './asset-allocation';
-import { calculateNelsonSiegelZeroRate, NelsonSiegelParams } from '../../nelsonSiegel';
 import { marketCapOf } from '../../../domain/company';
 import {
   INDEX_DEFINITIONS, IndexDefinition, IndexConstituent, MarketIndex,
@@ -38,22 +37,21 @@ const INDEXABLE_EXCLUDED = TR_FACILITY | TR_CP;
  * return: measured, the loan index sat at 99.5 after forty weeks of real spread movement, because
  * nothing but principal could ever move it.
  *
- * The price is not a new formula — it is the present value of the tranche's own cash flows at the
- * cleared curve plus this issuer's cleared spread, which is the same arithmetic the make-whole
- * uses. Floating paper reads the price 07d already clears for it.
+ * §3.13 — AND THE PRICE IS READ, NOT RE-DERIVED. This used to discount each tranche's cash flows
+ * at the Nelson-Siegel fit plus the issuer's one spread: a third opinion about a price the auction
+ * had already struck, on a curve that is not the one the auction struck it against (§3.25's two
+ * conventions, and `P6`'s whole point). 07b prints a price per piece of paper and this reads it.
+ * A tranche no session has printed contributes nothing rather than a guess — an index of what
+ * traded is what an index is.
  */
-function fixedMarketValueLocal(v2: V2World, comp: Company, curve: NelsonSiegelParams, week: number): number {
+function fixedMarketValueLocal(v2: V2World, comp: Company, week: number): number {
   const S = v2.tranches;
   let sum = 0;
   for (const r of ladderRowsOf(v2, comp.id)) {
     if (S.flags[r] & (INDEXABLE_EXCLUDED | TR_FLOATING)) continue;
-    const years = Math.max(0.25, (S.maturityWeek[r] - week) / 52);
-    const discount = calculateNelsonSiegelZeroRate(years, curve) + comp.oasSpreadBps / 10000;
-    const pricePerDollar = presentValuePerFace({
-      couponPerPeriod: Number.isNaN(S.couponRate[r]) ? 0 : S.couponRate[r],
-      periods: years, ratePerPeriod: discount, redemptionPerFace: 1,
-    });
-    sum += S.principalLocal[r] * Math.max(0, pricePerDollar);
+    const price = clearedPriceOf(v2, v2.internedStrings[S.idRef[r]]);
+    if (price === undefined || !(price > 0)) continue;
+    sum += S.principalLocal[r] * price;
   }
   return sum;
 }
@@ -75,7 +73,7 @@ function floatingMarketValueLocal(v2: V2World, comp: Company): number {
  * What each eligible name contributes to this index, at this week's cleared prices — market cap
  * for equity, outstanding principal for credit. Zero means not eligible.
  */
-function indexValueLocal(v2: V2World, def: IndexDefinition, comp: Company, curveOf: (r: RegionId) => NelsonSiegelParams, week: number): number {
+function indexValueLocal(v2: V2World, def: IndexDefinition, comp: Company, week: number): number {
   if (!isActiveCompany(comp)) return 0;
   if (def.region && comp.region !== def.region) return 0;
 
@@ -90,7 +88,7 @@ function indexValueLocal(v2: V2World, def: IndexDefinition, comp: Company, curve
   const ig = isInvestmentGrade(comp.creditRating);
   if (def.tier === 'IG' && !ig) return 0;
   if (def.tier === 'HY' && ig) return 0;
-  return fixedMarketValueLocal(v2, comp, curveOf(comp.region), week);
+  return fixedMarketValueLocal(v2, comp, week);
 }
 
 /**
@@ -98,9 +96,9 @@ function indexValueLocal(v2: V2World, def: IndexDefinition, comp: Company, curve
  * the cumulative share crosses the threshold; SMALL_CAP takes exactly what LARGE_CAP left, so the
  * two partition ALL_CAP with no name in both and none in neither.
  */
-function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], curveOf: (r: RegionId) => NelsonSiegelParams, week: number): IndexConstituent[] {
+function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], week: number): IndexConstituent[] {
   const eligible = companies
-    .map((c) => ({ instrumentId: c.id, valueLocal: indexValueLocal(v2, def, c, curveOf, week) }))
+    .map((c) => ({ instrumentId: c.id, valueLocal: indexValueLocal(v2, def, c, week) }))
     .filter((x) => x.valueLocal > 0)
     .sort((a, b) => b.valueLocal - a.valueLocal);
   if (eligible.length === 0) return [];
@@ -122,17 +120,16 @@ function rebalance(v2: V2World, def: IndexDefinition, companies: Company[], curv
 }
 
 /** This week's aggregate value of a fixed membership, at cleared prices. */
-function basketValueLocal(v2: V2World, def: IndexDefinition, constituents: IndexConstituent[], byId: Map<string, Company>, curveOf: (r: RegionId) => NelsonSiegelParams, week: number): number {
+function basketValueLocal(v2: V2World, def: IndexDefinition, constituents: IndexConstituent[], byId: Map<string, Company>, week: number): number {
   return constituents.reduce((sum, c) => {
     const comp = byId.get(c.instrumentId);
-    return comp ? sum + indexValueLocal(v2, def, comp, curveOf, week) : sum;
+    return comp ? sum + indexValueLocal(v2, def, comp, week) : sum;
   }, 0);
 }
 
 export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2 = ensureV2(state);
   const byId = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
-  const curveOf = (r: RegionId) => ctx.updatedRegions[r].yieldCurveParams;
   const previous = new Map((state.marketIndexes ?? []).map((i) => [i.id, i]));
   const week = ctx.nextWeek;
 
@@ -141,20 +138,20 @@ export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContex
 
     // Inception: strike the membership and start at base.
     if (!prior || prior.constituents.length === 0) {
-      const constituents = rebalance(v2, def, ctx.updatedCompanies, curveOf, week);
+      const constituents = rebalance(v2, def, ctx.updatedCompanies, week);
       return {
         id: def.id,
         constituents,
         lastRebalanceWeek: week,
         level: prior?.level ?? INDEX_BASE_LEVEL,
-        totalValueLocal: basketValueLocal(v2, def, constituents, byId, curveOf, week),
+        totalValueLocal: basketValueLocal(v2, def, constituents, byId, week),
       };
     }
 
     // Level FIRST, on the membership that was in force all week — the return the basket actually
     // delivered. Doing this after a rebalance would credit the index with the difference between
     // two different baskets, which is a return no holder could have earned.
-    const heldValueLocal = basketValueLocal(v2, def, prior.constituents, byId, curveOf, week);
+    const heldValueLocal = basketValueLocal(v2, def, prior.constituents, byId, week);
     const level = prior.totalValueLocal > 0
       ? prior.level * (heldValueLocal / prior.totalValueLocal)
       : prior.level;
@@ -165,13 +162,13 @@ export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContex
     }
     // Rebalance: new membership, and the value line re-based onto it so next week's level change
     // is measured against what the index now holds.
-    const constituents = rebalance(v2, def, ctx.updatedCompanies, curveOf, week);
+    const constituents = rebalance(v2, def, ctx.updatedCompanies, week);
     return {
       id: def.id,
       constituents,
       lastRebalanceWeek: week,
       level,
-      totalValueLocal: basketValueLocal(v2, def, constituents, byId, curveOf, week),
+      totalValueLocal: basketValueLocal(v2, def, constituents, byId, week),
     };
   });
 }

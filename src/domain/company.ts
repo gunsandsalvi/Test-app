@@ -231,8 +231,8 @@ export interface LeveragedLoanInfo {
   tenorYears: number;
   seniority: 'Senior Secured First Lien';
   recoveryRate: number;
-  // Rolling weekly history of real cleared discountMarginBps — same real momentum signal as
-  // Company.oasSpreadBpsHistory. See 07d-leveraged-loan-clearing.ts.
+  // Rolling weekly history of real cleared discountMarginBps — the momentum signal a loan buyer
+  // weighs beside static fair value. See 07d-leveraged-loan-clearing.ts.
   discountMarginBpsHistory?: number[];
 }
 
@@ -494,12 +494,19 @@ export interface Company {
   beta: number;
 
   // Debt & CDS Pricing
-  seniorBondYield: number;
-  oasSpreadBps: number;
   /**
-   * CRD/DER2 — the CLEARED single-name CDS spread, in bps. It was `oasSpreadBps + a random draw
-   * in [-4, +4]` bounded to [10, 5000] — a decoration on another price with a clamp on each end —
-   * and it is now what the protection book actually cleared at (07h).
+   * §3.13: what this borrower's five-year money cost at its LAST FILING — a statement of what the
+   * market charged it on the date it reported, read off its own bonds, not a live field anything
+   * prices from. There is no live issuer spread: `oasSpreadBps` is gone, and a caller that wants
+   * this borrower's cost of money at a maturity reads its own credit curve
+   * (`engine/credit-price.ts:issuerSpreadAt`), which is a term structure and not a number.
+   */
+  seniorBondYield: number;
+  /**
+   * CRD/DER2 — the CLEARED single-name CDS spread, in bps. It was the issuer's OAS plus a random
+   * draw in [-4, +4] bounded to [10, 5000] — a decoration on another price with a clamp on each
+   * end — and it is now what the protection book actually cleared at (07h). It is the ONE spread
+   * a borrower legitimately carries, because a CDS is one contract on one name at one tenor.
    */
   cdsSpreadBps: number;
   /** §5-CLOSE P2 — the week the protection book last cleared this name (undefined: never). */
@@ -514,11 +521,6 @@ export interface Company {
   /** HF — shares of this name out on loan, i.e. sold short. A measurement of the region's stock
    * loan book (domain/securities-lending.ts), never a stated number. */
   shortInterestShares?: number;
-  // Rolling weekly history of real cleared oasSpreadBps (most recent last, capped length) — real
-  // credit investors weigh recent spread momentum (a name that's been widening fast is a riskier
-  // "catch the falling knife" buy even if it already looks cheap) alongside static fair value.
-  // See 07b-corporate-bond-clearing.ts's attractiveness scoring.
-  // §4.C II.5 — oasSpreadBpsHistory lives on v2.oasRing (world.ts).
 
   // Production
   inputSupplyConstraintFactor: number;

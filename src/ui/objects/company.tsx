@@ -6,7 +6,7 @@ import { defineObject, PeerColumn } from './registry';
 import { Card, KV, Link, Stat, StatGrid, T } from '../ui';
 import { money, pct, pctLevel, ratio, num, bps, count } from '../format';
 import { formatMonth, formatSpan } from '../calendar';
-import { companyOf, companyPriceHistory, companyOasHistory, companyRatingHistory, companyRevenueHistory, holdersOf, bankLinesTo, contractsOf, displayWeek } from '../world';
+import { companyOf, companyPriceHistory, companyRatingHistory, companyRevenueHistory, holdersOf, bankLinesTo, contractsOf, displayWeek } from '../world';
 import { materializeLadder, facilityBookOf } from '../../engine2/tranches';
 import { isActiveCompany } from '../../domain/company';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, ringed, taped } from './common';
@@ -50,7 +50,6 @@ export function companyColumns(bank: boolean): PeerColumn<Company>[] {
     { key: 'margin', label: 'margin', render: (r) => (r.obj.annualRevenue > 0 ? pctLevel(r.obj.ebitda / r.obj.annualRevenue, 0) : '—'), value: (r) => (r.obj.annualRevenue > 0 ? r.obj.ebitda / r.obj.annualRevenue : -9) },
     { key: 'pe', label: 'p/e', render: (r) => (r.obj.forwardPE > 0 ? num(r.obj.forwardPE, 1) : '—'), value: (r) => r.obj.forwardPE ?? 0 },
     { key: 'lev', label: 'lev', render: (r) => ratio(r.obj.leverage), value: (r) => r.obj.leverage },
-    { key: 'oas', label: 'oas', render: (r) => bps(r.obj.oasSpreadBps), value: (r) => r.obj.oasSpreadBps },
     { key: 'rating', label: 'rating', render: (r) => r.obj.creditRating, value: (r) => -RATING_CODES.indexOf(r.obj.creditRating) },
     { key: 'heads', label: 'people', render: (r) => count(r.obj.employeeCount), value: (r) => r.obj.employeeCount },
     { key: 'sector', label: 'sector', width: 1.3, render: (r) => r.obj.sector, value: (r) => r.obj.sector },
@@ -72,7 +71,6 @@ export const company = defineObject<Company>({
   series: (world, id, c) => {
     const out = [
       ringed(world, companyPriceHistory(world, id), 'price', 'USD per share', (v) => num(v)),
-      ringed(world, companyOasHistory(world, id), 'oas', 'bp over the curve', (v) => `${Math.round(v)}`),
       ringed(world, companyRatingHistory(world, id), 'rating', 'notch', (v) => RATING_CODES[Math.round(v)] ?? String(v), true),
       ringed(world, companyRevenueHistory(world, id), 'revenue', 'USD, annualised', (v) => money(v)),
     ];
@@ -144,7 +142,7 @@ export const company = defineObject<Company>({
           <StatGrid>
             <Stat label="price" value={c.stockPrice > 0 ? num(c.stockPrice) : 'private'} sub={c.stockPrice > 0 ? <ChangeSub series={prices} /> : `${count(c.employeeCount)} people`} />
             <Stat label="market cap" value={marketCapOf(c) > 0 ? money(marketCapOf(c)) : '—'} sub={floatShare !== undefined ? `${pctLevel(floatShare, 0)} held by funds` : 'unlisted'} />
-            <Stat label="rating" value={c.creditRating} sub={`oas ${bps(c.oasSpreadBps)}bp · cds ${bps(c.cdsSpreadBps)}bp`} neg={c.creditRating === 'CCC' || c.creditRating === 'D'} />
+            <Stat label="rating" value={c.creditRating} sub={`cds ${bps(c.cdsSpreadBps)}bp`} neg={c.creditRating === 'CCC' || c.creditRating === 'D'} />
           </StatGrid>
         )}
         {sheet ? (

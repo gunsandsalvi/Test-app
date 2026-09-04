@@ -116,10 +116,11 @@ export interface BankingSector {
   // Wall Street: real corporate-bond dealer inventory — the banking sector's shared secondary-
   // market trading book (banks sit in the middle of the real institutional-entity clearing
   // auction, absorbing client order imbalance onto their own book rather than the market simply
-  // failing to clear). One position per issuer this region's banks are currently long/short
-  // against a flat book; a genuine balance-sheet line updated only by real trade fills, not a
+  // failing to clear). §3.13: one position per PIECE OF PAPER this region's banks are currently
+  // long/short against a flat book — the same key the register and the auction use, since 07b
+  // clears per tranche. A genuine balance-sheet line updated only by real trade fills, not a
   // formula. See stages/07b-corporate-bond-clearing.ts.
-  corpBondDealerInventory: { companyId: string; inventoryLocal: number }[];
+  corpBondDealerInventory: { instrumentId: string; inventoryLocal: number }[];
   // Wall Street: the banking sector's real sovereign-bond holdings, broken out by tenor bucket
   // (t2/t5/t10/t30) — banks hold government bonds substantially for real regulatory-liquidity
   // (HQLA) purposes; this per-bucket breakdown is what lets the real sovereign-bond clearing

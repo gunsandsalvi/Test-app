@@ -154,7 +154,6 @@ function runDivestitures(ctx: WeeklyStepContext): void {
       const pf = rowOf(v2r, parent.id), sf = rowOf(v2r, spin.id);
       v2r.priceRing = ringCopyRow(v2r.priceRing, pf, sf);
       v2r.ratingRing = ringCopyRow(v2r.ratingRing, pf, sf);
-      v2r.oasRing = ringCopyRow(v2r.oasRing, pf, sf);
     }
 
     // THE MINT: each holder of parent equity receives its pro-rata spin-co register rows,

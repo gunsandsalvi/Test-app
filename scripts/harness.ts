@@ -128,6 +128,7 @@ import { HouseholdLoanPool, MortgageVintage } from '../src/domain/banking';
 import { executeTrade } from "../src/engine/simulation/trade";
 import { isPubliclyListed, isActiveCompany } from '../src/domain/company';
 import { ensureV2 } from '../src/engine2/world';
+import { issuerSpreadAtOnCurve } from '../src/engine/credit-price';
 import { forEachContract } from '../src/engine2/contracts';
 import { sovereignCouponByBond, weeklyInterestExpenseLocal, decomposeGovernmentSpending } from '../src/domain/government';
 import { governmentOf } from '../src/domain/government-entity';
@@ -2182,7 +2183,7 @@ const spiralModule: HarnessModule = {
               + ` | biz ${(businessLoanBookOf(bs, facilityBookLocal) / 1e9).toFixed(2)}B hh ${(consumerLoanBookOf(bs) / 1e9).toFixed(2)}B`
               + ` cash ${(bankReservesOf(ensureV2(state), c.ticker) / 1e9).toFixed(2)}B cbloan ${((bs.centralBankLoanLocal ?? 0) / 1e9).toFixed(2)}B`
               + ` desk ${(deskLocal / 1e9).toFixed(2)}B`
-              + ` oas ${(c.oasSpreadBps ?? 0).toFixed(0)}bps rating ${c.creditRating}`);
+              + ` oas5y ${(issuerSpreadAtOnCurve(ensureV2(state), state.regions[c.region].zeroRates, c.id, state.currentWeek, 5)?.spreadBps ?? 0).toFixed(0)}bps rating ${c.creditRating}`);
           });
       });
     }

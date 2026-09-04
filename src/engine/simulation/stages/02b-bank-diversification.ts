@@ -38,6 +38,7 @@ import { runRegionalRepoSession } from './repo-clearing';
 import { maturingAt, repoInterestToMaturityLocal } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
 import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, repayCentralBankLoanLocal, CENTRAL_BANK_LOAN_PENALTY_BPS, facilityMarginBpsFor } from './bank-lending';
+import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
@@ -291,9 +292,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         regionDivertedLocal * share,
         // Slice 5: the rate this bank's deposits must compete with.
         findRegionMmf(ctx.updatedInstitutionalEntities, regionId)?.mmfNetYieldAnnual ?? 0,
-        // What the market charges THIS bank for money — its own cleared credit spread,
-        // printed by the same corporate-bond auction that prices every other issuer.
-        bank.oasSpreadBps > 0 ? bank.oasSpreadBps : WHOLESALE_FUNDING_SPREAD_BPS,
+        // §3.13: what the market charges THIS bank for money — the front of its OWN credit
+        // curve, since the wholesale roll it is paying for is a week long, read off the bonds the
+        // corporate book actually printed for it. A bank with none printed pays the wholesale
+        // spread, which is the only quote anyone has given it.
+        issuerSpreadAtOnCurve(ctx.v2, reg.zeroRates, bank.id, ctx.nextWeek, 1 / 52)?.spreadBps
+          ?? WHOLESALE_FUNDING_SPREAD_BPS,
         // The households' own measured split, so the funding-pressure denominator and the
         // inflow it is measured against are the SAME number.
         depositShare,
@@ -531,7 +535,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // These three arrays are the derived regional view of those desks and nothing decides off
       // them — the books that clear later this week overwrite them with their own session's
       // result, and a desk's position is only ever written by the bank that took it.
-      corpBondDealerInventory: deskView('corporate bond').map(([companyId, inventoryLocal]) => ({ companyId, inventoryLocal })),
+      corpBondDealerInventory: deskView('corporate bond').map(([instrumentId, inventoryLocal]) => ({ instrumentId, inventoryLocal })),
       sovBondDealerInventory: [
         // §3.13-SOV row 3: the desk row names the BOND (the field is still called bondId).
         ...deskView('sovereign bond').map(([instrumentId, inventoryLocal]) => ({ bondId: instrumentId, inventoryLocal })),

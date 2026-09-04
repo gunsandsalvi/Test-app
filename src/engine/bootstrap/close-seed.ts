@@ -33,6 +33,9 @@ import { accrueHoldersInterest, applyHolderInterestAccruals } from '../simulatio
 import { accrueSovereignHolders } from '../simulation/stages/sovereign-calendar';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { sovereignCouponByBond } from '../../domain/government';
+import { setClearedPrice } from '../../engine2/prices';
+import { priceFromSpreadBps } from '../../domain/pricing';
+import { RATING_OAS_SPREADS } from '../pricing';
 
 const sumByTenor = (byTenor: Record<string, number> | undefined): number =>
   Object.values(byTenor ?? {}).reduce((a, v) => a + (Number(v) || 0), 0);
@@ -147,6 +150,50 @@ export function closeSeedMoney(
  * Commercial paper is excluded: it accrues from ISSUE to maturity rather than in periods, and the
  * seed issues none — the treasury stage does, at the week it issues.
  */
+/**
+ * §3.37-SEED / §3.13 — THE OPENING PRICE OF EVERY SEEDED BOND.
+ *
+ * A price is what a market printed, and at week zero no market has run. But the seed's ladders are
+ * AGED — a rung part-way through a life it was struck for — so par is not the honest opening
+ * either: a bond issued years ago at its rating's spread is worth whatever that spread is worth on
+ * today's curve over its remaining life, and every rung of one issuer is worth something different
+ * because every rung has a different life left. Depositing that is what lets week 1's session open
+ * from a real price per piece of paper rather than from one number per borrower.
+ *
+ * The SPREAD it opens at is the seed's own rating table — the same primitive `generateDebtTranches`
+ * struck every coupon from, so the opening world is internally consistent (§7.4: the seed must open
+ * in the shape the engine produces). That table is 37-SEED's E1 and it is the last stated number in
+ * this chain: from week 1 the auction prices each tranche on its own and the table is never read
+ * again, so an issuer's flat opening curve becomes a real term structure in one session.
+ */
+export function seedOpeningCreditPrices(
+  regions: Record<RegionId, Region>,
+  companies: Company[],
+  v2: V2World,
+  currentWeek: number,
+): void {
+  const TS = v2.tranches;
+  companies.forEach((c) => {
+    const reg = regions[c.region];
+    if (!reg?.zeroRates) return;
+    const spreadBps = RATING_OAS_SPREADS[c.creditRating]?.baseBps;
+    if (spreadBps === undefined) return;
+    for (const tr of ladderRowsOf(v2, c.id)) {
+      // The corporate BOND book's paper only: a facility sits on its lender's own book, CP is
+      // 07f's, and a floater is 07d's, which still clears a margin.
+      if (TS.flags[tr] & (TR_FACILITY | TR_CP | TR_FLOATING)) continue;
+      const weeksToMaturity = TS.maturityWeek[tr] - currentWeek;
+      if (!(weeksToMaturity > 0) || !(TS.principalLocal[tr] > 0)) continue;
+      const price = priceFromSpreadBps({
+        annualCouponRate: Number.isNaN(TS.couponRate[tr]) ? 0 : TS.couponRate[tr],
+        periodWeeks: trancheScheduleOf(TS, tr).periodWeeks,
+        weeksToMaturity,
+      }, reg.zeroRates, spreadBps);
+      if (price > 0 && isFinite(price)) setClearedPrice(v2, v2.internedStrings[TS.idRef[tr]], price);
+    }
+  });
+}
+
 export function seedOpeningAccruals(
   regions: Record<RegionId, Region>,
   companies: Company[],

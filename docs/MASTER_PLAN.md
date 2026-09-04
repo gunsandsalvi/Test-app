@@ -12,7 +12,9 @@ number, so a `§7.N` citation still resolves. There is deliberately no section 7
 citation can never be misread as one.
 
 **WHERE THE WORK STANDS — read this first on a handover.**
-- HEAD on `claude/master-plan-cleanup-ld1oh1`, pushed to `main` too (rule 14).
+- HEAD on `claude/master-plan-review-qbp6qp` (the branch this session was given; rule 14's own
+  branch name is `claude/master-plan-cleanup-ld1oh1` and `main`, and a session told to use another
+  pushes only where it was told).
 - **Take §3's first open step, finish it, stop** (rule 10 states it in full). Do not write a "next
   step" note here naming anything but §3's first line; one was written, it disagreed with §3's
   order, and two steps were skipped behind it.
@@ -267,12 +269,15 @@ written from here):
 
 13. **EVERY ASSET TRADES ON PRICE — AND THE STRUCTURE HAS TO CHANGE, NOT THE CREDIT BOOKS**
     *(37-SEED handed this step two findings it already owns. **(a)** the seed's spread table is the
-    permanent CASH FLOW of every bond the world opened with — `RATING_OAS_SPREADS` sets
-    `oasSpreadBps`, and `generateDebtTranches` derives every coupon and loan margin from the same
-    table, so a cleared spread in week one moves the print and never the coupon. It has nowhere
-    else to go until a clear produces the spread (atlas the-seed E1). **(b)** `O7`, 409 tranches
-    claimed beyond their face by $439.28 — the seed rounds each holder's slice on its own, so the
-    slices sum past the face. Both die when the allocation becomes a per-tranche clear.)*
+    permanent CASH FLOW of every bond the world opened with — `RATING_OAS_SPREADS` strikes every
+    coupon and loan margin in `generateDebtTranches`, so a cleared spread in week one moves the
+    price and never the coupon. It has nowhere else to go until the SEED itself clears (atlas
+    the-seed E1); §9.13-CREDIT row 1 narrowed it to the coupons alone — the seed now deposits an
+    opening PRICE per tranche off the same table and nothing reads the table again after week 1.
+    **(b)** `O7`, 409 tranches claimed beyond their face by $439.28 — the seed rounds each holder's
+    slice on its own, so the slices sum past the face. Still open, and now visible one book at a
+    time: the bond book repays a claim on retired paper instead of migrating it, so what is left of
+    `O7` on CORP_BOND is the seed's rounding alone.)*
     (user, 2026-09-03: *"every asset is measured in units (be it par value, or number of shares,
     etc), every asset has a price attached to it as the cleared price. Every asset trades on
     price. DMs and OASs and all else is a measure derived… This needs to apply to everything that
@@ -331,12 +336,17 @@ written from here):
     4. **The equity row's stored value has to go**, or it drifts exactly as face did.
     5. *(Done — 13-SOV row 3: sovereign holdings are register rows naming a bond, so there is
        something to attach a price to.)*
-    6. **The clearing engine's `unitValueUSD = statKind === 'PRICE_LIKE' ? clearedStat : 1`**
-       (`financial-clearing-engine.ts:956`) is the financial half's one line, with
-       `assets/index.ts:45-47` declaring the credit books `SPREAD_LIKE` and the sovereign book
-       `YIELD_LIKE`. A participant VALUES on its spread and BIDS a price:
-       `priceFromSpreadBps` moves to the participant's side, `spreadBpsFromPrice` to after the
-       clear, and the OAS at `07b:271` stops being an input and becomes a report.
+    6. **The clearing engine's `unitValueLocal = statKind === 'PRICE_LIKE' ? clearedStat : 1`**
+       is the financial half's one line. *(Done for the BOND book — §9.13-CREDIT row 1: the
+       participant values on its spread and bids the price that spread implies on the paper's own
+       schedule, and `Company.oasSpreadBps` is deleted rather than demoted to a report, because a
+       borrower has no spread at all (user, 2026-09-04). What is left is `07d`'s
+       `leveragedLoan.discountMarginBps` and `07f`'s bill/CP yield — the same move, one book at a
+       time, and `07d`'s `pricePar` linearisation dies with it.)*
+       **AND THE REGISTRY MUST BE WHAT THE ADAPTER READS** (atlas corporate-credit D2, point 3):
+       `assets/index.ts` declares `quotedAs` and every adapter hard-codes `statKind` beside it —
+       two representations of one fact, and row 1 added a third agreement rather than removing the
+       second.
 
     **IT MUST NOT BE BYTE-IDENTICAL.** The moment value becomes units × cleared price, every
     balance sheet in the model moves, because today's stored values are costs, pars and stale
@@ -355,29 +365,56 @@ written from here):
     before anything else is possible — step 26 owns that decision). Each class is its own commit
     and each is expected to move the numbers.
 
-    **TWO CONVENTIONS TO SETTLE IN THE SOVEREIGN COMMIT** (step 12b, §9.12b): `index-calculation.ts:52`
-    discounts a bond it should be able to READ a cleared price for, and `engine/nelsonSiegel.ts`
+    **13-CREDIT, the credit class, one book at a time** (user, 2026-09-04: *"there shouldn't be any
+    spread per issuer. The spread is per asset, assets with different maturities should have
+    different risk levels and so different spreads. There is no spread quantity associated with an
+    issuer aside from the CDS."*). Row 1 is in §9. What is left, in order:
+    · **row 2 — the corporate accrued leg** (above): the bond book now names a tranche on every
+      fill, so the leg 13b built for the sovereign has somewhere to ride.
+    · **row 3 — `07d`, the loan book**: instruments become tranches, the price clears and
+      `leveragedLoan.discountMarginBps` / `pricePar` are deleted the way `oasSpreadBps` was — the
+      DM is read off the price, per loan, at its own life.
+    · **row 4 — `07f`, bills and commercial paper**: the same, and it closes atlas
+      short-term-debt A2/E2 (the short end clears a YIELD, so a bill's return is re-set weekly).
+      `register-split.ts` and the desks' issuer-keyed split die with this row.
+    · **row 5 — the mark**: the register carries FACE and `P5`/`P8` measure the gap to the cleared
+      price on both classes. It cannot land one book at a time (§9.13 part 3) — it lands when
+      every credit book prints a price and every reader takes `faceLocal`.
+
+    **A stale marking found while doing row 1, and not fixed here:** `docs/instruments/bond.md`
+    still marks **N7 · sov** and **N7.b · sov** ❌ against `discountBillProceedsLocal`, which
+    §9.13-SOV row 4 made false — both sovereign books clear a price now. Re-mark it in row 4,
+    where the bill book is being read anyway.
+
+    **THE CONTINUOUS-VERSUS-DISCRETE CONVENTION** (step 12b, §9.12b): `engine/nelsonSiegel.ts`
     discounts CONTINUOUSLY (`exp(-z·t)`) where `domain/pricing/` compounds discretely — two answers
-    to one question (rule 4). Unify the convention in the same commit as the sovereign pricing;
-    moving it alone re-prices every sovereign for no gain.
+    to one question (rule 4). *(`index-calculation.ts:52`, the other half, is done: §9.13-CREDIT
+    row 1 made it READ the cleared price instead of discounting to one, and stage 08's call and
+    refinancing tests moved to `zeroRateAt` on the struck curve for the same reason. The remaining
+    NS sites are `11-fiscal`, `call-protection` and `12-portfolio`, which step 25 and step 26
+    own.)*
 
     **AND IT OWNS 11f AND STEP 12's TAIL** — one file, three findings, one cause: the register is
     keyed by TRANCHE and the auctions clear by ISSUER, so `register-split.ts` has to invent the
     mapping. `O7` reports ~55 tranches a week claimed beyond their face because `:65` spreads an
-    ISSUER-level position across tranches with no cap, while `07b:530` clears one instrument per
-    COMPANY. `O8` reports **0.42B on 219 positions** because `:63` falls back to the ISSUER's own
-    id when the ladder of that kind is empty at split time — a position in paper that does not
-    exist, keyed as though it were the issuer. It cannot be deleted before the clear moves: drop
-    the row and the holder's cash leg has no security (rule 5); key it anywhere else and it is the
-    same invention under a new name. Clearing per tranche in price space closes all three, and
-    `register-split.ts` goes with them (its own header says so).
+    ISSUER-level position across tranches with no cap; `O8` reports **0.42B on 219 positions**
+    because `:63` falls back to the ISSUER's own id when the ladder of that kind is empty at split
+    time — a position in paper that does not exist, keyed as though it were the issuer. It cannot
+    be deleted before the clear moves: drop the row and the holder's cash leg has no security
+    (rule 5); key it anywhere else and it is the same invention under a new name.
+    *(The BOND book is done — §9.13-CREDIT row 1. It clears per tranche, so no split is invented
+    and a claim on paper that has retired is REPAID by its borrower at its own face instead of
+    migrating onto that borrower's other bonds. `register-split.ts` survives for `07d`, `07f` and
+    the desks' issuer-keyed books until those two rows land, and it goes with the last of them.)*
     Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
     DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
     **AND THE CORPORATE ACCRUED LEG** (13b's other half, `bond.md` N9.b): a buyer pays the seller
-    what has accrued on the face it takes. The sovereign has it; the corporate cannot until the
-    clear names a tranche, because there is no per-tranche face delta for the accrued to ride.
-    `book-settlement.ts:accruedOnFills` is the leg — 07b/07d call it with the same arguments 07c
-    does once they clear per tranche.
+    what has accrued on the face it takes. The sovereign has it; the corporate could not until the
+    clear named a tranche, because there was no per-tranche face delta for the accrued to ride.
+    **Row 1 removed that blocker for the bond book and did not take the leg** — it is the next
+    bond-book row: `book-settlement.ts:accruedOnFills` with a `moveCorporateAccrued` beside
+    `moveSovereignAccrued`, keyed on `holderAccruedInterestLocal`'s `TYPE:instrumentId`, which is
+    already per tranche. 07d follows when it clears per tranche.
 13e. **A HOLDER OF RECORD IS EVERY HOLDER.** `sovereign-calendar.ts:accrueSovereignHolders` walks
     the institutional register and the banks' investment books — so a bank's govvie DESK inventory
     and the CENTRAL BANK's own book accrue nothing, and their share of every sovereign coupon is
@@ -501,8 +538,12 @@ written from here):
     (hysteresis), `:323-328` (the whole invented consumer-confidence index, four invented
     coefficients, an equity return clamped ±0.5 and the index clamped [30,170]), `:830-855` (the
     Taylor rule's four bounds), `:1416,1424,1427` (commodity yield loss, drift and a 0.5 spot floor),
-    `:1443`; `07b:110-119` and `07d:86-88` (credit duration clamped after a magic 0.75/0.7 factor —
-    derive Macaulay duration from the ladder's own cash flows); `stage08-back.ts:970` (a payout ratio
+    `:1443`; `07d:86-88` (credit duration clamped after a magic 0.7 factor — derive Macaulay
+    duration from the ladder's own cash flows; `07b`'s twin is GONE, §9.13-CREDIT row 1: it blended
+    an issuer's whole ladder into one duration and there is no longer anything for it to be the
+    duration OF — every schedule is struck on the tranche's own remaining life. That life is its
+    MATURITY, and Macaulay duration off the same cash flows is what this step replaces it with);
+    `stage08-back.ts:970` (a payout ratio
     whose clamp makes a whole patience cohort pay out exactly 100%), `:1961` (a ten-employee floor),
     `:2029` (an invented book value with a 0.5 floor), `:1774` (a reservation floored at the print);
     `institution-profiles.ts:66,76` (hurdle [0.02,0.30]); `prime-brokerage.ts:52` (haircut floored at
@@ -1337,6 +1378,46 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-CREDIT row 1 — THE CORPORATE BOND BOOK CLEARS A PRICE, PER TRANCHE, AND A BORROWER HAS NO
+SPREAD.** 07b priced one instrument per ISSUER and cleared a SPREAD, and all three halves of that
+were one mistake: a spread is not a price (the engine values a non-`PRICE_LIKE` fill at 1, so every
+corporate bond changed hands at FACE — the sovereign's §9.13-SOV row 4 defect, one class over); an
+issuer is not a piece of paper (which is what forced `register-split.ts` to invent a tranche mapping,
+and that invention IS `O7` and `O8`); and one spread per borrower is no term structure. The
+instruments are now the issuer's live fixed tranches, `statKind: 'PRICE_LIKE'`, each cleared price
+deposited in a new price store (`engine2/prices.ts`, forgotten when its row is freed) so nothing
+re-derives one. **`Company.oasSpreadBps` is DELETED** (user, 2026-09-04: *"there shouldn't be any
+spread per issuer… There is no spread quantity associated with an issuer aside from the CDS"*), with
+its history ring, its stage-08 lane and its company-store field; every reader moved to either the
+PAPER's own spread (`credit-price.ts:rowSpreadBps`) or the borrower's own CREDIT CURVE
+(`domain/credit-curve.ts`, read at the maturity the caller means and told whether a bond traded
+there) — the call test, the cost of new debt, the bridge margin, the CDS cash leg, the bank funding
+spreads, the index cohorts, `P1`/`P2`/`P3`.
+
+The term structure needed no new parameter: spread-risk capital already scaled with duration and the
+distressed bid already discounted over a horizon, and both were being fed one blended ISSUER duration.
+Per tranche they give a performing name an upward-sloping curve and a distressed one an inverted
+curve, out of the hazard the model already had. Step 18's `07b:110-119` (a ladder blended into one
+duration × 0.75, clamped [1,8]) is gone with the issuer instrument, not fixed.
+
+Five things fell out. A **primary deal is its own piece of paper**: struck at par against the issuer's
+own curve, its PRICE cleared beside the outstanding stock, so the concession is a price below par and
+the issuer receives price × face instead of par whatever it cleared; stage 08 issues the terms 07b
+struck rather than re-deriving a coupon. A claim on **paper that has retired is repaid by its
+borrower** at its own face instead of migrating onto that borrower's other bonds — and the desks'
+positions, always stored per tranche, are finally on the same key the paydown measures outstanding
+on, so they were never once paid down before. `index-calculation` **reads** the cleared price instead
+of discounting to one through Nelson-Siegel (one of step 13's two conventions). The prime broker's
+credit haircut is the **price move the bonds themselves made**, deleting a five-year duration
+assumption and a sovereign add-on. And an instrument with no float and no offering **keeps its
+price** rather than depositing the bracket (§3.21).
+
+Not byte-identical and not meant to be: fills settle at price × face while the register still carries
+FACE, exactly as the sovereign does since row 4, and `P5` is now that gap's measurement rather than a
+sizing of "credit trades at par". Gates green; no run (rule 11). Cost noted, not measured: the
+reservation is two `priceFromSpreadBps` calls per (holder, tranche) where it was one arithmetic
+expression per (holder, issuer), and a spread read is a 60-step bisection.
 
 **The dead-file sweep (part of step 19, done early for a handover).** Seven files with no importer
 anywhere: `engine/columns/{arena,company-table,tranche-table}.ts` (SCALE wave 2's parallel company

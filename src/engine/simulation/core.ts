@@ -46,6 +46,7 @@ import { runEquityClearingStage } from './stages/07e-equity-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { auditCompanyStore, syncCompanyField } from '../../engine2/company-store';
 import { drainSeedRings } from '../../engine2/world';
+import { seedOpeningCreditPrices } from '../bootstrap/close-seed';
 import { runPeLifecycleForRegion, settlePeLifecycleDeals, runFirmBirthsForRegion } from './stages/pe-lifecycle';
 import { applyPendingCorporateActionSettlements } from './stages/shared-helpers';
 import { runIndexCalculationStage } from './stages/index-calculation';
@@ -271,7 +272,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // rows in the same order the old per-book partition-and-rebuild chain produced.
   run('holdings-store', () => buildHoldingsStore(ctx));
   run('07b-corporate-bond-clearing', () => runCorporateBondClearingStage(state, ctx));
-  syncCompanyField(state, 'oasSpreadBps');
   run('07c-sovereign-bond-clearing', () => runSovereignBondClearingStage(state, ctx));
   run('07d-leveraged-loan-clearing', () => runLeveragedLoanClearingStage(state, ctx));
   run('07f-short-debt-clearing', () => runShortDebtClearingStage(state, ctx));
@@ -327,6 +327,10 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       drainSeedRings({ v2: ensureV2(state), companies: born });
         // §5-WIRES W6: a newborn's ladder is issued by wire at its birth (pe-lifecycle); nothing
         // to seed.
+        // §3.13: a newborn's ladder is aged the same way the seed's is, so it opens with the same
+        // per-tranche price the seed deposits — otherwise its first session prices aged paper as
+        // though it had been struck at par this week.
+        seedOpeningCreditPrices(ctx.updatedRegions, born, ensureV2(state), ctx.nextWeek);
       }
     });
     // §5-MNC: a firm that has lost a foreign merit order for the measured year builds there —

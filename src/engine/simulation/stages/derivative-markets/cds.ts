@@ -36,6 +36,7 @@ import { strikeDerivatives } from '../derivative-lifecycle';
 import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf, facilityRowsOf } from '../../../../engine2/tranches';
+import { issuerSpreadAtOnCurve } from '../../../credit-price';
 
 const cdsInstrumentId = (regionId: RegionId, issuerId: string) => `${regionId}-CDS-${issuerId}`;
 
@@ -48,6 +49,16 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
   REGION_IDS.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     const recoveryRate = creditRecoveryRate(reg);
+    /**
+     * §3.13 — THE CASH LEG OF THE BASIS. Protection on a name at five years is comparable to that
+     * name's own five-year CASH paper and to nothing else, so the leg is a point on the issuer's
+     * own credit curve read at THIS contract's tenor. `undefined` means the issuer has printed no
+     * bond of any maturity, and then there is no basis to speak of rather than a basis against a
+     * number nobody traded.
+     */
+    const cashSpreadBpsOf = (c: { id: string; region: string }): number | undefined =>
+      issuerSpreadAtOnCurve(ctx.v2, ctx.updatedRegions[c.region as RegionId].zeroRates, c.id,
+        ctx.nextWeek, CDS_TENOR_WEEKS / 52)?.spreadBps;
 
     // ---- 1. WHO NEEDS PROTECTION, and how much. A bank's exposure to one name beyond what its
     // capital lets it carry against a single counterparty. This is the decision
@@ -93,10 +104,13 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
         id: cdsInstrumentId(regionId, c.id),
         outstandingLocal: floatLocal,
         tradableFloatLocal: floatLocal,
-        // Opens at the issuer's own cleared cash spread — the alternative a seller is pricing
-        // against — and moves from there on this book's own supply and demand. The BASIS between
-        // the two is what the market then produces.
-        currentStat: Math.max(1, c.cdsSpreadBps > 0 ? c.cdsSpreadBps : c.oasSpreadBps),
+        // Opens at the issuer's own cleared cash spread AT THIS CONTRACT'S OWN TENOR — the
+        // alternative a seller is pricing against — and moves from there on this book's own
+        // supply and demand. The BASIS between the two is what the market then produces.
+        // §3.13: that cash leg is a point on the issuer's own credit curve, not a number the
+        // issuer carries; a name with no printed bonds has no cash leg to price against and the
+        // contract opens on the structural hazard its sellers reserve against instead.
+        currentStat: Math.max(1, c.cdsSpreadBps > 0 ? c.cdsSpreadBps : (cashSpreadBpsOf(c) ?? 1)),
         statKind: 'YIELD_LIKE',
         durationYears: CDS_TENOR_WEEKS / 52,
       };
@@ -197,8 +211,12 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       // §5-CLOSE P2: the week this print was struck — a name with no protection book this week
       // carries last print, which is a quote, not a price, and the basis test reads only prices.
       issuer.cdsClearedWeek = ctx.nextWeek;
-      // ...and the BASIS, the second cross-market agreement test this model can run.
-      issuer.cdsBasisBps = Number((clearedBps - issuer.oasSpreadBps).toFixed(1));
+      // ...and the BASIS, the second cross-market agreement test this model can run: protection
+      // against the SAME issuer's cash paper at the SAME maturity, which is the only comparison
+      // the two prices are of. A name with no cash bond printed has no basis, and saying so is
+      // the honest answer — the pair `P2` measures has to be two real prices.
+      const cashBps = cashSpreadBpsOf(issuer);
+      issuer.cdsBasisBps = cashBps === undefined ? undefined : Number((clearedBps - cashBps).toFixed(1));
 
       const writtenBySeller = new Map<string, number>();
       let totalWrittenLocal = 0;

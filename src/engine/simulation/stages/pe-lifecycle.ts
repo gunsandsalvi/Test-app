@@ -33,7 +33,8 @@ import { REQUIRED_RETURN_ON_CAPITAL } from './asset-allocation';
 import { settleCorporateActionOnHolders, payHoldersCash } from './shared-helpers';
 import { pay, pendingSettlementLocal } from './settlement';
 import { smePoolSubUnits } from '../../../domain/industry-registry';
-import { STANDARD_CORP_TENOR_YEARS } from '../../../engine2/stage08-back';
+import { STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
+import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { facilityMarginBpsFor } from './bank-lending';
 import { issueTranche } from '../../ledger/tranche-ledger';
 import { marketCapOf, totalDebtOf } from '../../../domain/company';
@@ -546,7 +547,12 @@ export function runPeLifecycleForRegion(
         // post-deal stack, against the cheque it has to write. Its hurdle is higher than any
         // liquid holder's, which is why it needs the leverage to get there.
         const allInDebtLocal = ladderTotalLocal(ctx.v2, listedTarget.id) + debtLocal;
-        const debtCostAnnual = reg.policyRate + listedTarget.oasSpreadBps / 10000;
+        // §3.13: the target's own five-year credit, read off its own paper; a private name with
+        // nothing printed is underwritten at the sponsor's recap threshold, which is the price the
+        // loan market has actually quoted this kind of deal.
+        const debtCostAnnual = reg.policyRate
+          + (issuerSpreadAtOnCurve(ctx.v2, reg.zeroRates, listedTarget.id, ctx.nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
+            ?? RECAP_DM_THRESHOLD_BPS) / 10000;
         const leveredCashFlowLocal = ebitdaOf(listedTarget) - allInDebtLocal * debtCostAnnual;
         const clearsHurdle =
           equityLocal > 0 && leveredCashFlowLocal / equityLocal > REQUIRED_RETURN_ON_CAPITAL.PRIVATE_EQUITY;

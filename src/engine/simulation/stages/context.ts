@@ -202,7 +202,7 @@ export interface WeeklyStepContext {
    *  whatever the book took — while `marketTakeLocal` is only the part the book bought. They differ
    *  by the residual the lead is left holding, and creating the tranche at the take instead of at
    *  the issue is how the lead came to hold paper that did not exist (a ledger minting claims). */
-  primarySettlements: Map<string, { offering: import('../../../domain/primary-market').PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>;
+  primarySettlements: Map<string, { offering: import('../../../domain/primary-market').PrimaryOffering; clearedStat: number; struckTerms?: { couponRate: number; maturityWeek: number }; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>;
 
   // Main working state, threaded and reassigned stage to stage
   updatedRegions: Record<RegionId, Region>;

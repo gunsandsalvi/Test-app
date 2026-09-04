@@ -29,8 +29,25 @@ import { PartyRef } from '../../ledger/party';
 import { heldInShares } from '../../../domain/assets';
 
 /**
+ * §3.13 — WHAT THE BOOK PRICED, AND WHAT IT CALLED IT. A book that clears per ISSUER names its
+ * primary outcome by the issuer; 07b clears per TRANCHE, so the deal is its own instrument and
+ * the outcome is under the id of the paper that is about to exist. These options are what tells
+ * the two apart, and they carry back the terms that instrument was struck on so stage 08 issues
+ * the paper the market actually priced.
+ */
+export interface PricedOfferingOptions {
+  /** The instrument the auction listed this offering as. Default: the issuer's own id. */
+  instrumentIdOf?: (offering: PrimaryOffering) => string;
+  /** What one UNIT of the cleared statistic buys — the price, where the book clears one. Default
+   *  1, which is what a par book's units and money have always been. */
+  unitPriceOfStat?: (clearedStat: number) => number;
+  /** The terms the book STRUCK the new paper on, for the stage that issues it. */
+  termsOf?: (offering: PrimaryOffering) => { couponRate: number; maturityWeek: number } | undefined;
+}
+
+/**
  * Settle every offering the given book priced this week. `statToProceeds` converts the cleared
- * statistic into gross proceeds for the issuer (par for credit — the stat is a spread;
+ * statistic into gross proceeds for the issuer (price × face where the book clears a price;
  * shares × cleared price for equity).
  */
 export function settlePricedOfferings(
@@ -45,13 +62,16 @@ export function settlePricedOfferings(
   feeBpsOf?: (offering: PrimaryOffering, clearedStat: number) => number,
   /** The desk book the lead's firm commitment lands in ('corporate bond', 'equity', ...).
    *  Omitting it leaves the residual unfunded. */
-  deskBook?: string
+  deskBook?: string,
+  options: PricedOfferingOptions = {}
 ): void {
   if (offeringsByIssuerId.size === 0) return;
   const settledOfferingIds = new Set<string>();
+  const instrumentIdOf = options.instrumentIdOf ?? ((o: PrimaryOffering) => o.issuerId);
 
   offeringsByIssuerId.forEach((offering, issuerId) => {
-    const outcome = result.primaryOutcomeById.get(issuerId);
+    const instrumentId = instrumentIdOf(offering);
+    const outcome = result.primaryOutcomeById.get(instrumentId);
     if (!outcome) return; // issuer not in this week's book — offering stays queued
     settledOfferingIds.add(offering.id);
 
@@ -115,26 +135,26 @@ export function settlePricedOfferings(
       const existingSheet = ctx.companyUpdates[lead.ticker]?.bankBalanceSheet ?? lead.bankBalanceSheet!;
       const inventory: DealerDeskInventory = { ...(existingSheet.dealerDeskInventory ?? {}) };
       const rows = [...(inventory[deskBook] ?? [])];
-      const at = rows.findIndex((r) => r.instrumentId === issuerId);
+      const at = rows.findIndex((r) => r.instrumentId === instrumentId);
       // The position carries its UNITS. An equity book clears in shares, so a residual stored
       // as dollars alone is read back as a share count by every units-aware consumer (desk
       // build, fee mark) — inventoryLocal-as-units at a $40 price is a 40x phantom position.
       // Credit clears in dollars, where units and money are the same number.
-      const residualUnits = instrumentType === 'EQUITY'
-        ? residualLocal / Math.max(1e-9, outcome.clearedStat)
-        : residualLocal;
+      // §3.13: a book that clears a PRICE says what a unit costs, so the residual's units are its
+      // money over that price for credit exactly as they always were for equity.
+      const unitPrice = Math.max(1e-9, options.unitPriceOfStat
+        ? options.unitPriceOfStat(outcome.clearedStat)
+        : (instrumentType === 'EQUITY' ? outcome.clearedStat : 1));
+      const residualUnits = residualLocal / unitPrice;
       if (at >= 0) {
-        const prevUnits = rows[at].units
-          ?? (instrumentType === 'EQUITY'
-            ? rows[at].inventoryLocal / Math.max(1e-9, outcome.clearedStat)
-            : rows[at].inventoryLocal);
+        const prevUnits = rows[at].units ?? rows[at].inventoryLocal / unitPrice;
         rows[at] = {
-          instrumentId: issuerId,
+          instrumentId,
           inventoryLocal: rows[at].inventoryLocal + residualLocal,
           units: prevUnits + residualUnits,
         };
       } else {
-        rows.push({ instrumentId: issuerId, inventoryLocal: residualLocal, units: residualUnits });
+        rows.push({ instrumentId, inventoryLocal: residualLocal, units: residualUnits });
       }
       inventory[deskBook] = rows;
       updateBankSheet(ctx, lead.ticker, { ...existingSheet, dealerDeskInventory: inventory });
@@ -147,8 +167,8 @@ export function settlePricedOfferings(
       // side attributed one movement to two different senders.
       const leadDesk: PartyRef = { kind: 'BANK_SECURITIES', ticker: lead.ticker };
       const spec: HoldingSpec = heldInShares(instrumentType)
-        ? { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueLocal: residualLocal, shares: residualUnits }
-        : { instrumentType, instrumentId: issuerId, issuerRegion: regionId, valueLocal: residualLocal };
+        ? { instrumentType, instrumentId, issuerRegion: regionId, valueLocal: residualLocal, shares: residualUnits }
+        : { instrumentType, instrumentId, issuerRegion: regionId, valueLocal: residualLocal };
       if (heldInShares(instrumentType)) issueHolding(ctx.v2, { kind: 'COMPANY', ticker: issuerCompany!.ticker }, leadDesk, spec, 'underwriting residual taken by the lead');
       else transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: regionId }, leadDesk, spec, 'underwriting residual taken by the lead');
     }
@@ -156,6 +176,10 @@ export function settlePricedOfferings(
     ctx.primarySettlements.set(offering.id, {
       offering,
       clearedStat: outcome.clearedStat,
+      // §3.13: the paper the market priced is the paper that gets issued. The book that struck
+      // the coupon hands it over rather than leaving stage 08 to re-derive one off a curve the
+      // same session has already moved past.
+      struckTerms: options.termsOf?.(offering),
       withdrawn: false,
       marketTakeLocal: outcome.marketTakeLocal,
       // Firm commitment issues the WHOLE deal — the lead owns what the book did not take, and

@@ -16,6 +16,8 @@
 import { GameState, Company, RegionId } from '../../../types';
 import { NewsItem } from '../../../domain/events';
 import { WeeklyStepContext } from './context';
+import { issuerSpreadAtOnCurve } from '../../credit-price';
+import { STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { partyId, partyOf, PartyRef } from '../../ledger/party';
 import { reasonText } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
@@ -144,7 +146,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: up ? 'upgrade' : 'downgrade',
       category: 'CREDIT',
       title: `${c.name} ${up ? 'upgraded' : 'downgraded'} to ${rc.to}${crossesIg ? (up ? ', back to investment grade' : ', out of investment grade') : ''}`,
-      description: `${rc.ticker} moves ${rc.from} → ${rc.to}; its bonds clear ${Math.round(c.oasSpreadBps)}bp over the curve and its protection ${Math.round(c.cdsSpreadBps)}bp. Leverage ${c.leverage.toFixed(1)}×, coverage ${c.interestCoverage.toFixed(1)}×, cash ${M(cashOf(ctx.v2, c))}, revenue ${M(c.annualRevenue)}.`,
+      description: `${rc.ticker} moves ${rc.from} → ${rc.to}; its five-year bonds clear ${Math.round(issuerSpreadAtOnCurve(ctx.v2, ctx.updatedRegions[c.region].zeroRates, c.id, ctx.nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps ?? 0)}bp over the curve and its protection ${Math.round(c.cdsSpreadBps)}bp. Leverage ${c.leverage.toFixed(1)}×, coverage ${c.interestCoverage.toFixed(1)}×, cash ${M(cashOf(ctx.v2, c))}, revenue ${M(c.annualRevenue)}.`,
       refs: [company(c), region(c.region)],
       materialityLocal: ladderTotalLocal(ctx.v2, c.id),
       impactRegion: c.region, impactSector: c.sector, affectedTicker: rc.ticker,

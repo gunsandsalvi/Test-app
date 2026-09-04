@@ -45,7 +45,6 @@ export interface BackLanes {
   learningMultiplier: Float64Array;     // NaN = undefined
   lastLearningGrowthAnnual: Float64Array; // NaN = undefined
   rndExpenseLocal: Float64Array;          // NaN = undefined
-  oasSpreadBps: Float64Array;
   idleStreakWeeks: Float64Array;        // NaN = undefined
   mothballedPpeShare: Float64Array;     // NaN = undefined
   mothballedStreakWeeks: Float64Array;  // NaN = undefined
@@ -140,7 +139,7 @@ export function buildBackLanes(
     maintenanceShortfallStreak: N.maintenanceShortfallStreak, baselineGrowthCapexToRevenueRatio: N.baselineGrowthCapexToRevenueRatio,
     marketCapLocal: N.marketCap, totalDebtLocal: N.totalDebt,
     cumulativeOutputUnits: N.cumulativeOutputUnits, learningMultiplier: N.learningMultiplier, lastLearningGrowthAnnual: N.lastLearningGrowthAnnual,
-    rndExpenseLocal: N.rndExpense, oasSpreadBps: N.oasSpreadBps,
+    rndExpenseLocal: N.rndExpense,
     idleStreakWeeks: N.idleStreakWeeks, mothballedPpeShare: N.mothballedPpeShare, mothballedStreakWeeks: N.mothballedStreakWeeks,
     usefulLifeYears: f(),
     producedUnitsThisWeek: f(), plantCapacityUnitsThisWeek: f(), idleLineRevenueShare: f(), demandSlackRevenueShare: f(),

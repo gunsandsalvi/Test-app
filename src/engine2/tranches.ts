@@ -18,6 +18,7 @@ import { DebtTranche } from '../domain/company';
 import { GovDebtTrancheView } from '../domain/region-macro';
 import { govTrancheView } from '../domain/government';
 import { V2World, rowOf, internString } from './world';
+import { forgetClearedPrice } from './prices';
 import { defect } from '../domain/defect';
 
 export const TR_FLOATING = 1;
@@ -123,9 +124,10 @@ function growTranches(S: TrancheStore): void {
   S.cap = cap;
 }
 
-/** A freed row carries nothing a scan could mistake for a live tranche. */
-function freeRow(S: TrancheStore, r: number): void {
-  if (S.rowByIdRef.get(S.idRef[r]) === r) S.rowByIdRef.delete(S.idRef[r]);
+/** A freed row carries nothing a scan could mistake for a live tranche — its cleared price
+ *  included: §3.13's price store holds a fact about an instrument, and the instrument is gone. */
+function freeRow(S: TrancheStore, r: number, v2: V2World): void {
+  if (S.rowByIdRef.get(S.idRef[r]) === r) { S.rowByIdRef.delete(S.idRef[r]); forgetClearedPrice(v2, S.idRef[r]); }
   S.callProt[r] = undefined; S.flags[r] = 0; S.bankRef[r] = -1; S.issuerRef[r] = -1; S.principalLocal[r] = 0;
   S.next[r] = S.freeHead; S.freeHead = r;
 }
@@ -181,7 +183,7 @@ export function syncLadderRows(v2: V2World, companyId: string, ladder: DebtTranc
   // free the old chain
   for (let r = S.head[slot]; r >= 0; ) {
     const nxt = S.next[r];
-    freeRow(S, r);
+    freeRow(S, r, v2);
     r = nxt;
   }
   S.head[slot] = -1;
@@ -302,7 +304,7 @@ export function relinkLadder(v2: V2World, companyId: string, keptRows: number[])
   const keep = new Set(keptRows);
   for (let r = S.head[firmRow]; r >= 0; ) {
     const nxt = S.next[r];
-    if (!keep.has(r)) freeRow(S, r);
+    if (!keep.has(r)) freeRow(S, r, v2);
     r = nxt;
   }
   let prev = -1;

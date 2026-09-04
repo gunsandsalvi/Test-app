@@ -31,11 +31,17 @@ import { transferHolding, HoldingKind } from '../../ledger/holdings-ledger';
 export function reconcileHolderPrincipal(args: {
   ctx: WeeklyStepContext;
   regionId: RegionId;
-  /** Each live issuer's REAL outstanding for this book's debt class. */
-  outstandingByIssuerId: Map<string, number>;
-  /** The issuers themselves, so the payer is the borrower and the cap is its own money. */
-  issuerById: Map<string, Company>;
-  /** Institutions' positions by (entityId → issuerId → USD) — scaled IN PLACE. */
+  /**
+   * What each INSTRUMENT this book keys by really has outstanding. §3.13: a book that clears per
+   * tranche keys this by tranche (a retired one is present at ZERO, so its holders are repaid
+   * rather than silently re-keyed onto the borrower's other paper); a book that still clears per
+   * issuer keys it by issuer, and the arithmetic is the same either way.
+   */
+  outstandingByInstrumentId: Map<string, number>;
+  /** The borrower behind each of those instruments, so the payer is the borrower and the cap is
+   *  its own money. */
+  issuerOfInstrument: Map<string, Company>;
+  /** Institutions' positions by (entityId → instrumentId → face) — scaled IN PLACE. */
   holdingsByEntity: Map<string, Map<string, number>>;
   /** The banks whose desks may hold this book's paper. */
   banks: Company[];
@@ -46,13 +52,13 @@ export function reconcileHolderPrincipal(args: {
   /** The payment reason, so the flow is attributable per book. */
   reason: string;
 }): void {
-  const { ctx, outstandingByIssuerId, issuerById, holdingsByEntity, banks, deskBook, instrumentType, reason } = args;
+  const { ctx, outstandingByInstrumentId, issuerOfInstrument, holdingsByEntity, banks, deskBook, instrumentType, reason } = args;
 
-  // Pass 1 — each issuer's holder total, institutions plus positive desk positions.
-  const heldByIssuer = new Map<string, number>();
-  holdingsByEntity.forEach((byIssuer) => byIssuer.forEach((usd, issuerId) => {
-    if (usd > 0 && outstandingByIssuerId.has(issuerId)) {
-      heldByIssuer.set(issuerId, (heldByIssuer.get(issuerId) ?? 0) + usd);
+  // Pass 1 — each instrument's holder total, institutions plus positive desk positions.
+  const heldByInstrument = new Map<string, number>();
+  holdingsByEntity.forEach((byInstrument) => byInstrument.forEach((usd, instrumentId) => {
+    if (usd > 0 && outstandingByInstrumentId.has(instrumentId)) {
+      heldByInstrument.set(instrumentId, (heldByInstrument.get(instrumentId) ?? 0) + usd);
     }
   }));
   const deskSheets = banks.map((bank) => {
@@ -61,8 +67,8 @@ export function reconcileHolderPrincipal(args: {
   });
   deskSheets.forEach(({ sheet }) => {
     (sheet?.dealerDeskInventory?.[deskBook] ?? []).forEach((p) => {
-      if (p.inventoryLocal > 0 && outstandingByIssuerId.has(p.instrumentId)) {
-        heldByIssuer.set(p.instrumentId, (heldByIssuer.get(p.instrumentId) ?? 0) + p.inventoryLocal);
+      if (p.inventoryLocal > 0 && outstandingByInstrumentId.has(p.instrumentId)) {
+        heldByInstrument.set(p.instrumentId, (heldByInstrument.get(p.instrumentId) ?? 0) + p.inventoryLocal);
       }
     });
   });
@@ -70,14 +76,14 @@ export function reconcileHolderPrincipal(args: {
   // The scale for every issuer whose holders claim more than it owes, CAPPED by what the
   // issuer can actually pay this week. $1M of slack keeps the pass off rounding noise; the
   // drift this burns is B-scale.
-  const factorByIssuer = new Map<string, number>();
+  const factorByInstrument = new Map<string, number>();
   const trace = process.env.PAYDOWN_TRACE === '1';
-  heldByIssuer.forEach((heldLocal, issuerId) => {
-    const outstandingLocal = Math.max(0, outstandingByIssuerId.get(issuerId) ?? 0);
+  heldByInstrument.forEach((heldLocal, instrumentId) => {
+    const outstandingLocal = Math.max(0, outstandingByInstrumentId.get(instrumentId) ?? 0);
     if (!(heldLocal > outstandingLocal + 1e6)) return;
-    const issuer = issuerById.get(issuerId);
+    const issuer = issuerOfInstrument.get(instrumentId);
     if (trace && heldLocal - outstandingLocal > 1e9) {
-      console.log(`  [paydown] ${deskBook} ${issuer?.ticker ?? issuerId} held ${(heldLocal / 1e6).toFixed(0)}M out ${(outstandingLocal / 1e6).toFixed(0)}M`
+      console.log(`  [paydown] ${deskBook} ${issuer?.ticker ?? instrumentId} held ${(heldLocal / 1e6).toFixed(0)}M out ${(outstandingLocal / 1e6).toFixed(0)}M`
         + `${!issuer ? ' SKIP:no-issuer' : issuer.isBankEntity ? ' SKIP:bank' : ` cash ${(cashOf(ctx.v2, issuer) / 1e6).toFixed(0)}M`}`);
     }
     if (!issuer) return;
@@ -90,27 +96,27 @@ export function reconcileHolderPrincipal(args: {
     const desiredBurnLocal = heldLocal - outstandingLocal;
     const availableLocal = Math.max(0, cashOf(ctx.v2, issuer) + pendingSettlementLocal(ctx, { kind: 'COMPANY', ticker: issuer.ticker }));
     const burnLocal = Math.min(desiredBurnLocal, availableLocal);
-    if (burnLocal > 1) factorByIssuer.set(issuerId, (heldLocal - burnLocal) / heldLocal);
+    if (burnLocal > 1) factorByInstrument.set(instrumentId, (heldLocal - burnLocal) / heldLocal);
   });
-  if (factorByIssuer.size === 0) return;
+  if (factorByInstrument.size === 0) return;
 
   /** The borrower's own account (bank issuers are excluded above — their paper is the
    *  wholesale roll's). */
-  const payerOf = (issuerId: string): PartyRef | undefined => {
-    const issuer = issuerById.get(issuerId);
+  const payerOf = (instrumentId: string): PartyRef | undefined => {
+    const issuer = issuerOfInstrument.get(instrumentId);
     return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
   };
 
-  // Pass 2 — scale and PAY, issuer by issuer: the borrower's repayment reaching its holder
-  // directly, one instruction per (issuer, holder) with money on both ends.
-  holdingsByEntity.forEach((byIssuer, entityId) => {
-    byIssuer.forEach((usd, issuerId) => {
-      const factor = factorByIssuer.get(issuerId);
+  // Pass 2 — scale and PAY, instrument by instrument: the borrower's repayment reaching its
+  // holder directly, one instruction per (instrument, holder) with money on both ends.
+  holdingsByEntity.forEach((byInstrument, entityId) => {
+    byInstrument.forEach((usd, instrumentId) => {
+      const factor = factorByInstrument.get(instrumentId);
       if (factor === undefined || !(usd > 0)) return;
       const paidLocal = usd * (1 - factor);
-      byIssuer.set(issuerId, usd * factor);
+      byInstrument.set(instrumentId, usd * factor);
       if (paidLocal <= 1) return;
-      const payer = payerOf(issuerId);
+      const payer = payerOf(instrumentId);
       if (!payer) return;
       pay(ctx, { payer, payee: { kind: 'INSTITUTION', id: entityId }, amount: paidLocal, currency: currencyOf(args.regionId), reason });
     });
@@ -121,7 +127,7 @@ export function reconcileHolderPrincipal(args: {
     if (!rows || rows.length === 0) return;
     let touched = false;
     const newRows = rows.map((p) => {
-      const factor = factorByIssuer.get(p.instrumentId);
+      const factor = factorByInstrument.get(p.instrumentId);
       if (factor === undefined || !(p.inventoryLocal > 0)) return p;
       const paidLocal = p.inventoryLocal * (1 - factor);
       if (paidLocal > 1) {

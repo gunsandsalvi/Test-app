@@ -92,20 +92,20 @@ export function executeTrade(
       // The region's view of that book, kept in step for the readers that want one aggregate.
       const region = updatedRegions[posData.region];
       if (region) {
+        // §3.13: the bond book is keyed by the PAPER (07b clears per tranche) and the loan book
+        // still by the borrower, so the shared walk hands back ids and each line names its own.
         const view = (b: string) => Array.from(regionalDeskView(
           updatedCompanies
             .filter((c) => c.region === posData.region && c.isBankEntity)
             .map((c) => c.bankBalanceSheet?.dealerDeskInventory),
           b
-        ).entries())
-          .filter(([, usd]) => Math.abs(usd) > 1)
-          .map(([companyId, inventoryLocal]) => ({ companyId, inventoryLocal }));
+        ).entries()).filter(([, usd]) => Math.abs(usd) > 1);
         updatedRegions[posData.region] = {
           ...region,
           bankingSector: {
             ...region.bankingSector,
-            corpBondDealerInventory: view('corporate bond'),
-            loanDealerInventory: view('leveraged loan'),
+            corpBondDealerInventory: view('corporate bond').map(([instrumentId, inventoryLocal]) => ({ instrumentId, inventoryLocal })),
+            loanDealerInventory: view('leveraged loan').map(([companyId, inventoryLocal]) => ({ companyId, inventoryLocal })),
           },
         };
       }

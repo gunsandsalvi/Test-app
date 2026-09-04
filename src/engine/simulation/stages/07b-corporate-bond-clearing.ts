@@ -1,52 +1,83 @@
 /**
  * Stage 7b: Corporate Bond Real Clearing
  *
- * Foundational correction (Wall Street): a bond's price/spread must be the actual result of
- * real supply and demand, not a formula that outputs a spread directly. OAS/discount margin is
- * a STATISTIC computed from the cleared price, never the primitive that sets it.
+ * Foundational correction (Wall Street): a bond's price must be the actual result of real supply
+ * and demand, not a formula that outputs a spread directly. OAS is a STATISTIC computed from the
+ * cleared price, never the primitive that sets it.
+ *
+ * §3.13 — THE INSTRUMENT IS THE TRANCHE, WHAT CLEARS IS ITS PRICE, AND THERE IS NO SUCH THING AS
+ * AN ISSUER'S SPREAD (user, 2026-09-04: *"there shouldn't be any spread per issuer. The spread is
+ * per asset, assets with different maturities should have different risk levels and so different
+ * spreads. There is no spread quantity associated with an issuer aside from the CDS."*). This
+ * book used to price ONE instrument per ISSUER and clear a SPREAD, and all three halves of that
+ * were the same mistake:
+ *
+ *   - a SPREAD IS NOT A PRICE. `financial-clearing-engine` values a fill at `unitValueLocal = 1`
+ *     for anything that is not PRICE_LIKE, so every corporate bond in the model changed hands at
+ *     FACE whatever its coupon and whatever the market said. That is "credit always trades at
+ *     par" (rule 3), and it is the defect §9.13-SOV row 4 removed from the sovereign;
+ *   - an ISSUER IS NOT A PIECE OF PAPER. A 4.75% 2031 and a 3% 2029 of one borrower are two
+ *     instruments with two prices; pricing the borrower forced `register-split.ts` to invent a
+ *     mapping back onto the register's tranche rows, and that invention IS `O7` (holders claiming
+ *     past a tranche's face) and `O8` (a position keyed as though a company were a security);
+ *   - and ONE SPREAD PER BORROWER IS NO TERM STRUCTURE. Every holder's reservation was computed
+ *     against a single blended issuer duration, so a two-year rung and a thirty-year rung of the
+ *     same name were required to pay the same spread. The arithmetic to do better was already
+ *     here and was being fed the wrong argument: spread-risk capital scales with the PAPER's own
+ *     duration and the distressed bid discounts over the PAPER's own life, so handing each
+ *     tranche its own remaining life produces an upward-sloping curve for a performing credit and
+ *     an inverted one for a distressed name, out of the hazard the model already had and with no
+ *     new parameter.
+ *
+ * Nothing about anyone's REASON changes. A credit buyer's reservation genuinely is a SPREAD — it
+ * covers the issuer's expected loss and the capital THIS paper consumes — so it still computes
+ * one, and then states it as the PRICE that spread implies on this tranche's own cash flows
+ * against the region's cleared curve. What changes is what the auction solves for, what a fill is
+ * worth, and what the paper is called.
+ *
+ * The cleared price is DEPOSITED per tranche (`engine2/prices.ts`), so next week's session, the
+ * register's mark, the index and every borrower's cost of money read the number this auction
+ * printed rather than re-deriving one. `Company.oasSpreadBps` is GONE: what replaced it is the
+ * issuer's own credit curve, read off its own paper at whatever maturity the caller means
+ * (`engine/credit-price.ts`).
  *
  * This is the corporate-bond adapter over the generalized, asset-agnostic clearing engine (see
  * financial-clearing-engine.ts) — it owns only what's specific to corporate bonds:
  *
  * - Who the real participants are (named institutional entities, banks as dealer).
- * - Each entity's real, bottom-up total target (see deriveEntityTargetsLocal below) — never an
- *   independently-computed number that could exceed the real market and need a cap.
- * - Each participant's DEMAND SCHEDULE per issuer (§7.16's engine): a reservation spread built
- *   from the issuer's own structural default probability, the entity's rating- and
- *   duration-granular capital charge and required return on that capital (or, for distressed
- *   paper, the recovery arithmetic of the fund bidding it), the size it scales in over, and
- *   its real weekly budget (S11). The auction bisects for the spread where total demanded
- *   quantity equals the real tradable float.
- * - How the cleared price maps onto this asset class's quoted statistic (OAS moves opposite
- *   price — no realism floor or ceiling, purely a function of real demand versus govies).
+ * - Each entity's real, bottom-up total target — never an independently-computed number that
+ *   could exceed the real market and need a cap.
+ * - Each participant's DEMAND SCHEDULE per TRANCHE (§7.16's engine): a reservation spread built
+ *   from the issuer's own structural default probability and this paper's own capital charge (or,
+ *   for distressed paper, the recovery arithmetic of the fund bidding it), restated as the price
+ *   it implies, the size it scales in over, and its real weekly budget (S11).
  *
- * This adapter only covers each issuer's FIXED-rate tranches (real corporate bonds). Floating
+ * This adapter only covers FIXED-rate capital-markets tranches (real corporate bonds). Floating
  * tranches are real leveraged loans — a genuinely different market with a different investor
  * base (CLOs/loan funds, not bond funds) and different technicals — and get their own real
- * clearing (07d-leveraged-loan-clearing.ts), not a byproduct split of this one's fills.
+ * clearing (07d-leveraged-loan-clearing.ts), not a byproduct split of this one's fills. They
+ * still clear a per-issuer discount margin; §3.13's next credit row moves them here.
  *
  * The actual auction — the demand-schedule solve, cores-first rationing, cash legs, dealer
  * residual — lives once in the shared engine; sovereign bonds, bills, loans, equity and the
  * repo session plug into the same engine as their own adapters rather than re-implementing it.
  *
- * Foreign and household participation in corporate bonds, and hedge funds bidding for
- * distressed issuers specifically, are follow-on slices (see PROJECT_WALL_STREET.md) — this
- * slice's real participants are named institutional entities and the bank dealer desk.
- *
  * Must run after stage 2b (bank diversification, so named banks and their dealer inventory
  * carry-forward already reflect this week) and before stage 8 (company fundamentals), which
- * reads comp.oasSpreadBps as an already-real, already-cleared value rather than computing one
- * itself.
+ * reads this book's cleared prices as already-real values rather than computing any itself.
  */
 
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
-import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
-import { ringPush, rowOf, ensureV2, V2World } from '../../../engine2/world';
-import { ladderRowsOf, TR_FLOATING, TR_CP, issuerIdOf } from '../../../engine2/tranches';
-import { splitAcrossTranches, primarySliceOf } from './register-split';
-import { primaryTrancheId } from '../../../domain/primary-market';
+import { GameState, RegionId, ItemizedHolding, Company, PrimaryOffering } from '../../../types';
+import { ensureV2, V2World } from '../../../engine2/world';
+import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY, issuerIdOf, trancheScheduleOf } from '../../../engine2/tranches';
+import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
+import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { isActiveCompany } from '../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
+import { priceFromSpreadBps, zeroRateAt, COUPON_PERIOD_WEEKS } from '../../../domain/pricing';
+import type { PaperTerms, ZeroCurve } from '../../../domain/pricing';
+import { issuerSpreadAt, CreditPriceWorld } from '../../credit-price';
 import {
   computeReservationSpreadBps,
   fullSizeSpreadRangeBpsOf,
@@ -64,7 +95,7 @@ import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settl
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
-import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
+import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
@@ -77,12 +108,6 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { reconcileHolderPrincipal } from './holder-paydown';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 
-// Within that slow-moving budget, how fast a participant rotates toward its currently most
-// How much a tightening/loosening real credit-conditions backdrop (reg.bankingSector's own
-// -1..+1 index) shifts what "fair value" means right now — real credit investors price a bond
-// against the current market, not against an idiosyncratic PD estimate in a vacuum.
-// Bid/ask spread the dealer desk earns on the gross flow it facilitates, credited as real
-// trading revenue to the named banks' own equity (split by bankMarketShare).
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['corporate bond'];
 
@@ -91,46 +116,32 @@ const BOOK = 'corporate bond';
 // Real insurers and pension funds overwhelmingly run investment-grade-only mandates in
 // practice — a genuine structural avoidance of high-yield paper, not a soft preference.
 
+/**
+ * The ladder rows this book prices: an issuer's own capital-markets FIXED paper — the same three
+ * flags the register's CORP_BOND rows name, in ONE place. A bank facility is its lender's
+ * itemized loan and commercial paper is 07f's book, so neither is for sale here.
+ */
+const isBondRow = (flags: number): boolean => !(flags & (TR_FLOATING | TR_CP | TR_FACILITY));
+
 // §7.311 — ladder reads on rows (chain order = array order, so every fold is float-identical).
 function fixedDebtLocal(v2: V2World, comp: Company): number {
   const S = v2.tranches;
   let sum = 0;
   for (const r of ladderRowsOf(v2, comp.id)) {
-    if (!(S.flags[r] & (TR_FLOATING | TR_CP))) sum += S.principalLocal[r];
+    if (isBondRow(S.flags[r])) sum += S.principalLocal[r];
   }
   return sum;
 }
 
-function creditDurationYears(v2: V2World, comp: Company): number {
-  const S = v2.tranches;
-  const totalFixed = fixedDebtLocal(v2, comp);
-  let weighted = 0;
-  let count = 0;
-  for (const r of ladderRowsOf(v2, comp.id)) {
-    if (S.flags[r] & (TR_FLOATING | TR_CP)) continue;
-    count++;
-    const tenorYears = Math.max(0.5, (S.maturityWeek[r] - S.originationWeek[r]) / 52);
-    weighted += tenorYears * S.principalLocal[r];
-  }
-  if (count === 0 || totalFixed <= 0) return 3.5;
-  return Math.max(1.0, Math.min(8.0, (weighted / totalFixed) * 0.75));
-}
-
-// Credit-book duration preference is the kind registry's `preferredCreditDurationYears` row.
-
-
-/**
- * How attractive THIS entity finds THIS issuer's bonds right now — a real, multi-factor tactical
- * view, not the target allocation itself. Combines: value (cheap/rich versus a fair-value
- * estimate that is itself adjusted for current credit conditions), recent momentum (a name
- * that's been widening fast is a riskier "catch the falling knife" buy even where it already
- * looks cheap), this entity's own mandate (IG-only funds structurally avoid high-yield), and
- * duration/maturity fit against this entity's own real liability/benchmark profile.
- */
+// §3.18's `07b:110-119` is GONE with the issuer instrument: `creditDurationYears` blended an
+// issuer's whole ladder into one number, multiplied it by a magic 0.75 and clamped it to [1, 8].
+// There is nothing left for it to be the duration OF — every schedule below is struck on the
+// tranche's own remaining life, which the row already states exactly.
 
 export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2 = ensureV2(state);
   const regionIds = REGION_IDS;
+  const week = ctx.nextWeek;
 
   // SCALE: fixedDebtLocal filters and reduces a company's whole ladder per call, and the stage
   // used to call it ~14k times a week (four full-universe region sweeps included). Nothing in
@@ -148,60 +159,180 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     corpStockByRegion[r] = ctx.prevActiveFirms
       .filter((c) => c.region === r).reduce((a, c) => a + fixedDebtOf(c), 0);
   });
+  // The credit-curve read, for the one thing that genuinely needs a borrower-level number: what a
+  // brand-new deal's coupon is struck at. It reads the issuer's OWN printed paper.
+  const companyById = new Map<string, Company>();
+  ctx.updatedCompanies.forEach((c) => companyById.set(c.id, c));
+  ctx.prevActiveFirms.forEach((c) => { if (!companyById.has(c.id)) companyById.set(c.id, c); });
+  ctx.prevActivePrivateFirms.forEach((c) => { if (!companyById.has(c.id)) companyById.set(c.id, c); });
+  const creditWorld: CreditPriceWorld = {
+    issuerById: (id: string) => companyById.get(id),
+    regionById: (r: string) => ctx.updatedRegions[r as RegionId],
+  };
 
   regionIds.forEach((regionId) => {
     ctx.holdingsStore!.nextEpoch();
     const reg = ctx.updatedRegions[regionId];
+    // §3.13: the curve standing at WEEK START — what a real session prices against, and the same
+    // one 07c strikes its sovereign bonds on. `sovereign-curve.ts` republishes it after this
+    // stage from what this week's sovereign sessions cleared.
+    const curve: ZeroCurve = reg.zeroRates;
     // HC2: the named private tier's paper trades here alongside the public universe — the
     // market prices an issuer's credit, not its listing status. Private issuers arrived with
     // their tradable float already seeded onto these same holders (initialization), so their
     // first clearing week opens with genuine small gaps, not a systemic buy-in.
-    const regionCompanies = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
-      (c) => c.region === regionId && isActiveCompany(c) && fixedDebtOf(c) > 0
+    const regionActive = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
+      (c) => c.region === regionId && isActiveCompany(c)
     );
-    if (regionCompanies.length === 0) return;
+    if (regionActive.length === 0) return;
+    // Every issuer whose paper a holder in this region's book could be carrying — INCLUDING one
+    // whose fixed ladder has run off entirely, because a claim on retired paper is still a claim
+    // and it is repaid below rather than migrated onto the borrower's other bonds.
+    const regionIssuerIds = new Set(regionActive.map((c) => c.id));
 
     const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
 
-    // OWN2 claimed the float here was the whole outstanding, because this instrument is
-    // "already net of what does not trade in it". MEASUREMENT FALSIFIED IT: over ten weeks the
-    // desks took on 5.7B of corporate paper sold by NOBODY — an UNMODELED counterparty on the
-    // sell side of every auction. The book's holders are the institutions and the desks; the
-    // outstanding they do not hold between them belongs to nobody in this model, and handing
-    // it to the bidders mints a claim. The shrink is applied below, once the desks exist.
     // WS8: this week's primary offerings in THIS book — new fixed-rate paper priced alongside
     // the outstanding stock. The issuer's walk-away rides on the instrument; the engine
     // re-solves without the offering when it is pulled.
-    const offeringsByIssuerId = new Map<string, import('../../../types').PrimaryOffering>();
+    const offeringsByIssuerId = new Map<string, PrimaryOffering>();
     ctx.primaryOfferingsWorking.forEach((o) => {
       if (o.region === regionId && o.instrumentType === 'CORP_BOND') offeringsByIssuerId.set(o.issuerId, o);
     });
 
-    // An allocator sizes to the instrument that will EXIST once the deal prices — the
-    // outstanding stock plus the paper on offer — because that is what its benchmark will hold.
-    // Sizing off the outstanding stock alone left the demand side mechanically unable to absorb
-    // new supply at any spread (see the same fix in 07d, where it withdrew every LBO financing).
-    // The cash constraint is untouched: `maxNetPurchaseLocal` still decides whether the market can
-    // actually pay for the deal, which is the honest reason for one to fail.
-    const offeringSizeLocal = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeLocal ?? 0;
-    const liveTradableFloatLocal = (c: Company) => fixedDebtOf(c) + offeringSizeLocal(c);
+    // ---- The issuers: what a CREDIT VIEW is about. ----
+    // A hazard and a rating belong to the FIRM, so they are resolved once per issuer; everything
+    // that varies with the paper is resolved per tranche below. The structural PD reads the debt
+    // ladder and revenue history and was being recomputed once per entity × company — 4x the work
+    // for identical answers (§6's optimization rule).
+    //
+    // ONE OWNER (§6.1's duplicate row): the recovery this book prices is the region's own
+    // REALISED experience blended with the prior (`creditRecoveryRate`) — the same basis the
+    // loan book and the CDS leg already price on.
+    const regionRecoveryRate = creditRecoveryRate(reg);
+    const issuers = regionActive.filter((c) => fixedDebtOf(c) > 0 || offeringsByIssuerId.has(c.id));
+    const companyTerms = issuers.map((c) => {
+      const annualPd = computeAnnualDefaultProbability(v2, c);
+      return {
+        id: c.id,
+        comp: c,
+        creditRating: c.creditRating,
+        annualPd,
+        subIG: !isInvestmentGrade(c.creditRating),
+        expectedLossBps: annualPd * (1 - regionRecoveryRate) * 10000,
+      };
+    });
+    const ciById = new Map(companyTerms.map((t, ci) => [t.id, ci]));
 
-    const priorOasById = new Map(regionCompanies.map((c) => [c.id, c.oasSpreadBps]));
-    const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
-      id: c.id,
-      outstandingLocal: fixedDebtOf(c),
-      tradableFloatLocal: fixedDebtOf(c),
-      currentStat: c.oasSpreadBps,
-      statKind: 'YIELD_LIKE',
-      durationYears: creditDurationYears(v2, c),
-      primaryOfferingLocal: offeringsByIssuerId.get(c.id)?.sizeLocal,
-      primaryWithdrawStat: offeringsByIssuerId.get(c.id)?.walkAwayStat,
+    /**
+     * §3.13 — THE INSTRUMENTS ARE THE TRANCHES. Each carries its own coupon, its own remaining
+     * life, its own capital charge and its own price. `register-split.ts` has nothing left to do
+     * on this book: a fill already names the paper it bought.
+     */
+    type BondInstrument = {
+      id: string; ci: number;
+      /** Face outstanding — 0 for a deal that has not priced yet. */
+      faceLocal: number;
+      /** This week's offering ON THIS PAPER — non-zero only for the primary. */
+      offeringLocal: number;
+      terms: PaperTerms;
+      tenorYears: number;
+      /** Spread-risk capital against THIS paper's own duration — the term structure's source. */
+      capitalChargeRate: number;
+      /** The distressed bid's reservation, discounted over THIS paper's own life. */
+      distressedReservationBps: number;
+      isPrimary: boolean;
+    };
+    const S = v2.tranches;
+    const bonds: BondInstrument[] = [];
+    const bondOf = (ci: number, id: string, faceLocal: number, offeringLocal: number, terms: PaperTerms, isPrimary: boolean): BondInstrument => {
+      const tenorYears = terms.weeksToMaturity / 52;
+      return {
+        id, ci, faceLocal, offeringLocal, terms, tenorYears, isPrimary,
+        capitalChargeRate: spreadRiskCapitalChargeRate(companyTerms[ci].creditRating, tenorYears),
+        distressedReservationBps: computeDistressedReservationSpreadBps({
+          annualDefaultProbability: companyTerms[ci].annualPd,
+          recoveryRate: regionRecoveryRate,
+          durationYears: tenorYears,
+        }),
+      };
+    };
+    companyTerms.forEach((t, ci) => {
+      for (const r of ladderRowsOf(v2, t.id)) {
+        if (!isBondRow(S.flags[r]) || !(S.principalLocal[r] > 0.01)) continue;
+        const weeksToMaturity = S.maturityWeek[r] - week;
+        // Paper that is due redeems at its face; it does not trade for a price.
+        if (!(weeksToMaturity > 0)) continue;
+        bonds.push(bondOf(ci, v2.internedStrings[S.idRef[r]], S.principalLocal[r], 0, {
+          annualCouponRate: Number.isNaN(S.couponRate[r]) ? 0 : S.couponRate[r],
+          periodWeeks: trancheScheduleOf(S, r).periodWeeks,
+          weeksToMaturity,
+        }, false));
+      }
+    });
+    // WS8 — A DEAL IS ITS OWN PIECE OF PAPER, and the book prices it beside the outstanding
+    // stock. It is STRUCK AT PAR against the issuer's own credit curve at the tenor it is being
+    // sold at — which is what a new corporate bond IS: the coupon is fixed at launch and the
+    // market decides what it will pay for it. The concession the book demands then shows up
+    // where it belongs, as a price below par, and the issuer receives price × face instead of
+    // par whatever it cleared. The walk-away is the issuer's own indifference spread restated as
+    // the price it implies, so a deal is pulled when the market asks a bigger concession than the
+    // borrower will wear.
+    const primaryTermsById = new Map<string, { couponRate: number; maturityWeek: number }>();
+    offeringsByIssuerId.forEach((o, issuerId) => {
+      const ci = ciById.get(issuerId);
+      if (ci === undefined || !(o.sizeLocal > 0)) return;
+      const sovAt = zeroRateAt(curve, STANDARD_CORP_TENOR_YEARS);
+      // A DEBUT has no credit curve to read, and inventing one for it is what this replaces: it
+      // launches on the price talk it published, which is what price talk is for.
+      const talkBps = issuerSpreadAt(creditWorld, v2, issuerId, week, STANDARD_CORP_TENOR_YEARS)?.spreadBps
+        ?? o.indicativeStat ?? o.walkAwayStat;
+      const couponRate = sovAt + talkBps / 10000;
+      const id = primaryTrancheId(issuerId, o.purpose, week);
+      primaryTermsById.set(id, { couponRate, maturityWeek: week + STANDARD_CORP_TENOR_YEARS * 52 });
+      bonds.push(bondOf(ci, id, 0, o.sizeLocal, {
+        annualCouponRate: couponRate,
+        periodWeeks: COUPON_PERIOD_WEEKS,
+        weeksToMaturity: STANDARD_CORP_TENOR_YEARS * 52,
+      }, true));
+    });
+    if (bonds.length === 0) return;
+    const nB = bonds.length;
+    const issuerIdOfInstrument = new Map(bonds.map((b) => [b.id, companyTerms[b.ci].id]));
+
+    /** A reservation stated in spread, restated as the price it implies on THIS bond. */
+    const priceAtSpread = (b: BondInstrument, spreadBps: number): number =>
+      priceFromSpreadBps(b.terms, curve, spreadBps);
+    /**
+     * Where the instrument stands before this session: what it last cleared at; for paper no
+     * auction has printed, the price its ISSUER's own curve implies at this bond's own tenor; and
+     * for a borrower with no printed paper at all, par — which is what every birth in this model
+     * is struck at, and what the seed deposits for its aged ladders.
+     */
+    const openingPrice = bonds.map((b) => {
+      const stored = b.isPrimary ? undefined : clearedPriceOf(v2, b.id);
+      if (stored !== undefined && stored > 0) return stored;
+      const curveBps = issuerSpreadAt(creditWorld, v2, companyTerms[b.ci].id, week, b.tenorYears)?.spreadBps;
+      const px = curveBps === undefined ? 1 : priceAtSpread(b, curveBps);
+      return px > 0 && isFinite(px) ? px : 1;
+    });
+
+    const instruments: ClearingInstrument[] = bonds.map((b, bi) => ({
+      id: b.id,
+      outstandingLocal: b.faceLocal,
+      tradableFloatLocal: b.faceLocal,
+      currentStat: openingPrice[bi],      // price per unit of face
+      statKind: 'PRICE_LIKE',
+      durationYears: b.tenorYears,
+      primaryOfferingLocal: b.offeringLocal > 0 ? b.offeringLocal : undefined,
+      primaryWithdrawStat: b.isPrimary
+        ? priceAtSpread(b, offeringsByIssuerId.get(companyTerms[b.ci].id)!.walkAwayStat)
+        : undefined,
       // No floor and no ceiling. The floor is an outcome: every bidder's reservation already
-      // covers its own expected loss and capital cost, so demand tighter than that is genuinely
+      // covers its own expected loss and capital cost, so demand richer than that is genuinely
       // zero. The ceiling is an outcome too: the distressed regime below always has a bid at
-      // SOME price — as the level widens, the implied cash price falls until the buyer's IRR on
-      // expected recovery clears — so the widening arrests where that bid stands, not where a
-      // bound says.
+      // SOME price — as the price falls the buyer's IRR on expected recovery clears — so the
+      // fall arrests where that bid stands, not where a bound says.
     }));
 
     // Index funds are ordinary holders with an extraordinary schedule — they buy their benchmark
@@ -218,47 +349,67 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         && INDEX_DEFINITIONS.some((d) => d.id === e.etf!.indexId && d.assetClass === 'CORP_BOND')
     );
     const bookEntities = [...regionEntities, ...regionIndexFunds];
-    const issuerIdsThisRegion = new Set(regionCompanies.map((c) => c.id));
-    const currentHoldingByCompanyByEntity = new Map<string, Map<string, number>>();
 
     // SCALE C1: positions come off the shared store's CORP_BOND rows — one claim-scan per
-    // entity instead of a sweep of its whole book. XB1 / §7.34 still holds: only THIS region's
-    // paper is claimed (a JPN insurer's JPN bonds stay unclaimed and pass through the
+    // entity instead of a sweep of its whole book. XB1 / §7.34 still holds: only paper of THIS
+    // region's issuers is claimed (a JPN insurer's JPN bonds stay unclaimed and pass through the
     // write-back untouched, exactly as the old "other holdings" partition carried them).
+    //
+    // §3.13: a row names its TRANCHE, and the claim is made on the issuer that tranche names —
+    // permanently, so a row naming paper that has already retired is still claimed here and
+    // repaid by its borrower below. It used to be folded into the issuer's total and silently
+    // re-keyed onto whatever OTHER bonds that borrower still had outstanding, which is half of
+    // what `O7` counts.
     const store = ctx.holdingsStore!;
+    const bondFaceById = new Map(bonds.map((b) => [b.id, b.faceLocal]));
+    const claimedByEntity = new Map<string, Map<string, number>>();
     bookEntities.forEach((entity) => {
-      const currentHoldingByCompany = new Map<string, number>();
+      const claimed = new Map<string, number>();
       store.scan(entity.id, 'CORP_BOND', (h) => {
-        const issuerId = issuerIdOf(v2, h.instrumentId); // 13b: a row names a tranche or its issuer
-        if (!issuerIdsThisRegion.has(issuerId)) return false;
-        // A book trades PAR amounts. This reads the value because nothing marks credit yet;
-        // when the mark lands it reads `faceLocal`, or a price move looks like a trade.
-        currentHoldingByCompany.set(issuerId, (currentHoldingByCompany.get(issuerId) ?? 0) + h.quantityOrNotionalLocal);
+        if (!regionIssuerIds.has(issuerIdOf(v2, h.instrumentId))) return false;
+        // A book trades FACE. The row carries it; a row written before face was stored falls back
+        // to its value, which par pricing made the same number.
+        const faceLocal = h.faceLocal ?? h.quantityOrNotionalLocal ?? 0;
+        claimed.set(h.instrumentId, (claimed.get(h.instrumentId) ?? 0) + faceLocal);
         return true;
       });
-      currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);
+      claimedByEntity.set(entity.id, claimed);
     });
 
     // §7.259 — settle the borrowers' retired principal ON THE HOLDERS before this book clears
-    // (see holder-paydown.ts; same defect and same fix as the loan book in 07d).
+    // (see holder-paydown.ts; same defect and same fix as the loan book in 07d). Keyed by the
+    // PAPER now, so a tranche that matured is repaid at its own face rather than netted against
+    // the borrower's other bonds — and the desks' own positions, which have always been stored
+    // per tranche, are finally on the same key the outstanding is measured on.
     const regionBanksEarly = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const outstandingByInstrumentId = new Map(bonds.filter((b) => !b.isPrimary).map((b) => [b.id, b.faceLocal]));
+    const issuerOfInstrument = new Map<string, Company>();
+    bonds.forEach((b) => issuerOfInstrument.set(b.id, companyTerms[b.ci].comp));
+    claimedByEntity.forEach((claimed) => claimed.forEach((_face, instrumentId) => {
+      if (outstandingByInstrumentId.has(instrumentId)) return;
+      // Paper this book is not pricing: it has retired. Its holders are owed their face.
+      outstandingByInstrumentId.set(instrumentId, 0);
+      const issuer = companyById.get(issuerIdOf(v2, instrumentId));
+      if (issuer) issuerOfInstrument.set(instrumentId, issuer);
+    }));
     reconcileHolderPrincipal({
       ctx, regionId,
-      outstandingByIssuerId: new Map(regionCompanies.map((c) => [c.id, fixedDebtOf(c)])),
-      issuerById: new Map(regionCompanies.map((c) => [c.id, c])),
-      holdingsByEntity: currentHoldingByCompanyByEntity,
+      outstandingByInstrumentId,
+      issuerOfInstrument,
+      holdingsByEntity: claimedByEntity,
       banks: regionBanksEarly,
       deskBook: BOOK, instrumentType: 'CORP_BOND',
       reason: 'bond principal paydown to holders',
     });
+
     // OWN7, first half: the float is what this book's holders hold, and the INSTITUTIONS' half of
     // it is known here. It is set before the desks are built rather than after, because a desk is
     // sized against the LIVE float — leaving `tradableFloatLocal` at the whole outstanding until
     // after the desk build gave every desk capacity against an issue that is not for sale, and a
     // float of zero makes `buildDealerDeskParticipants` hand back no desk at all.
     const heldByInstitutionsLocal = new Map<string, number>();
-    currentHoldingByCompanyByEntity.forEach((byCompany) => byCompany.forEach((usd, id) => {
-      if (usd > 0) heldByInstitutionsLocal.set(id, (heldByInstitutionsLocal.get(id) ?? 0) + usd);
+    claimedByEntity.forEach((claimed) => claimed.forEach((faceLocal, id) => {
+      if (faceLocal > 0 && bondFaceById.has(id)) heldByInstitutionsLocal.set(id, (heldByInstitutionsLocal.get(id) ?? 0) + faceLocal);
     }));
     instruments.forEach((inst) => { inst.tradableFloatLocal = heldByInstitutionsLocal.get(inst.id) ?? 0; });
 
@@ -272,61 +423,25 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
           * mandateWeightForIssuer(e.entityType, e.region, regionId, corpStockByRegion),
       ])
     );
-
-    // Per-company quantities memoized ONCE per region-week, never inside the participants loop
-    // (§6's optimization rule): the structural PD reads the debt ladder and revenue history and
-    // was being recomputed once per entity x company — 4x the work for identical answers.
-    const pdByCompanyId = new Map<string, number>();
-    regionCompanies.forEach((c) => pdByCompanyId.set(c.id, computeAnnualDefaultProbability(v2, c)));
-
-    // Everything about a COMPANY that the per-entity loops below were recomputing per pair —
-    // ~35 entities x ~350 names x 4 regions of identical answers per week. Hoisted once, same
-    // expressions, same values (§7.32's optimization discipline; the profiler put this adapter
-    // at 120 ms/week of self time).
-    // ONE OWNER (§6.1's duplicate row): the recovery this book prices is the region's own
-    // REALISED experience blended with the prior (`creditRecoveryRate`) — the same basis the
-    // loan book and the CDS leg already price on. Pricing a fixed 0.4 here while resolutions
-    // ran elsewhere was one market disagreeing with the world it clears in, and the CDS-cash
-    // basis partly measured that disagreement.
-    const regionRecoveryRate = creditRecoveryRate(reg);
-    const companyTerms = regionCompanies.map((c) => {
-      const annualPd = pdByCompanyId.get(c.id)!;
-      const durationYears = creditDurationYears(v2, c);
-      return {
-        id: c.id,
-        creditRating: c.creditRating,
-        subIG: !isInvestmentGrade(c.creditRating),
-        liveFloatLocal: liveTradableFloatLocal(c),
-        offeringLocal: offeringSizeLocal(c),
-        expectedLossBps: annualPd * (1 - regionRecoveryRate) * 10000,
-        capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, durationYears),
-        distressedReservationBps: computeDistressedReservationSpreadBps({
-          annualDefaultProbability: annualPd,
-          recoveryRate: regionRecoveryRate,
-          durationYears,
-        }),
-      };
-    });
     // Identical for every entity; the old code re-reduced it inside each entity's closure.
     const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
     // §4.C direct-to-pack — demand written straight into the engine's staging; no
     // ParticipantDemand objects exist for this book at all.
-    const DS = openDemandStaging(companyTerms.length);
+    const DS = openDemandStaging(nB);
 
     // §4.C Stage I — the pair loops on dense columns (the 07e slice's shape, §7.327 (1)): the
-    // per-(entity, name) holding probe becomes an array read; iteration order is companyTerms
-    // order in both passes, so every float accumulates exactly as before.
-    const tiById = new Map<string, number>();
-    companyTerms.forEach((t, ti) => tiById.set(t.id, ti));
-    const heldArr = new Float64Array(companyTerms.length);
+    // per-(entity, name) holding probe becomes an array read; iteration order is `bonds` order in
+    // both passes, so every float accumulates exactly as before.
+    const biById = new Map(bonds.map((b, bi) => [b.id, bi]));
+    const heldArr = new Float64Array(nB);
     const heldTouched: number[] = [];
 
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
-      const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
+      const claimed = claimedByEntity.get(entity.id)!;
       heldTouched.length = 0;
-      currentHoldingByCompany.forEach((usd, id) => {
-        const ti = tiById.get(id);
-        if (ti !== undefined) { heldArr[ti] = usd; heldTouched.push(ti); }
+      claimed.forEach((faceLocal, id) => {
+        const bi = biById.get(id);
+        if (bi !== undefined) { heldArr[bi] = faceLocal; heldTouched.push(bi); }
       });
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
       // Per-entity invariants of the per-name loops below.
@@ -337,82 +452,93 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // discounted expected recovery instead of expected loss, and running the conviction size
       // that goes with it, is one strategy — the credit long-short book beside it is an ordinary
       // relative-value buyer and prices like one.
-      const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
-        ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate);
       const strategy = hedgeFundStrategyProfile(entity);
       const overweightMultiple = strategy?.convictionMultiple ?? maxOverweightMultipleOf(entity);
+      // XB2: hedged, so a foreign buyer's requirement carries the CIP cost of the hedge.
+      const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
+        ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate);
+      const fullSizeRangeBps = fullSizeSpreadRangeBpsOf(entity);
       // The entity's real budget for this auction (S11): available cash plus its type's genuine
       // leverage capacity, sliced to this asset class by its own targets, then directed at the
-      // names where paper is actually changing hands — a live offering, or the gap between what
-      // this holder targets and what it already owns. A bid is a claim on money; this is the
-      // money. Apportioning it across the whole STOCK instead gave a new issue a slice the size
-      // of its issuer's index weight rather than of the deal, which starved the primary market by
-      // construction (see the same fix and its measurement in 07d).
+      // paper that is actually changing hands — a live offering, or the gap between what this
+      // holder targets and what it already owns. A bid is a claim on money; this is the money.
       const classBudgetLocal = stagePurchaseBudgetLocal(ctx, entity, institutionTotalAssetsLocal(ctx, entity), 'CORP_BOND', institutionUnsettledLessCollateralLocal(ctx, entity.id));
-      // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
-      // walk companyTerms in order, so the id was pure overhead.
-      const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
+      // SCALE: indexed by `bonds` position, not a Map keyed by id — both loops already walk
+      // `bonds` in order, so the id was pure overhead.
+      const cashDemandWeightByIndex = new Float64Array(nB);
       let totalCashDemandWeightLocal = 0;
-      for (let ti = 0; ti < companyTerms.length; ti++) {
-        const t = companyTerms[ti];
-        const f = t.subIG ? entitySubIGFactor : 1;
-        const structuralLocal = t.liveFloatLocal * entityShare * f;
-        const gapToTargetLocal = Math.max(0, structuralLocal - heldArr[ti]);
-        const weightLocal = t.offeringLocal + gapToTargetLocal;
-        cashDemandWeightByIndex[ti] = weightLocal;
+      for (let bi = 0; bi < nB; bi++) {
+        const b = bonds[bi];
+        const f = companyTerms[b.ci].subIG ? entitySubIGFactor : 1;
+        const structuralLocal = (b.faceLocal + b.offeringLocal) * entityShare * f;
+        const gapToTargetLocal = Math.max(0, structuralLocal - heldArr[bi]);
+        const weightLocal = b.offeringLocal + gapToTargetLocal;
+        cashDemandWeightByIndex[bi] = weightLocal;
         totalCashDemandWeightLocal += weightLocal;
       }
 
-      // This entity's terms, per issuer. The reservation spread is the RV economics used as what
-      // they always were — a PRICE. Below the level that covers this issuer's own expected loss
-      // and the capital the position consumes at this entity's own required return, it does not
-      // want the bond at all; above it, it scales into its policy size. The old engine used the
-      // same numbers to nudge a quantity target, which is why spreads could settle through zero:
-      // a nudged quota still has to be filled at whatever price results.
+      // This entity's terms, PER PIECE OF PAPER. The reservation spread is the RV economics used
+      // as what they always were — a PRICE. Below the level that covers this issuer's own
+      // expected loss and the capital THIS paper consumes at this entity's own required return,
+      // it does not want the bond at all; above it, it scales into its policy size. Two tranches
+      // of one borrower get two answers, because the capital a position consumes is its own
+      // duration's, and that difference IS the issuer's credit term structure.
       const demandRow = claimDemandRow(DS);
-      for (let ti = 0; ti < companyTerms.length; ti++) {
-        const t = companyTerms[ti];
-        // Rating enters this book in the two places it really acts: the capital the position
-        // consumes and the size of the sub-IG sleeve the holder will run — never a prohibition
-        // (see subInvestmentGradeSizeFactor for what modelling it as one did to HY clearing).
+      for (let bi = 0; bi < nB; bi++) {
+        const b = bonds[bi];
+        const t = companyTerms[b.ci];
         // Two pricing regimes, one issuer hazard: regulated holders price spread vs expected
         // loss + capital cost; the distressed fund prices vs discounted expected recovery.
-        const reservationBps = strategy?.pricesOffRecovery
-          ? t.distressedReservationBps
+        const reservationBps = (strategy?.pricesOffRecovery
+          ? b.distressedReservationBps
           : computeReservationSpreadBps({
               entityType: entity.entityType,
               requiredReturn,
               expectedLossBps: t.expectedLossBps,
-              capitalChargeRate: t.capitalChargeRate,
+              capitalChargeRate: b.capitalChargeRate,
               creditConditionsIndex,
-            });
+            })) + hedgeAdjBps;
+        // A willingness-to-move stated in spread, restated as the price move it implies on THIS
+        // bond at its own level. Duration does the conversion, which is what duration IS.
+        const reservationPrice = priceAtSpread(b, reservationBps);
+        const rangePrice = Math.max(1e-9, Math.abs(reservationPrice - priceAtSpread(b, reservationBps + fullSizeRangeBps)));
         const sizeFactor = t.subIG ? entitySubIGFactor : 1;
-        const structuralSizeLocal = t.liveFloatLocal * entityShare * sizeFactor;
-        // XB2: hedged, so a foreign buyer's requirement carries the CIP cost of the hedge.
-        setDemand(DS, demandRow, ti,
-          reservationBps + hedgeAdjBps,
-          fullSizeSpreadRangeBpsOf(entity),
+        const structuralSizeLocal = (b.faceLocal + b.offeringLocal) * entityShare * sizeFactor;
+        // The bound is posted in FACE, and the money it stands for buys that face at the price
+        // this book opened at — the same commitment 07e's index funds make, and for the same
+        // reason: the cash constraint has to be expressible in the unit the auction allocates.
+        setDemand(DS, demandRow, bi,
+          reservationPrice,
+          rangePrice,
           structuralSizeLocal * overweightMultiple,
-          classBudgetLocal *
+          (classBudgetLocal *
             (totalCashDemandWeightLocal > 0
-              ? cashDemandWeightByIndex[ti] / totalCashDemandWeightLocal
-              : 0),
+              ? cashDemandWeightByIndex[bi] / totalCashDemandWeightLocal
+              : 0)) / Math.max(1e-9, openingPrice[bi]),
           0);
       }
-      for (const ti of heldTouched) heldArr[ti] = 0;
+      for (const bi of heldTouched) heldArr[bi] = 0;
 
-      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId: EMPTY_DEMAND_MAP, demandRow };
+      return { id: entity.id, currentHoldingsByInstrumentId: claimed, demandByInstrumentId: EMPTY_DEMAND_MAP, demandRow };
     });
 
     const priorDealerInventoryById = new Map<string, number>();
-    (reg.bankingSector.corpBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.companyId, p.inventoryLocal));
+    (reg.bankingSector.corpBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.instrumentId, p.inventoryLocal));
 
     // ETF: the index funds tracking this book's benchmarks. A fund posts a SIZE with no
     // reservation level — its benchmark weight at whatever the market is asking — which is the
     // one demand shape the engine could not previously express and a large real force in credit.
+    // A credit index weights by MARKET VALUE, so a constituent's weight is spread over that
+    // issuer's own bonds by what each is worth — the index owns the paper, not the borrower.
     const bookIndexIds = INDEX_DEFINITIONS
       .filter((d) => d.assetClass === 'CORP_BOND' && d.region === regionId)
       .map((d) => d.id);
+    const bondsByIssuerId = new Map<string, number[]>();
+    bonds.forEach((b, bi) => {
+      const key = companyTerms[b.ci].id;
+      const list = bondsByIssuerId.get(key);
+      if (list) list.push(bi); else bondsByIssuerId.set(key, [bi]);
+    });
     const indexFundParticipants: ClearingParticipant[] = indexFundsForBook(
       ctx.v2,
       regionIndexFunds, ctx.updatedMarketIndexes, bookIndexIds, (e) => store.currentHoldingsLocal(e.id)
@@ -425,19 +551,32 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // behaviour falls out of the quarterly rebalance without any special case.)
       const fundShareOfIndex = index.totalValueLocal > 0 ? investableLocal / index.totalValueLocal : 0;
       index.constituents.forEach((c) => {
-        const offeringLocal = offeringsByIssuerId.get(c.instrumentId)?.sizeLocal ?? 0;
-        const targetLocal = investableLocal * c.weight + offeringLocal * fundShareOfIndex;
-        demandByInstrumentId.set(
-          c.instrumentId,
-          // §7.270: the kernel's cash leg is traded PLUS the dealer fee, so a bound spent to
-          // the last dollar overdraws by spread × gross — the fee rides outside the bound. A
-          // fund that never walks away rides the bound exactly; shave it by the spread.
-          indexFundDemand(targetLocal, institutionSpendableLocal(ctx, fund) * c.weight / (1 + DEALER_SPREAD_BPS / 10000), 'YIELD_LIKE')
-        );
+        const list = bondsByIssuerId.get(c.instrumentId);
+        if (!list || list.length === 0) return;
+        let valueLocal = 0;
+        list.forEach((bi) => { valueLocal += (bonds[bi].faceLocal + bonds[bi].offeringLocal) * openingPrice[bi]; });
+        if (!(valueLocal > 0)) return;
+        list.forEach((bi) => {
+          const b = bonds[bi];
+          const shareOfIssuer = ((b.faceLocal + b.offeringLocal) * openingPrice[bi]) / valueLocal;
+          const targetValueLocal = investableLocal * c.weight * shareOfIssuer
+            + b.offeringLocal * openingPrice[bi] * fundShareOfIndex;
+          const px = Math.max(1e-9, openingPrice[bi]);
+          demandByInstrumentId.set(
+            b.id,
+            // §7.270: the kernel's cash leg is traded PLUS the dealer fee, so a bound spent to
+            // the last dollar overdraws by spread × gross — the fee rides outside the bound. A
+            // fund that never walks away rides the bound exactly; shave it by the spread.
+            indexFundDemand(
+              targetValueLocal / px,
+              (institutionSpendableLocal(ctx, fund) * c.weight * shareOfIssuer / (1 + DEALER_SPREAD_BPS / 10000)) / px,
+              'PRICE_LIKE')
+          );
+        });
       });
       return {
         id: fund.id,
-        currentHoldingsByInstrumentId: currentHoldingByCompanyByEntity.get(fund.id) ?? new Map<string, number>(),
+        currentHoldingsByInstrumentId: claimedByEntity.get(fund.id) ?? new Map<string, number>(),
         demandByInstrumentId,
       };
     });
@@ -448,6 +587,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     const deskParticipants = buildDealerDeskParticipants({
       ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
+      unitPriceOf: (i) => openingPrice[i],
     });
     const deskTickers = deskTickersOf(deskParticipants);
 
@@ -455,8 +595,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // outside this book keeps its position, so its paper was never for sale — and the residual no
     // named book holds at all was never for sale either, because there is no seller to decrement.
     const deskHeldLocal = new Map<string, number>();
-    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((usd, id) => {
-      if (usd > 0) deskHeldLocal.set(id, (deskHeldLocal.get(id) ?? 0) + usd);
+    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((faceLocal, id) => {
+      if (faceLocal > 0) deskHeldLocal.set(id, (deskHeldLocal.get(id) ?? 0) + faceLocal);
     }));
     instruments.forEach((inst) => {
       inst.tradableFloatLocal = (heldByInstitutionsLocal.get(inst.id) ?? 0) + (deskHeldLocal.get(inst.id) ?? 0);
@@ -474,88 +614,108 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const piById = new Map(allParticipants.map((pp, pi) => [pp.id, pi]));
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `corporate bond:${id}`));
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} corporate bond`);
+
+    /**
+     * THE PRINT, DEPOSITED — but only where there was something to trade.
+     *
+     * A book with no float and no offering has no clearing level: the solve's target is zero, no
+     * segment crosses it, and what comes back is the numerical bracket (§3.21). Depositing that
+     * would put a 1%-of-par or 100×-par print on paper nobody bought or sold. Such an instrument
+     * KEEPS the price it had, which is the honest answer and the one §3.21 asks every adapter to
+     * be able to give.
+     */
+    const clearedPriceById = new Map<string, number>();
+    for (let bi = 0; bi < nB; bi++) {
+      const b = bonds[bi];
+      const outcome = result.primaryOutcomeById.get(b.id);
+      const placedLocal = outcome && !outcome.withdrawn ? Math.max(0, outcome.marketTakeLocal) : 0;
+      const tradedSomething = instruments[bi].tradableFloatLocal > 0 || placedLocal > 0;
+      const px = result.newStatByIndex[bi];
+      const printed = tradedSomething && px > 0 && isFinite(px);
+      clearedPriceById.set(b.id, printed ? px : openingPrice[bi]);
+      if (printed) setClearedPrice(v2, b.id, px);
+    }
+
     // WS8: settle this week's priced offerings — lead bank pays the unsold residual and takes
-    // the fee; stage 08 posts the issuer's proceeds and creates the tranche at cleared terms.
-    // G3c: the lead quotes THIS deal — the desks' own spread, plus what a week's spread move
-    // through the deal's own duration can cost on the residual the desks cannot absorb.
+    // the fee; stage 08 issues the tranche at the terms this book struck and priced.
+    // G3c: the lead quotes THIS deal — the desks' own spread, plus what a week's price move can
+    // cost on the residual the desks cannot absorb.
     const bookCapacityLocal = totalDeskCapacityLocal(ctx, regionBanks, BOOK);
-    const durationById = new Map(regionCompanies.map((c) => [c.id, creditDurationYears(v2, c)]));
     // §7.259: the settlement call moved BELOW applyDealerDeskFills — called here it landed the
     // lead's residual on its desk between the clearing and the rebuild-from-fills, which
     // deleted it with no cash leg and charged it to equity as a phantom fee (see 07d).
 
-    // Apply: real cleared OAS, mutated in place so stage 8 (which runs next) reads it as this
-    // week's already-real value rather than recomputing one. Also extend each company's rolling
-    const companyById = new Map(regionCompanies.map((c) => [c.id, c]));
-    // §4.C int flip — instruments[i] IS regionCompanies[i]; the map's insertion order was this
-    // index order, so the walk and its floats are unchanged.
-    for (let ii = 0; ii < result.nInstruments; ii++) {
-      const comp = regionCompanies[ii];
-      v2.oasRing = ringPush(v2.oasRing, rowOf(v2, comp.id), comp.oasSpreadBps);
-      comp.oasSpreadBps = result.newStatByIndex[ii];
-    }
-
-    // Apply: each entity's real new CORP_BOND holdings. Loans are a genuinely different real
-    // market (different investor base, different technicals) and get their own real clearing
-    // (07d-leveraged-loan-clearing.ts), not a byproduct split of this fill.
+    // Apply: each entity's real new CORP_BOND holdings. The rows name the TRANCHE the auction
+    // priced — there is nothing left to split (register-split.ts).
     // SCALE C1: the entities here ARE the store's working copies, and the fill rows are appended
     // to the store for the single write-back after 07e. SETL6: the cash leg is settled below as
     // payment instructions, not mutated here.
-    // 13b: the rows name TRANCHES. What every participant bought this session, per issuer, is the
-    // denominator of the primary's slices (register-split.ts).
-    const boughtByInstrument = new Float64Array(result.nInstruments);
-    allParticipants.forEach((p, pi) => {
-      const base = pi * result.nInstruments;
-      for (let ii = 0; ii < result.nInstruments; ii++) {
-        const bought = result.holdingsMatrix[base + ii] - (p.currentHoldingsByInstrumentId.get(regionCompanies[ii].id) ?? 0);
-        if (bought > 0) boughtByInstrument[ii] += bought;
-      }
-    });
+    const holdingRow = (instrumentId: string, faceLocal: number): ItemizedHolding =>
+      // Written in PAR space, as the sovereign's fills are (§9.13-SOV row 4): the row carries the
+      // FACE it holds and the cash leg above paid the cleared price for it. What the register is
+      // WORTH is `face × price`, and `P5` measures the gap until the mark lands — §3.13's item 4,
+      // which cannot land one book at a time (§9.13 part 3).
+      ({ instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalLocal: faceLocal, faceLocal, units: faceLocal });
     bookEntities.forEach((entity) => {
       const pi = piById.get(entity.id);
+      const claimed = claimedByEntity.get(entity.id);
       const newCorpHoldings: ItemizedHolding[] = [];
       if (pi !== undefined) {
         const base = pi * result.nInstruments;
-        const prior = currentHoldingByCompanyByEntity.get(entity.id);
-        for (let ii = 0; ii < result.nInstruments; ii++) {
-          const newHoldingLocal = result.holdingsMatrix[base + ii];
-          if (!(newHoldingLocal > 1)) continue;
-          const issuerId = regionCompanies[ii].id;
-          const outcome = result.primaryOutcomeById.get(issuerId);
-          const offering = offeringsByIssuerId.get(issuerId);
-          const primary = outcome && !outcome.withdrawn && offering
-            ? { trancheId: primaryTrancheId(issuerId, offering.purpose, ctx.nextWeek), sliceLocal: primarySliceOf(newHoldingLocal - (prior?.get(issuerId) ?? 0), boughtByInstrument[ii], outcome.marketTakeLocal) }
-            : undefined;
-          splitAcrossTranches(v2, issuerId, 'CORP_BOND', newHoldingLocal, primary).forEach((t) => {
-            // Written in par space; `credit-marking` prices it before anything reads a value.
-            if (t.usd > 1) newCorpHoldings.push({ instrumentId: t.instrumentId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalLocal: t.usd, faceLocal: t.usd, units: t.usd });
-          });
+        for (let bi = 0; bi < result.nInstruments; bi++) {
+          const faceLocal = result.holdingsMatrix[base + bi];
+          if (faceLocal > 1) newCorpHoldings.push(holdingRow(bonds[bi].id, faceLocal));
         }
       }
+      // A stage may only rewrite what it CLEARED (§7.34 / the WS5 bug). Two kinds of claimed row
+      // survive this session untouched, and both would otherwise vanish with no cash leg:
+      //   · paper this book did not price — a claim on a tranche that has retired, standing at
+      //     whatever the borrower's cash could not reach this week and claimed again next week;
+      //   · every row of an entity that ended up with no seat in the auction at all (an index
+      //     fund with nothing investable), which sold nothing and must therefore keep everything.
+      if (claimed) claimed.forEach((faceLocal, instrumentId) => {
+        if (!(faceLocal > 1)) return;
+        if (pi !== undefined && bondFaceById.has(instrumentId)) return;
+        newCorpHoldings.push(holdingRow(instrumentId, faceLocal));
+      });
       store.append(entity.id, newCorpHoldings);
     });
 
     // Apply: each desk's inventory, onto the bank that carried it. The regional array is now
     // the DERIVED sum of the named desks — nothing decides off it (G3a).
-    const deskViewByCompany = applyDealerDeskFills({ piById, ctx, banks: regionBanks, book: BOOK, instruments, result });
+    const deskViewByInstrument = applyDealerDeskFills({
+      piById, ctx, banks: regionBanks, book: BOOK, instruments, result,
+      // Only ids this session priced reach here (`applyDealerDeskFills` tests `clearedIds` before
+      // every call); par is the answer for anything else, which is what a book nobody printed is
+      // carried at everywhere else in this model.
+      unitPriceOf: (id) => clearedPriceById.get(id) ?? 1,
+    });
     // §7.259: AFTER the fills application, so the lead's residual survives to next week's
     // clearing as a real prior position.
-    settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx, (o) => o.sizeLocal,
-      (o, clearedStat) => underwritingFeeBps({
+    settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx,
+      (o, clearedPrice) => o.sizeLocal * clearedPrice,
+      (o, clearedPrice) => underwritingFeeBps({
         bookSpreadBps: DEALER_SPREAD_BPS,
         oneWeekPriceRiskBps: oneWeekPriceRiskBps({
-          statKind: 'YIELD_LIKE', currentStat: clearedStat,
-          weeklyMovePct: Math.abs(clearedStat - (priorOasById.get(o.issuerId) ?? clearedStat)) / Math.max(1, Math.abs(clearedStat)),
-          minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
-          durationYears: durationById.get(o.issuerId) ?? 0,
+          statKind: 'PRICE_LIKE', currentStat: clearedPrice,
+          // The concession THIS deal conceded: what the book paid against the par it was struck
+          // at. A deal that prices through par cost the underwriter nothing to guarantee.
+          weeklyMovePct: Math.abs(clearedPrice - 1),
         }),
         dealSizeLocal: o.sizeLocal,
         deskCapacityLocal: bookCapacityLocal,
       }),
-      BOOK);
-    const newDealerInventory: { companyId: string; inventoryLocal: number }[] = [];
-    deskViewByCompany.forEach((inventoryLocal, companyId) => {
-      if (Math.abs(inventoryLocal) > 1) newDealerInventory.push({ companyId, inventoryLocal });
+      BOOK,
+      {
+        instrumentIdOf: (o) => primaryTrancheId(o.issuerId, o.purpose, week),
+        unitPriceOfStat: (clearedPrice) => clearedPrice,
+        // The paper the market priced is the paper that gets issued: stage 08 takes these terms
+        // rather than re-striking a coupon off a curve this book has already moved past.
+        termsOf: (o) => primaryTermsById.get(primaryTrancheId(o.issuerId, o.purpose, week)),
+      });
+    const newDealerInventory: { instrumentId: string; inventoryLocal: number }[] = [];
+    deskViewByInstrument.forEach((inventoryLocal, instrumentId) => {
+      if (Math.abs(inventoryLocal) > 1) newDealerInventory.push({ instrumentId, inventoryLocal });
     });
     reg.bankingSector = { ...reg.bankingSector, corpBondDealerInventory: newDealerInventory };
 
@@ -567,12 +727,13 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
       { netCashLocal: result.dealerNetCashLocal, feeLocal: result.totalDealerRevenueLocal },
       feeDesksForRegion(ctx, regionId),
-      // WS8: the CCP pays each issuer for the paper its deal actually placed.
+      // WS8: the CCP pays each issuer for the paper its deal actually placed, AT THE PRICE it
+      // placed at — a deal that conceded raises less, which is what a concession is.
       // The paper's leg is the tranche's own wire (issuer → house at issue, W3) — no asset here.
-      primaryTakes(result, (issuerId) => {
-        const issuer = companyById.get(issuerId);
+      primaryTakes(result, (instrumentId) => {
+        const issuer = companyById.get(issuerIdOfInstrument.get(instrumentId) ?? '');
         return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
-      })
+      }, (takeLocal, clearedPrice) => takeLocal * clearedPrice)
     );
   });
 }

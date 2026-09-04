@@ -156,9 +156,6 @@ export function regionOf(world: World, id: string): Region | undefined {
 export function companyPriceHistory(world: World, id: string): number[] {
   return ringFill(world.v2.priceRing, rowOf(world.v2, id), []);
 }
-export function companyOasHistory(world: World, id: string): number[] {
-  return ringFill(world.v2.oasRing, rowOf(world.v2, id), []);
-}
 export function companyRatingHistory(world: World, id: string): number[] {
   return ringFill(world.v2.ratingRing, rowOf(world.v2, id), []);
 }

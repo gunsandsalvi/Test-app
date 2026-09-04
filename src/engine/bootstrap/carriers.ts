@@ -354,7 +354,6 @@ function buildCarrierCompany(
     occupationMixDrift: {},
     creditRating: rating,
     isDefaulted: false,
-    oasSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
     cdsSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
     seniorBondYield: 0,
     dividendYield: 0, baselineDividendYield: 0,

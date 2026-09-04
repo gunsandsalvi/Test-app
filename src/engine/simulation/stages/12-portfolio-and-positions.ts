@@ -19,6 +19,8 @@ import { priceCorporateBond, priceLeveragedLoan, priceInterestRateSwap, priceCre
 import { getUnifiedInitialMarginRate } from '../../dealers';
 import { calculateCompositeIndices } from '../../macro/indices';
 import { WeeklyStepContext } from './context';
+import { rowSpreadBps } from '../../credit-price';
+import { zeroRateAt } from '../../../domain/pricing';
 import { realizedAnnualVol } from '../../../domain/volatility';
 import { regionIndexOf } from '../../macro/indices';
 
@@ -34,7 +36,8 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
     updatedRegions,
     updatedCommodities,
     state.compositeIndices,
-    v2
+    v2,
+    nextWeek
   );
 
 
@@ -132,7 +135,11 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           // S6: the position marks off the CLEARED stat, full stop. The deleted block here
           // re-adjusted the already-cleared OAS by an ownership-derived premium — a second
           // price-setter duplicating (and disagreeing with) the real auction in 07b.
-          const adjustedOasSpreadBps = comp.oasSpreadBps;
+          // §3.13: and the stat is THIS TRANCHE's, off the price its own book printed. Paper the
+          // book has not printed carries no view, and its own coupon is the fair rate.
+          const adjustedOasSpreadBps = rowSpreadBps(v2, updatedRegions[pos.region].zeroRates, trRow, nextWeek)
+            ?? ((Number.isNaN(TS.couponRate[trRow]) ? 0.05 : TS.couponRate[trRow])
+              - zeroRateAt(updatedRegions[pos.region].zeroRates, remainingTenorYears)) * 10000;
 
           if (!(TS.flags[trRow] & TR_FLOATING)) {
             const bondPriced = priceCorporateBond(
@@ -152,7 +159,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             const carryEst = calculateExpectedCarry('CORP_BOND', pos.direction, posValueLocal, {
               policyRate: updatedRegions[pos.region].policyRate,
               couponRate: Number.isNaN(TS.couponRate[trRow]) ? 0.05 : TS.couponRate[trRow],
-              cdsSpreadBps: comp.oasSpreadBps
+              cdsSpreadBps: comp.cdsSpreadBps
             });
             weeklyFinancing = carryEst.components.financingCostLocal;
             ctx.attributionCarry += carryEst.weeklyCarryLocal;
@@ -294,7 +301,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           const cdsPricing = priceCreditDefaultSwap(
             pos.notional,
             pos.entryPrice,
-            comp.oasSpreadBps,
+            comp.cdsSpreadBps,
             remainingTenorYears,
             pos.direction as 'BUY_PROTECTION' | 'SELL_PROTECTION',
             sovParams,

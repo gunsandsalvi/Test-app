@@ -41,6 +41,8 @@ import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/prof
 import { measureBeta, regionIndexOf } from '../engine/macro/indices';
 import { pay, payByIds, internReason, PartyRef, settlementWeek, CORPORATE_TAX_REASON } from '../engine/simulation/stages/settlement';
 import { defect } from '../domain/defect';
+import { setClearedPrice } from './prices';
+import { rowSpreadBps, issuerSpreadAtOnCurve } from '../engine/credit-price';
 import { partyId } from '../engine/ledger/party';
 import { planCapitalProgramme, capacityRetirement } from '../domain/company-week/capital-programme';
 import { learningUpdate, seedCumulativeUnits } from '../domain/company-week/learning';
@@ -55,7 +57,7 @@ import { ladderRowsOf, materializeTranche, trancheScheduleOf, TR_FLOATING, TR_CP
 import { issueTranche, retireTranche, commitLadder } from '../engine/ledger/tranche-ledger';
 import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World } from './world';
 import { totalInputValueLocal } from './lots';
-import { primaryTrancheId } from '../domain/primary-market';
+import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../domain/primary-market';
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/stated';
 import { trancheWeekAccrual } from './front-core';
 
@@ -72,7 +74,6 @@ const round3 = (v: number) => Math.round(v * 1000) / 1000;
 const round4 = (v: number) => Math.round(v * 10000) / 10000;
 
 
-export const STANDARD_CORP_TENOR_YEARS = 5;
 
 /** IND4 — a firm's payout discipline is its INDUSTRY's, from the registry. */
 function fixedShareOf(comp: Company): number {
@@ -111,7 +112,7 @@ export interface BackKernelDeps {
   systemicStressFactorGlobal: number;
   retainCashLedger: boolean;
   mmfSweepBooks: ReturnType<typeof openCorporateSweepBooks>;
-  primarySettlementByIssuerId: Map<string, { offering: PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>;
+  primarySettlementByIssuerId: Map<string, { offering: PrimaryOffering; clearedStat: number; struckTerms?: { couponRate: number; maturityWeek: number }; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>;
   pendingOfferingIssuerIds: Set<string>;
   leadBankFor: (comp: Company, sizeLocal: number) => string;
   enqueueOffering: (o: PrimaryOffering) => void;
@@ -168,9 +169,14 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   nextWeek: number;
   priorOccupationMixDrift: Company['occupationMixDrift'];
   homeBankTicker: string | undefined;
+  /** §3.13: what a bridge on this borrower costs, in bps over the curve. It arrives as an
+   *  argument because it is a read of the borrower's OWN printed paper and this core is
+   *  lane-only by design (§7.317: no world reads, so it stays worker-safe). */
+  bridgeMarginBps: number;
 }): CapitalBlockOut {
   const { newEbitda, newRevenue, weeklyInterest, effectiveDebtRate, newExecutionQuality,
-    capexCommissionedThisWeekLocal, nextWeek, priorOccupationMixDrift, homeBankTicker } = args;
+    capexCommissionedThisWeekLocal, nextWeek, priorOccupationMixDrift, homeBankTicker,
+    bridgeMarginBps } = args;
   // §7.317 step 1.3 — THE CAPITAL CORE READS LANES, NOT THE OBJECT. Every `x ?? d` the object
   // read had becomes `Number.isNaN(lane) ? d : lane` on the same value; the scrap/learning
   // read-after-write chains thread locals carrying exactly the values the object carried.
@@ -294,7 +300,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
       id: `${L.ticker[row]}-MAINT-${nextWeek}`,
       principalLocal: weeklyDebtFundedPortion,
       rateType: 'FLOATING',
-      floatingMarginBps: Math.round(L.oasSpreadBps[row] * 1.1), // priced wide — bridge, not term
+      floatingMarginBps: Math.round(bridgeMarginBps * 1.1), // priced wide — bridge, not term
       originationWeek: nextWeek,
       maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
       seniority: 'SENIOR',
@@ -761,7 +767,7 @@ export function rebuildBackCoreA(shipped: ShippedBackCoreA, row: number, d: Back
 export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDeps) {
   // §7.325 W2 — A's dep surface, kept to what its body actually touches: `state` and
   // `entityById` feed only the profile branch (main-side), so a worker's deps may stub them.
-  const { state, ctx, F, nextWeek, currentWeekMod13, updatedRegions, entityById, retainCashLedger } = d;
+  const { state, ctx, v2, F, nextWeek, currentWeekMod13, updatedRegions, entityById, retainCashLedger } = d;
     const __k0 = S08K_PROF ? performance.now() : 0;
     const L8 = d.backLanes;
     /**
@@ -939,6 +945,11 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       effectiveDebtRate, newExecutionQuality, capexCommissionedThisWeekLocal, nextWeek,
       priorOccupationMixDrift: L8.occupationMixDrift[row],
       homeBankTicker: L8.homeBankTicker[row],
+      // §3.13: what this borrower's own bonds say a five-year claim on it costs. A borrower with
+      // none printed pays what its committed line charges — which is what a bridge IS.
+      bridgeMarginBps: issuerSpreadAtOnCurve(
+        v2, updatedRegions[L8.region[row]].zeroRates, L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS
+      )?.spreadBps ?? L8.facilityMarginBps[row],
     });
     if (comp) applyCapCompWrites(comp, cap, L8, row);
     const newMaintenanceCapex = cap.maintenanceCapexLocal;
@@ -1350,14 +1361,21 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
      */
     const retirementEconomics = (r: number) => {
       const remainingYears = Math.max(0.5, (TS.maturityWeek[r] - state.currentWeek) / 52);
-      const riskFree = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams);
+      const riskFree = zeroRateAt(reg.zeroRates, remainingYears);
       const isFixed = !(TS.flags[r] & TR_FLOATING);
       const annualRate = isFixed
         ? (Number.isNaN(TS.couponRate[r]) ? 0 : TS.couponRate[r])
         : reg.policyRate + (Number.isNaN(TS.floatingMarginBps[r]) ? 0 : TS.floatingMarginBps[r]) / 10000;
+      // §3.13 — WHAT WOULD THIS PAPER COST TODAY, asked of THIS PAPER. A treasurer decides a call
+      // by comparing the coupon it is paying to what the same claim trades at, and "the same
+      // claim" is this bond, not this borrower: a 2029 and a 2031 of one name are worth different
+      // things and only one of them is the one being called. It used to read one issuer spread
+      // for every rung, so every rung of a stack looked equally rich or equally cheap.
+      // A rung the market has not printed carries no view, and its own rate is the fair one —
+      // which makes the saving zero and leaves the call to the premium alone.
       const fairRateToday = isFixed
-        ? riskFree + L8.oasSpreadBps[row] / 10000
-        : reg.policyRate + L8.oasSpreadBps[row] / 10000;
+        ? riskFree + (paperSpreadBps(r) ?? (annualRate - riskFree) * 10000) / 10000
+        : reg.policyRate + (loanQuoteBps() ?? (Number.isNaN(TS.floatingMarginBps[r]) ? 0 : TS.floatingMarginBps[r])) / 10000;
       const premiumPerDollar = callPremiumRowLocal(r, 1);
       const savingPvPerDollar = (annualRate - fairRateToday) * annuityFactor(fairRateToday, remainingYears);
       return {
@@ -1371,6 +1389,16 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         valuePerCost: annualRate / (1 + premiumPerDollar),
       };
     };
+
+    /**
+     * §3.13 — THE SPREAD OF A PIECE OF PAPER, and of a piece of paper only. It is the one its own
+     * cleared price implies over the curve at its own remaining life; `undefined` means no market
+     * has printed it, which is a fact and not a zero.
+     */
+    const paperSpreadBps = (r: number): number | undefined => rowSpreadBps(v2, reg.zeroRates, r, nextWeek);
+    /** The borrower's floating quote, which 07d still clears per issuer (§3.13's next credit row
+     *  moves it onto the paper, as this one now is). */
+    const loanQuoteBps = (): number | undefined => comp?.leveragedLoan?.discountMarginBps;
 
     /** Premiums owed to holders this week, by the book that owns the paper. */
     let bondCallPremiumLocal = 0;
@@ -1392,7 +1420,10 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     rowList.forEach(rTr => {
       if ((TS.flags[rTr] & (TR_FLOATING | TR_CP))) return;
       const remainingYears = Math.max(0.5, (TS.maturityWeek[rTr] - state.currentWeek) / 52);
-      const currentFairRate = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams) + L8.oasSpreadBps[row] / 10000;
+      const riskFreeHere = zeroRateAt(reg.zeroRates, remainingYears);
+      // §3.13: this rung's own cleared spread, not one number for the whole stack.
+      const currentFairRate = riskFreeHere
+        + (paperSpreadBps(rTr) ?? ((Number.isNaN(TS.couponRate[rTr]) ? 0 : TS.couponRate[rTr]) - riskFreeHere) * 10000) / 10000;
       // A floating tranche carries a margin rather than a coupon; there is nothing to refinance
       // INTO a lower fixed rate, so its saving is zero rather than NaN.
       const excessCashAvailable = cash.usd > L8.annualRevenueLocal[row] * 0.15;
@@ -1405,7 +1436,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // bond the premium IS the present value of the saving, so a purely rate-driven call never
       // clears this test and an IG issuer calls for a real reason instead.
       // §5-STRUCT step 2 — the call test lives on the ladder (domain/company-week/debt-ladder.ts).
-      const premiumPerDollar = callPricePerDollar(viewOf(rTr), state.currentWeek, currentFairRate - L8.oasSpreadBps[row] / 10000) - 1;
+      const premiumPerDollar = callPricePerDollar(viewOf(rTr), state.currentWeek, riskFreeHere) - 1;
       const economics = callEconomics({
         couponRate: Number.isNaN(TS.couponRate[rTr]) ? undefined : TS.couponRate[rTr],
         currentFairRate,
@@ -1541,10 +1572,15 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
             id: primaryTrancheId(L8.companyId[row], o.purpose, nextWeek),
             principalLocal: placedLocal,
             rateType: 'FIXED',
-            // The CLEARED terms — the whole point of the primary market.
-            couponRate: fiveYearSovRate + settlement.clearedStat / 10000,
+            // §3.13 — THE PAPER THE MARKET PRICED IS THE PAPER THAT GETS ISSUED. 07b struck this
+            // deal's coupon before it opened the book and cleared its PRICE, so the concession is
+            // in the price and the coupon is the one the buyers bid against. Re-deriving it here
+            // from `fiveYearSovRate + the cleared stat` was the old spread-clearing world's
+            // arithmetic, and against a price it is not even the right kind of number.
+            couponRate: settlement.struckTerms?.couponRate
+              ?? defect(`${L8.ticker[row]}: a priced fixed-rate offering carries no struck coupon — 07b must hand back the terms it cleared`),
             originationWeek: nextWeek,
-            maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
+            maturityWeek: settlement.struckTerms?.maturityWeek ?? nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
             seniority: 'SENIOR',
             callProtection: callProtectionForIssue({ rateType: 'FIXED', isInvestmentGrade: isInvestmentGrade(newRating) }),
           }
@@ -1574,6 +1610,9 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       if (placedLocal > 1000) {
         const newRow = issueTranche(v2, issuer, newTranche, `primary ${o.purpose.toLowerCase()} placed`);
         rowList.push(newRow);
+        // §3.13: the deal's own cleared price is this paper's opening print — the market said it
+        // this week and every reader takes it from the store rather than re-deriving one.
+        if (o.rateType === 'FIXED') setClearedPrice(v2, newTranche.id, settlement.clearedStat);
         // 13b: the new tranche's pre-action face is the deal — a same-week prepayment or call of it
         // scales its holders' rows by post/placed like any other tranche's.
         preFaceByRow.set(newRow, placedLocal);
@@ -1675,8 +1714,13 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // Priced off this company's OWN cleared cost of debt this week, so tight spreads genuinely
     // invite the supply that widens them and wide spreads choke it off — the credit cycle, which
     // this simulation had no way to produce before.
-    const costOfNewDebtAnnual =
-      calculateNelsonSiegelZeroRate(STANDARD_CORP_TENOR_YEARS, reg.yieldCurveParams) + L8.oasSpreadBps[row] / 10000;
+    // §3.13 — WHAT NEW MONEY COSTS THIS BORROWER, read off its OWN paper at the tenor it would
+    // fund at rather than off a single number attached to the firm. A borrower whose bonds have
+    // never printed pays what its committed bank line charges, which is the only price anyone has
+    // actually quoted it.
+    const fiveYearSpreadBps = issuerSpreadAtOnCurve(v2, reg.zeroRates, L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
+      ?? L8.facilityMarginBps[row];
+    const costOfNewDebtAnnual = fiveYearSovRate + fiveYearSpreadBps / 10000;
     // S5 leak #3 fixed for real: surplus-cash prepayment retires ACTUAL tranches (nearest
     // maturity first — the paper a treasurer would take out), so cash and the ladder move
     // together and the settled reduction reaches holders via settleCorporateActionOnHolders.
@@ -1770,8 +1814,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // then gaps past it is pulled, which is what a real busted bookbuild is.
       const dealSizeLocal = financing.netDebtChangeLocal * 13;
       const walkAwayOasBps = Math.max(
-        L8.oasSpreadBps[row],
-        Math.round((financing.walkAwayCostAnnual - calculateNelsonSiegelZeroRate(STANDARD_CORP_TENOR_YEARS, reg.yieldCurveParams)) * 10000)
+        fiveYearSpreadBps,
+        Math.round((financing.walkAwayCostAnnual - fiveYearSovRate) * 10000)
       );
       enqueueOffering({
         id: `PO-${L8.companyId[row]}-${nextWeek}-OPP`,
@@ -1837,8 +1881,6 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       post('opportunistic deleveraging: principal repaid', -actuallyRepaidLocal, undefined, false);
     }
 
-    // Real, already-cleared this week (see the comment above) — not recomputed here.
-    const newOasBps = L8.oasSpreadBps[row];
     // CRD/DER2 — THE CDS SPREAD IS CLEARED NOW (07h), not decorated here.
     //
     // What stood here was `oasSpreadBps + a random draw in [-4, +4]`, bounded to [10, 5000]: a
@@ -1847,7 +1889,9 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // credit concentration at all — the only way to reduce one was to stop lending. The
     // protection book prices it against real hedging demand and real sellers, and the difference
     // between it and the cash OAS is the BASIS, which is an outcome worth having.
-    const newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row] : newOasBps;
+    // §3.13: a name whose protection has never cleared opens at what its own five-year cash
+    // paper costs — the one place a CDS and a bond are the same risk, and the basis's zero.
+    const newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row] : fiveYearSpreadBps;
 
     // Real, already-cleared this week by 07d-leveraged-loan-clearing.ts — not recomputed here.
 
@@ -1855,7 +1899,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // Reporting is something a LISTED company does. Gating on the modulo alone kept a company
     // that had been taken private reporting quarterly to a market it had left.
   if (S08K_PROF) s08k.debt += performance.now() - __k2;
-  return { bondCallPremiumLocal, buybacksThisWeek, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumLocal, newCdsSpreadBps, newLastOpportunisticOfferingWeek, newOasBps, newRating, preActionFixedLocal, preActionFloatingLocal, preFaceByRow, rowList, settlement, newRevenue, newEbitda, newEbit, newTotalDebt };
+  return { bondCallPremiumLocal, buybacksThisWeek, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumLocal, newCdsSpreadBps, newLastOpportunisticOfferingWeek, newRating, preActionFixedLocal, preActionFloatingLocal, preFaceByRow, rowList, settlement, newRevenue, newEbitda, newEbit, newTotalDebt };
 }
 
 export type BackCoreOut = ReturnType<typeof runBackCoreA> & ReturnType<typeof runBackCoreB>;
@@ -1886,7 +1930,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
     }
     const core = pre ?? runBackCore(comp, row, d);
-    const { annualInterest, bondCallPremiumLocal, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, capexCommissionedThisWeekLocal, cashLedger, costDriversLocal, debtIssuanceThisWeek, debtRepaymentThisWeek, isDefaulted, loanCallPremiumLocal, measuredInputConsumptionWeeklyLocal, newAccumulatedDepreciationLocal, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPELocal, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOasBps, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseLocal, newRevenue, newRndExpense, newTotalDebt, preActionFixedLocal, preActionFloatingLocal, preFaceByRow, rowList, sec, stillUnderConstruction, targetProductionLocal, updatedProductLines, weeklyDepreciation, weeklyPayrollLocal, post, cash } = core;
+    const { annualInterest, bondCallPremiumLocal, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, capexCommissionedThisWeekLocal, cashLedger, costDriversLocal, debtIssuanceThisWeek, debtRepaymentThisWeek, isDefaulted, loanCallPremiumLocal, measuredInputConsumptionWeeklyLocal, newAccumulatedDepreciationLocal, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPELocal, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseLocal, newRevenue, newRndExpense, newTotalDebt, preActionFixedLocal, preActionFloatingLocal, preFaceByRow, rowList, sec, stillUnderConstruction, targetProductionLocal, updatedProductLines, weeklyDepreciation, weeklyPayrollLocal, post, cash } = core;
     const L8 = d.backLanes;
     const reg = updatedRegions[L8.region[row]];
     const weekUpdate = companyUpdates[L8.ticker[row]];
@@ -2049,7 +2093,12 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       }
     }
     const newMarketCap = Math.round((newStockPrice * updatedSharesOutstanding));
-    const newSeniorBondYield = reg.zeroRates.tenor5Y + newOasBps / 10000;
+    // §3.13 — WHAT THIS FILING RECORDS is the borrower's cost of five-year money at the date it
+    // files, read off its OWN bonds. It is a statement of what the market charged this issuer, not
+    // a field the issuer carries: a name with nothing printed reports what its bank line costs.
+    const filedFiveYearSpreadBps = issuerSpreadAtOnCurve(v2, reg.zeroRates, L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
+      ?? L8.facilityMarginBps[row];
+    const newSeniorBondYield = reg.zeroRates.tenor5Y + filedFiveYearSpreadBps / 10000;
 
     const quarterIdx = Math.floor((nextWeek - 1) / 13) + 4;
     const prevSnapshot = comp.historicalFundamentals ? comp.historicalFundamentals[comp.historicalFundamentals.length - 1] : undefined;
@@ -2107,7 +2156,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         Object.values(newOutputInventoryBySubUnit).reduce((s, inv) => s + inv.valueLocal, 0),
         newMaintenanceCapex,
         newGrowthCapex,
-        newOasBps,
+        filedFiveYearSpreadBps,
         newDividendYield,
         newMarketCap,
         prevSnapshot,
@@ -2365,8 +2414,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     v2.priceRing = ringPush(v2.priceRing, rowOf(v2, L8.companyId[row]), newStockPrice);
 
-
-    comp.oasSpreadBps = newOasBps;
 
     comp.cdsSpreadBps = newCdsSpreadBps;
 
