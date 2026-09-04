@@ -39,7 +39,11 @@ function householdWeekOf(
   flows.forEach((amountLocal, reason) => {
     if (amountLocal > 0) {
       receiptsLocal += amountLocal;
-      if (reason === 'dividend to the public float') dividendsLocal += amountLocal;
+      // §9.13-EQUITY: the household sector is a HOLDER OF RECORD now and is paid on the same
+      // walk as every other holder, so the string this matches is the one that walk uses. It used
+      // to read "dividend to the public float" — the residual's own name, and the residual is
+      // gone with the second representation it belonged to.
+      if (reason === 'dividend to holder of record') dividendsLocal += amountLocal;
       return;
     }
     if (reason.includes('tax')) taxPaidLocal += -amountLocal;

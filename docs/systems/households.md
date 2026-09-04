@@ -106,7 +106,8 @@ checked by `scripts/check-atlas.sh`.
 | C4 it buys at a price it pays — tax and margin included | `src/domain/distribution.ts:shelfPriceLocal` | ✅ |
 | C5 VERIFY consumption is Σ bought, reaching named sellers | `src/engine/simulation/stages/05-unit-bidding.ts:R_HH_GOODS` | ✅ |
 | D1 assets: deposits, securities, fund shares, pensions, housing | `src/engine/simulation/stages/household-balance-sheet.ts:runHouseholdBalanceSheetStage` | ✅ |
-| D1.a each a real claim on a named issuer, in a register | `src/engine/macro/household-portfolio.ts:householdDirectEquityLocal` | ⚠️ |
+| D1 · the four components, each a read of what exists | `src/engine/macro/household-portfolio.ts:householdPrivateBusinessEquityLocal` | ✅ |
+| D1.a each a real claim on a named issuer, in a register | `src/engine/ledger/holdings-ledger.ts:householdBookId` | ✅ |
 | D2 liabilities, and they are somebody's asset | `src/engine/simulation/stages/bank-lending.ts:HouseholdLoanPool` | ✅ |
 | **D3 net worth is D1 − D2, a read and never stored** | `src/engine/simulation/stages/household-balance-sheet.ts:netWorthLocal` | ⚠️ |
 | D4 it revalues, and the revaluation is not income | `src/engine/simulation/stages/household-balance-sheet.ts:priorNetWorthLocal` | ✅ |
@@ -127,6 +128,24 @@ checked by `scripts/check-atlas.sh`.
 ---
 
 ## 3. THE DIFF
+
+### ✅ D1.a — CLOSED: THE SECTOR'S EQUITY IS A REGISTER BOOK, NOT A SUBTRACTION
+
+The node asks that each household asset be a real claim on a named issuer, HELD IN A REGISTER.
+Deposits, fund shares and pensions were; the largest one was not. Listed equity was
+`householdDirectEquityLocal`: market cap minus what the institutions and the desks hold, name by
+name, recomputed every time anybody asked. That is not a claim, it is an arithmetic identity — the
+sector could not be pointed at, could not be a counterparty, was skipped by every walk that scales
+or pays a holder of record, and was paid its dividends under a second name ("the public float")
+precisely because there was nobody to pay.
+
+**§9.13-EQUITY gave the sector a register book per region** (`holdings-ledger.ts:householdBookId`),
+opened by wire at the seed with exactly the shares no named book held and moved only by trade
+since. `holderIdOf` resolves the HOUSEHOLD party, so the ledger writes its rows like anyone's;
+`registerBooks` is the one statement of who the register's holders are, so the corporate actions,
+the week's consolidation and the close's mark all reach it; and `householdDirectEquityLocal` is now
+a read of those rows. What remains is not a representation gap: households have no BUY schedule
+(`equity.md` C2.a), so the sector is a holder that can be forced to sell and can never bid.
 
 ### ⚠️ A2.d — THE CROSS-SECTION IS REAL, THE THRESHOLDS ARE NOT ON IT
 

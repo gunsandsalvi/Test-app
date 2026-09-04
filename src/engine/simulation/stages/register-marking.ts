@@ -40,7 +40,7 @@
  */
 import { GameState } from '../../../types';
 import { WeeklyStepContext } from './context';
-import { markBookToMarket } from '../../ledger/holdings-ledger';
+import { markBookToMarket, registerBooks } from '../../ledger/holdings-ledger';
 import { trancheClearedPricePerFace } from '../../credit-price';
 import { isTrancheKind, holdingClassOf } from '../../../domain/assets';
 import { isActiveCompany } from '../../../domain/company';
@@ -90,8 +90,10 @@ export function markRegisterToMarket(state: GameState, ctx: WeeklyStepContext): 
     return p;
   };
   let markedLocal = 0, rows = 0;
-  ctx.updatedInstitutionalEntities.forEach((e) => {
-    const r = markBookToMarket(ctx.v2, e.id, priceOfRow);
+  // §9.13-EQUITY: every book the register holds — the household sector's shares are marked like
+  // any other holder's, which is what makes household net worth a read of real rows.
+  registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id)).forEach((b) => {
+    const r = markBookToMarket(ctx.v2, b.id, priceOfRow);
     rows += r.rows; markedLocal += r.deltaLocal;
   });
   if (process.env.REGISTER_MARK_TRACE === '1') {

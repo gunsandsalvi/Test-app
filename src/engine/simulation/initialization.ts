@@ -61,7 +61,7 @@ import { facilityBookOf } from '../../engine2/tranches';
  */
 const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42 };
 
-import { isActiveCompany, managedEntityIdsOf } from '../../domain/company';
+import { isActiveCompany, isPubliclyListed, managedEntityIdsOf } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
 import { closeSeedMoney, seedOpeningAccruals, seedOpeningCreditPrices } from '../bootstrap/close-seed';
 import { centralBankAssetsLocal, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../domain/central-bank';
@@ -94,7 +94,8 @@ import { runFreightClearing } from './stages/freight-clearing';
 import { getFxToUsd, publishFxRatesNow } from './stages/06-fx-and-trade';
 import { convertLocal, localToUsd } from '../../domain/currency';
 import { laneTransitWeeks } from '../../domain/carrier';
-import { laneDistanceNm, currencyOf } from '../../domain/geography';
+import { laneDistanceNm, currencyOf, REGION_IDS } from '../../domain/geography';
+import { bookHeadOf } from '../../engine2/holdings';
 import { InTransitShipment } from './stages/goods-arrival';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { burnInMode, burnIn } from './burn-in';
@@ -404,6 +405,38 @@ function openSeededMirrors(state: GameState): void {
     for (const e of state.institutionalEntities ?? []) {
       if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
     }
+    // §9.13-EQUITY — AND THE HOUSEHOLD SECTOR'S BOOK, opened by wire like every other holder's.
+    // Every share of every listed company is either on a named book or held directly by
+    // households; the institutions' books have just been opened, so what is left of each issue is
+    // the household sector's OPENING POSITION. From here it moves only by trade, like anyone
+    // else's — it is never recomputed as a residual again, which is the whole point (rule 2).
+    // The desks hold nothing at the seed: a dealer inventory is built from a bank's sheet in the
+    // weekly sessions, so there is no third claimant to net out here.
+    REGION_IDS.forEach((regionId) => {
+      const heldShares = new Map<string, number>();
+      const H = v2.holdings;
+      const equityRef = v2.internedIdByString.get('EQUITY');
+      if (equityRef !== undefined) {
+        for (const e of state.institutionalEntities ?? []) {
+          for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
+            if (H.typeRef[r] !== equityRef) continue;
+            const id = v2.internedStrings[H.instrRef[r]];
+            heldShares.set(id, (heldShares.get(id) ?? 0) + (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]));
+          }
+        }
+      }
+      const book: ItemizedHolding[] = [];
+      state.companies.forEach((c) => {
+        if (c.region !== regionId || !isActiveCompany(c) || !isPubliclyListed(c)) return;
+        const shares = c.sharesOutstanding - (heldShares.get(c.id) ?? 0);
+        if (!(shares > 0) || !(c.stockPrice > 0)) return;
+        book.push({
+          instrumentId: c.id, instrumentType: 'EQUITY', issuerRegion: regionId,
+          quantityShares: shares, quantityOrNotionalLocal: shares * c.stockPrice, units: shares,
+        });
+      });
+      seedBook(v2, { kind: 'HOUSEHOLD', region: regionId }, book, issuerOfHolding);
+    });
     // The seed's wires are a real journal and the world carries it, so week 0 can be asked what
     // it wired exactly as any week is. There are no payments at the seed, so the pending money it
     // is netted against is zero.

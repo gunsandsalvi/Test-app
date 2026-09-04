@@ -35,12 +35,11 @@ import { bookHeadOf } from '../../../engine2/holdings';
 import { AVERAGE_HOUSEHOLD_SIZE, WealthTier } from '../../../domain/region-macro';
 import { WEALTH_TIERS } from '../../macro/household-cohorts';
 import {
-  householdDirectEquityLocal, householdEtfHoldingsLocal, householdPrivateBusinessEquityLocal,
-} from '../../macro/household-portfolio';
+  householdDirectEquityLocal, householdEtfHoldingsLocal, householdPrivateBusinessEquityLocal } from '../../macro/household-portfolio';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { REGION_IDS } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
-import { regionalDeskView } from '../../../domain/dealer-desk';
+import { } from '../../../domain/dealer-desk';
 
 // Whose beneficiaries are households is the kind registry's `beneficiariesAreHouseholds` row
 // (domain/institution-profiles.ts) — a new kind states it or fails to build.
@@ -71,8 +70,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     return {
       ...entity,
       beneficiaryLiabilityLocal: liabilityLocal,
-      equityCapitalLocal: institutionTotalAssetsLocal(ctx, entity) - liabilityLocal,
-    };
+      equityCapitalLocal: institutionTotalAssetsLocal(ctx, entity) - liabilityLocal };
   });
 
   const fundNavPerShare = (fund: InstitutionalEntity): number => {
@@ -123,14 +121,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // ---- 4. The rest of the real book, marked from this week's clears. ----
     const evMultiple = publicComparableEvMultiple(region, ctx.updatedCompanies);
     const etfHoldingsLocal = householdEtfHoldingsLocal(ctx.v2, { etfShares }, ctx.updatedInstitutionalEntities);
-    const directEquityLocal = householdDirectEquityLocal(ctx.v2,
-      region, ctx.updatedCompanies, ctx.updatedInstitutionalEntities,
-      regionalDeskView(
-        ctx.updatedCompanies.filter((c) => c.region === region && c.isBankEntity)
-          .map((c) => c.bankBalanceSheet?.dealerDeskInventory),
-        'equity'
-      )
-    );
+    const directEquityLocal = householdDirectEquityLocal(ctx.v2, region);
     const privateBusinessEquityLocal = householdPrivateBusinessEquityLocal(region, ctx.updatedCompanies, evMultiple);
 
     // Household financial wealth is the claims that EXIST — fund shares,
@@ -269,8 +260,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
           institutionalClaimsLocal: Math.round(tierClaimsLocal),
           shareOfNetWorthLocal: Math.round((tierAssetsLocal - tierDebtLocal)),
           homeEquityLocal: Math.round((housingStockLocal * incomeShareOf(t, i)
-            - mortgageLocal * incomeShareOf(t, i))),
-        };
+            - mortgageLocal * incomeShareOf(t, i))) };
       });
     }
 
@@ -292,7 +282,6 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // national accounts. Omitting the asset while carrying the debt understated net worth by
       // the entire housing stock.
       netWorthLocal: depositsLocal + mmfSharesLocal + equityHoldingsLocal + housingStockLocal
-        - (mortgageLocal + (hs.creditCardDebtLocal ?? 0) + (hs.otherConsumerLoanDebtLocal ?? 0)),
-    };
+        - (mortgageLocal + (hs.creditCardDebtLocal ?? 0) + (hs.otherConsumerLoanDebtLocal ?? 0)) };
   });
 }

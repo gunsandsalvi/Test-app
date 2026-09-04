@@ -38,7 +38,8 @@ const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { institutionSpendableLocal } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
-import { clearedBookDelta } from '../../ledger/holdings-ledger';
+import { householdBookId, transferHolding } from '../../ledger/holdings-ledger';
+import { bookHeadOf } from '../../../engine2/holdings';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
@@ -284,14 +285,18 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       inst.tradableFloatLocal = (heldByInstitutionsShares.get(inst.id) ?? 0) + (deskHeldShares.get(inst.id) ?? 0);
     });
 
-    // §7.281 — THE HOUSEHOLD DIRECT-EQUITY SELL CHANNEL. The households' listed shares are the
-    // register's residual (what institutions and desks do not hold), and until now they were
-    // never for sale at any price — "a holding that cannot be sold is not a holding" (§7.166's
-    // row). When last week's liquidity ladder announced a sale (deposits and fund shares both
-    // exhausted — `pendingDirectEquitySaleLocal`), the sector enters this session as a SELLER:
-    // its residual shares, prorated across names by value, at reservation zero (a forced seller
+    // §7.281 — THE HOUSEHOLD DIRECT-EQUITY SELL CHANNEL. Until now the households' listed shares
+    // were never for sale at any price — "a holding that cannot be sold is not a holding"
+    // (§7.166's row). When last week's liquidity ladder announces a sale (deposits and fund shares
+    // both exhausted — `pendingDirectEquitySaleLocal`), the sector enters this session as a
+    // SELLER: its shares, prorated across names by value, at reservation zero (a forced seller
     // takes the print; the book's damper still bounds the week's move). Only the slice for sale
     // joins the float — the rest stays as unsellable as it always was.
+    //
+    // §9.13-EQUITY: the shares are READ OFF THE HOUSEHOLD SECTOR'S OWN REGISTER BOOK. They used
+    // to be recomputed here as `liveShares − institutions − desks`, a residual struck a second
+    // time and by a different route than `householdDirectEquityLocal`'s, so the sector could be
+    // sold a quantity its own net-worth line never agreed it had.
     const hhSaleNeedLocal = Math.max(0, reg.householdState?.pendingDirectEquitySaleLocal ?? 0);
     if (process.env.HH_EQ_TRACE === '1' && hhSaleNeedLocal > 0) {
       console.log(`  [hh-eq] ${regionId} forced direct-equity sale announced: ${(hhSaleNeedLocal / 1e6).toFixed(1)}M`);
@@ -302,14 +307,18 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     if (hhSaleNeedLocal > 1) {
       const hhSharesByCompany = new Map<string, number>();
       let hhTotalValueLocal = 0;
-      regionCompanies.forEach((c) => {
-        if (!isPubliclyListed(c)) return;
-        const hhShares = Math.max(0,
-          liveSharesOf(c) - (heldByInstitutionsShares.get(c.id) ?? 0) - (deskHeldShares.get(c.id) ?? 0));
-        if (hhShares <= 0) return;
-        hhSharesByCompany.set(c.id, hhShares);
-        hhTotalValueLocal += hhShares * (refPriceById.get(c.id) ?? 0);
-      });
+      {
+        const H = ctx.v2.holdings;
+        const equityRef = ctx.v2.internedIdByString.get('EQUITY');
+        for (let r = equityRef === undefined ? -1 : bookHeadOf(ctx.v2, householdBookId(regionId)); r >= 0; r = H.next[r]) {
+          if (H.typeRef[r] !== equityRef) continue;
+          const companyId = ctx.v2.internedStrings[H.instrRef[r]];
+          const hhShares = Number.isNaN(H.shares[r]) ? 0 : H.shares[r];
+          if (!(hhShares > 0) || !ciById.has(companyId)) continue;
+          hhSharesByCompany.set(companyId, (hhSharesByCompany.get(companyId) ?? 0) + hhShares);
+          hhTotalValueLocal += hhShares * (refPriceById.get(companyId) ?? 0);
+        }
+      }
       if (hhTotalValueLocal > 1) {
         const sellFraction = Math.min(1, hhSaleNeedLocal / hhTotalValueLocal);
         const demandByInstrumentId = new Map<string, ParticipantDemand>();
@@ -603,8 +612,9 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       const hpi = piById.get(householdParticipantId);
       let cashDeltaLocal = 0;
       // Step 13 (W2): the shares the households sold go to the house by wire, at the print.
-      const hhBefore = new Map<string, { valueLocal: number; shares?: number }>(), hhAfter = new Map<string, { valueLocal: number; shares?: number }>();
-      const hhPrice = new Map<string, number>();
+      // §9.13-EQUITY: `transferHolding`, not `clearedBookDelta`. The household sector holds real
+      // register rows now, and nothing rebuilds its book from a store write-back the way the
+      // institutions' is rebuilt — so the shares it sold have to LEAVE, not merely be wired.
       householdPriorShares.forEach((prevShares, companyId) => {
         const comp = companyById.get(companyId);
         if (!comp) return;
@@ -614,11 +624,12 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const f = soldShares * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
         cashDeltaLocal += soldShares * comp.stockPrice - f;
         bookFeeLocal += f;
-        hhBefore.set(companyId, { shares: soldShares, valueLocal: soldShares * comp.stockPrice });
-        hhAfter.set(companyId, { shares: 0, valueLocal: 0 });
-        hhPrice.set(companyId, comp.stockPrice);
+        transferHolding(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, { kind: 'CLEARING_HOUSE', region: regionId },
+          {
+            instrumentType: 'EQUITY', instrumentId: companyId, issuerRegion: regionId,
+            valueLocal: soldShares * comp.stockPrice, shares: soldShares, units: soldShares,
+          }, 'equity clearing fill');
       });
-      clearedBookDelta({ kind: 'HOUSEHOLD', region: regionId }, regionId, 'EQUITY', hhBefore, hhAfter, (id) => hhPrice.get(id), 'equity clearing fill');
       if (cashDeltaLocal > 0) netCashByEntityId.set(householdParticipantId, cashDeltaLocal);
       reg.householdState.pendingDirectEquitySaleLocal = 0;
     }

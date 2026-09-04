@@ -33,7 +33,7 @@ import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, markBook
 import { V2World } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
-import { clearedBookDelta, BookEntry } from '../../ledger/holdings-ledger';
+import { clearedBookDelta, registerBooks, BookEntry } from '../../ledger/holdings-ledger';
 import { mutableHoldings } from '../../../engine2/holdings';
 import { RegionId } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
@@ -375,7 +375,9 @@ export function consolidateRegister(ctx: WeeklyStepContext): void {
   let seenEpoch = CONSOLIDATE_SEEN.get(v2);
   if (!seenEpoch) { seenEpoch = { epoch: 0, byKey: new Map<number, number>() }; CONSOLIDATE_SEEN.set(v2, seenEpoch); }
   const seenByKey = seenEpoch.byKey;
-  ctx.updatedInstitutionalEntities.forEach((entity) => {
+  // §9.13-EQUITY: every book the register holds, not the institutions alone — the household
+  // sector's rows merge like anyone else's.
+  registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id)).forEach((entity) => {
     // First pass is a scan, not an allocation: the overwhelming majority of books have nothing
     // to merge in a given week and must not pay for a map they do not need.
     let hasDuplicate = false;

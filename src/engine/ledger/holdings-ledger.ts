@@ -21,6 +21,7 @@ import {
 } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
 import { PartyRef } from './party';
+import { REGION_IDS } from '../../domain/geography';
 import { wire, AssetKind, ASSET_KINDS } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { RegionId } from '../../domain/geography';
@@ -52,8 +53,48 @@ export interface HoldingSpec {
   units?: number;
 }
 
-/** The register's own read of a party as a holder: only institutions hold register rows today. */
-const holderIdOf = (p: PartyRef): string | undefined => (p.kind === 'INSTITUTION' ? p.id : undefined);
+/**
+ * THE HOUSEHOLD SECTOR'S BOOK. One per region, and the id is the one 07e already used for the
+ * household clearing participant — one thing, one key (`O8`).
+ */
+export const householdBookId = (region: string): string => `HOUSEHOLD-${region}`;
+
+/**
+ * The register's own read of a party as a holder.
+ *
+ * §9.13-EQUITY — THE HOUSEHOLD SECTOR IS A HOLDER. It used to return an id for institutions
+ * alone, so the largest holder class in the model held its listed equity as `marketCap` minus
+ * what the named books hold: a SUBTRACTION, recomputed from scratch every time anybody asked.
+ * It could not be pointed at, could not be anyone's counterparty, and was the same residual the
+ * dividend walk paid under the second name "the public float" (rule 4). Rule 2: a residual with
+ * no holder is a defect, not a boundary.
+ *
+ * Companies, banks and the central bank still hold their books outside this register
+ * (`the-register.md` A1.a) — that is the tree's own statement of its boundary, and it is not
+ * this step's.
+ */
+const holderIdOf = (p: PartyRef): string | undefined => (
+  p.kind === 'INSTITUTION' ? p.id
+    : p.kind === 'HOUSEHOLD' ? householdBookId(p.region)
+      : undefined);
+
+/**
+ * EVERY BOOK THE REGISTER HOLDS, and the party each one pays and is paid as.
+ *
+ * One place says who the register's holders are, because everything that must reach ALL of them —
+ * a corporate action, the week's consolidation, the close's mark — was written as a walk over
+ * `institutionalEntities` back when that was the whole list. A holder added anywhere else is a
+ * holder those three walks silently skip, which is how the desks came to accrue nothing for
+ * thirteen weeks (§9.13-CREDIT row 2) and how a household buyback would have handed the household
+ * sector free shares. The institutions come first and in the order given, so a caller that still
+ * needs to rebuild its entity array off the same flags can index straight into them.
+ */
+export function registerBooks(entityIds: readonly string[]): { id: string; payee: PartyRef }[] {
+  return [
+    ...entityIds.map((id) => ({ id, payee: { kind: 'INSTITUTION' as const, id } })),
+    ...REGION_IDS.map((region) => ({ id: householdBookId(region), payee: { kind: 'HOUSEHOLD' as const, region } })),
+  ];
+}
 
 /**
  * WHAT MOVED, AND AT WHAT PRICE. The quantity is the thing owned — shares for equity, FACE for
@@ -242,6 +283,9 @@ export function seedBook(
       issuerRegion: h.issuerRegion,
       valueLocal: h.quantityOrNotionalLocal ?? 0,
       shares: h.quantityShares,
+      // §9.13-CREDIT row 5: an opening position states its QUANTITY like any other, so the wire
+      // carries a real price and the row opens with the face it holds.
+      units: h.units,
     }, 'seed: book opened');
   }
 }

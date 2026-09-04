@@ -1,7 +1,8 @@
 /**
- * AU · holders / holdings — both off the register. A company's holders are the institutions
- * with a row against its paper (and the banks with a facility to it); an institution's holdings
- * are its own book; a region's holders are whoever holds its sovereign paper. Every name a link.
+ * AU · holders / holdings — both off the register. A company's holders are every book with a row
+ * against its paper — the institutions, the HOUSEHOLD SECTOR (§9.13-EQUITY) and the banks' desks
+ * — plus the banks with a facility to it; an institution's holdings are its own book; a region's
+ * holders are whoever holds its sovereign paper. Every name a link.
  */
 
 import { useState } from 'react';
@@ -25,6 +26,19 @@ function tenorWord(id: string): string {
   const t = tail.match(/^t(\d+)$/i); if (t) return `${t[1]}y`;
   const b = tail.match(/^b(\d+)$/i); if (b) return `${b[1]}w bill`;
   return tail.replace(/_/g, ' ').toLowerCase();
+}
+
+/**
+ * A HOLDER'S NAME. §9.13-EQUITY put the household sector on the register, and its book id is the
+ * one key everything else uses for it (`HOUSEHOLD-USA`) — which is a key, not a name. This reads
+ * it as the sector it is and links to the region, so the largest shareholder of most companies in
+ * this world appears in the list as something a reader recognises.
+ */
+function HolderName({ world, holderId, nav }: { world: World; holderId: string; nav: import('../ui').Nav }) {
+  const hh = holderId.match(/^HOUSEHOLD-(.+)$/);
+  if (hh) return <Link to={{ type: 'region', id: hh[1] }} nav={nav}>households · {hh[1].toLowerCase()}</Link>;
+  const ref = refOfIdentifier(world, holderId);
+  return ref ? <Link to={ref} nav={nav}>{labelOf(world, ref).ticker}</Link> : <>{holderId}</>;
 }
 
 function typeWord(t: string): string {
@@ -53,13 +67,17 @@ function CompanyHolders({ world, id, nav, tab }: { world: World; id: string; nav
     <Tabs items={kinds} active={active} onPick={(t) => nav.go('holders', { tab: t })} />
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
       <Hint>{list.length} holders · {money(total)} of {money(denom)}{denom > 0 ? ` · ${pctLevel(total / denom, 0)}` : ''}</Hint>
-      <Hint>{active === 'equity' ? 'households and the float hold the rest' : 'the ladder is the whole'}</Hint>
+      {/* §9.13-EQUITY: no prose about who is missing, because nobody is. The household sector is
+          a register book and the desks are read off their banks, so this list IS the holders and
+          the total below is the whole issue. "households and the float hold the rest" named ONE
+          residual twice — the float was households, computed by subtraction. */}
+      <Hint>{active === 'equity' ? 'every holder of record' : 'the ladder is the whole'}</Hint>
     </div>
-    {sorted.length === 0 ? <Card style={{ padding: 14, color: T.muted }}>no register row names this paper — {active === 'equity' ? 'the float is with households' : 'no traded debt or bank line'}.</Card> : (
+    {sorted.length === 0 ? <Card style={{ padding: 14, color: T.muted }}>no register row names this paper — {active === 'equity' ? 'this issue is on nobody\u2019s book, which is a defect (O2)' : 'no traded debt or bank line'}.</Card> : (
       <Table
         rows={sorted} keyOf={(r) => `${r.holderId}:${r.kind}`} sortKey={sort} onSort={setSort}
         columns={[
-          { key: 'holder', label: 'holder', sortable: true, render: (r) => { const ref = refOfIdentifier(world, r.holderId); return ref ? <Link to={ref} nav={nav}>{labelOf(world, ref).ticker}</Link> : r.holderId; } },
+          { key: 'holder', label: 'holder', sortable: true, render: (r) => <HolderName world={world} holderId={r.holderId} nav={nav} /> },
           { key: 'usd', label: 'value', sortable: true, render: (r) => money(r.usd) },
           { key: 'share', label: active === 'equity' ? '% cap' : '% debt', render: (r) => (denom > 0 ? (100 * r.usd / denom).toFixed(1) : '—') },
           { key: 'kind', label: active === 'equity' ? 'shares' : 'type', render: (r) => (active === 'equity' ? (Number.isFinite(r.shares) ? money(r.shares, 1) : '—') : r.kind) },

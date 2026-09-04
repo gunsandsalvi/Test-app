@@ -9,6 +9,7 @@ import { ensureV2 } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
 import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf } from '../../engine2/tranches';
 import { materializeBook } from '../../engine2/holdings';
+import { householdBookId } from '../ledger/holdings-ledger';
 import { holdingClassOf } from '../../domain/assets';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { isTrancheKind } from '../../domain/assets';
@@ -78,6 +79,25 @@ function o2(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const heldShares = new Map<string, number>();
   state.institutionalEntities.forEach((e) => { if (e.isDefaulted) return; e.itemizedHoldings.forEach((h) => { if (h.instrumentType === 'EQUITY' && h.quantityShares) heldShares.set(h.instrumentId, (heldShares.get(h.instrumentId) ?? 0) + h.quantityShares); }); });
+  // §9.13-EQUITY — AND THE HOUSEHOLD SECTOR'S BOOK, which holds most of the register's shares and
+  // has no object array to walk (the rows are its only representation). Counting the institutions
+  // alone made this check a comparison of a fraction of the register against the whole issue, so
+  // "the register's count never exceeds the issue" could not fail however far the register drifted
+  // — and the household half was where the drift used to be absorbed, silently, as a residual.
+  {
+    const v2o2 = ensureV2(state);
+    const H = v2o2.holdings;
+    const equityRef = v2o2.internedIdByString.get('EQUITY');
+    if (equityRef !== undefined) {
+      REGION_IDS.forEach((region) => {
+        for (let r = bookHeadOf(v2o2, householdBookId(region)); r >= 0; r = H.next[r]) {
+          if (H.typeRef[r] !== equityRef || Number.isNaN(H.shares[r])) continue;
+          const id = v2o2.internedStrings[H.instrRef[r]];
+          heldShares.set(id, (heldShares.get(id) ?? 0) + H.shares[r]);
+        }
+      });
+    }
+  }
   let over = 0, overLocal = 0, capGap = 0, capN = 0;
   state.companies.forEach((c) => {
     if (!isActiveCompany(c)) return;

@@ -8,7 +8,7 @@ import { journalPayment, partyId, PendingNetCtx } from './settlement';
 import { currencyOf } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
 import { bookHeadOf } from '../../../engine2/holdings';
-import { transferHolding } from '../../ledger/holdings-ledger';
+import { transferHolding, registerBooks } from '../../ledger/holdings-ledger';
 import { bookPnL } from '../../ledger/bank-book';
 import { revHistLen, revHistAt, rowOf, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
@@ -448,8 +448,9 @@ export function applyPendingCorporateActionSettlements(
     pendingHolderCashLocal?: Map<string, number>;
     /** `kind:oldTrancheId` → the replacement tranche (an accretive call). */
     pendingHolderReplacements?: Map<string, string>;
-    /** The issuers, so an equity payment can find the shares the register does NOT hold — the
-     *  public float, whose dividend goes to the household sector by payment. */
+    /** The issuers, so an equity payment can check its holders against the issue and name the
+     *  payer. (It used to be here to find the shares the register did NOT hold — the "public
+     *  float" — which §9.13-EQUITY removed by giving that holder rows.) */
     updatedCompanies?: Company[];
     issuerTickerById?: Map<string, string>;
   } & PendingNetCtx
@@ -565,8 +566,15 @@ export function applyPendingCorporateActionSettlements(
       deskByInstrumentByType.set(type, deskHoldingsByInstrument(ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
     });
   }
-  const entityHit: boolean[] = new Array(ctx.updatedInstitutionalEntities.length);
-  ctx.updatedInstitutionalEntities.forEach((entity, ei) => {
+  // §9.13-EQUITY — THE WALK IS OVER REGISTER BOOKS, NOT OVER INSTITUTIONS. The household sector
+  // holds real rows now, and a corporate action reaches every holder of record or it reaches none:
+  // a buyback that scaled the institutions and left the households whole would hand the household
+  // sector a larger share of the company for free, and `O2` would report the register above the
+  // issue. The institutions come first and in order, so the entity array is rebuilt off the same
+  // hit flags below.
+  const books = registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id));
+  const entityHit: boolean[] = new Array(books.length);
+  books.forEach((entity, ei) => {
     let anyHit = false;
     if (hasCash) {
       for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
@@ -582,11 +590,12 @@ export function applyPendingCorporateActionSettlements(
     }
     entityHit[ei] = anyHit;
   });
-  // EVERY HOLDER OF RECORD OF A CASH ACTION, AND ONLY THEM. Three kinds hold the paper an
-  // issuer is paying on: the institutional register, the banks' desks, and — for equity — the
-  // public float, the stock no book names, owned by the household sector. The denominator is
-  // all three, so each is paid its own share; before this the desks were left out of both the
-  // split and the payment, and their share was handed to the other holders.
+  // EVERY HOLDER OF RECORD OF A CASH ACTION, AND ONLY THEM. Two kinds hold the paper an issuer
+  // is paying on: the REGISTER — the institutions and, since §9.13-EQUITY, the household sector,
+  // both walked as books — and the banks' DESKS, which hold on their own sheets. The denominator
+  // is both, so each is paid its own share. Before this the desks were left out of the split and
+  // the payment and their share went to the other holders; and the households were paid by
+  // subtraction, under a second name, because they had no rows to be paid on.
   const denomByPair = new Map<number, number>();
   const deskIncomeByTicker = new Map<string, number>();
   if (hasCash && ctx.updatedCompanies) {
@@ -614,12 +623,24 @@ export function applyPendingCorporateActionSettlements(
         // every one of them is struck at the same price, which stopped being true the week the
         // credit books started printing one. The ratios are the same arithmetic in shares as in
         // dollars; what changes is that they cannot come apart.
+        // §9.13-EQUITY — THE DENOMINATOR IS THE HOLDERS, and the household sector is one of them.
+        // `registerLocal` includes its book now, so the issue and the sum of the holders agree by
+        // construction and the `max` is a GUARD rather than a source: a company whose holders do
+        // not add up to its issue has a defect in the register, and paying the difference to
+        // somebody would hide it. `O2` owns that comparison.
         const issuedLocal = t === equityRef && issuer ? Math.max(0, issuer.sharesOutstanding) : 0;
         const denomLocal = Math.max(registerLocal + deskLocal, issuedLocal);
         if (!(denomLocal > 0)) return;
         denomByPair.set(k, denomLocal);
         if (!issuerTicker || !ctx.paymentJournal) return;
         const payer = { kind: 'COMPANY' as const, ticker: issuerTicker };
+        // §9.13-EQUITY — THE REASON SAYS WHICH PAYMENT THIS IS. Every holder of record used to be
+        // paid under one reason while the household sector was paid its share under a second
+        // ("dividend to the public float"), and the household income line read THAT string. With
+        // households on the register there is one payment, so the reason has to distinguish a
+        // DIVIDEND from a call premium instead — which it should have done anyway, since the flow
+        // ledgers are keyed by it.
+        const paymentReason = t === equityRef ? 'dividend to holder of record' : 'security payment to holder of record';
         if (deskLocal > 0) {
           byDesk?.forEach((usd, deskId) => {
             const amountLocal = owedLocal * (usd / denomLocal);
@@ -629,29 +650,29 @@ export function applyPendingCorporateActionSettlements(
               // The paper's own money, off the ISSUER — which is the payer here. Read from the
               // party rather than from `issuer`, which is `undefined` for every non-equity
               // instrument at this site and would have thrown the moment a credit desk was paid.
-              currency: obligationCurrencyOf(ctx.v2, payer), reason: 'security payment to holder of record',
+              currency: obligationCurrencyOf(ctx.v2, payer), reason: paymentReason,
             });
             const deskTicker = dealerDeskTicker(deskId);
             if (deskTicker !== undefined) deskIncomeByTicker.set(deskTicker, (deskIncomeByTicker.get(deskTicker) ?? 0) + amountLocal);
           });
         }
-        const floatLocal = denomLocal - registerLocal - deskLocal;
-        if (floatLocal > 0 && issuer) {
-          journalPayment(ctx, {
-            payer,
-            payee: { kind: 'HOUSEHOLD', region: issuer.region },
-            amount: owedLocal * (floatLocal / denomLocal),
-            currency: currencyOf(issuer.region),
-            reason: 'dividend to the public float',
-          });
+        // §9.13-EQUITY — "THE PUBLIC FLOAT" IS GONE, and it was never a second holder. It was
+        // `denom − register − desks`: the household sector under a second name (rule 4), paid by
+        // subtraction because there was no holder of record to pay. The households now hold rows
+        // and are paid on the walk below like everybody else, so this term is zero by
+        // construction — and where it is NOT zero the shares belong to nobody, which is a defect
+        // for `O2` to report and not money to hand out.
+        const unheldLocal = denomLocal - registerLocal - deskLocal;
+        if (unheldLocal > 1 && issuer && process.env.FLOAT_TRACE === '1') {
+          console.log(`  [float] ${issuer.ticker} ${(unheldLocal / Math.max(1, denomLocal) * 100).toFixed(2)}% of the issue is on no book`);
         }
       });
     });
     bookDeskIncome(ctx.updatedCompanies, deskIncomeByTicker, 'security payment on desk inventory');
   }
 
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity, ei) => {
-    if (!entityHit[ei]) return entity;
+  books.forEach((entity, ei) => {
+    if (!entityHit[ei]) return;
     let touched = false;
     // Placements this entity has funded within THIS pass — journalPayment does not update the
     // running settlement net, so two placements in one week must see each other here.
@@ -679,10 +700,10 @@ export function applyPendingCorporateActionSettlements(
           }
           journalPayment(ctx, {
             payer: { kind: 'COMPANY', ticker: issuerTicker },
-            payee: { kind: 'INSTITUTION', id: entity.id },
+            payee: entity.payee,
             amount: shareLocal,
             currency: currencyOf(v2.internedStrings[H.regionRef[r]] as RegionId),
-            reason: 'security payment to holder of record',
+            reason: H.typeRef[r] === equityRef ? 'dividend to holder of record' : 'security payment to holder of record',
           });
           touched = true;
         }
@@ -707,7 +728,7 @@ export function applyPendingCorporateActionSettlements(
       let effectiveRatio = ratio;
       if (principalCashLocal < 0) {
         const pendingLocal = ctx.pendingNetById
-          ? (ctx.pendingNetById[partyId({ kind: 'INSTITUTION', id: entity.id })] ?? 0)
+          ? (ctx.pendingNetById[partyId(entity.payee)] ?? 0)
           : 0;
         const availableLocal = Math.max(0, entityCashOf(v2, entity) + pendingLocal
           - committedPlacementLocal);
@@ -726,13 +747,13 @@ export function applyPendingCorporateActionSettlements(
         journalPayment(ctx, principalCashLocal > 0
           ? {
             payer: { kind: 'COMPANY', ticker: principalIssuerTicker },
-            payee: { kind: 'INSTITUTION', id: entity.id },
+            payee: entity.payee,
             amount: principalCashLocal,
             currency: currencyOf(v2.internedStrings[H.regionRef[r]] as RegionId),
             reason: 'principal redeemed to holder of record',
           }
           : {
-            payer: { kind: 'INSTITUTION', id: entity.id },
+            payer: entity.payee,
             payee: { kind: 'COMPANY', ticker: principalIssuerTicker },
             amount: -principalCashLocal,
             currency: currencyOf(v2.internedStrings[H.regionRef[r]] as RegionId),
@@ -778,7 +799,7 @@ export function applyPendingCorporateActionSettlements(
       // at placement, the tranche ledger), so the two sides of one action meet at the house and
       // the issuer's wires count once. Equity (no ladder) settles the same way for symmetry.
       const house = { kind: 'CLEARING_HOUSE' as const, region: a.region };
-      const holder = { kind: 'INSTITUTION' as const, id: entity.id };
+      const holder = entity.payee;
       // Equity has no ladder, so its issuer's side of the action is
       // wired HERE — a buyback returns the shares from the house to the issuer, a placement
       // creates them from the issuer to the house — and the house nets to zero on equity too.
@@ -795,8 +816,10 @@ export function applyPendingCorporateActionSettlements(
       }
     });
     void kept;
-    return { ...entity };
   });
+  // The entity objects a book touched are replaced, exactly as the old `map` did — the household
+  // books have no object to replace, because the rows are their only representation.
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e, i) => (entityHit[i] ? { ...e } : e));
   pending.clear();
   pendingCash?.clear();
   ctx.pendingHolderReplacements?.clear();

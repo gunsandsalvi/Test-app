@@ -333,10 +333,12 @@ written from here):
        model never books. That is a NEW MECHANISM, not a refactor.
     3. **The goods auction already computes the price it needs and discards it.** It has to be
        stored per `region|subUnit|week` — the cheapest half of the whole step.
-    4. **The equity row's stored value has to go**, or it drifts exactly as face did. *(Credit
-       showed exactly how — §9.13-CREDIT row 5. The row keeps `units` and NOTHING keeps the value:
-       it is written as `units × price` at the close and re-derived from the quantity every week.
-       Equity already stores its shares, so what is left there is the readers.)*
+    4. *(Done — §9.13-CREDIT row 5 and §9.13-EQUITY. **The equity row's stored value** no longer
+       drifts: `register-marking` re-derives every row's value from its own quantity at the close,
+       so what is stored is a CACHE of `units × price` and not an independent number. The FIELD
+       itself is what is left, on both classes — this step's structure ends at *"value is a
+       FUNCTION, `units × price(asset)`, never a field"*, and a cache re-derived once a week is
+       one step short of that.)*
     5. *(Done — 13-SOV row 3: sovereign holdings are register rows naming a bond, so there is
        something to attach a price to.)*
     6. *(Done for CREDIT — §9.13-CREDIT rows 1, 3 and 4. The clearing engine's
@@ -369,8 +371,9 @@ written from here):
     goes, and households become holders) → **inventory at cost versus price** (the new
     holding-gain mechanism) → **goods** (the price already exists and is discarded) → **plant and
     housing** (units must be defined before anything else is possible — step 26 owns that
-    decision). Each class is its own commit and each is expected to move the numbers. *(Sovereign
-    and credit are DONE — 13-SOV and 13-CREDIT in §9. Equity is next.)*
+    decision). Each class is its own commit and each is expected to move the numbers. *(Sovereign,
+    credit and equity are DONE — 13-SOV, 13-CREDIT and 13-EQUITY in §9. **Inventory at cost versus
+    price** is next, and 13-BILL below is a residue of the sovereign the mark made visible.)*
 
     **13-CREDIT, the credit class — DONE, rows 1 to 5 in §9** (user, 2026-09-04: *"there shouldn't
     be any spread per issuer. The spread is per asset, assets with different maturities should have
@@ -380,36 +383,13 @@ written from here):
     that paper's own auction printed`. `P5` stops sizing the defect and starts measuring the
     residual: paper no session has printed.
 
-    **13-EQUITY, the equity class** — the stored value goes (WHAT THIS FORCES, point 4), **and
-    HOUSEHOLDS BECOME HOLDERS** (user, 2026-09-04, reading a company's shareholders: *"first I
-    want to see households as actual holders and second what does the float comment mean?"*).
-    *(**The stored value is done** — commit "13-EQUITY a". Reading the code corrected this step's
-    own claim that the two halves must be one commit "because both rewrite every equity register
-    row": the mark rewrites a row's VALUE and the household work ADDS rows, and they do not touch
-    each other. The mark is the small half and it went first, so the household rows join a
-    register that is already marked. `markCreditBook` is now `markBookToMarket` and the stage is
-    `register-marking`: it walks EVERY row it can price, so an equity holder that did not trade
-    this week no longer carries its shares at a stale print. Equity's node `equity.md` C3 read ✅
-    against `markHolding`, a one-row setter — the node asks whether a HOLDER is marked and the
-    honest answer was no.)*
-    · **THERE IS NO HOUSEHOLD HOLDER.** `ui/world.ts:189` `holdersOf` walks
-      `state.institutionalEntities` and nothing else — because that is where the register is. The
-      household sector's equity is `household-portfolio.ts:householdDirectEquityLocal`, a macro
-      aggregate with no row naming a company, so the largest holder class in the model owns
-      nothing that can be pointed at, cannot be anyone's counterparty, and has no buy schedule at
-      all (atlas `equity.md` C2.a ⚠️, `households.md` D1.a ⚠️). Rule 2: a residual with no
-      holder is a defect, not a boundary.
-    · **AND "THE FLOAT" IS THAT SAME RESIDUAL UNDER A SECOND NAME** (rule 4 — this answers the
-      user's second question). The dividend walk computes
-      `floatLocal = denomLocal − registerLocal − deskLocal` (`shared-helpers.ts:618`) and pays
-      `owedLocal × floatLocal/denomLocal` to `{ kind: 'HOUSEHOLD' }` with the reason *"dividend to
-      the public float"*. The float IS the household sector: a subtraction, not a holder. So
-      `holders.tsx:56` printing *"households and the float hold the rest"* names one thing twice
-      and reads as two. The wording is not the fix — once households hold rows there is nothing
-      left to subtract, and both names go with the residual.
-    · **THE DESKS ARE MISSING FROM THE SAME VIEW.** `holdersOf` skips them too, though 13e and
-      §9.13-CREDIT row 2 settled that they are holders of record and `deskLocal` is already a term
-      in the dividend's denominator — the view contradicts the payment it is a view of.
+    **13-EQUITY, the equity class — DONE, in §9** (user, 2026-09-04, reading a company's
+    shareholders: *"first I want to see households as actual holders and second what does the
+    float comment mean?"*). The stored value is re-derived at the close like credit's, the
+    HOUSEHOLD SECTOR holds a register book per region, and "the public float" is gone — it was
+    that same book's shares under a second name, computed by subtraction. What is left of
+    `equity.md` C2.a is a mechanism and not a representation: households have no BUY schedule, so
+    the largest holder class in the model can be forced to sell and can never bid.
 
     **13-BILL — A BILL'S RETURN IS THE MARK, AND TODAY TWO THINGS OWN IT** (found while wiring the
     mark, §9.13-EQUITY; it is `short-term-debt.md` E2 from the other side, and row 4's line
@@ -1455,6 +1435,47 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-EQUITY — THE STORED VALUE IS RE-DERIVED, AND THE HOUSEHOLD SECTOR HOLDS A REGISTER BOOK.**
+Two commits, because reading the code corrected this step's own claim that they had to be one:
+the mark rewrites a row's VALUE and the household work ADDS rows.
+
+**a — the mark covers every row it can price.** `markCreditBook` became `markBookToMarket` and the
+stage `register-marking`. EQUITY had the opposite half of credit's defect: a row stores its shares
+AND its value, and only a session that TOUCHED the row rewrote the value, so a holder that did not
+trade this week carried its shares at a stale print — and its NAV, its capital ratio and every
+allocation sized off them were struck on last week's market. `equity.md` C3 read ✅ against
+`markHolding`, a one-row setter used by bill accretion; the node asks whether a HOLDER is marked
+and the honest answer was no. **The SOVEREIGN turned out to have step 13's item 3 in full**: `07c`
+strikes a price per bond and `07f` a price per bill, and both kept nothing but the yield those
+prices implied — "the auction already computes the price it needs and discards it", in the one
+class that had already priced its way out of the defect. Both deposit now. Government BONDS mark;
+discount BILLS do not, because `bill-accretion` already owns their value, and rather than make two
+writers of one number that became §3's **13-BILL**.
+
+**b — households become holders of record.** `holderIdOf` resolves the HOUSEHOLD party, so the
+sector has a register book per region, opened by wire at the seed with exactly the shares no named
+book held and moved only by trade since. What it replaced was a SUBTRACTION —
+`marketCap − institutions − desks`, recomputed by two different routes (`householdDirectEquityLocal`
+and 07e's sell channel) that could disagree about what the sector owned. **"The public float" was
+that same residual under a second name** (rule 4, and the user's question): the dividend walk paid
+`denom − register − desks` to the household sector because there was no holder of record to pay.
+Both are gone; the walk pays households on their own rows, the `unheld` term is zero by
+construction, and where it is not the shares are on nobody's book — a defect for `O2` to report,
+not money to hand out.
+
+**The trap this step is really about is the walks.** A holder added to the register is a holder
+that every walk written as `updatedInstitutionalEntities.forEach` silently skips — which is how the
+desks accrued nothing for thirteen weeks (row 2), and how a buyback would have scaled the
+institutions and left households whole, handing the sector free shares. `registerBooks` is now the
+ONE statement of who the register's holders are, and the corporate actions, the week's
+consolidation, the close's mark, `O2` and the UI's `holdersOf` all take it. The payment reason
+splits too — `dividend to holder of record` against `security payment to holder of record` — since
+the household income line keyed off the residual's own name.
+
+`holders.tsx` no longer explains who is missing, because nobody is: the desks are read off their
+banks beside the register books, and the hint that said *"households and the float hold the rest"*
+named one thing twice. Gates green; no run (rule 11).
 
 **13-CREDIT row 5 — THE MARK, WIRED IN: A CREDIT ROW IS WORTH `units × price` AND THE BOOKS GO ON
 TRADING FACE.** The attempt recorded in `LOG_ARCHIVE` as "13 (part 3)" built this and did not wire

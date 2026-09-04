@@ -569,10 +569,11 @@ export function evolveRegionMacro(
     // was a second derivation of a flow the banks already compute and post — rule 4, and it
     // disagreed with them by whatever the deposit competition was doing.
     depositInterestLocal: (region.householdDepositInterestWeeklyLocal ?? 0) * 52,
-    // The dividends the public float was PAID last week (the register's paying agent pays the
-    // float's share to the household sector of the issuer's region), read off the household flow
-    // ledger — not a yield times a mark. The residual "return path" of debt service (a share of
-    // income from nobody, 14.7% of it) is deleted: income is what arrived.
+    // The dividends households were PAID last week as HOLDERS OF RECORD — since §9.13-EQUITY the
+    // sector has a register book, so its share of an issuer's dividend is paid on the same walk
+    // as every other holder's rather than as a residual under its own name. Read off the
+    // household flow ledger, not a yield times a mark. The residual "return path" of debt service
+    // (a share of income from nobody, 14.7% of it) is deleted: income is what arrived.
     dividendsLocal: (microFeedback.householdWeek?.dividendsLocal ?? 0) * 52,
   };
   // INCOME IS THE SUM OF PAYMENTS. It used to be

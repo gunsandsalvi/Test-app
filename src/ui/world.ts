@@ -14,7 +14,8 @@ import { V2World, ensureV2, rowOf, ringFill, revHistFill } from '../engine2/worl
 import { bookHeadOf } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
 import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
-import { facilityBookOf, facilitiesOfBorrower, issuerIdOf } from '../engine2/tranches';
+import { facilityBookOf, facilitiesOfBorrower, issuerIdOf, trancheRowOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../engine2/tranches';
+import { registerBooks } from '../engine/ledger/holdings-ledger';
 
 export type { ObjectRef, ObjectType, ObjectLabel, Series } from './types';
 export { refKey, sameRef } from './types';
@@ -184,18 +185,27 @@ export function bookOf(world: World, entityId: string): RegisterRow[] {
   return out;
 }
 
-/** Every register row that names an instrument — the holders of one company's paper (13b: a row
- *  names a tranche or its issuer; the company's paper is every row that resolves to it). */
+/**
+ * Every register row that names an instrument — the holders of one company's paper (13b: a row
+ * names a tranche or its issuer; the company's paper is every row that resolves to it).
+ *
+ * §9.13-EQUITY: EVERY BOOK THE REGISTER HOLDS, which since that step includes the HOUSEHOLD
+ * SECTOR's. This walked the institutions alone, so the view of a company's shareholders left out
+ * the largest holder of nearly every one of them and had to explain the gap in prose ("households
+ * and the float hold the rest") — two names for one absence. The desks are added beside it, from
+ * the banks that carry them: 13e and §9.13-CREDIT row 2 settled that they are holders of record,
+ * and this view had been contradicting the payments it is a view of.
+ */
 export function holdersOf(world: World, instrumentId: string): RegisterRow[] {
   const out: RegisterRow[] = [];
   const ref = world.v2.internedIdByString.get(instrumentId);
   if (ref === undefined) return out;
   const H = world.v2.holdings;
-  world.state.institutionalEntities.forEach((e) => {
-    for (let r = bookHeadOf(world.v2, e.id); r >= 0; r = H.next[r]) {
+  registerBooks(world.state.institutionalEntities.map((e) => e.id)).forEach((b) => {
+    for (let r = bookHeadOf(world.v2, b.id); r >= 0; r = H.next[r]) {
       if (H.instrRef[r] !== ref && issuerIdOf(world.v2, world.v2.internedStrings[H.instrRef[r]]) !== instrumentId) continue;
       out.push({
-        holderId: e.id,
+        holderId: b.id,
         instrumentId: world.v2.internedStrings[H.instrRef[r]],
         instrumentType: world.v2.internedStrings[H.typeRef[r]],
         region: world.v2.internedStrings[H.regionRef[r]],
@@ -204,7 +214,40 @@ export function holdersOf(world: World, instrumentId: string): RegisterRow[] {
       });
     }
   });
+  // The desks hold the same paper on their banks' sheets rather than in the register (`the-
+  // register.md` A1.a is that boundary), so they are read from there and shown beside it.
+  world.state.companies.forEach((bank) => {
+    const inv = bank.bankBalanceSheet?.dealerDeskInventory;
+    if (!inv) return;
+    Object.values(inv).forEach((positions) => {
+      positions.forEach((p) => {
+        if (!(Math.abs(p.inventoryLocal) > 1)) return;
+        if (p.instrumentId !== instrumentId && issuerIdOf(world.v2, p.instrumentId) !== instrumentId) return;
+        out.push({
+          holderId: bank.id,
+          instrumentId: p.instrumentId,
+          instrumentType: instrumentTypeOfDeskRow(world, p.instrumentId),
+          region: bank.region,
+          usd: p.inventoryLocal,
+          shares: p.units ?? NaN,
+        });
+      });
+    });
+  });
   return out;
+}
+
+/** What kind of paper a desk position names, read off the world rather than off the book it sat
+ *  in — a desk's books are named by MARKET ('corporate bond'), the register by KIND. */
+function instrumentTypeOfDeskRow(world: World, instrumentId: string): string {
+  const row = trancheRowOf(world.v2, instrumentId);
+  if (row === undefined) return 'EQUITY';
+  const S = world.v2.tranches;
+  const f = S.flags[row];
+  if (issuerIdOf(world.v2, instrumentId).startsWith('GOV_')) return 'GOV_BOND';
+  if (f & TR_FACILITY) return 'BANK_FACILITY';
+  if (f & TR_CP) return 'COMMERCIAL_PAPER';
+  return (f & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND';
 }
 
 /** The holders of a region's sovereign paper, by holder. */

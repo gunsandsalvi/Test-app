@@ -25,8 +25,9 @@ import { Company, RegionId } from '../../types';
 import { InstitutionalEntity } from '../../domain/institutions';
 import { HouseholdState } from '../../domain/region-macro';
 import { isActiveCompany, isPubliclyListed } from '../../domain/company';
-import { marketCapOf, totalDebtOf } from '../../domain/company';
+import { totalDebtOf } from '../../domain/company';
 import { entityCashOf } from '../ledger/accounts';
+import { householdBookId } from '../ledger/holdings-ledger';
 
 /**
  * Founder stakes in this region's private tier, at the multiple the public market clears for
@@ -49,53 +50,38 @@ export function householdPrivateBusinessEquityLocal(
 }
 
 /**
- * The listed shares households hold directly: the residual of a REAL register, name by
- * name. Every share of a listed company is either on some institution's book (funds, insurers,
- * pensions and the index funds, all of which bid in 07e and settle their cash there) or it is
- * held directly, and this counts the second kind by subtracting the first from the register.
+ * The listed shares households hold directly — READ OFF THEIR OWN REGISTER BOOK.
  *
- * What it replaces: `marketCap x (1 - equityOwnership.institutionalShare)`, a flat regional
- * fraction of every company alike, taken from a share that was assigned at seed and drifted
- * inside a band. A name institutions have crowded into and a name they have never bought were
- * reported as equally household-owned.
+ * §9.13-EQUITY: this was a SUBTRACTION. Every share of a listed company was either on some
+ * institution's book or on a bank's desk, and this counted the rest by taking those two away from
+ * market cap, name by name, every time anybody asked. That made the largest holder class in the
+ * model a quantity nobody could point at: it had no rows, so it could not be a counterparty, could
+ * not be scaled by a corporate action, and was paid its dividends under a second name ("the public
+ * float") because there was no holder of record to pay. Rule 2 — a residual with no holder is a
+ * defect, not a boundary.
  *
- * Nothing circular: 07e clears the whole register (OWN2), so this is a measurement of who ended
- * up holding it, never an input to what the book may trade.
+ * The household sector now has a register book like anyone else's (`holdings-ledger.ts`), opened
+ * by wire at the seed with exactly the shares no named book held, and moved only by trade since.
+ * This is a read of it, marked at the close by `register-marking` like every other row.
+ *
+ * What the subtraction replaced before that, and why it was still an improvement:
+ * `marketCap × (1 - equityOwnership.institutionalShare)`, a flat regional fraction of every
+ * company alike, from a share assigned at seed and drifting inside a band.
  */
 // Reads the persistent rows — mid-week the object books are a stale view.
 export function householdDirectEquityLocal(
   v2: import('../../engine2/world').V2World,
-  regionId: RegionId,
-  companies: Company[],
-  entities: InstitutionalEntity[],
-  /** The banks' equity desks, by company — 07e creates their inventory as real bank-owned
-   *  shares, so what a desk holds is not part of the float. */
-  deskHeldLocal?: Map<string, number>
+  regionId: RegionId
 ): number {
   const H = v2.holdings;
   const equityRef = internString(v2, 'EQUITY');
   const regionRef = internString(v2, regionId);
-  const institutionallyHeldLocal = new Map<string, number>();
-  entities.forEach((e) => {
-    if (e.isDefaulted) return;
-    for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
-      if (H.typeRef[r] !== equityRef || H.regionRef[r] !== regionRef) continue;
-      const instrumentId = v2.internedStrings[H.instrRef[r]];
-      institutionallyHeldLocal.set(
-        instrumentId,
-        (institutionallyHeldLocal.get(instrumentId) ?? 0) + H.qtyLocal[r]
-      );
-    }
-  });
-  return companies.reduce((sum, c) => {
-    if (c.region !== regionId || !isActiveCompany(c) || !isPubliclyListed(c)) return sum;
-    // The float is what NO named book holds: the register's institutions and the banks' desks
-    // both come out. Subtracting only the register counted the desks' whole equity book as
-    // household net worth — and 07e computes the same residual the other way, with the desks
-    // out, so the two disagreed by exactly that.
-    const namedLocal = (institutionallyHeldLocal.get(c.id) ?? 0) + (deskHeldLocal?.get(c.id) ?? 0);
-    return sum + Math.max(0, Math.max(0, marketCapOf(c)) - namedLocal);
-  }, 0);
+  let sum = 0;
+  for (let r = bookHeadOf(v2, householdBookId(regionId)); r >= 0; r = H.next[r]) {
+    if (H.typeRef[r] !== equityRef || H.regionRef[r] !== regionRef) continue;
+    sum += H.qtyLocal[r];
+  }
+  return sum;
 }
 
 /** Marked value of the household's index-fund shares, at each fund's current net asset value. */
