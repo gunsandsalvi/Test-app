@@ -500,10 +500,9 @@ written from here):
        **Eleven fields store a reference to an entity as a ticker** — ~~`homeBankTicker` (69)~~ and
        ~~`leadBankTicker` (11)~~ **DONE, in §9**; still open: `brokerTicker` (26), `borrowerTicker`
        (20), `buyerTicker` (18), `issuerTicker` (18), `facilityBankTicker` (16), `carrierTicker`
-       (15), `parentTicker` (14), `sellerTicker` (7), `acquiredByTicker` (4) — 138 sites left, plus
-       **`accounts.ts`'s dense bank lane and the settlement report's per-bank maps**, which the
-       first commit left in the ticker space on purpose: `bankIdxOf` is the ONE site where the two
-       spaces meet, and moving it is its own commit. Resolving ticker→id AT the
+       (15), `parentTicker` (14), `sellerTicker` (7), `acquiredByTicker` (4) — 138 sites left.
+       *(`accounts.ts`'s dense bank lane and the settlement report's four per-bank maps are DONE,
+       in §9.)* Resolving ticker→id AT the
        81 party sites instead would add 81 lookups and leave the references in the other space,
        which is a mirror wearing a fix's clothes. So each field is its own commit, and the arms
        take an `EntityId` last, when every site that must supply one already holds one.
@@ -1605,6 +1604,29 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c-then-3b, THE BANK LANE) — `asTicker` IS HOW A BRAND STOPS HELPING.** The
+account store's dense bank lane was `Ticker[]`, so every tally read off it came out keyed by ticker
+while every party pointing AT a bank named it by entity id. It holds the BANK now — `{ id, ticker }`,
+the same "hand it the firm, not one of its names" move `rekeyBankLinks` made — so the four per-bank
+tallies key by entity id and the translation table `bankIdxOf` needed is **gone rather than moved**.
+
+**And the finding, which is a limit on the previous commit's own argument.** Both consumers of
+those tallies did `map.get(asTicker(key))` — `settlement.ts:700` booking a bank's equity delta onto
+its sheet, `core.ts:byRegion` attributing credit creation to a region. `asTicker` is `s as Ticker`
+by construction, so when the key underneath changed from a ticker to an entity id **the compiler
+had nothing to say**: both lookups would have missed every bank, silently, sending every equity
+delta to `unresolvedLocal` and every credit tally to `bankTallyUnmappedLocal`. The previous commit's
+claim — that branding made the rename safe — holds only up to the last unchecked cast on the path,
+and these were two of them. Found by reading the consumers, not by the types. Both are lookups by
+id now.
+
+*(Also here, same shape: `ownership.ts:o5`'s `idOrTicker` fell back to a full `state.companies.find`
+PER SHIPMENT after a ticker miss. The goods book's keys genuinely can be either space — that is
+`05-unit-bidding`'s `byKey` seen from the audit — so both tries stay; the second is the index's
+other half now.)*
+
+4 files, +67 −54. Gates green (150 tests); no run.
 
 **13-BOOK slice (c-then-3b, `homeBankId`) — BRANDING IS WHAT MADE A 218-SITE RENAME SAFE, AND
 THIS IS THE PROOF.** The first of the eleven stored ticker cross-references: a party named its

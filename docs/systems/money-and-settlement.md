@@ -306,10 +306,22 @@ second scan that could never find a firm the first had not.
 hashed off the ISSUER's id — so re-keying the allocator is provably outcome-preserving rather than
 hopefully so.
 
-**What is left in the ticker space, deliberately:** `accounts.ts`'s dense bank lane
-(`bankIdxOfTicker`) and the settlement report's per-bank maps. `bankIdxOf` is the ONE site where
-the two spaces now meet, and it is the next commit in this slice rather than a translation
-scattered across every caller.
+**AND THEN THE LANE ITSELF (second commit).** `accounts.ts`'s dense bank lane was `Ticker[]`, so
+every tally read off it came out keyed by ticker while every party pointing AT a bank named it by
+entity id. It holds the BANK now — `{ id, ticker }` — so the four per-bank tallies
+(`reserveDeltaByBank`, `creditCreatedByBank`, `bankSecuritiesDeltaByBank`, `bankEquityDeltaByBank`)
+key by entity id, the translation table `bankIdxOf` needed is **gone rather than moved**, and the
+two sites that genuinely want the register's or the persistent store's ticker take `.ticker` and
+say so.
+
+**`asTicker` is how a brand stops helping, and this is where it showed.** Both consumers of those
+tallies did `map.get(asTicker(key))` — `settlement.ts` booking a bank's equity delta,
+`core.ts` attributing credit creation to a region. `asTicker` is `s as Ticker` by construction, so
+when the key underneath changed from a ticker to an entity id **the compiler had nothing to say**:
+both lookups would have missed every bank, silently, sending every equity delta to
+`unresolvedLocal` and every credit tally to `bankTallyUnmappedLocal`. Found by reading the two
+consumers rather than by the type system, which is the point: a brand is only as good as the last
+unchecked cast on the path. Both are lookups by id now.
 
 ### ⚠️ E3 — "TWO INSTRUCTIONS THAT BOTH DRAW ON ONE BALANCE CANNOT BOTH SUCCEED BY LUCK"
 

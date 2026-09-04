@@ -49,7 +49,6 @@ const MONEY_KIND_ID = ASSET_KINDS.indexOf('MONEY');
 import { PaymentCategory, categoryOfReason } from '../../ledger/payment-category';
 import { banksOf } from '../../../domain/company';
 import type { EntityId } from '../../../domain/ids';
-import { asTicker } from '../../../domain/ids';
 
 export interface PaymentInstruction {
   payer: PartyRef;
@@ -394,7 +393,7 @@ export interface SettlementReport {
   grossLocal: number;
   /** A4: the tallies below are `settledTallies` — reads of the account rows' deltas. */
   /** Reserve movement per bank — what it had to settle across the central bank's books. */
-  reserveDeltaByBank: Map<string, number>;
+  reserveDeltaByBank: Map<EntityId, number>;
   /** Treasury account movement per region. */
   tgaDeltaByRegion: Map<string, number>;
   /** HH — every household flow this week, per region, keyed by the payment's own reason and
@@ -411,9 +410,9 @@ export interface SettlementReport {
    *  up in its P&L without anything being instrumented (rule 15). */
   smePoolFlowsByPool: Map<string, Map<string, number>>;
   /** Payments to/from a bank on its own account — income and expense, so equity moves too. */
-  bankEquityDeltaByBank: Map<string, number>;
+  bankEquityDeltaByBank: Map<EntityId, number>;
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
-  creditCreatedByBank: Map<string, number>;
+  creditCreatedByBank: Map<EntityId, number>;
   /** What the cleared books' central counterparty was left holding. Must be zero. */
   clearingHouseResidualLocal: number;
   /** Reserves the central bank ISSUED this week by paying for assets with money it
@@ -426,7 +425,7 @@ export interface SettlementReport {
   /** M6 — reserves a bank's own SECURITIES account paid (−) or received (+): a desk
    *  buying paper from a fund destroys the fund's deposit, selling creates one. Own-account money
    *  the equity ledger above does not see (no P&L, one asset for another). */
-  bankSecuritiesDeltaByBank: Map<string, number>;
+  bankSecuritiesDeltaByBank: Map<EntityId, number>;
   /** §3.13c — the week's settled gross PER CURRENCY, in that currency's units: the exact form of
    *  the identity the wire ledger checks (`grossLocal` is the same thing brought to one money,
    *  which a dated row written at another week's rate can only match approximately). */
@@ -694,11 +693,13 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // ---- 3. Apply it. Every balance is the PROJECTION of the account store (`projectBooks`).
   // Equity is not a balance: the bank's own-account legs are its income and expense, and they
   // land here, on the sheet.
-  const bankByTicker = new Map(
-    banksOf(ctx.updatedCompanies).map((c) => [c.ticker, c])
-  );
-  report.bankEquityDeltaByBank.forEach((equityDeltaLocal, ticker) => {
-    const bank = bankByTicker.get(asTicker(ticker));
+  // §3.13-BOOK (c-then-3b): the tally is keyed by the bank's ENTITY id, so this is a lookup by
+  // id. It read `bankByTicker.get(asTicker(key))` — and the cast is why the compiler could not
+  // have caught the key changing under it: `asTicker` is unchecked by construction, so a brand
+  // stops helping at exactly the boundary where it is applied to something else's key.
+  const bankById = new Map(banksOf(ctx.updatedCompanies).map((c) => [c.id, c]));
+  report.bankEquityDeltaByBank.forEach((equityDeltaLocal, bankId) => {
+    const bank = bankById.get(bankId);
     if (!bank?.bankBalanceSheet) { report.unresolvedLocal += equityDeltaLocal; return; }
     if (equityDeltaLocal !== 0) bank.bankBalanceSheet = { ...bank.bankBalanceSheet, bankEquityLocal: bank.bankBalanceSheet.bankEquityLocal + equityDeltaLocal };
   });

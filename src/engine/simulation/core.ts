@@ -1,4 +1,5 @@
 import { bankReservesOf } from '../ledger/accounts';
+import type { EntityId } from '../../domain/ids';
 import { ensureManagements, runManagementReviewStage } from './stages/management-review';
 import { runFxRevaluationStage } from './stages/fx-revaluation';
 import { toNumeraire } from '../../domain/currency';
@@ -84,7 +85,6 @@ import { distributeMoneyFundIncome } from './stages/money-market-fund';
 import { REGION_IDS } from '../../domain/geography';
 import { equityIssuerId } from '../../domain/instrument-keys';
 import type { Ticker } from '../../domain/ids';
-import { asTicker } from '../../domain/ids';
 
 export { computeOccupationDemand } from './stages/shared-helpers';
 
@@ -509,20 +509,21 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         // §3.13-BOOK (c-then-2): the week's index first, the week-start one behind it. Two
         // populations on purpose — a bank that vanished mid-week is still the company whose
         // region the money moved in, and that is the whole point of the fallback.
-        const nowByTicker = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities).companyByTicker;
-        const wasByTicker = buildEntityIndex(state.companies, state.institutionalEntities ?? []).companyByTicker;
-        const regionOfBank = (ticker: Ticker): string | undefined =>
-          (nowByTicker.get(ticker) ?? wasByTicker.get(ticker))?.region;
-        const mergeMapsForRegion = (x: Map<string, number>, y: Map<string, number>): Map<string, number> => {
+        // §3.13-BOOK (c-then-3b): the tallies are keyed by the bank's ENTITY id.
+        const nowById = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities).companyById;
+        const wasById = buildEntityIndex(state.companies, state.institutionalEntities ?? []).companyById;
+        const regionOfBank = (bankId: EntityId): string | undefined =>
+          (nowById.get(bankId) ?? wasById.get(bankId))?.region;
+        const mergeMapsForRegion = (x: Map<EntityId, number>, y: Map<EntityId, number>): Map<EntityId, number> => {
           const out = new Map(x); y.forEach((v, k) => out.set(k, (out.get(k) ?? 0) + v)); return out;
         };
         // Whatever still finds no region is NAMED, never absorbed: a tally that cannot be placed
         // is money the identity below cannot see, which is the thing M6 exists to report.
         let unmappedLocal = 0;
-        const byRegion = (m: Map<string, number>): Record<string, number> => {
+        const byRegion = (m: Map<EntityId, number>): Record<string, number> => {
           const out: Record<string, number> = {};
-          m.forEach((v, ticker) => {
-            const r = regionOfBank(asTicker(ticker));
+          m.forEach((v, bankId) => {
+            const r = regionOfBank(bankId);
             if (r) out[r] = (out[r] ?? 0) + v; else unmappedLocal += v;
           });
           return out;

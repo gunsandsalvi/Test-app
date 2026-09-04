@@ -421,7 +421,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
 /** O5 — contracts, estates, indices, shipments: parties alive, claims bounded, weights whole. */
 function o5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  const { companyByTicker: tickers, institutionById: ents } = partyIndexOfState(state);
+  const { companyByTicker: tickers, companyById: byId5, institutionById: ents } = partyIndexOfState(state);
   let deadParty = 0, deadLocal = 0;
   (state.derivativesBook ?? []).forEach((k) => {
     const alive = (p: { kind: string; ticker?: Ticker; id?: EntityId }) => p.kind === 'INSTITUTION' ? !!ents.get(p.id!) && !ents.get(p.id!)!.isDefaulted : !!tickers.get(p.ticker!) && isActiveCompany(tickers.get(p.ticker!)!);
@@ -440,7 +440,10 @@ function o5(state: GameState, week: number): AuditFinding[] {
   // SELLER is a shipment that is perfectly deliverable — the goods left before the firm died and
   // the live buyer will receive them — so a count there is a question about the check.
   let deadBuyerShip = 0, deadSellerShip = 0;
-  const idOrTicker = (key: string) => tickers.get(asTicker(key)) ?? state.companies.find((c) => c.id === key);
+  // A goods-book key is a TICKER or an ID — the one place two id spaces share a key on purpose
+  // (`05-unit-bidding.ts:GlobalFirmLookup.byKey`), so both are tried. §3.13-BOOK (c-then-3b): the
+  // second try was a full scan of every company PER SHIPMENT; it is the index's other half.
+  const idOrTicker = (key: string) => tickers.get(asTicker(key)) ?? byId5.get(asEntityId(key));
   // A dead buyer with an OPEN estate still takes delivery — the receiver liquidates it.
   const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   const estateOf = new Map((state.estates ?? []).map((e) => [e.companyId, e]));

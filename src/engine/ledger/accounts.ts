@@ -37,7 +37,7 @@
  */
 import { WeeklyStepContext } from '../simulation/stages/context';
 import type { EntityId } from '../../domain/ids';
-import { bankCreditParty, bankParty, bankPartyOfTicker, bankSecuritiesParty, companyParty, companyPartyOfTicker } from '../../domain/party';
+import { bankCreditParty, bankParty, bankPartyOfTicker, bankSecuritiesParty, companyParty } from '../../domain/party';
 import { PartyRef } from './party';
 import { partyId, partyOf, partyKey, partyFromKey } from './party';
 import { RegionId, CurrencyCode, CURRENCY_CODES, currencyOf, NUMERAIRE } from '../../domain/geography';
@@ -456,11 +456,19 @@ export interface AccountStore {
   balance: Float64Array;
   /** The balance the row opened the pass with — a line moves by (balance − opening). */
   opening: Float64Array;
-  /** Bank tickers by index, and the row of each bank's OWN reserve account in its own money. */
-  /** §3.13-BOOK slice (c2c): the pass's dense bank lane, by ticker. */
-  banks: Ticker[];
+  /**
+   * The pass's dense bank lane, and the row of each bank's OWN reserve account in its own money.
+   *
+   * §3.13-BOOK (c-then-3b): it holds the BANK, not one of its names. It was `Ticker[]`, so every
+   * tally read off it came out keyed by ticker while every party that pointed AT a bank named it
+   * by entity id — the one seam left after `homeBankId`, and the reason `bankIdxOf` needed a
+   * translation table. Carrying both names costs one object per bank per pass and removes the
+   * question of which name a consumer wanted: the tallies key by `id`, and the two sites that
+   * need the register's or the persistent store's ticker take `.ticker` and say so.
+   */
+  banks: { id: EntityId; ticker: Ticker }[];
   reserveRowOfBank: Int32Array;
-  bankIdxOfTicker: Map<Ticker, number>;
+  bankIdxOfBank: Map<EntityId, number>;
   /** A bank's reserve row in a money that is not its own, opened the first time one arrives:
    *  `bankIdx * CURRENCY_CODES.length + currencyId` → row. A bank funding a euro deposit holds
    *  euro liquidity against it; netting that into its own reserves at the week's rate would
@@ -500,15 +508,15 @@ export function newAccountStore(): AccountStore {
   return {
     n: 0, partyId: new Int32Array(cap), bankIdx: new Int32Array(cap), classId: new Int8Array(cap),
     currencyId: new Int8Array(cap), balance: new Float64Array(cap), opening: new Float64Array(cap),
-    banks: [], reserveRowOfBank: new Int32Array(0), bankIdxOfTicker: new Map(), foreignReserveRow: new Map(),
+    banks: [], reserveRowOfBank: new Int32Array(0), bankIdxOfBank: new Map(), foreignReserveRow: new Map(),
     rowsOfParty: new Map(), rowsOfPartyCur: new Map(), splitOfParty: new Map(),
     ownAccountBankOfParty: new Map(), ownNetByParty: new Map(), fx: PARITY_FX,
   };
 }
 
-function bankIndex(s: AccountStore, ticker: Ticker): number {
-  let i = s.bankIdxOfTicker.get(ticker);
-  if (i === undefined) { i = s.banks.length; s.banks.push(ticker); s.bankIdxOfTicker.set(ticker, i); }
+function bankIndex(s: AccountStore, bank: { id: EntityId; ticker: Ticker }): number {
+  let i = s.bankIdxOfBank.get(bank.id);
+  if (i === undefined) { i = s.banks.length; s.banks.push({ id: bank.id, ticker: bank.ticker }); s.bankIdxOfBank.set(bank.id, i); }
   return i;
 }
 
@@ -599,7 +607,7 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
   // Banks first: every other row may point at one, and a bank's own COMPANY party is its reserves.
   s.reserveRowOfBank = new Int32Array(Math.max(1, banks.length)).fill(-1);
   banks.forEach((b) => {
-    const bi = bankIndex(s, b.ticker);
+    const bi = bankIndex(s, b);
     if (s.reserveRowOfBank.length <= bi) { const arr = new Int32Array(bi + 16).fill(-1); arr.set(s.reserveRowOfBank); s.reserveRowOfBank = arr; }
     // A3.6a/c: the pass row opens at the persistent row — the bank's reserves ARE that row.
     const money = currencyOf(b.region);
@@ -627,11 +635,11 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
   // lane is still keyed by ticker, so this is where the two spaces meet. The lane's key is the
   // next commit in this slice — until then the translation is HERE, at one site, rather than at
   // every caller.
-  const bankTickerOfId = new Map(banks.map((b) => [b.id, b.ticker]));
-  const bankIdxOf = (bankId: EntityId | undefined): number => {
-    const ticker = bankId !== undefined ? bankTickerOfId.get(bankId) : undefined;
-    return ticker !== undefined && s.bankIdxOfTicker.has(ticker) ? s.bankIdxOfTicker.get(ticker)! : AT_NOWHERE;
-  };
+  // §3.13-BOOK (c-then-3b): ONE SPACE. A party names its house bank by entity id and the lane is
+  // keyed by entity id, so the translation table that stood here — built per pass, from a lookup
+  // in one name to a lookup in another — is gone rather than moved.
+  const bankIdxOf = (bankId: EntityId | undefined): number =>
+    (bankId !== undefined ? s.bankIdxOfBank.get(bankId) : undefined) ?? AT_NOWHERE;
   ctx.updatedCompanies.forEach((c) => {
     if (c.isBankEntity && c.bankBalanceSheet) return;
     // A3.1: the pass row opens at the persistent balance; a firm with no account yet opens at zero.
@@ -653,7 +661,7 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     const hh = partyId(hhParty);
     const hhSplit: number[] = [];
     regionBanks.forEach((b) => {
-      openRow(s, hh, s.bankIdxOfTicker.get(b.ticker)!, 'HOUSEHOLD', money, ctx.v2.accounts.balance[sectorRowAt(ctx.v2, hhParty, b.ticker, money)]);
+      openRow(s, hh, s.bankIdxOfBank.get(b.id)!, 'HOUSEHOLD', money, ctx.v2.accounts.balance[sectorRowAt(ctx.v2, hhParty, b.ticker, money)]);
       hhSplit.push(shareSum > 0 ? (b.bankMarketShare ?? 0) / shareSum : 1 / Math.max(1, regionBanks.length));
     });
     if (regionBanks.length === 0) { openRow(s, hh, AT_NOWHERE, 'HOUSEHOLD', money, householdDepositsOf(ctx.v2, region)); hhSplit.push(1); }
@@ -665,7 +673,7 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
       const split: number[] = [];
       regionBanks.forEach((b) => {
         const sh = shareSum > 0 ? (b.bankMarketShare ?? 0) / shareSum : 1 / Math.max(1, regionBanks.length);
-        openRow(s, p, s.bankIdxOfTicker.get(b.ticker)!, 'SME', money, ctx.v2.accounts.balance[sectorRowAt(ctx.v2, party, b.ticker, money)]);
+        openRow(s, p, s.bankIdxOfBank.get(b.id)!, 'SME', money, ctx.v2.accounts.balance[sectorRowAt(ctx.v2, party, b.ticker, money)]);
         split.push(sh);
       });
       if (regionBanks.length === 0) { openRow(s, p, AT_NOWHERE, 'SME', money, poolCashOf(ctx.v2, region, seg.industry)); split.push(1); }
@@ -745,13 +753,13 @@ function reserveRowFor(s: AccountStore, bankIdx: number, cur: number): number {
 /** A4 — what the pass settled, read off the rows' deltas. */
 export interface SettledTallies {
   /** Reserve movement per bank — what it settled across the central bank's books. */
-  reserveDeltaByBank: Map<string, number>;
+  reserveDeltaByBank: Map<EntityId, number>;
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
-  creditCreatedByBank: Map<string, number>;
+  creditCreatedByBank: Map<EntityId, number>;
   /** Reserves a bank's own SECURITIES account paid (−) or received (+): one asset for another. */
-  bankSecuritiesDeltaByBank: Map<string, number>;
+  bankSecuritiesDeltaByBank: Map<EntityId, number>;
   /** Payments to/from a bank on its own account — income and expense, so equity moves too. */
-  bankEquityDeltaByBank: Map<string, number>;
+  bankEquityDeltaByBank: Map<EntityId, number>;
   /** Treasury account movement per region. */
   tgaDeltaByRegion: Map<string, number>;
   /** Reserves the central bank ISSUED (paid for assets with money it created), less what it
@@ -786,27 +794,27 @@ export function settledTallies(s: AccountStore, fx: FxTable): SettledTallies {
     centralBankIssuanceLocal: 0, centralBankResidualNumeraire: 0, centralBankIssuanceByRegion: new Map(),
     clearingHouseResidualLocal: 0, unresolvedLocal: 0,
   };
-  const addTo = (m: Map<string, number>, k: string, d: number) => m.set(k, (m.get(k) ?? 0) + d);
+  const addTo = <K,>(m: Map<K, number>, k: K, d: number) => m.set(k, (m.get(k) ?? 0) + d);
   /** A row's move, in the money of the book that reports it. */
   const moved = (r: number, into: CurrencyCode): number =>
     convert(s.balance[r] - s.opening[r], currencyOfId(s.currencyId[r]), into, fx);
-  s.banks.forEach((ticker, bi) => {
+  s.banks.forEach((bank, bi) => {
     const rr = s.reserveRowOfBank[bi];
     if (rr < 0) return;
     const money = currencyOfId(s.currencyId[rr]);
-    { const d = moved(rr, money); if (d !== 0) addTo(t.reserveDeltaByBank, ticker, d); }
+    { const d = moved(rr, money); if (d !== 0) addTo(t.reserveDeltaByBank, bank.id, d); }
     t.centralBankResidualNumeraire += moved(rr, NUMERAIRE);
     // What it settled in every OTHER money is reserve movement too, at this pass's rate.
     CURRENCY_CODES.forEach((cur, ci) => {
       const fr = s.foreignReserveRow.get(bi * CURRENCY_CODES.length + ci);
       if (fr === undefined) return;
-      const d = moved(fr, money); if (d !== 0) addTo(t.reserveDeltaByBank, ticker, d);
+      const d = moved(fr, money); if (d !== 0) addTo(t.reserveDeltaByBank, bank.id, d);
       t.centralBankResidualNumeraire += moved(fr, NUMERAIRE);
     });
-    const own = s.ownNetByParty.get(partyId(bankPartyOfTicker(ticker))) ?? 0;
-    const self = s.ownNetByParty.get(partyId(companyPartyOfTicker(ticker))) ?? 0;
-    if (own !== 0) addTo(t.bankEquityDeltaByBank, ticker, own);
-    if (self !== 0) addTo(t.bankEquityDeltaByBank, ticker, self);
+    const own = s.ownNetByParty.get(partyId(bankParty(bank))) ?? 0;
+    const self = s.ownNetByParty.get(partyId(companyParty(bank))) ?? 0;
+    if (own !== 0) addTo(t.bankEquityDeltaByBank, bank.id, own);
+    if (self !== 0) addTo(t.bankEquityDeltaByBank, bank.id, self);
   });
   for (let r = 0; r < s.n; r++) {
     if (s.balance[r] === s.opening[r]) continue;
@@ -820,8 +828,8 @@ export function settledTallies(s: AccountStore, fx: FxTable): SettledTallies {
       : currencyOfId(s.currencyId[r]);
     const d = moved(r, into);
     switch (cls) {
-      case 'CREATED': addTo(t.creditCreatedByBank, s.banks[bi], -d); break;
-      case 'SECURITIES': addTo(t.bankSecuritiesDeltaByBank, s.banks[bi], d); break;
+      case 'CREATED': addTo(t.creditCreatedByBank, s.banks[bi].id, -d); break;
+      case 'SECURITIES': addTo(t.bankSecuritiesDeltaByBank, s.banks[bi].id, d); break;
       case 'TREASURY': {
         const p = partyOf(s.partyId[r]);
         if (p.kind === 'GOVERNMENT') { addTo(t.tgaDeltaByRegion, p.region, d); t.centralBankResidualNumeraire += moved(r, NUMERAIRE); }
@@ -857,7 +865,7 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
   const landSectorRows = (party: PartyRef) => {
     (s.rowsOfParty.get(partyId(party)) ?? []).forEach((r) => {
       const bi = s.bankIdx[r];
-      if (bi >= 0) mutableAccounts(ctx.v2).balance[sectorRowAt(ctx.v2, party, s.banks[bi], currencyOfId(s.currencyId[r]))] = s.balance[r];
+      if (bi >= 0) mutableAccounts(ctx.v2).balance[sectorRowAt(ctx.v2, party, s.banks[bi].ticker, currencyOfId(s.currencyId[r]))] = s.balance[r];
     });
   };
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
@@ -867,7 +875,7 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
   });
   ctx.updatedCompanies.forEach((c) => {
     if (c.isBankEntity && c.bankBalanceSheet) {
-      const bi = s.bankIdxOfTicker.get(c.ticker); if (bi === undefined) return;
+      const bi = s.bankIdxOfBank.get(c.id); if (bi === undefined) return;
       // A3.6: the pass's result is the persistent row; the sheet carries no reserves line and no
       // deposit line (the sector rows landed above ARE its household and SME lines). Its own
       // money and every other it settled in each land on their own row.
