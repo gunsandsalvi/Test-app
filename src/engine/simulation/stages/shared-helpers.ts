@@ -8,12 +8,12 @@ import { journalPayment, partyId, PendingNetCtx } from './settlement';
 import { DESK_BOOK_KIND } from '../../../domain/dealer-desk';
 import { deskRowsOf } from '../../desk-register';
 import type { EntityId } from '../../../domain/ids';
-import { bankSecuritiesParty, bankSecuritiesPartyOf, companyPartyOf } from '../../../domain/party';
+import { bankSecuritiesParty, companyPartyOf } from '../../../domain/party';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { currencyOf } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
-import { transferHolding, registerBooks } from '../../ledger/holdings-ledger';
+import { transferHolding, registerBooks, deskBookId, deskBankIdOf, bookIdOfParty } from '../../ledger/holdings-ledger';
 import { bookPnL } from '../../ledger/bank-book';
 import { revHistLen, revHistAt, rowOf, V2World, regionOf, typeOf, typeRefOf, instrumentRefOf } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
@@ -26,7 +26,6 @@ import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructu
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { bankRwaLocal, BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
 import { heldInShares } from '../../../domain/assets';
-import { dealerDeskParticipantId, dealerDeskTicker } from '../../../domain/dealer-desk';
 
 /**
  * The default trigger, defined once. A company defaults the week its cash goes negative while
@@ -165,10 +164,9 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
 export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 import { cashOf, entityCashOf, obligationCurrencyOf } from '../../ledger/accounts';
-import { asInstrumentId, type InstrumentId, asEntityId } from '../../../domain/ids';
+import { asInstrumentId, type InstrumentId } from '../../../domain/ids';
 import type { TypeRef, InstrRef } from '../../../engine2/refs';
 import { equityIssuerId } from '../../../domain/instrument-keys';
-import type { Ticker } from '../../../domain/ids';
 
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
@@ -398,8 +396,8 @@ function deskHoldingsByInstrument(
   if (kind === undefined) return out;
   companies?.forEach((bank) => {
     if (!bank.isBankEntity || !bank.bankBalanceSheet) return;
-    const deskId = dealerDeskParticipantId(bank.ticker);
-    // §3.13-BOOK d3d: the desk's rows of this book's kind, off the register.
+    // §3.13-BOOK d3d/d3f: the desk's rows of this book's kind, off the register, under its BOOK id.
+    const deskId = deskBookId(bank.id);
     deskRowsOf(v2, bank.id, kind).forEach((p) => {
       if (!(p.inventoryLocal > 0)) return;
       const faceLocal = p.units;
@@ -412,20 +410,21 @@ function deskHoldingsByInstrument(
   return out;
 }
 
-/** The payee behind a holder key on the register's accrual ledger: an institution, or a bank's
- *  securities desk where the key names one. */
-/** §3.13-BOOK (c2b): the argument spans TWO id spaces — a desk's participant id
- *  (`<ticker>::DESK`) or a holder's entity id — so it stays a string, and the entity arm is
- *  reached only by ELIMINATION, once `dealerDeskTicker` has said this is not a desk. */
-function holderPayee(holderId: string, bankIdOfTicker: (t: Ticker) => EntityId | undefined): import('./settlement').PartyRef {
-  const ticker = dealerDeskTicker(holderId);
-  const deskBankId = ticker !== undefined ? bankIdOfTicker(ticker) : undefined;
-  // §3.13-BOOK (c-then-3b): a desk's participant id embeds its bank's TICKER, and a `PartyRef`
-  // names that bank by entity id — so the crossing back is a lookup, handed in by the caller
-  // that holds the index. A desk whose bank cannot be found is not a party at all.
-  return deskBankId !== undefined
-    ? bankSecuritiesPartyOf(deskBankId)
-    : { kind: 'INSTITUTION', id: asEntityId(holderId) };
+/** §3.13-BOOK d3f — THE ACCRUAL LEDGER'S HOLDER KEY IS A REGISTER BOOK ID: an institution's
+ *  entity id, a desk's securities book (`deskBookId`) — the same id the holder's rows sit under.
+ *  It used to be the clearing SEAT for a desk (`<ticker>::DESK`) and the entity id for everyone
+ *  else, two id spaces told apart by elimination and crossed back through a ticker lookup. A
+ *  clearing book writes the key through its seat→party crossing (`participantPartyOf`), once. */
+export function accrualBookOf(participantId: string, partyOfParticipant: (id: string) => import('./settlement').PartyRef | undefined): string {
+  const party = partyOfParticipant(participantId);
+  const bookId = party === undefined ? undefined : bookIdOfParty(party);
+  return bookId ?? defect(`accrual ledger: participant '${participantId}' holds on no register book`);
+}
+
+/** The payee behind a holder key on the accrual ledger: the party of that register book, as
+ *  `registerBooks` states it — no second id space, no arm to eliminate. */
+function holderPayee(bookId: string, payeeByBook: ReadonlyMap<string, import('./settlement').PartyRef>): import('./settlement').PartyRef {
+  return payeeByBook.get(bookId) ?? defect(`accrual ledger names holder '${bookId}', which is no register book`);
 }
 
 /**
@@ -433,10 +432,10 @@ function holderPayee(holderId: string, bankIdOfTicker: (t: Ticker) => EntityId |
  * on its securities account and nothing leaves the book, so equity has to move with it or the
  * sheet stops closing. The principal legs beside it need no such write — paper out, cash in.
  */
-function bookDeskIncome(companies: Company[] | undefined, byTicker: Map<Ticker, number>, reason: string): void {
-  if (byTicker.size === 0) return;
+function bookDeskIncome(companies: Company[] | undefined, byBankId: Map<EntityId, number>, reason: string): void {
+  if (byBankId.size === 0) return;
   companies?.forEach((bank) => {
-    const deltaLocal = byTicker.get(bank.ticker);
+    const deltaLocal = byBankId.get(bank.id);
     if (!deltaLocal || !bank.bankBalanceSheet) return;
     bank.bankBalanceSheet = bookPnL(bank.bankBalanceSheet, deltaLocal, reason, bank.ticker);
   });
@@ -591,6 +590,7 @@ export function applyPendingCorporateActionSettlements(
   // issue. The institutions come first and in order, so the entity array is rebuilt off the same
   // hit flags below.
   const books = registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), ctx.updatedCompanies ?? []);
+  const payeeByBook = new Map(books.map((b) => [b.id, b.payee] as const));
   const entityHit: boolean[] = new Array(books.length);
   books.forEach((entity, ei) => {
     let anyHit = false;
@@ -615,10 +615,9 @@ export function applyPendingCorporateActionSettlements(
   // the payment and their share went to the other holders; and the households were paid by
   // subtraction, under a second name, because they had no rows to be paid on.
   const denomByPair = new Map<number, number>();
-  const deskIncomeByTicker = new Map<Ticker, number>();
+  const deskIncomeByBankId = new Map<EntityId, number>();
   if (hasCash && ctx.updatedCompanies) {
-    const { companyById, companyByTicker: cbt2 } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
-    const bankIdOfTicker = (t: Ticker) => cbt2.get(t)?.id;
+    const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
     pendingCashByType.forEach((byId, type) => {
       const t = typeRefOf(v2, type);
       if (t < 0) return;
@@ -667,14 +666,14 @@ export function applyPendingCorporateActionSettlements(
             const amountLocal = owedLocal * (usd / denomLocal);
             if (!(amountLocal > 0)) return;
             journalPayment(ctx, {
-              payer, payee: holderPayee(deskId, bankIdOfTicker), amount: amountLocal,
+              payer, payee: holderPayee(deskId, payeeByBook), amount: amountLocal,
               // The paper's own money, off the ISSUER — which is the payer here. Read from the
               // party rather than from `issuer`, which is `undefined` for every non-equity
               // instrument at this site and would have thrown the moment a credit desk was paid.
               currency: obligationCurrencyOf(ctx.v2, payer), reason: paymentReason,
             });
-            const deskTicker = dealerDeskTicker(deskId);
-            if (deskTicker !== undefined) deskIncomeByTicker.set(deskTicker, (deskIncomeByTicker.get(deskTicker) ?? 0) + amountLocal);
+            const deskBankId = deskBankIdOf(deskId);
+            if (deskBankId !== undefined) deskIncomeByBankId.set(deskBankId, (deskIncomeByBankId.get(deskBankId) ?? 0) + amountLocal);
           });
         }
         // §9.13-EQUITY — "THE PUBLIC FLOAT" IS GONE, and it was never a second holder. It was
@@ -689,7 +688,7 @@ export function applyPendingCorporateActionSettlements(
         }
       });
     });
-    bookDeskIncome(ctx.updatedCompanies, deskIncomeByTicker, 'security payment on desk inventory');
+    bookDeskIncome(ctx.updatedCompanies, deskIncomeByBankId, 'security payment on desk inventory');
   }
 
   books.forEach((entity, ei) => {
@@ -899,9 +898,9 @@ export function accrueHoldersInterest(
  * CLEAN price, the buyer pays the seller what has run since the last coupon date, and the BALANCE
  * has to move with the face or the coupon date pays it to the seller a second time.
  *
- * The holder key is the CLEARING PARTICIPANT's id, which is what the weekly accrual walk already
- * keys by — an institution's own id, or a desk's participant id — so a balance moved here is a
- * balance that walk will find. A balance that reaches zero leaves the ledger, exactly as the
+ * The holder key is the holder's REGISTER BOOK id (§3.13-BOOK d3f: `accrualBookOf`), which is
+ * what the weekly accrual walk already keys by — an institution's own id, a desk's securities
+ * book — so a balance moved here is a balance that walk will find. A balance that reaches zero leaves the ledger, exactly as the
  * payout path leaves it.
  */
 export function moveCorporateAccrued(
@@ -1104,9 +1103,10 @@ export function applyHolderInterestAccruals(
   // §3.13-BOOK (c-then-2): the issuers, read off the entity index rather than the `Map<id, ticker>`
   // mirror that had to be hand-registered at every firm birth. Built here, after the early
   // returns, so a week with no payout pays nothing for it.
-  const { companyById: issuersById, companyByTicker: issuersByTicker } = buildEntityIndex(ctx.updatedCompanies ?? [], []);
-  const bankIdOfTicker = (t: Ticker) => issuersByTicker.get(t)?.id;
-  const deskCouponByTicker = new Map<Ticker, number>();
+  const { companyById: issuersById } = buildEntityIndex(ctx.updatedCompanies ?? [], []);
+  // §3.13-BOOK d3f: a holder key is a register book id; its payee is what the register says.
+  const payeeByBook = new Map(registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), ctx.updatedCompanies ?? []).map((b) => [b.id, b.payee] as const));
+  const deskCouponByBankId = new Map<EntityId, number>();
   payouts.forEach((instrumentKey) => {
     const byHolder = ctx.holderAccruedInterestLocal.get(instrumentKey);
     if (!byHolder) return;
@@ -1123,16 +1123,16 @@ export function applyHolderInterestAccruals(
     const couponCurrency = obligationCurrencyOf(ctx.v2, payer);
     byHolder.forEach((accruedLocal, holderId) => {
       if (!(accruedLocal > 0)) return;
-      const deskTicker = dealerDeskTicker(holderId);
-      if (deskTicker !== undefined) deskCouponByTicker.set(deskTicker, (deskCouponByTicker.get(deskTicker) ?? 0) + accruedLocal);
+      const deskBankId = deskBankIdOf(holderId);
+      if (deskBankId !== undefined) deskCouponByBankId.set(deskBankId, (deskCouponByBankId.get(deskBankId) ?? 0) + accruedLocal);
       if (COUPON_TRACE) {
         const type = instrumentKey.slice(0, instrumentKey.indexOf(':'));
         traceAdd(tracePaidLocal, type, accruedLocal);
-        if (deskTicker !== undefined) traceAdd(traceDeskPaidLocal, type, accruedLocal);
+        if (deskBankId !== undefined) traceAdd(traceDeskPaidLocal, type, accruedLocal);
       }
       journalPayment(ctx, {
         payer,
-        payee: holderPayee(holderId, bankIdOfTicker),
+        payee: holderPayee(holderId, payeeByBook),
         amount: accruedLocal,
         currency: couponCurrency,
         reason: 'coupon payment',
@@ -1141,7 +1141,7 @@ export function applyHolderInterestAccruals(
     ctx.holderAccruedInterestLocal.delete(instrumentKey);
   });
   payouts.clear();
-  bookDeskIncome(ctx.updatedCompanies, deskCouponByTicker, 'coupon on desk inventory');
+  bookDeskIncome(ctx.updatedCompanies, deskCouponByBankId, 'coupon on desk inventory');
   if (COUPON_TRACE) reportCouponTrace(ctx, traceAccruedLocal, tracePaidLocal, traceDeskAccruedLocal, traceDeskPaidLocal);
 }
 
@@ -1162,7 +1162,7 @@ function reportCouponTrace(
     byHolder.forEach((v, holderId) => {
       if (!(v > 0)) return;
       usd += v;
-      if (dealerDeskTicker(holderId) !== undefined) deskLocal += v;
+      if (deskBankIdOf(holderId) !== undefined) deskLocal += v;
     });
     owed.set(type, (owed.get(type) ?? 0) + usd);
     deskOwed.set(type, (deskOwed.get(type) ?? 0) + deskLocal);

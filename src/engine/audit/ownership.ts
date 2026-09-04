@@ -2,6 +2,7 @@
 
 import { GameState, RegionId } from '../../types';
 import { deskRowsOf } from '../desk-register';
+import { deskBankIdOf } from '../ledger/holdings-ledger';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, sum } from './types';
@@ -20,7 +21,6 @@ import { bookHeadOf } from '../../engine2/holdings';
 import { equityIssuerId, etfShareFundId } from '../../domain/instrument-keys';
 import { asEntityId, asTicker } from '../../domain/ids';
 import { assertNever } from '../../domain/defect';
-import { dealerDeskTicker } from '../../domain/dealer-desk';
 import { partyFromKey } from '../ledger/party';
 import type { PartyRef } from '../../domain/party';
 import type { Ticker } from '../../domain/ids';
@@ -372,7 +372,6 @@ function o8(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
   const companyIds = new Set(state.companies.map((c) => c.id));
-  const tickers = new Set(state.companies.map((c) => c.ticker));
   const entityIds = new Set(state.institutionalEntities.map((e) => e.id));
 
   // 1. The desks' credit books against the register's key.
@@ -444,12 +443,10 @@ function o8(state: GameState, week: number): AuditFinding[] {
     if (!entityExists(sh.buyerId)) bump('consignment buyers');
     if (sh.carrierId !== undefined && !companyById.has(sh.carrierId)) bump('consignment carriers');
   });
-  // The corporate accrual ledger's holder key is TWO spaces by design: an entity id, or a desk's
-  // participant id (`holderPayee`). A desk is alive if its bank is.
+  // §3.13-BOOK d3f: the corporate accrual ledger's holder key is a register BOOK id — an
+  // institution's entity id, or a desk's securities book, which names its bank.
   state.holderAccruedInterestLocal.forEach((byHolder) => byHolder.forEach((_v, holderId) => {
-    const desk = dealerDeskTicker(holderId);
-    const ok = desk !== undefined ? tickers.has(desk) : entityExists(asEntityId(holderId));
-    if (!ok) bump('accrued-interest holders');
+    if (!entityExists(deskBankIdOf(holderId) ?? asEntityId(holderId))) bump('accrued-interest holders');
   }));
   // The sovereign accrual ledger's key ends in a `partyKey`.
   state.sovereignAccruedInterestLocal.forEach((_v, k) => {

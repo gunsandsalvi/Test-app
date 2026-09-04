@@ -76,7 +76,7 @@ import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY, issuerIdOf, trancheSched
 import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
 import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
 import { isActiveCompany, accruedPerFace, defaultPeriodWeeks, banksOf } from '../../../domain/company';
-import { computeAnnualDefaultProbability, creditRecoveryRate, moveCorporateAccrued } from './shared-helpers';
+import { computeAnnualDefaultProbability, creditRecoveryRate, moveCorporateAccrued, accrualBookOf } from './shared-helpers';
 import { priceFromSpreadBps, zeroRateAt } from '../../../domain/pricing';
 import type { PaperTerms, ZeroCurve } from '../../../domain/pricing';
 import { issuerSpreadAt, CreditPriceWorld } from '../../credit-price';
@@ -631,8 +631,10 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const accruedLeg = accruedOnFills(
       allParticipants, result.newParticipantHoldings,
       (id) => accruedPerFaceById.get(id) ?? 0,
+      // §3.13-BOOK d3f: the ledger's holder key is the participant's register BOOK — the same id
+      // its rows sit under — read through the seat→party crossing above.
       (instrumentId, participantId, usd) => moveCorporateAccrued(
-        ctx.holderAccruedInterestLocal, 'CORP_BOND', instrumentId, participantId, usd)
+        ctx.holderAccruedInterestLocal, 'CORP_BOND', instrumentId, accrualBookOf(participantId, partyOfParticipant), usd)
     );
     settleClearedBook(
       ctx, regionId, currencyOf(regionId), BOOK,

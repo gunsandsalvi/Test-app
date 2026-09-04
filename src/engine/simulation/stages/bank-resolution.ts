@@ -28,7 +28,7 @@ import { reassignConsignments } from './goods-arrival';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { banksOf } from '../../../domain/company';
 import { partyKey } from '../../ledger/party';
-import { dealerDeskParticipantId } from '../../../domain/dealer-desk';
+import { deskBookId } from '../../ledger/holdings-ledger';
 import { getSimulationDate } from '../../formatters';
 import { WeeklyStepContext } from './context';
 import { derivativesBookOf } from './derivative-lifecycle';
@@ -96,11 +96,11 @@ export function rekeyBankLinks(
   });
   // THE DESK'S UNPAID COUPONS MOVE WITH ITS INVENTORY. `absorbBankSheet` merges the dealer books
   // into the acquirer, but what that paper has already EARNED and not been paid sits on the
-  // register's accrual ledger under the failed bank's own desk id. Left there, the coupon date
+  // register's accrual ledger under the failed bank's own desk BOOK (§3.13-BOOK d3f). Left there, the coupon date
   // paid a desk whose bank has no account any more: the settlement store had no row for it and
   // dropped BOTH legs of the payment — the only kind M7 ever named was `payee BANK_SECURITIES`.
-  const fromDesk = dealerDeskParticipantId(from);
-  const toDesk = dealerDeskParticipantId(to);
+  const fromDesk = deskBookId(fromBank.id);
+  const toDesk = deskBookId(toBank.id);
   ctx.holderAccruedInterestLocal.forEach((byHolder) => {
     const owedLocal = byHolder.get(fromDesk);
     if (owedLocal === undefined) return;

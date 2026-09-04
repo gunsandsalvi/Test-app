@@ -509,14 +509,6 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d3f. **THE ACCRUAL LEDGER'S DESK KEY IS THE BOOK.** `holderAccruedInterestLocal` (state) and
-        the corporate-action split key a desk by its clearing SEAT (`<ticker>::DESK`,
-        `dealerDeskParticipantId`) and cross back to the party through `holderPayee`'s desk arm
-        — a ticker→id lookup, by elimination. The key becomes the desk's register BOOK id
-        (`deskBookId`), as an institution's key is its book id, and the payee is what
-        `registerBooks` says for that book: the arm, `dealerDeskTicker` at the five readers
-        (`shared-helpers`, `O8`'s accrued-interest arm, `bank-resolution`'s re-key, the three
-        books' accrual writes) and `bookDeskIncome`'s by-ticker map go. Byte-identical.
     d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
        share and contract gets a row: kind, issuer, **currency**, issued units, and nothing else.
        Terms stay in the class store, so the index copies no quantity and cannot drift.
@@ -1725,6 +1717,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d3f — THE ACCRUAL LEDGER'S DESK KEY IS THE BOOK.** `holderAccruedInterestLocal` keyed a
+desk by its clearing SEAT (`<ticker>::DESK`) and everyone else by entity id — two id spaces in one
+map, told apart by elimination (`dealerDeskTicker` said "not a desk") and crossed back to a party
+through a ticker→id lookup in `holderPayee`. The key is the holder's REGISTER BOOK id now
+(`holdings-ledger.ts:bookIdOfParty`, which `holderIdOf` is a case of; a desk's is `deskBookId`), the
+same id its rows sit under: the three flow books write it through their existing seat→party
+crossing (`accrualBookOf(participantId, partyOfParticipant)`), the corporate-action and coupon
+passes look the payee up in what `registerBooks` states for that book, the desk-income roll-up is
+by bank id, `O8`'s accrued-interest arm checks the bank a desk book names, and a resolution
+re-keys `deskBookId(from) → deskBookId(to)`. `holderPayee`'s desk arm, its `bankIdOfTicker`
+parameter and the two `companyByTicker` reads that fed it are gone. Byte-identical in every
+number; the ledger's keys change shape, which a seed has none of. Gates green; no run.
 
 **13-BOOK d3e — THE REGIONAL DESK ROLL-UPS DIE.** `bankingSector.corpBondDealerInventory`,
 `sovBondDealerInventory` and `loanDealerInventory` are deleted, with `domain/dealer-desk.ts:

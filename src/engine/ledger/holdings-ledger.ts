@@ -20,7 +20,7 @@ import { companyParty, bankPartyOf, bankSecuritiesPartyOf } from '../../domain/p
 import {
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
-import { PartyRef, partyKey } from './party';
+import { PartyRef, partyKey, partyFromKey } from './party';
 import { REGION_IDS } from '../../domain/geography';
 import { InstrumentId, EntityId, asEntityId } from '../../domain/ids';
 import { wire, AssetKind, ASSET_KINDS } from './wire';
@@ -100,17 +100,30 @@ const isDeskBook = (bookId: string): boolean => bookId.startsWith('BANK_SECURITI
  * seed's `seedBook` passes no instruction and a company is never seeded a book.
  */
 const holderIdOf = (v2: V2World, p: PartyRef, spec?: { instrumentId: InstrumentId }): string | undefined => (
+  p.kind === 'COMPANY' ? (spec !== undefined && (issuerIdOf(v2, spec.instrumentId) as string) !== (p.id as string) ? p.id : undefined)
+    : bookIdOfParty(p));
+
+/** THE REGISTER BOOK A PARTY HOLDS ON — for every party whose book does not depend on the paper
+ *  (a company's does: `holderIdOf`). §3.13-BOOK d3f: the accrual ledgers key a holder by this, so
+ *  the same id names a holder's rows and its unpaid coupons. */
+export const bookIdOfParty = (p: PartyRef): string | undefined => (
   p.kind === 'INSTITUTION' ? p.id
     : p.kind === 'HOUSEHOLD' ? householdBookId(p.region)
       // §3.13-BOOK d3a: the central bank holds its sovereign book here, like any holder.
       : p.kind === 'CENTRAL_BANK' ? centralBankBookId(p.region)
         // §3.13-BOOK d3b: a bank's OWN book (its liquidity buffer) is the entity's book, under the
-        // party whose money buys it — its reserves. Its desk (`BANK_SECURITIES`) is d3d's.
+        // party whose money buys it — its reserves.
         : p.kind === 'BANK' ? p.id
-          // §3.13-BOOK d3d: the desk's inventory, signed.
+          // §3.13-BOOK d3d: the desk's inventory, signed, on its own book.
           : p.kind === 'BANK_SECURITIES' ? deskBookId(p.id)
-          : p.kind === 'COMPANY' ? (spec !== undefined && (issuerIdOf(v2, spec.instrumentId) as string) !== (p.id as string) ? p.id : undefined)
             : undefined);
+
+/** The bank whose desk a book id names, or undefined for any other book — the inverse of
+ *  `deskBookId`, read off the party key it is. */
+export const deskBankIdOf = (bookId: string): EntityId | undefined => {
+  const p = partyFromKey(bookId);
+  return p !== undefined && p.kind === 'BANK_SECURITIES' ? p.id : undefined;
+};
 
 /**
  * §3.13-BOOK slice (c) — WHO ISSUED THE PAPER ON THIS ROW.

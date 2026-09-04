@@ -46,7 +46,7 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
-import { computeAnnualDefaultProbability, creditRecoveryRate, payHoldersAccruedInterest, moveCorporateAccrued, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
+import { computeAnnualDefaultProbability, creditRecoveryRate, payHoldersAccruedInterest, moveCorporateAccrued, accrualBookOf, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetLocal, accruedPerFace, banksOf } from '../../../domain/company';
 import type { CreditRating } from '../../../domain/company';
@@ -1214,8 +1214,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const cpAccruedLeg = accruedOnFills(
         cpAllParticipants, cpResult.newParticipantHoldings,
         (id) => accruedPerFaceById.get(id) ?? 0,
+        // §3.13-BOOK d3f: the ledger's holder key is the participant's register BOOK — the same id
+        // its rows sit under — read through the seat→party crossing above.
         (instrumentId, participantId, usd) => moveCorporateAccrued(
-          ctx.holderAccruedInterestLocal, 'COMMERCIAL_PAPER', instrumentId, participantId, usd)
+          ctx.holderAccruedInterestLocal, 'COMMERCIAL_PAPER', instrumentId, accrualBookOf(participantId, cpPartyOfParticipant), usd)
       );
       settleClearedBook(
         ctx, regionId, currencyOf(regionId), CP_BOOK,

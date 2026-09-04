@@ -51,7 +51,7 @@ import { isActiveCompany, accruedPerFace, defaultPeriodWeeks, banksOf } from '..
 import { priceFromSpreadBps } from '../../../domain/pricing';
 import type { PaperTerms } from '../../../domain/pricing';
 import { computeDistressedReservationSpreadBps, spreadRiskCapitalChargeRate, isInvestmentGrade } from './asset-allocation';
-import { computeAnnualDefaultProbability, creditRecoveryRate, moveCorporateAccrued } from './shared-helpers';
+import { computeAnnualDefaultProbability, creditRecoveryRate, moveCorporateAccrued, accrualBookOf } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { buildEntityIndex } from '../../ledger/entity-index';
 
@@ -548,8 +548,10 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const accruedLeg = accruedOnFills(
       allParticipants, result.newParticipantHoldings,
       (id) => accruedPerFaceById.get(id) ?? 0,
+      // §3.13-BOOK d3f: the ledger's holder key is the participant's register BOOK — the same id
+      // its rows sit under — read through the seat→party crossing above.
       (instrumentId, participantId, usd) => moveCorporateAccrued(
-        ctx.holderAccruedInterestLocal, 'LEVERAGED_LOAN', instrumentId, participantId, usd)
+        ctx.holderAccruedInterestLocal, 'LEVERAGED_LOAN', instrumentId, accrualBookOf(participantId, partyOfParticipant), usd)
     );
     settleClearedBook(
       ctx, regionId, currencyOf(regionId), BOOK,
