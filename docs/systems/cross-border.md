@@ -141,11 +141,11 @@ finance.
 §3 step 15 lists *"`macro.tsx:63` reports a permanent 0.0% current account"* among a run of UI unit
 errors (a `$2` move printed as `200.0%`, home ownership as `0.6%`). It is not the same kind of
 thing: the other entries render a real number wrongly, this one renders a number nobody computes.
-Fixing the formatter would print `0.0%` in a different font. Rule 29 — **fix the cause** — and the
+Fixing the formatter would print `0.0%` in a different font. Rule 12 — **fix the cause** — and the
 cause is that the model has no external accounts.
 
-The ingredients are all present and none of them are joined up. Goods: `reg.exportsUSD` /
-`reg.importsUSD`, summed from real fills (`06-fx-and-trade:70-77`). Income: coupons and dividends
+The ingredients are all present and none of them are joined up. Goods: `reg.exportsLocal` /
+`reg.importsLocal`, summed from real fills (`06-fx-and-trade:70-77`). Income: coupons and dividends
 already reach foreign holders through `applyHolderInterestAccruals` and the register, and the payer
 and payee both carry a region. Financial account: `fx-clearing.ts:100` already computes each
 entity's **change in foreign holdings by issuer region** off `priorForeignHoldingsByRegion` — that
@@ -153,7 +153,7 @@ is the net acquisition of foreign claims, per party, per region, already in the 
 generate FX orders and never summed into an account. So D1 and D2 are a read over things that exist,
 and D3 then becomes checkable rather than imposed, which is exactly the node's demand.
 
-Not in §3 as a mechanism. **Becomes a step**, medium: two reads and one audit check, made possible
+**§3 step 37-BOP**, medium: two reads and one audit check, made possible
 by 13c-FX-2 having put real two-sided flows underneath them.
 
 ### ❌ C2 / C2.a — NOTHING IS ISSUED IN A FOREIGN CURRENCY, SO ORIGINAL SIN CANNOT EXIST
@@ -171,17 +171,17 @@ carries its own denomination, and it is the shape the other three want."* Record
 demand-side reason 13c's tail matters: cross-border finance is a currency decision by the ISSUER,
 and today only the goods invoice gets to make one.
 
-### ⚠️ F2 / F3 — THE TRADE AGGREGATE SURVIVED, IN THE PLACE WHERE IT IS LEGITIMATE
+### ⚠️ F2 / ✅ F3 — THE TRADE AGGREGATE SURVIVED, IN THE PLACE WHERE IT IS LEGITIMATE
 
-§9.13c-FX-2 records `ctx.bilateralTradeWeeklyUSD` as deleted. **It was not deleted; it was removed
+§9.13c-FX-2 records `ctx.bilateralTradeWeeklyLocal` as deleted. **It was not deleted; it was removed
 from `fx-clearing`**, which is the removal that mattered. It still exists at `context.ts:271,435`,
 is zeroed each week at `05-unit-bidding:2457`, and is accumulated at `05-unit-bidding:1786` — one
 `+=` per FILL, keyed `[lot.sellerRegion][buyerRegion]`, converted at the buyer's rate. Then
-`06-fx-and-trade:70-77` sums it into `reg.exportsUSD` / `importsUSD` / `tradeBalance`.
+`06-fx-and-trade:70-77` sums it into `reg.exportsLocal` / `importsLocal` / `tradeBalance`.
 
 That is the correct direction of travel and **F3 holds**: the series is a report of settled
 transactions, not an input. `fx-clearing.ts:111` carries the tombstone — *"This was
-`ctx.bilateralTradeWeeklyUSD[exporter][importer]` — a derived aggregate standing in for"* orders
+`ctx.bilateralTradeWeeklyLocal[exporter][importer]` — a derived aggregate standing in for"* orders
 nobody places — and the FX book now reads the desks' real positions instead.
 
 F2 is `⚠️` and not `✅` for one reason: the aggregate is the only surviving representation of the
@@ -215,7 +215,7 @@ financial account, because there is nothing to check.
 ### ⚠️ B4 — THE ONE CROSS-BORDER VERIFY IS TAUTOLOGICAL AND ITS TOLERANCE IS A PERCENTAGE
 
 `audit/accounts.ts:f3` compares world exports to world imports. Both come from the same
-`bilateralTradeWeeklyUSD` matrix summed along different axes, so it is true by construction and can
+`bilateralTradeWeeklyLocal` matrix summed along different axes, so it is true by construction and can
 only fire on a NaN. B4 asks for something stronger — party to party, unit for unit — which would be
 a real check against the fills.
 
@@ -253,3 +253,8 @@ expenditure switching as a consequence of a real comparison, never an elasticity
 working, funds it out of the parent's own cash through the FX path, and uses the ordinary birth
 machinery. **F1** is not close to failing: cross-border fills, foreign holdings, FDI subsidiaries
 and interbank FX squaring all exist.
+
+### Also marked, briefly
+
+- **C3 ⚠️** — a bank's cross-currency mismatch is squared spot-for-spot each week; no term funding in another money exists — `fx-forwards-and-xcs.md` A4/D3.
+- **E4 ⚠️** — a central bank reaches other regions only through the cleared rate; `evolveFxPair`'s basis walk is the one formula channel left — 37-SMALL.

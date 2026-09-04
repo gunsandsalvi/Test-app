@@ -134,7 +134,7 @@ thing in this tree.
 **The exception is the SME tier, and it is total.** `bank-lending.ts:243`:
 
 ```
-lossUSD = (l.principalUSD * smePoolAnnualPd(seg) * (1 - creditRecoveryRate(reg))) / 52
+lossLocal = (l.principalLocal * smePoolAnnualPd(seg) * (1 - creditRecoveryRate(reg))) / 52
 ```
 
 A pooled loan's loss is `principal × PD × LGD`, applied every week to every SME loan in the world.
@@ -151,7 +151,7 @@ sector where a credit tightening should bite first. Today a tightening reaches t
 quoted margins → `blendedMarginBps` → `coverageDistress`) and comes out as a smoothly larger loss
 RATE, never as a firm failing.
 
-Not in §3. **Becomes a §3 step**, and it is `sme-pools.md` E1's step too — one step, sized by
+**§3 step 37-LOSSRATE**, and it is `sme-pools.md` E1's step too — one step, sized by
 whatever resolution the SME tier is given (see that tree's diff).
 
 ### ❌ E3 — INSIDE AN SME POOL, BIRTHS EXACTLY OFFSET DEATHS BY CONSTRUCTION
@@ -171,7 +171,7 @@ The named tier does not have this defect: `runFirmBirthsForRegion` is conditiona
 and `isInDefault` is conditional on a real state, so the named population moves both ways. The pool
 is the exception, and it is the tier that holds most of the firms.
 
-Not in §3. **Becomes a §3 step** — the same step as C2.a's, because both are "what resolution is an
+**§3 step 37-LOSSRATE** — the same step as C2.a's, because both are "what resolution is an
 SME".
 
 ### ❌ B2 / E4 — AGE IS RECORDED AND NOTHING READS IT
@@ -187,7 +187,7 @@ best possible volatility**. A newborn is also handed a stated `leverage: 2.5` an
 
 E4 is the measurement that would have shown this: nothing anywhere reads the population, its age
 distribution or its sector mix over time. It is a **measurement, for §3 step 38**; B2 is a
-mechanism gap and **becomes a §3 step**, small.
+mechanism gap and is **§3 step 37-BIRTH**, small.
 
 ### ⚠️ D6.a — A DEAD FIRM WITH NO CLAIMS KEEPS ITS MONEY FOR EVER
 
@@ -205,7 +205,7 @@ every row of the dead issuer whether or not it carried a claim, and the ladder i
 the fix is to give a claimless death a destination (the residual is the founders', by D2's
 seniority) rather than to build anything.
 
-Not in §3. **Becomes a §3 step**, very small.
+**§3 step 37-ESTATE**, very small.
 
 ### ⚠️ D1 — THE ASSET SALE IS A DISPOSAL SCHEDULE, NOT A CLEARED PRICE
 
@@ -216,7 +216,7 @@ than by willingness, and a week with no peer able to pay **scraps** the slice. D
 buyers at cleared prices"; the buyers are named and the price is not cleared.
 
 This is rule 3's shape and the reason it matters here is D2.a: recovery is only "what the assets
-fetched" if what they fetched was struck by somebody. **Becomes a §3 step**, and it is naturally the
+fetched" if what they fetched was struck by somebody. **§3 step 37-ESTATE**, and it is naturally the
 same one as `m-and-a.md` B2 (a distressed sale and a takeover are the same auction).
 
 ### ⚠️ D4 / D4.a — THE SUPPLIERS' LOSS IS REAL; THE EMPLOYEES' JOBS JUST STOP BEING COUNTED
@@ -230,7 +230,7 @@ matched stock. **There is no separation event**: those workers never enter `sepa
 never matched again through the labour market's own machinery, and no household is notified that its
 earner lost a job. The unemployment print moves, the mechanism does not.
 
-**Becomes a §3 step**, small — the layoffs path already exists (`employerWeekPosting` emits
+**§3 step 37-ESTATE**, small — the layoffs path already exists (`employerWeekPosting` emits
 separations); a death has to route its headcount through it.
 
 ### ⚠️ C1 / B4 — THE DEFAULT DEFINITION AND THE DISTRESSED FIRM'S OPTIONS
@@ -240,7 +240,7 @@ C1 wants a missed payment or a covenant breach. The trigger is a balance-and-rat
 covenants, no acceleration, no observable event").
 
 B4's four actions: cutting costs is real (distress layoffs), drawing the line is real
-(`revolverDrawUSD`), cutting the dividend is real (`sustainableDividendWeeklyUSD` pays nothing on a
+(`revolverDrawLocal`), cutting the dividend is real (`sustainableDividendWeeklyLocal` pays nothing on a
 loss). **Selling assets and raising expensive money are absent** — a distressed firm cannot
 voluntarily sell plant, and the primary market is a binary gate (`MARKET_ACCESS_DENIED` is `['D']`,
 i.e. shut only after it is already too late) rather than a price. Related to **§3 step 35** (there is
@@ -261,7 +261,7 @@ for §3 step 38.**
 demand times the profit of serving it, with no coefficient — and gives an entrant to **every** pool
 where that is positive. That is a genuine A4/A4.a: no birth rate, and the signal is the reason.
 Two stated shapes remain inside it: the quarterly `nextWeek % 13` gate (the model's structural
-clock, consistent with everything else) and `revenueUSD = pool revenue × 0.004`, which fixes every
+clock, consistent with everything else) and `revenueLocal = pool revenue × 0.004`, which fixes every
 entrant's opening size at four-tenths of a percent of its pool regardless of what the opportunity is
-worth. The size should be what the founders can fund. Small; **becomes a §3 step** or a line of
+worth. The size should be what the founders can fund. Small; is **§3 step 37-BIRTH** or a line of
 C2.a's.

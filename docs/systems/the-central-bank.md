@@ -130,7 +130,7 @@ checked by `scripts/check-atlas.sh`.
 
 ### ❌ D3 / D3.a / D4 — THERE IS NO LENDER OF LAST RESORT, THERE IS A CREDIT LINE. KNOWN(20-LLR)
 
-Bagehot's rule is four conditions and `raiseCentralBankLoanUSD` (`bank-lending.ts:917`) has one and a
+Bagehot's rule is four conditions and `raiseCentralBankLoanLocal` (`bank-lending.ts:917`) has one and a
 half:
 
 | Bagehot | code |
@@ -141,12 +141,12 @@ half:
 | to the solvent | ❌ — nothing in `bank-funding-close.ts` reads `isBankUnderPca`, or capital, or anything else |
 
 D4 (refusal reachable) has no code path whatever: the function's only early return is
-`shortfallUSD < 1e6`. **The central bank cannot say no**, and since the funding-close runs at stage
+`shortfallLocal < 1e6`. **The central bank cannot say no**, and since the funding-close runs at stage
 417 of ~50 named stages — after resolution's own trigger has *not* fired and before
 `bank-resolution` at 418 — a bank that is about to be closed is funded first.
 
 Note what this is NOT: `runRegionalRepoSession`'s standing-facility seat IS a proper facility. It is
-collateralised (`unencumberedBorrowingCapacityUSD` bounds the borrower's size), priced (`srfBps -
+collateralised (`unencumberedBorrowingCapacityLocal` bounds the borrower's size), priced (`srfBps -
 SRF_SEAT_STEP_BPS`, a posted rate with an elastic quantity), and a bank out of eligible paper simply
 does not appear as a borrower. **The model has a disciplined facility and an undisciplined one, and
 the undisciplined one runs later** — which is rule 4's defect and exactly what 20-LLR names as the
@@ -157,7 +157,7 @@ escape hatch from the disciplined one. **Already §3 step 20-LLR.**
 Recorded in full as `the-treasury.md` D3, and this is the central bank's side of the same row: the
 advance is an ASSET of this institution. `waysAndMeansOf(v2, region)` is `max(0, -treasuryNetOf)` —
 the treasury's account is one signed row and its negative side is carried into
-`centralBankAssetsUSD` as the last term (`central-bank.ts:136`), charged the policy rate every week
+`centralBankAssetsLocal` as the last term (`central-bank.ts:136`), charged the policy rate every week
 by `central-bank.ts:49` and remitted straight back to the treasury at `:60`. `ui/objects/centralbank.tsx`
 labels it for the player as "the treasury's overdraft here".
 
@@ -167,8 +167,8 @@ Two things belong to this tree rather than the treasury's:
   approves it, nothing caps it, and D4's refusal does not exist for this borrower either — the same
   hole as D3, in the other direction.
 - **the interest round-trips.** The treasury pays the policy rate on the advance and the central
-  bank remits it back in the same stage, in the same week, in full (`remitUSD` includes
-  `waysAndMeansInterestUSD`). So the advance is not merely available, it is **free**, and E3's
+  bank remits it back in the same stage, in the same week, in full (`remitLocal` includes
+  `waysAndMeansInterestLocal`). So the advance is not merely available, it is **free**, and E3's
   remittance is what makes it free.
 
 The mechanism belongs to `the-treasury.md` D3 and is that tree's finding. **Already a §3 step-to-be
@@ -197,7 +197,7 @@ as a **literal** (`repo-clearing.ts:359`) — the code's own comment records tha
 corridor assertion pass vacuously for eight commits — and `reg.repoRateAnnual` is seeded at
 `policyRate - 20bp` (`macro/initialization.ts:558`).
 
-**Becomes a §3 step**, and it is the natural successor to 20-LLR: once the session clears at the
+**§3 step 37-BENCHMARK**, and it is the natural successor to 20-LLR: once the session clears at the
 close against the week's real flows, the thing to do with the print is to make the loan and deposit
 books read it instead of the policy rate.
 
@@ -211,30 +211,30 @@ eligibility in a stress is one of the two things a central bank actually does. H
 terms tighten automatically exactly when the curve turns volatile — procyclical, and with nobody
 deciding it. Eligibility is likewise not a choice but a scope decision (`domain/repo.ts:16`,
 "Sovereign general collateral only, deliberately"), which is **OUT OF SCOPE and says so**. The
-haircut being un-chosen is the live half. Small; **becomes a §3 step** or joins 20-LLR's follow-on.
+haircut being un-chosen is the live half. Small; is **§3 step 20-LLR** or joins 20-LLR's follow-on.
 
 ### ⚠️ C2 / E4 — TWO HALVES THAT NEVER HAPPEN
 
 C2: a purchase creates reserves and this is exactly right (`applyCentralBankFills` books the paper
 with no debit anywhere, and `central-bank-demand.ts:9` explains why). The *sale* half does not
-exist: `centralBankParticipant` sets `minHoldingUSD: heldUSD`, so the central bank never sells, and
+exist: `centralBankParticipant` sets `minHoldingLocal: heldLocal`, so the central bank never sells, and
 QT is runoff only (`openMarketPolicy` returns a `reinvestmentShare` below 1 and nothing else). The
 comment states this as deliberate — "a central bank selling its book outright is a rarer operation
 than QT and is not this" — so it is **OUT OF SCOPE**, stated.
 
-E4 is not. `runCentralBankStage` computes `remitUSD` and when it is negative pays
+E4 is not. `runCentralBankStage` computes `remitLocal` and when it is negative pays
 `GOVERNMENT → CENTRAL_BANK` for the whole of it, the same week, with the reason "treasury covers the
 central bank's loss". So the loss never sits on the central bank's equity — E4's "it reduces its
 equity, and the treasury MAY have to make it good" becomes "the treasury always makes it good
 immediately". The famous case E4 exists for (a central bank in deferred-asset territory after a
 hiking cycle) cannot happen. `central-bank.ts:13` states the design — "The CB is the one balance
 sheet allowed to be special: no capital constraint, never defaults" — which is right about the
-constraint and over-broad about the equity. Small; **becomes a §3 step** paired with the E5 read.
+constraint and over-broad about the equity. Small; is **§3 step 37-SMALL** paired with the E5 read.
 
-### ❌ E5 / A3 — A VERIFY NOBODY TAKES, AND A MANDATE THAT IS A FIELD
+### ❌ E5 / ⚠️ A3 — A VERIFY NOBODY TAKES, AND A MANDATE THAT IS A FIELD
 
 E5 (the consolidated and unconsolidated views of the central bank's sovereign holding) is never
-computed: `centralBankSovereignBookUSD` exists and the treasury's gross debt exists, and nothing
+computed: `centralBankSovereignBookLocal` exists and the treasury's gross debt exists, and nothing
 differences them. **A measurement, for §3 step 38.**
 
 A3: the mandate is `region.targetInflation` plus the Taylor rule's implicit output-gap term. It is a

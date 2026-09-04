@@ -124,21 +124,21 @@ every one is a comment.
 
 The sequence at HEAD, in pipeline order:
 
-1. **The call is real.** `prime-brokerage.ts:137` re-strikes `lineUSD = min(maxDrawnUSD(equity,
-   haircut), brokerRoom)`. When the haircut widens or the book falls, `lineUSD` drops below
-   `drawnUSD`, `targetDrawnUSD` clamps to it, and `:167-175` pays the difference from the fund to the
+1. **The call is real.** `prime-brokerage.ts:137` re-strikes `lineLocal = min(maxDrawnLocal(equity,
+   haircut), brokerRoom)`. When the haircut widens or the book falls, `lineLocal` drops below
+   `drawnLocal`, `targetDrawnLocal` clamps to it, and `:167-175` pays the difference from the fund to the
    broker. Real money, right direction, right week.
 2. **The fund's selling pressure is then clamped away.** `:181` writes
-   `primeBrokerageAvailableUSD: Math.max(0, lineUSD - targetDrawnUSD)`. Two files downstream,
+   `primeBrokerageAvailableLocal: Math.max(0, lineLocal - targetDrawnLocal)`. Two files downstream,
    `institutional-balance-sheet.ts:72` reads it with the comment *"Negative when the line has been
    CUT below the draw — which makes the fund a net seller in this week's auctions, at whatever
    they clear, which is what a margin call is."* **It can never be negative.** The writer floors
    it at zero, so the mechanism the comment describes — the one C3.a is about — has never once
    run. The fund's capacity simply goes to zero and it stops buying.
 3. **And the shortfall is lent straight back.** `overdraft-sweep.ts:73` runs at the close over
-   every fund of every kind: a negative balance draws `drawUSD = -balanceUSD` from the SAME broker
-   — `withinLineUSD` is computed only to decide whether to add `OVERDRAFT_PENALTY_BPS` — and the
-   loan goes on the broker's `primeBrokerageLoansUSD`. So the money the margin call took out at
+   every fund of every kind: a negative balance draws `drawLocal = -balanceLocal` from the SAME broker
+   — `withinLineLocal` is computed only to decide whether to add `OVERDRAFT_PENALTY_BPS` — and the
+   loan goes on the broker's `primeBrokerageLoansLocal`. So the money the margin call took out at
    `:171` comes back in at the close, 200bp dearer, and the broker's exposure ends the week where
    it started.
 
@@ -152,12 +152,12 @@ move), the line CAN fall, and then nothing propagates, because the fund is refin
 sold out.
 
 For the player the same node fails in its purest form: `portfolio.ts:isMarginCall` is a boolean,
-set at `13-news-and-turn-summary.ts:35` as `navUSD < ctx.maintenanceMarginUSD`, and its entire
+set at `13-news-and-turn-summary.ts:35` as `navLocal < ctx.maintenanceMarginLocal`, and its entire
 effect is `marginAlert: 'ACCOUNT IN MARGIN CALL: …'`, a string. A margin that is only a number.
 
-**Becomes a §3 step, and it is the largest finding in these six trees.** The shape: a fund whose
+**§3 step 37-MARGIN**, . The shape: a fund whose
 draw exceeds its re-struck line is a FORCED SELLER in this week's books — the negative
-`primeBrokerageAvailableUSD` the comment already assumes — and one whose sales cannot cover the
+`primeBrokerageAvailableLocal` the comment already assumes — and one whose sales cannot cover the
 draw is closed out by its broker, with the shortfall written off that bank's capital. The
 overdraft sweep must stop catching funds in that state, or it undoes the step. Everything needed
 exists: the books clear the same week, `unsoldStaysWithHolder` already handles a seller nobody
@@ -165,7 +165,7 @@ buys from, and `estate-resolution.ts` already knows how to walk a waterfall.
 
 ### ❌ C1.a / A3 / E3 — MARGIN IS GROSS, AND EVERY FUND HAS EXACTLY ONE BROKER
 
-`prime-brokerage.ts:123-132` sums `Math.max(0, h.quantityOrNotionalUSD)` over the fund's rows,
+`prime-brokerage.ts:123-132` sums `Math.max(0, h.quantityOrNotionalLocal)` over the fund's rows,
 weights each by its class haircut, and widens by `concentration = largest / book`. Two absences
 in that arithmetic:
 
@@ -180,7 +180,7 @@ in that arithmetic:
   arise. This is a real absence rather than a defect, and it is the harder half of E3: it needs
   a fund-to-broker relation, not a field.
 
-C1.a **becomes a §3 step** (small, and it is a prerequisite for the tree's C4.a to bite the right
+C1.a is **§3 step 37-MARGIN** (small, and it is a prerequisite for the tree's C4.a to bite the right
 funds). A3/E3 are **OUT OF SCOPE for now** and recorded: with one bank per fund the model cannot
 have the blind spot, and adding a second broker buys nothing until D1's close-out exists to make
 the blind spot cost somebody something.
@@ -197,7 +197,7 @@ must assume before it could sell, read off measured moves rather than posted), w
 is ⚠️ and not ❌: what is missing is the broker's own view — its capital position, how much of
 this client it already has, what it thinks of this client — entering the number. That is the same
 argument `bank-lending.ts:quoteLoanMarginBps` already makes for a loan margin, one asset class
-over. **Becomes a §3 step**, small, and it is what makes C4 a decision rather than a volatility
+over. **§3 step 37-MARGIN**, small, and it is what makes C4 a decision rather than a volatility
 read.
 
 ### ⚠️ A2 / A4 / B4 — THE BROKER FINANCES BUT DOES NOT CUSTODY, AND EARNS ONE OF THREE INCOMES
@@ -210,26 +210,26 @@ found from the other side, and the two should be fixed in one commit: a pledged-
 the broker is what makes both rehypothecation and close-out expressible.
 
 **A4**: of the three incomes the node names, only the financing spread exists
-(`weeklyFinancingUSD`, paid at `prime-brokerage.ts:75`). The stock-borrow fee goes to the LENDING
+(`weeklyFinancingLocal`, paid at `prime-brokerage.ts:75`). The stock-borrow fee goes to the LENDING
 holder, never through a broker; there are no commissions — the fund pays `DEALER_SPREAD_BPS` to
 the region's dealer DESKS in each clearing book instead, which is a different party and a
 different business. Not a defect so much as a smaller broker than the node describes.
 
 **B4**: the short side is financed by the FUND, not the broker. `securities-lending.ts:291`:
-`fundableUSD = institutionSpendableUSD(fund) + max(0, fund.primeBrokerageAvailableUSD)` — the
+`fundableLocal = institutionSpendableLocal(fund) + max(0, fund.primeBrokerageAvailableLocal)` — the
 broker's line does fund the collateral, which is the node's economics, but the proceeds of the
 short sale land in the fund's own cash at 07e rather than being held by the broker, and the
 borrow is arranged by the fund directly with the lender.
 
 ### ⚠️ E4 — THE LIMIT EXISTS IN THE MORNING AND IS WAIVED AT THE CLOSE
 
-`lineUSD = min(maxDrawnUSD(fundEquity, haircut), brokerRoomUSD)` is a real two-sided limit and
-`leverageHeadroomUSD` is the broker's own balance-sheet constraint, so E4 holds for the struck
+`lineLocal = min(maxDrawnLocal(fundEquity, haircut), brokerRoomLocal)` is a real two-sided limit and
+`leverageHeadroomLocal` is the broker's own balance-sheet constraint, so E4 holds for the struck
 line. It does not hold for the day: `overdraft-sweep.ts:77` lends whatever the fund spent, with
-no reference to `brokerRoomUSD` and no reference to the fund's equity — only a penalty rate. A
+no reference to `brokerRoomLocal` and no reference to the fund's equity — only a penalty rate. A
 broker with no capacity left still funds the whole draw. The morning pass then re-prices the
 enlarged balance, which is the file's stated defence, but between the two the exposure was
-genuinely unlimited. **Becomes a §3 step**, and it is the same step as C3/D1 above — both are the
+genuinely unlimited. **§3 step 37-MARGIN**, and it is the same step as C3/D1 above — both are the
 sweep refusing to let anything fail.
 
 ### ❌ D4 — THE LOSS CHAIN IS UNMEASURED BECAUSE THERE IS NO LOSS
@@ -238,3 +238,7 @@ sweep refusing to let anything fail.
 before the fund: nothing writes `InstitutionalEntity.isDefaulted` anywhere in `src`
 (`hedge-funds.md` E3), so there is no first link. **A measurement, for §3 step 38**, but only
 once C3/D1 exist — until then there is nothing to trace.
+
+### Also marked, briefly
+
+- **C1 ⚠️** — a requirement on the whole book exists and is one formula for every broker — C1.b.

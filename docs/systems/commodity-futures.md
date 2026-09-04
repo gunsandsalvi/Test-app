@@ -148,7 +148,7 @@ hedger need and desk capital (`DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM`), never by
 supply, and a squeeze — the thing E2 says must follow from finite supply — cannot occur because
 supply is not a constraint on the paper at all.
 
-**Becomes a §3 step.** Medium-to-large: a deliverable contract needs dated expiries (not constant
+**§3 step 37-COMMODITY**, . Medium-to-large: a deliverable contract needs dated expiries (not constant
 maturity), a delivery leg that moves units into the long's inventory, and a decision about who can
 take delivery. It pairs naturally with §3 step 17e, which asks for the same shape on government
 bonds (*"a deliverable govie future plus the cash-futures basis"*) and says a deliverable future is
@@ -171,8 +171,8 @@ never mentions it. So the futures curve is built from producers' covenant headro
 cost of capital and desk balance sheet, and physical tightness is not an input to any of them.
 
 C3 (inventories low ⇒ backwardation) is therefore not merely unmeasured but unmeasurable: one side
-of the correlation is a random walk. **A measurement, for §3 step 38** for C3; **becomes a §3
-step** for C2, which needs inventory to become a real stock — held by named parties, drawn down
+of the correlation is a random walk. **A measurement, for §3 step 38** for C3; **§3 step
+37-COMMODITY** for C2, which needs inventory to become a real stock — held by named parties, drawn down
 when consumption exceeds production — before either the curve or the audit can read it. That is
 `commodities-spot.md` D2.a's node, and this tree is the second witness to it.
 
@@ -199,7 +199,7 @@ this system.
 Three nodes, one absence. When a futures contract reaches maturity `settleDerivativeClass` settles
 the final mark and **drops it** — no participant re-enters, and no market stage looks for an
 expiring position to replace. `runCommodityFuturesMarket` sizes demand as
-`hedgeUSD/spot − standingCoverUnits(...)`, so a hedger whose contract just expired simply appears
+`hedgeLocal/spot − standingCoverUnits(...)`, so a hedger whose contract just expired simply appears
 with a gap again next week and strikes a new one at whatever the new print is.
 
 That is not nothing — it is a de facto roll — but it is not the node's roll, and the difference is
@@ -214,7 +214,7 @@ where the money is:
 - **E3** — with no roll there is no roll cost, so the FORBID is satisfied vacuously and would be
   breached the moment a roll was added carelessly.
 
-**Becomes a §3 step**, and it is the same step as C4.a/D2: dated expiries are the prerequisite for
+**§3 step 37-COMMODITY**, and it is the same step as C4.a/D2: dated expiries are the prerequisite for
 all three.
 
 ### ⚠️ B4 / C1.a — THE CARRY BOUND IS A PARTICIPANT'S PRICE, AND THE PARTICIPANT CANNOT STORE
@@ -234,7 +234,7 @@ is a naked short at the bound's level, and B4's own condition — *"who can only
 actually store and finance"* — is not tested. If the print stays above carry, the desks add short
 after short with no physical accumulating anywhere.
 
-**Becomes a §3 step**, small once D2 exists: the arb leg should buy spot, hold units, pay storage,
+**§3 step 37-COMMODITY**, small once D2 exists: the arb leg should buy spot, hold units, pay storage,
 and deliver into the short. Until then C1.a is `⚠️`: the right shape with the wrong balance sheet
 behind it.
 
@@ -253,7 +253,7 @@ point — *"size is in contracts, not money"* — is half met (the class is genu
 `standingCoverUnits` nets in physical units, which is right) and half missing (there is no contract
 size, so 0.0173 contracts is representable).
 
-All three are small and all three are prerequisites for delivery. **Becomes a §3 step**, folded
+All three are small and all three are prerequisites for delivery. **§3 step 37-COMMODITY**, folded
 into C4.a/D2's.
 
 ### ⚠️ B5 — THE DEALER IS AN ARBITRAGEUR OR NOTHING
@@ -264,3 +264,9 @@ which appears **only when `priorPrint > carryBound`** and only on the sell side;
 backwardated week there is no dealer in the commodity futures market at all, and the book clears
 producer-against-consumer directly. Same family as the missing dealer in `cds.md` B4 and
 `interest-rate-swaps.md` B5 — three trees, one absence — and it belongs with them.
+
+### Also marked, briefly
+
+- **A1 ⚠️** — the profile satisfies the contract except D5 (one currency) and delivery — C4.a/D2 above.
+- **A1.b ⚠️** — cash settlement is against a formula spot — D4/E1.
+- **C4 ⚠️ / D1 ⚠️** — the mark is switched to spot in the delivery week and the contract is dropped; nothing is delivered — C4.a/D2.

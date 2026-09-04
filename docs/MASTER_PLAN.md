@@ -1119,12 +1119,15 @@ last** — it moves every input-output number in the model, so it needs a stable
 against. **The trees still say "Becomes a §3 step" where they mean one of these** — a tree names the
 step that owns its node; where it does not yet, the step below is the owner.
 
-**Added 2026-09-04 from the review of the atlas** — eight findings the trees had marked "Becomes a
+**Added 2026-09-04 from the review of the atlas** — nine findings the trees had marked "Becomes a
 §3 step" that no step here owned: 37-LOANBOOK, 37-OVERDRAFT, 37-OPENFUND, 37-VIEW, 37-FIRMCOST,
-37-BIRTH, 37-SECURITISE, 37-EMPLOYMENT. Each is inserted at its dependency position, not appended.
+37-BANKEQUITY, 37-BIRTH, 37-SECURITISE, 37-EMPLOYMENT, plus ten one-commit items into 37-SMALL. Each is inserted at its dependency position, not appended.
 
 37-LOSSRATE. **A LOSS RATE IS NOT A DEFAULT, AND FOUR SYSTEMS RUN ON ONE.** (banks-lending E1/E2;
-    sme-pools E1; firm-birth-and-death C2.a pooled tier, E3; housing C4/C4.a; cds D1.)
+    sme-pools E1, A3/B4; firm-birth-and-death C2.a pooled tier, E3; housing C4/C4.a; cds D1;
+    households A2.d/E4 — the threshold is on a band mean, never a cell; and downstream of it
+    banks-capital D1/D2.a — a resolution cannot value the book it takes until a loan can be worth
+    less than its face.)
     **The named-firm tier is CLEAN** — no hazard rate, no PD against a random draw; every named
     default is a state test taken after the revolver is drawn, and the structural PD only prices.
     Everywhere else it is arithmetic:
@@ -1177,8 +1180,9 @@ step that owns its node; where it does not yet, the step below is the owner.
     pension's `pensionHurdle` makes it reach for MORE risk with no solvency consequence. Small in
     code — the reads already exist — and it is what makes 37-MARGIN's chain terminate somewhere.
 
-37-OPENFUND. **NO VEHICLE IN THE MODEL REDEEMS IN CASH AND SELLS TO PAY.** (fund-shares C2.b/C4/
-    C4.a/C5; hedge-funds D5/D5.a; prime-brokerage C3.a; insurers-and-pensions A2.b.) The ETF
+37-OPENFUND. **NO VEHICLE IN THE MODEL HAS A CLAIM ITS INVESTOR CAN REDEEM.** (fund-shares
+    C2/C3/C4/C5, A2/A3; hedge-funds A2, D5.a; insurers-and-pensions A2.a/A2.b. The SALE the
+    redemption forces is 37-MARGIN's — C2.b, C4.a, D5 — and this step is the CLAIM it needs.) The ETF
     redeems in kind — correct for an ETF, and it means the forced-seller channel the fund tree calls
     "the point" is absent from the largest fund complex; a hedge fund's investors hold a scalar with
     no share count and cannot ask for their money back; a household ETF redemption is rationed by the
@@ -1202,6 +1206,17 @@ step that owns its node; where it does not yet, the step below is the owner.
     · a dealer's inventory consumes cash and capital and is **never charged rent**, so carrying a
       position is free and the desk has no reason to shed it.
     Large, and it is the step that makes every cleared price in Part IV actually do something.
+
+37-BANKEQUITY. **A BANK CANNOT RAISE CAPITAL, AND IT HAS ONE LAYER OF IT.** (banks-capital
+    A2.b/A2.c, A3, C2/C2.a/C2.b, B2; banks-funding A3.) No bank issues equity —
+    `evolveBankingSector` records the old equity-rescale write as deleted and says a bank "stays
+    undercapitalized until a real equity raise exists" — and no bank issues a subordinated tranche,
+    so the ladder that gets bailed in is SENIOR paper and depositors are never touched: one layer
+    short at the top, one over-punished in the middle, and a breach goes straight to closure. The
+    bank's financing decision joins `corporate-financing.ts` (it runs for every firm and a bank is a
+    firm): an equity issue priced by 07e's book that can fail, a subordinated tranche in the ladder
+    with `seniority` finally written, and B2's buffer as the bank's own choice rather than
+    `BANK_WORKING_CAPITAL_RATIO`. Medium; after 37-COSTOFCAPITAL, which gives the raise a price.
 
 37-FIRMCOST. **A THIRD OF EVERY FIRM'S COST BASE IS THE GAP TO ITS SEEDED MARGIN.** (firm-fundamentals
     B4/B4.a/B5, C1/C2, F2; trade-credit A2, C4.) `front-core.ts:683` strikes `otherOpexRate` as
@@ -1233,6 +1248,8 @@ step that owns its node; where it does not yet, the step below is the owner.
     borrower with no funding constraint. Medium.
 
 37-FX-CROSS. **THE MARKET CLEARS SIX PAIRS AND THE LEDGER READS THREE.** (fx-spot E3/A3/C3;
+    fx-forwards-and-xcs A1.c/B1/E1 — the forward RATE is spot moved by a cleared basis, with no
+    interest differential in it, so nothing can be checked against parity; A1.b/A2/E3, A4, D3;
     currency-and-fx C3/C3.a; fx-forwards B3/C4, A1.c/B1/E1, A4, C1/C1.a/C3, D3, A1.b/A2/E3.)
     `fx-clearing.ts`'s XB6 header sets out at length why each pair must clear on its own flow — so
     the USD stops being the cheapest vehicle currency BY CONSTRUCTION, with triangular consistency
@@ -1279,7 +1296,9 @@ step that owns its node; where it does not yet, the step below is the owner.
     Medium. Pair it with 37-LOSSRATE: a spread can only disagree once a default is an event.
 
 37-VIEW. **THREE DERIVATIVE BOOKS HAVE TWO PARTICIPANTS AND BOTH ARE HEDGERS.** (interest-rate-swaps
-    B4/B5/B1; cds B3 buy side/B4; commodity-futures B5; the-derivative-layer B3.) Every swap is
+    B4/B5/B1; cds B3 buy side/B4; commodity-futures B5; the-derivative-layer B3; dealer-desks
+    C4/B2 — a desk never learns whom it faced — and E1/E2/E3 — no cash desk hedges and no cash
+    book has an interdealer market.) Every swap is
     struck between a bank whose repricing loss binds and a pension closing a duration gap; every CDS
     buyer is a bank above its large-exposure limit; the commodity desk appears only as a carry
     arbitrageur and only on the sell side; `dealerSpreadBps: 0` in all three. So the cleared par
@@ -1392,21 +1411,20 @@ step that owns its node; where it does not yet, the step below is the owner.
     contract — and 37-SMALL's labour C2/C3 lands on it. Medium; after 37-MANDA, which is the
     largest consumer of a transfer of employees.
 
-37-BIRTH. **A FIRM'S AGE IS WRITTEN AND NEVER READ, AND FOUR SMALL THINGS AT THE EDGES OF ITS LIFE.**
-    (firm-birth-and-death B2, A4.a, D4/D4.a, D6.a; m-and-a D4; labour C4.) `Company.bornWeek` is
+37-BIRTH. **A FIRM'S AGE IS WRITTEN AND NEVER READ, AND THE ENTRANT'S SIZE IS A CONSTANT.**
+    (firm-birth-and-death B2, A4.a; m-and-a E3's headcount half. D1, D4/D4.a and D6.a — the death
+    side — are 37-ESTATE's.) `Company.bornWeek` is
     read by a trace, a log tag and a headline; no rating, spread, term or lending decision is a
     function of it, and the rating's volatility notch returns 0 below three prints, so a newborn
     scores best. An entrant's opening size is `pool revenue × 0.004` whatever the opportunity. A
-    dead firm's employees stop being counted rather than being separated (`employeeCount = 0`,
-    never `separationsByOcc`) — and a MERGED firm's headcount saving does the same. A claimless
-    death (`openEstate` returns `undefined`) keeps its cash, plant and lots for ever, owned by a
-    party that no longer trades. Four commits, each small: the age enters the assessment, the size
-    is what the founders can fund, deaths and mergers route headcount through the labour market's
-    own separation path, and a claimless estate pays its residual to the founders. After
+    MERGED firm's headcount saving (`employeeCount += target × 0.75`) deletes a quarter of the
+    target's workers in one statement — the same absence 37-ESTATE closes for a death. Three
+    commits, each small: the age enters the assessment, the size is what the founders can fund, and
+    a merger routes its headcount change through the labour market's own separation path. After
     37-LOSSRATE, which owns what a pooled death IS.
 
 37-SECLENDING. **THE LENDER LOSES THE DIVIDEND AND PAYS FOR THE PRIVILEGE.** (securities-lending
-    A3/A5.b, C1, C5/B3, D1.) No manufactured payment exists anywhere — `payHoldersCash` pays the
+    A3/A5.b, C1, C5/B3, D1, B2.a/C3 — posted cash collateral is spendable capacity.) No manufactured payment exists anywhere — `payHoldersCash` pays the
     register, i.e. the BORROWER — so A3's defining property of a stock loan (title moves, economics
     do not) is inverted. Collateral exactly equals the loan (`shares × stockPrice`, re-marked to
     the same), so there is no haircut and the one-week gap is covered by nothing; there is no
@@ -1453,7 +1471,25 @@ step that owns its node; where it does not yet, the step below is the owner.
     · **private-equity B5** — LBO sources and uses do not balance: sellers are paid the equity
       cheque while the debt proceeds stop at the target;
     · **banks-lending F3** — no large-exposure limit, and `09-concentration-risk.ts:82` says in its
-      own comment that it measures something else.
+      own comment that it measures something else;
+    · **derivative D10.a, cds E2** — no reservation in any of the four books carries a term for the
+      COUNTERPARTY, so a weak dealer never loses flow and wrong-way risk can cost nobody anything;
+    · **banks-capital D3.b/D6** — the assuming bank is assigned, not choosing: its bid IS
+      `estateLocal`, and a resolution with no bid falls through to the public path that exists;
+    · **banks-funding D4/D4.a, banks-lending B2.b** — origination is gated by capital alone, so a
+      bank out of cash and collateral writes the same book as one flush with reserves;
+    · **fx-forwards B3/C4** — `evolveFxPair` still walks a second cross-currency basis the player
+      trades against; delete the line and point every reader at `reg.crossCurrencyBasisBps`;
+    · **freight B4** — nothing ever blocks a route (with E2, in that order);
+    · **m-and-a D4** — `trade-settlement` writes off every invoice against an ACQUIRED firm as if
+      it had died, because `isActiveCompany` conflates the two;
+    · **insurers B4, C3** — claims are `premium × ratio` for every policy, so a catastrophe has no
+      representation; and no insurer or pension is an LP, so the illiquidity it is paid for earns
+      it nothing;
+    · **private-equity A2/A2.a** — a capital call is bounded by the LP's spare cash, so it is never
+      an obligation: the LP funds it from its own liquidity ladder or defaults on it;
+    · **the-central-bank C2/E4** — the treasury makes a central-bank loss good the same week, so the
+      deferred-asset case cannot occur.
 
 37-GOODS-RECIPE. **THE RECIPE IS A VALUE SHARE, SO EVERY INPUT SUBSTITUTES UNIT-ELASTICALLY.**
     (goods A2.a.) `recipeInputs` is cents-per-dollar-of-revenue and the draw is
@@ -1707,6 +1743,27 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**PLAN AND ATLAS REVIEW (2 of 2) — THE ATLAS CHECKS ITSELF, AND 47 FILES ARE RE-MARKED AGAINST WHAT
+IS TRUE.** `check-atlas.sh` proves a citation RESOLVES; nothing proved a mark was TRUE, and the
+review found the drift that gap allows: ~35 diff headings giving a node one mark over a row giving
+it another, ~60 ⚠️/❌ rows no diff entry argued, tallies wrong in the file that lectured about
+tallies, duplicate row ids (the-register A4 twice with different marks), a row with no tree node and
+a tree node with no row, and 119 "Becomes a §3 step" sentences naming no step. `test/atlas-marks.
+test.ts` now reads every tree against itself on every commit — tree ids ↔ rows, heading marks ↔
+row marks, every ⚠️/❌ argued, tallies counted — and README owns the legend once (❌ on a FORBID,
+evidence sub-rows as `<id> · text`, the unmarked titles, "a diff is not a log"). Every "Becomes a
+§3 step" names its owner now. Prose caught up with the code the gate could not see: 348 `…USD`
+names in tree prose are `…Local`, the ticker fields are ids, `DerivativeParty` is a view, every
+credit book is `PRICE_LIKE` (the-clearing-engine D1.a ❌→⚠️ and re-argued), `comp.oasSpreadBps` is
+gone from three diffs, four "Rule 28/29" citations are rules 7 and 12, bond.md's N9.b and its
+missing N5 sub-rows, short-term-debt's stale "⚠️ D1/D2/D4" beside its own "✅ CLOSED" section, and
+corporate-credit's "still open after row 1" beside row 4. Five session-narrative entries in
+money-and-settlement collapsed to one closed entry with §9 pointers; private-equity C5 the same;
+sovereign-credit's E1.a entry moved below its own tally and E1.a joined the tree. Re-marks: the-seed
+A2 and C3 ✅ (§9.37-SEED closed them and the tree never heard), indices A2 ✅, the-derivative-layer
+A1 ⚠️, the-register A1.b ⚠️, commodities-spot D2/D2.a/F2 ❌ (the diff had argued absence over ⚠️
+rows), the-clearing-engine B5 ✅. Gates green, 297 tests; no run.
 
 **PLAN AND ATLAS REVIEW (1 of 2) — THE BOOK REORDERED, EIGHT UN-HOMED FINDINGS INSERTED, AND `tsc`
 WAS RED.** The user asked whether 13-BOOK was being built the smart way. It was not, in order:

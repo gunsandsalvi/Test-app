@@ -133,7 +133,7 @@ freight dearer and never makes a cargo late or absent. The transport pool is a s
 a lane no fleet serves — but it is currently the *release valve on every lane*, which is not what
 it was built for.
 
-**Becomes a §3 step.** Small and well-defined: `shippedShareByLaneSubUnit` already exists and is
+**§3 step 37-SMALL**, . Small and well-defined: `shippedShareByLaneSubUnit` already exists and is
 already keyed the way the goods settlement iterates, so this is applying a number the market
 already computed, plus a decision about what the transport pool's own capacity is.
 
@@ -146,7 +146,7 @@ weather on a lane: `region.weather` exists and destroys a *commodity yield*
 anyway — a blocked route would raise the rate and the goods would still arrive — which is why the
 two belong in one step, in that order.
 
-**Becomes a §3 step**, and it is the cheapest way to make B2.a's violence observable: the
+**§3 step 37-SMALL**, and it is the cheapest way to make B2.a's violence observable: the
 mechanism ("a real reduction in units moved, not a price shock") is exactly what E2's fix installs.
 
 ### ⚠️ A2 / C3 — THE CARRIER IS NAMED; THE SHIPPER IS THE CARGO
@@ -171,7 +171,7 @@ nothing consumes it — it becomes a real measurement the moment E2's step lands
 
 Recorded in full because a costless-transport model is the default and this is not one.
 
-- Distance costs **money**: `marginalCostPerTonneNmUSD` is fuel at the **refined-products market's
+- Distance costs **money**: `marginalCostPerTonneNmLocal` is fuel at the **refined-products market's
   own cleared price** per tonne (`fuelPriceUsdPerTonne`), plus crew at the region's **real
   SKILLED_TRADES going wage**, plus the carrier's own weekly capital charge on net PP&E spread over
   the tonne-miles that capital delivers. Every term is a measurement, and the asymmetry between the
@@ -196,7 +196,7 @@ gap).
 ### ❌ D5 — ONE VERIFY NODE NOBODY READS
 
 Nothing compares a good's price gap between two regions against that lane's cleared freight rate.
-Both numbers exist per week — `categoryDemand[sub].exWorksUnitPriceUSD` per region and
+Both numbers exist per week — `categoryDemand[sub].exWorksUnitPriceLocal` per region and
 `freightRatePerTonneLaneMoneyByLane[lane]` — so this is a division and a print.
 **A measurement, for §3 step 38**, and it is the read that would show whether E2's missing
 rationing is biting once it exists.

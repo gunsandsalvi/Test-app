@@ -133,7 +133,7 @@ which, because they are different absences:
 - **B2** — the premium is the constant `1.15`. It does not move with the target's business, with
   competition for it, with the acquirer's cost of funds or with anything at all. It is the single
   stated number this whole system rests on.
-- **B2.a / C1 / C2 / C3** — the target's owners are never asked. `institutionalTenderUSD` pays every
+- **B2.a / C1 / C2 / C3** — the target's owners are never asked. `institutionalTenderLocal` pays every
   holder of record its pro-rata share of the cash leg and converts the rest to acquirer stock;
   no holder has a reservation price, none can decline, and there is no management to resist. A bid
   cannot fail, so a failed bid has no price consequence for either side.
@@ -150,13 +150,13 @@ anything; it waits for a 20% quarterly coin flip. And because the premium is a c
 takeover channel transmits no information into the equity price** — `marketCapOf(target) × 1.15`
 means the deal price is an output of the equity market rather than an input to it.
 
-Not in §3 at all; the plan's §3 contains no M&A step. **Becomes a §3 step, and a large one.** The
+**§3 step 37-MANDA**, . The
 shape is the one the rest of the repo already uses: the acquirer forms a value, the holders of
 record post reservations, `the-clearing-engine.md` clears the tender, and the funding leg goes
 through the primary market like any other. `07e-equity-clearing.ts` and `primary-market.ts` are
 most of the machinery.
 
-### ❌ E3 / A4 — TWO SYNERGIES ARE ASSUMED STRAIGHT INTO THE COMBINED FIRM
+### ❌ E3 / ⚠️ A4 — TWO SYNERGIES ARE ASSUMED STRAIGHT INTO THE COMBINED FIRM
 
 `10-mergers.ts:293-294`:
 
@@ -181,7 +181,7 @@ They behave differently, and both are defects:
   same defect `firm-birth-and-death.md` D4 records for a death, in the one place where the tree
   explicitly says the people carry over (D4).
 
-**Becomes a §3 step** — the same one as B5's; a real deal's cost savings are a decision the combined
+**§3 step 37-MANDA** — the same one as B5's; a real deal's cost savings are a decision the combined
 firm then makes through `labor-demand.ts:employerWeekPosting`, and its revenue is whatever it clears.
 
 ### ❌ A3.a / D2.a — A CASH ACQUISITION IS NOT FUNDED
@@ -223,11 +223,11 @@ there is no "what a buyer would pay" in the model. Falls out of B5's step.
 Contracts, consignments, bank links, derivative books and the whole bank balance sheet all novate
 properly (`novateContracts`, `reassignConsignments`, `rekeyBankLinks`, `mergeBankSheets`) — this is
 the most complete part of the stage. Customers and suppliers therefore carry over. Employees do not
-(E3 above). Trade receivables against the target carry over because the invoice book is keyed by
-ticker and the target's ticker leaves `isActiveCompany` — which means `trade-settlement.ts:53`
+(E3 above). Trade receivables against the target carry over because the invoice book names the buyer
+by id and the target's id leaves `isActiveCompany` — which means `trade-settlement.ts:53`
 **writes off** every invoice a supplier had against an acquired firm as if it had died. That is a
 real bug in this tree's D4: an acquisition is not a default, and its suppliers should be paid.
-Small; **becomes a §3 step** (the write-off test must distinguish `isDefaulted` from
+Small; is **§3 step 37-SMALL** (the write-off test must distinguish `isDefaulted` from
 `mergerAcquired`, which `isActiveCompany` deliberately conflates).
 
 ### ✅ A2 / D5 / E1 / E2 — THE MONEY AND THE REGISTER ARE RIGHT
@@ -238,3 +238,10 @@ the stock leg converts each target equity row into acquirer shares by two wires 
 rather than a re-key. The target's ladder is rebuilt to empty and the acquirer's carries the face.
 `D5`'s identity holds by construction. This half of the system is real; it is the deciding half that
 does not exist.
+
+### Also marked, briefly
+
+- **A1 ⚠️** — acquirer and target are real; the price is `marketCap × 1.15`, accepted by nobody — B2.
+- **A3 ⚠️** — cash and stock, always half each.
+- **D1 ⚠️** — the combined revenue is an EMA toward measured sales after a one-off `× 0.85` — E3.
+- **D2 ⚠️** — leverage rises because the target's ladder is assumed, never because the acquirer borrowed — A3.a.

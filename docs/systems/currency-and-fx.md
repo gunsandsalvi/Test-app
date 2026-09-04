@@ -151,7 +151,7 @@ C3 stays `⚠️` and not `❌` because the invariant C3 asks for does hold in t
 by triangulating. What is missing is that it holds for the wrong reason, and it discards a cleared
 price to do it (rule 3's mirror image: a price that cleared and is used by nothing).
 
-Not a §3 step today. **Becomes one**, and it is small: `publishFxRates` must carry the cross prints
+**§3 step 37-FX-CROSS**, and it is small: `publishFxRates` must carry the cross prints
 into a rate object the ledger can express a cross in, and `convert` must read them.
 
 ### ⚠️ E3 — THE RATE IS CLEARED, THE BASIS IS STILL A FORMULA
@@ -163,12 +163,13 @@ interest differential times a constant plus a random walk: rule 2's defect, one 
 where it was found last time. It belongs to `fx-forwards-and-xcs.md`'s diff and is recorded there
 as the same finding.
 
-### ⚠️ A3 / A4 — THE SUFFIX STILL SAYS USD
+### ⚠️ A3 / A4 — THE SUFFIX NO LONGER LIES, AND THE INSTRUMENT STILL HAS NO CURRENCY
 
-`assets/index.ts:countedIn` is the right abstraction and is present, but 11,243 identifiers still
-carry a `…USD` suffix while holding local money, and an account's currency is a column while a
-FIGURE's currency is still a naming convention. That is §3 step 13c, already a step and already
-sized; this tree is a second witness and adds nothing new to it.
+§9.13c-RENAME turned 11,821 `…USD` suffixes into `…Local`, so a figure's name no longer claims a
+money it does not hold; eight `…USD` names remain and mean it. What A3/A4 still lack is the half
+that matters: an account's currency is a column, and an INSTRUMENT's is still read off its owner's
+region (`obligationCurrencyOf`, `currencyOf(region)`), so a cross-border issue is inexpressible.
+That is **§3 step 13-BOOK (d)** — currency lands on the instrument index.
 
 ### ❌ D4 — THE REVALUATION IS NEVER SUMMED
 
@@ -176,5 +177,5 @@ sized; this tree is a second witness and adds nothing new to it.
 of every revaluation gain and loss equals the rate move applied to the world's net open position in
 that currency. That check is the only thing that can catch a position revalued twice or not at all,
 and the M family went green at 16 weeks *because* revaluation was added — so the check would be
-measuring exactly the fix that made it green. It belongs in `the-audit.md`'s M family. **Becomes a
-step** and is small.
+measuring exactly the fix that made it green. It belongs in `the-audit.md`'s M family. **§3 step
+27**, and it is small.

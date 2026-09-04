@@ -128,9 +128,9 @@ in `src`.
 `bank-lending.ts:243`, run every week against every SME loan in the world:
 
 ```
-lossUSD = (l.principalUSD * smePoolAnnualPd(seg) * (1 - creditRecoveryRate(reg))) / 52
-loanLossWeeklyUSD += lossUSD
-return { ...l, principalUSD: l.principalUSD - lossUSD }
+lossLocal = (l.principalLocal * smePoolAnnualPd(seg) * (1 - creditRecoveryRate(reg))) / 52
+loanLossWeeklyLocal += lossLocal
+return { ...l, principalLocal: l.principalLocal - lossLocal }
 ```
 
 `smePoolAnnualPd` clamps `seg.defaultRateAnnualPct` to `[0.002, 0.25]`, and that rate is set in
@@ -146,8 +146,8 @@ exactly, and it drags A3, B3 and the whole of D4 down with it, as the node says 
 
 Two consequences that are worse than "a rate instead of an event":
 
-1. **The debt is extinguished with no default and no cash.** `seg.debtUSD` is *derived* from the
-   banks' loan rows (`bank-lending.ts:187`), so writing the loans down by `lossUSD` writes the
+1. **The debt is extinguished with no default and no cash.** `seg.debtLocal` is *derived* from the
+   banks' loan rows (`bank-lending.ts:187`), so writing the loans down by `lossLocal` writes the
    pool's debt down by the same amount. Nobody defaulted, nobody was foreclosed on, no asset was
    sold, no recovery was paid — the pool is simply relieved of its liability by arithmetic, and its
    own leverage improves as a result. That is a one-sided flow (rule 5) sitting inside the
@@ -157,7 +157,7 @@ Two consequences that are worse than "a rate instead of an event":
    (`estate.ts:realisedDebtRecoveryRate`). Two definitions of recovery in one model, and the pooled
    one is the one that touches most of the loans.
 
-Not in §3. **Becomes a §3 step**, and it is the same step as `firm-birth-and-death.md` C2.a and E3 —
+**§3 step 37-LOSSRATE**, and it is the same step as `firm-birth-and-death.md` C2.a and E3 —
 all three are the one question: *what resolution is an SME?* The cheapest honest answer is probably
 to keep the pool but give the strata an absorbing default with a real estate at pool granularity, so
 that an exiting weight takes revenue, employment and debt out with it and pays a realised recovery.
@@ -172,7 +172,7 @@ holder of pool risk other than the originating bank, and therefore:
 - no channel by which SME credit risk reaches insurers, pension funds, money funds or hedge funds
   (D1) — every dollar of it sits on the bank that wrote it, for ever;
 - no capital relief and no lending-capacity mechanism (D2), so a bank's SME origination is bounded
-  only by `declinedOriginationUSD`'s regulatory-floor test and can never be expanded by selling risk;
+  only by `declinedOriginationLocal`'s regulatory-floor test and can never be expanded by selling risk;
 - no senior-tranche collateral in the money market (D3);
 - no possibility of D4 at all — the event this system exists to be able to produce, where correlation
   turns out worse than the tranching assumed and every holder is hit at once, has no holders to hit.
@@ -181,7 +181,7 @@ E2 and E3 are marked `❌` rather than "satisfied" deliberately: they are vacuou
 is vacuous is telling you the thing it guards is absent, not that the model is clean.
 
 **MISSING, not out of scope** — the tree's own header says the securitised claim is half of why this
-system is a system, and the README's 45 include it. **Becomes a §3 step**, and a large one: it needs
+system is a system, and the README's 45 include it. **§3 step 37-SECURITISE**, and a large one: it needs
 a named vehicle party, a tranche instrument with a cleared price (`the-clearing-engine.md`), a loss
 waterfall, and holders. It is also blocked on E1: tranching a loss RATE would produce tranches whose
 losses are smooth and whose senior notes can never be touched, which is the one outcome D4 says must
@@ -207,7 +207,7 @@ representative agent — it is not.
 A3 asks for size, sector, region, leverage and coverage, with losses depending on the distribution of
 those. `SmePoolStratum` carries **one** field beside its weight: `leverageMultiple`. Sector and region
 are the pool's identity, so those are fine; size and coverage are not distributed at all — coverage
-is *derived* from leverage through a single pool-wide `annualEarningsUSD` and a single
+is *derived* from leverage through a single pool-wide `annualEarningsLocal` and a single
 `poolDebtRateAnnual`, and cash is allocated from one pool balance.
 
 That makes B4's correlation **total by construction, not a modelled property**: every firm in a pool
@@ -215,10 +215,10 @@ shares one revenue, one margin, one earnings figure, one debt rate and one cash 
 thing that distinguishes two firms is where they sit on the leverage axis. B4.a is satisfied ("not
 the sum of independent draws") for the wrong reason — there are no draws, and there is no
 idiosyncratic component at all. A pool cannot have a bad *year for some of its firms*; it can only
-have a bad year. This is what makes D4's scenario unreachable even if C existed. **Becomes a §3
-step**, folded into E1's.
+have a bad year. This is what makes D4's scenario unreachable even if C existed. **§3 step
+37-LOSSRATE**, folded into E1's.
 
-### ⚠️ B1 / B2 — ONE LOAN PER BANK PER POOL, WITH NO TERM AND NO SECURITY
+### ⚠️ B1 / ❌ B2 — ONE LOAN PER BANK PER POOL, WITH NO TERM AND NO SECURITY
 
 `bank-lending.ts:161` originates a single row per `(bank, smePoolId(region, industry))` — priced,
 which is real (`quoteLoanMarginBps` off the pool's PD at the bank's own hurdle, and a tightening in

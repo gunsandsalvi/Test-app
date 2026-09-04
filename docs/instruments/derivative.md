@@ -57,11 +57,11 @@ Node types, per `README.md`: **REASON**, **VERIFY**, **FORBID**.
 
 ## WHAT A DERIVATIVE IS NOT
 
-- FORBID — **it is not a holding.** It does not go in the issued-amount check
+- **N1** FORBID — **it is not a holding.** It does not go in the issued-amount check
   (`../systems/the-register.md` B2) because nobody issued it; it goes in the zero-sum check (D1.b)
-- FORBID — **it is not a way to get an exposure for free.** The cash it moves — margin, premium,
+- **N2** FORBID — **it is not a way to get an exposure for free.** The cash it moves — margin, premium,
   periodic payments — is real and comes out of a real account
-- FORBID — **it is not a substitute for the underlying market.** If the derivative's price is
+- **N3** FORBID — **it is not a substitute for the underlying market.** If the derivative's price is
   computed from a model and the cash market's price is computed from the derivative, neither has
   been cleared and rule 3 is broken in a loop
 
@@ -70,8 +70,7 @@ Node types, per `README.md`: **REASON**, **VERIFY**, **FORBID**.
 ## 2. THE MAPPING
 
 Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
-checked by `scripts/check-atlas.sh`. The three unnumbered FORBIDs of **WHAT A DERIVATIVE IS NOT**
-are given the ids `N1`–`N3` here, in the order they are written; the tree is unchanged.
+checked by `scripts/check-atlas.sh`. The three FORBIDs of **WHAT A DERIVATIVE IS NOT** carry the ids `N1`–`N3`.
 
 | Node | Code | |
 |---|---|---|
@@ -115,7 +114,7 @@ is the node's exact opposite. Six position kinds — `IRS` (:246), `CDS` (:294),
 `fxPair.basisSpreadBps` (`priceCrossCurrencyBasisSwap`), none of them appears in
 `state.derivativesBook`, and **none has a `b` side.** The gain settles: `12-portfolio:276`,
 `:327`, `:496` do `ctx.weeklyRealizedPnL += unrealizedPnL`, and `13-news-and-turn-summary.ts:25`
-adds that straight into `state.portfolio.cashUSD`. A payoff received from nobody, which is D1.a
+adds that straight into `state.portfolio.cashLocal`. A payoff received from nobody, which is D1.a
 verbatim.
 
 **Consequence.** Every VERIFY node in this contract that sums across parties (D1.b) is unrunnable
@@ -164,7 +163,7 @@ wrong-way risk (the protection seller correlated with the reference) cannot cost
 because the identity of the seller is not in any price. It is the pricing half of what step 17's
 CCP work assumes.
 
-**Becomes a §3 step.** Small as a mechanism (one term in four reservations), large in what it
+**§3 step 37-SMALL**, . Small as a mechanism (one term in four reservations), large in what it
 enables: it is the first thing that makes D9's margin a *decision* rather than a stated rate.
 
 ### ⚠️ D7.a — THE FX FORWARD'S PRICE IS THE ONE THAT IS NOT CLEARED
@@ -188,12 +187,12 @@ is paid in the holder's home money, so a two-currency instrument (`fx-forwards-a
 cross-currency swap) cannot be represented at all. Every periodic leg is `/52` — `irs.ts:44`,
 `cds.ts:52` — so both legs of a swap share one weekly period and no accrual convention exists
 (rule 8); `interest-rate-swaps.md` A2's mismatch, which is *part of the price*, has nowhere to
-live. **Becomes a §3 step**, and it is a prerequisite for 17b's XCS.
+live. **§3 step 13-BOOK (d), and 28b for the convention**, and it is a prerequisite for 17b's XCS.
 
 ### ⚠️ D2.a — THE NOTIONAL *IS* THE EXPOSURE, THROUGH A FLAT RATE
 
 The only measure of derivative exposure in the model is
-`registry.ts:standingPfeChargeUSD` = Σ `notionalUSD × pfeAddOnRateOf(c)`, and the add-on is a
+`registry.ts:standingPfeChargeLocal` = Σ `notional × pfeAddOnRateOf(c)`, and the add-on is a
 per-class constant (`irs.ts` 0.005, `fx-forward.ts` 0.02, `cds.ts`/`commodity-future.ts` 0.10,
 with CDS's one investment-grade split). The mark never enters it. So the node's two things are not
 conflated — but only because one of them (current exposure) does not exist: what the desk budget
@@ -212,3 +211,8 @@ does it unconditionally (`const currentCdsSpreadBps = currentOasBps`) for every 
 Separately, D3.a's underlying: the commodity futures book cash-settles to
 `evolution.ts:evolveCommodity`'s spot, which is `spotPrice × exp(drift)` with a 0.5 floor — a
 price nothing cleared. **Already §3 step 22.**
+
+### Also marked, briefly
+
+- **D11.a ⚠️** — the close-out value is the remaining nets at today's par, undiscounted — `interest-rate-swaps.md` section D.
+- **N1 ⚠️** — `O5` keeps a derivative out of the issued-amount check by checking liveness, not the zero-sum — D1.b.

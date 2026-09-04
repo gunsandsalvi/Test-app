@@ -120,13 +120,13 @@ checked by `scripts/check-atlas.sh`.
 ### ❌ B1 / B2 / B2.a / B2.b / E3 — THE LIABILITY IS A CASH BALANCE, NOT A PRESENT VALUE
 
 There is no discount rate in this sector, fixed or otherwise, because **there is no discounting.**
-The whole liability is one number, `beneficiaryLiabilityUSD`, and
+The whole liability is one number, `beneficiaryLiabilityLocal`, and
 `insurance-and-pensions.ts:206-208` is its entire law of motion:
 
-    e.beneficiaryLiabilityUSD = Math.max(0, (e.beneficiaryLiabilityUSD ?? 0)
-      + (weeklyContributionsUSD - weeklyBenefitsUSD) * share);
+    e.beneficiaryLiabilityLocal = Math.max(0, (e.beneficiaryLiabilityLocal ?? 0)
+      + (weeklyContributionsLocal - weeklyBenefitsLocal) * share);
 
-plus, at `household-balance-sheet.ts:70`, `+ max(0, lastWeeklyInvestmentIncomeUSD)`. Contributions
+plus, at `household-balance-sheet.ts:70`, `+ max(0, lastWeeklyInvestmentIncomeLocal)`. Contributions
 in, benefits out, investment income credited. **No schedule (B1), so no cash flows to discount; no
 rate (B2), so no present value; and therefore no repricing when rates move (B2.a).**
 
@@ -135,7 +135,7 @@ The code reaches that forbidden outcome by a shorter road: with no rate at all, 
 sensitivity to rates is exactly zero, and **the sector's defining risk is not modelled.** A
 hundred-basis-point rally revalues an insurer's assets and leaves its obligations untouched, which
 makes an insurer a leveraged bond fund rather than an insurer. E3 falls with it — solvency
-(`equityCapitalUSD = totalAssets − liabilityUSD`) is measured against exactly the stored value the
+(`equityCapitalLocal = totalAssets − liabilityLocal`) is measured against exactly the stored value the
 node forbids, and D2 and D5 have nothing to be true of.
 
 The pieces for a schedule exist. `bootstrap/population.ts:remainingLifeExpectancyYears` already
@@ -143,7 +143,7 @@ gives the drawdown horizon (the stage uses it, at `:196`, to size this week's be
 cohorts carry ages, and every region publishes a cleared curve. What is missing is that the
 entitlement is carried as a stock instead of as dated amounts.
 
-**Becomes a §3 step, and it is the largest one in this tree** — it is the sector's reason to
+**§3 step 37-PENSION** — it is the sector's reason to
 exist. Nothing in §3 names it: step 16b is about insurance *pricing* between three insurers,
 31b about the claims loss ratio, neither about the liability's valuation.
 
@@ -153,7 +153,7 @@ A2.a is the node that separates this system from `fund-shares.md`, and the code 
 side of it. `institution-profiles.ts:29` marks INSURER, ASSET_MANAGER, PENSION_FUND and HEDGE_FUND
 alike as `beneficiariesAreHouseholds`, and `household-balance-sheet.ts:63-70` states the intent in
 its own comment: *"THE BENEFICIARIES OWN WHAT THEIR MONEY EARNS, for every kind that has them —
-not only pensions."* The claim grows by `lastWeeklyInvestmentIncomeUSD` and the household sheet
+not only pensions."* The claim grows by `lastWeeklyInvestmentIncomeLocal` and the household sheet
 marks it at that value.
 
 That is the definition of a fund share: the holder takes the investment result. A pension
@@ -189,7 +189,7 @@ reason that step matters.
 ### ⚠️ D1 — THE "DURATION GAP" IS MEASURED AGAINST ASSETS, BECAUSE THERE IS NO LIABILITY TO MEASURE AGAINST
 
 `irs.ts:158` computes it as
-`durationGapUSD = institutionTotalAssetsUSD(…) − bondBookUSD − alreadyReceivingUSD`: everything the
+`durationGapLocal = institutionTotalAssetsLocal(…) − bondBookLocal − alreadyReceivingLocal`: everything the
 entity owns that is not already a rate-duration asset. The comment above it says *"a
 liability-matched book's assets are shorter than its claims, and the gap is what it will take
 synthetically"* — but no claim enters the arithmetic. The number is real and it is not D1's number,
@@ -198,7 +198,7 @@ no separate step.
 
 ### ⚠️ A3 / D3 — SOLVENCY IS A READ WITH NO CONSEQUENCE
 
-`equityCapitalUSD` is genuinely `institutionTotalAssetsUSD − liabilityUSD` and can go negative
+`equityCapitalLocal` is genuinely `institutionTotalAssetsLocal − liabilityLocal` and can go negative
 (`household-balance-sheet.ts:74`). Nothing reads the sign. `isDefaulted` is set for institutional
 entities nowhere in `src/` — only `bank-resolution.ts:224` sets it, and only on banks — so an
 insolvent insurer or pension fund keeps writing business, keeps bidding in every auction, and its
@@ -208,7 +208,7 @@ D3's three real responses (the sponsor contributes, the fund de-risks, benefits 
 absent. The nearest thing is `institution-profiles.ts:pensionHurdle`, which divides the benefit
 need by `fundedRatio` — an underfunded fund *raises* its required return, so it reaches for risk.
 That is one of the three real behaviours, and it is the one that is not a consequence anybody
-chose. **Becomes a §3 step**, smaller than B1's and dependent on it: a solvency event needs a
+chose. **§3 step 37-IMMORTAL**, smaller than B1's and dependent on it: a solvency event needs a
 liability worth being insolvent against.
 
 ### ❌ B4 / C3 — TWO ABSENCES THE STAGE'S OWN HEADER ALREADY ADMITS
@@ -216,11 +216,11 @@ liability worth being insolvent against.
 **B4** — `insurance-and-pensions.ts:26-30` states it: *"claims are allocated in proportion to
 premiums, which is right in aggregate and wrong in the way that matters most — real claims are
 LUMPY … this stage moves real money on a real schedule but does not yet transfer real risk."* The
-code is `claimUSD = premiumUSD * claimRecoveryRate` at `:127`, with the same ratio for every firm
+code is `claimLocal = premiumLocal * claimRecoveryRate` at `:127`, with the same ratio for every firm
 and household in the region. A catastrophe — one event hitting many policies at once — has no
 representation, which is the whole economic content of insurance. The hooks the header names
 (estates, `macro/weather.ts`'s anomalies with their real per-region exposure) already exist.
-**Becomes a §3 step**, adjacent to 16b but not the same one: 16b is about the price of a policy,
+**§3 step 37-SMALL**, adjacent to 16b but not the same one: 16b is about the price of a policy,
 this is about the loss it covers.
 
 **C3** — no illiquid sleeve. `INSTITUTION_PROFILES` gives an insurer
@@ -234,7 +234,7 @@ earns it nothing. MISSING, not out of scope; small once PE's LP list can name th
 
 C2.a is the node this tree was most worried about and the code has it: `sovereignCoreShare` (0.70
 insurer, 0.75 pension) is applied at `07c-sovereign-bond-clearing.ts:416` as
-`minHoldingUSD` — a floor the entity buys **at any yield**, which is exactly the one-way demand the
+`minHoldingLocal` — a floor the entity buys **at any yield**, which is exactly the one-way demand the
 node asks for, expressed as a real bid rather than an assigned holding. `preferredCreditDurationYears: 6.0`
 does the same job in the credit book.
 
@@ -250,3 +250,8 @@ a liability of its own to match against; recorded here, no separate step.
 Nothing measures a large rate move against the three things it should move (liability up, hedge
 down, cash on the hedge only). It cannot be measured until B1 exists, and when it does it is
 **a measurement, for §3 step 38.**
+
+### Also marked, briefly
+
+- **A2 ⚠️** — the liability is one balance, not stated amounts at stated times — B1 above.
+- **B3 ⚠️** — `remainingLifeExpectancyYears` sizes this week's benefit and nothing else; no schedule is uncertain because there is no schedule.

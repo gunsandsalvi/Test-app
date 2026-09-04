@@ -97,7 +97,7 @@ checked by `scripts/check-atlas.sh`.
 | C2 an action requires the means | `src/engine/simulation/trade.ts:updatedCash` | ❌ |
 | **C2.a FORBID no privileged actor** | `src/engine/simulation/trade.ts:adjustBankReserves` | ❌ |
 | C3 an action's consequences propagate like anyone else's | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` | ❌ |
-| C4 the actor is a named party in the register and the accounts | `src/engine/ledger/party.ts:PartyRef` | ❌ |
+| C4 the actor is a named party in the register and the accounts | `src/domain/party.ts:PartyRef` | ❌ |
 | D1 a history that is a read, not a log that can drift | `src/ui/world.ts:Tape` | ⚠️ |
 | D2 performance computed from real positions and real prices | `src/domain/portfolio.ts:Portfolio` | ❌ |
 | D3 VERIFY anything shown is reproducible from the state | `src/ui/functions/statements.tsx:currentAccountPctGdp` | ⚠️ |
@@ -126,16 +126,16 @@ own definition and nothing else.
 
 That matters because of what it would do if it were called. Three violations, in one function:
 
-- **C2 / C2.a.** `trade.ts:31` is `const updatedCash = state.portfolio.cashUSD −
-  (executionDetails?.spreadCostUSD ?? 0)`. The player pays **the spread and nothing else.** Buying
+- **C2 / C2.a.** `trade.ts:31` is `const updatedCash = state.portfolio.cashLocal −
+  (executionDetails?.spreadCostLocal ?? 0)`. The player pays **the spread and nothing else.** Buying
   a billion of bonds debits a few basis points of it; the notional never leaves the account. The
   means are not required, which is exactly C2.a's forbidden actor. Worse for rule 4 ("1$ is 1$"),
   the desk's side IS charged the notional — `adjustBankReserves(v2, bank.ticker,
-  −inventoryDeltaUSD + incomeUSD)` at `:98` — so the bank pays for paper the buyer did not pay for,
+  −inventoryDeltaLocal + incomeLocal)` at `:98` — so the bank pays for paper the buyer did not pay for,
   and the difference is money created at the ticket.
 - **C1.a.** The fill price arrives as `executionDetails.fillPrice`, supplied by the caller. Nothing
   in the function enters a book, joins a queue, or clears. The price is the actor's to bring.
-- **C4.** `engine/ledger/party.ts:PartyRef` has ten kinds — COMPANY, BANK, BANK_CREDIT,
+- **C4.** `domain/party.ts:PartyRef` has ten kinds — COMPANY, BANK, BANK_CREDIT,
   BANK_SECURITIES, CLEARING_HOUSE, INSTITUTION, SEGMENT, HOUSEHOLD, GOVERNMENT, CENTRAL_BANK — and
   **no PLAYER.** The portfolio has no account, no register rows, and appears in no audit family, so
   its positions are marked against companies it does not appear as a holder of. C3 follows: the
@@ -143,13 +143,13 @@ That matters because of what it would do if it were called. Three violations, in
 
 **MISSING and not OUT OF SCOPE.** The tree's premise is that what can be observed and acted on is
 part of the model, and the model has kept the acting half as a vestige rather than deciding against
-it. **Becomes a §3 step**, and the shape of the step is the finding: an actor is a `PartyRef` kind
+it. **§3 step 37-SURFACE**, and the shape of the step is the finding: an actor is a `PartyRef` kind
 with an account and register rows, whose orders are ordinary participants in the books that already
 clear — not a second position system beside them. §3 step 17b touches the edge of this (*"stage 12's
 player options stay on the legacy layer instead of the one book, which is the last thing outside
 it"*) but names only the options; the account, the party and the fill are not named anywhere.
 
-### ❌ E1 / A5.a / D3 — DISPLAY-ONLY NUMBERS, AND ONE OF THEM IS A WHOLE SYSTEM
+### ❌ E1 / A5.a / ⚠️ D3 — DISPLAY-ONLY NUMBERS, AND ONE OF THEM IS A WHOLE SYSTEM
 
 E1 forbids a number on the surface with no derivation behind it. Two on the region page have no
 derivation at all — not a wrong one, none:
@@ -158,7 +158,7 @@ derivation at all — not a wrong one, none:
   `macro.tsx:69` and `statements.tsx:226` both render it. It prints `0.0%` forever. See
   `cross-border.md` §3: this is not a formatter defect, it is that the model has no external
   accounts.
-- **`fxReservesUSD`** — `macro/initialization.ts:581` sets it to `estimatedNominalGdpUSD * 0.002`
+- **`fxReservesLocal`** — `macro/initialization.ts:581` sets it to `estimatedNominalGdpLocal * 0.002`
   once, at the seed. No stage writes it. It is shown on the macro page and again on the central-bank
   page (`centralbank.tsx:64`). A central bank's reserves are a *position*, and this one has never
   moved and cannot.
@@ -168,8 +168,8 @@ style rule. A5.a is the same defect from the other side: what IS published is pu
 and exactly, straight off the state object.
 
 **Already §3 step 15 for the current account**, listed among UI unit errors — but the entry treats
-it as a rendering problem. Rule 29: the cause is the missing mechanism, and it belongs in
-cross-border's step. `fxReservesUSD` is named nowhere. **Both become part of that step**; the second
+it as a rendering problem. Rule 12: the cause is the missing mechanism, and it belongs in
+cross-border's step. `fxReservesLocal` is named nowhere. **Both become part of that step**; the second
 also wants a decision (a central bank with no reserves position is a legitimate design — then delete
 the field rather than show it).
 
@@ -202,7 +202,7 @@ the inspector's, and building the actor without deciding the filter builds the s
 
 B2 and B2.a are in good shape and that is worth stating first. `news-derivation.ts` is a genuine
 derivation: nine sections, each reading what the week's stages recorded, each citing `refs` the UI
-resolves to objects, each carrying `materialityUSD`, and the deaths carry a `cause` traced through
+resolves to objects, each carrying `materialityLocal`, and the deaths carry a `cause` traced through
 the payment journal (`outflowsOf` walks `ctx.paymentJournal` for the payer's largest outflows by
 reason). And B2.a holds across the whole model: `grep NewsItem src/` finds writers and the UI, and
 **no mechanism reads the news feed.** `newsGenerator.ts:13-21` records the sentiment plumbing being
@@ -225,8 +225,8 @@ derivation (called from `11-fiscal:781`) and writes claims the state does not su
   and `newsGenerator:44` puts it in the headline as management's guidance.
 
 Every one of these is a duplicate of a story the derivation already tells from the state — rule 4,
-and the stated version is the wrong one. Not in §3; **step 15b (News slice 2)** is the natural home
-and is about developing stories, not this. **Becomes a step, and it is a delete**: retire
+and the stated version is the wrong one. **Step 15b (News slice 2)** is the natural home
+and is about developing stories, not this. **§3 step 37-SURFACE**: retire
 `newsGenerator.ts` into the derivation (the rate-decision and weather items are the two it still
 has that `news-derivation` does not).
 
@@ -247,7 +247,7 @@ aggregate is exact and instant. **A measurement and a design question rather tha
 — but the honest note is that A5.a is currently `❌` and A5 is `⚠️` only because CPI carries it
 alone.
 
-### ⚠️ D1 / D2 / E2 — THE RECORD
+### ⚠️ D1 / E2 / ❌ D2 — THE RECORD
 
 **D1** — `ui/world.ts:Tape` is a UI-side recorder for series the engine keeps only as a snapshot,
 and its own header gives the reason (*"no engine state grows for a view"*). It is a separate log,
@@ -270,3 +270,8 @@ with `newsGenerator.ts` in the same delete.
 mutates `GameState` or `V2World`; `recordTape` appends to the UI's own tape. The one place a surface
 could have written the model — `executeTrade` — is never called. So the atlas's measurements are not
 contaminated by being taken.
+
+### Also marked, briefly
+
+- **A2 ⚠️** — every holder's positions render as the register holds them; "its own" has no referent because there is no actor — C1–C4.
+- **C1.a ❌** — nothing enters a book: `executeTrade` takes its fill price from the caller — C1–C4.

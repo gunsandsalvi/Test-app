@@ -79,7 +79,7 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a stated rule over stated constituents at stated weights | `src/domain/indexes.ts:IndexConstituent` | ⚠️ |
 | A1.a all three public and reproducible | `src/ui/objects/index-object.tsx:indexesOf` | ⚠️ |
-| A2 reads cleared prices and nothing else | `src/engine/simulation/stages/index-calculation.ts:indexValueLocal` | ⚠️ |
+| A2 reads cleared prices and nothing else | `src/engine/simulation/stages/index-calculation.ts:indexValueLocal` | ✅ |
 | **A3 FORBID never an input to its own constituents** | `src/engine/macro/indices.ts:measureBeta` | ⚠️ |
 | A4 a unit and a base | `src/domain/indexes.ts:INDEX_BASE_LEVEL` | ✅ |
 | B1 weights come from something real | `src/engine/simulation/stages/index-calculation.ts:rebalance` | ✅ |
@@ -107,13 +107,13 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ D1 / E1 / E2 — THERE ARE TWO INDEX SYSTEMS, AND THE ONE EVERYTHING READS IS THE INVENTED ONE
+### ⚠️ D1 / ❌ E1 / E2 — THERE ARE TWO INDEX SYSTEMS, AND THE ONE EVERYTHING READS IS THE INVENTED ONE
 
 `indexes.ts` + `index-calculation.ts` is the rule-based system this tree describes: a membership
 rule, a quarterly rebalance, market-value weights, and a level chained off the basket so a
 rebalance cannot print a return (`index-calculation:150-171`). It is correct, and **its level has
 no reader.** `grep` finds `MarketIndex.level` written at `index-calculation:145,161,175` and read
-nowhere in `src/` — `etf-flows` and `etf-demand` take `totalValueUSD` and `constituents`, and
+nowhere in `src/` — `etf-flows` and `etf-demand` take `totalValueLocal` and `constituents`, and
 `ui/objects/index-object.tsx` renders names and weights only. The index publishes no level.
 
 The level everything DOES read is `macro/indices.ts:calculateCompositeIndices`, a second, older
@@ -145,7 +145,7 @@ a bare literal, and `getDebtWeightedOas` returns `IG_OAS_FALLBACK`/`HY_OAS_FALLB
 table's spread — for any bucket with no companies in it, which is a credit index level with no
 credit in it.
 
-Not in §3. **Becomes a step**, and a large one: it is a delete, not a build — the rule-based system
+**§3 step 37-BENCHMARK**, and a large one: it is a delete, not a build — the rule-based system
 already exists and is better, so the work is to publish its level, point `measureBeta`, the UI's
 macro page and stage 12's marks at it, and remove `calculateCompositeIndices` and
 `generate52WeekHistory` with it.
@@ -186,14 +186,14 @@ COMPANY id, which is a third reader treating this field as an issuer — so *eve
 named `equityIssuerId`, which makes it countable rather than fixing it. Three read sites for slice
 (d) to resolve: `index-calculation.ts:basketValueLocal`, `07b:571`, `07d:489`.
 
-**Becomes a §3 step**, in slice (d)'s neighbourhood: either the field splits by asset class, or a
+**§3 step 13-BOOK (d)**, in slice (d)'s neighbourhood: either the field splits by asset class, or a
 credit index states tranches and `rebalance` stops being one function over companies. Not slice
 (a)'s to decide — recorded here so the decision is made rather than inherited.
 
 ### ❌ D3 / D3.a / D3.b — THE BENCHMARK IS A POSTED POLICY RATE, AND A CLEARED ONE EXISTS BESIDE IT
 
 Every floating instrument in the model fixes on `region.policyRate`. Measured: `front-core:524`
-(`isFloating ? principalUSD * (policyRate + annualRate)`), `pricing/tranche.ts:33`,
+(`isFloating ? principalLocal * (policyRate + annualRate)`), `pricing/tranche.ts:33`,
 `07f-short-debt-clearing:665`, `derivative-markets/irs.ts:114`, `bank-lending:232,267,492,493`,
 `02b-bank-diversification:224,229,239,255`, `stage08-back:1186,1394,1518,1668`,
 `prime-brokerage:142,260`, `overdraft-sweep:90,99`, `sme-pools:115`, `pe-lifecycle:533`. And
@@ -213,7 +213,7 @@ The sharp part: **the model already clears an overnight rate.** `repo-clearing.t
 region"*. It is read by the money-market fund's yield, the IRS float leg's discount
 (`irs.ts:231`) and `derivative-lifecycle:114` — and by nothing that fixes a coupon. So the world
 has a transacted overnight rate and a posted policy rate, and the entire floating book references
-the posted one. **Becomes a §3 step**, and it is small: the fixing source is one expression
+the posted one. **§3 step 37-BENCHMARK**, and it is small: the fixing source is one expression
 repeated at ~25 sites.
 
 ### ⚠️ D4 / D4.a — THERE IS NO PPI, AND THE INPUT PRICE THAT WOULD BUILD IT IS ALREADY CLEARED
@@ -224,12 +224,12 @@ measure over the same basket with food and energy dropped. That is one index and
 not two indices. `grep -i ppi` over `src/` returns nothing.
 
 The missing half is not missing data. `shelfPriceFor` at `price-index.ts:52` distinguishes exactly
-the two prices a PPI/CPI pair needs — `demand.shelfUnitPriceUSD` (what a household pays) and
-`demand.unitPriceUSD`, the **landed** price, which its own comment calls *"the price a business
+the two prices a PPI/CPI pair needs — `demand.shelfUnitPriceLocal` (what a household pays) and
+`demand.unitPriceLocal`, the **landed** price, which its own comment calls *"the price a business
 pays for the same good"*. A producer price index is that second series over a producer basket
 (`buyerMix` already carries the firm share the way it carries `HOUSEHOLD`). Without it D4.a has no
 expression: the margin squeeze — input prices rising faster than output prices — is the difference
-between two series, and only one series exists. Not in §3. **Becomes a step**, small: the basket
+between two series, and only one series exists. **§3 step 37-BENCHMARK**, small: the basket
 builder is already parameterised by buyer mix.
 
 ### ⚠️ A3 — BETA IS MEASURED AGAINST THE INDEX AND THEN PRICES THE INDEX'S OWN CONSTITUENTS
@@ -287,3 +287,7 @@ the tree should not record it as a decision nobody made.
 `ownership.ts:301`, which checks that constituent weights sum to 1 — not that the level's return
 equals the weighted constituent return, not that an inclusion moved a price, not that index and
 constituents move together. All three are **measurements, for §3 step 38.**
+
+### Also marked, briefly
+
+- **A1.a ⚠️** — names and weights render on one screen; no published rule and no base a reader could reproduce the level from — D1/E2.

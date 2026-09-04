@@ -130,7 +130,7 @@ computed identically in two places (`household-balance-sheet.ts:147-150` and
 
 ```
 owningHouseholds = (totalPopulation / AVERAGE_HOUSEHOLD_SIZE) * housingMarket.ownershipRatePct;
-housingStockUSD  = owningHouseholds * housingMarket.medianHomePriceUSD;
+housingStockLocal  = owningHouseholds * housingMarket.medianHomePriceLocal;
 ```
 
 Three consequences, each of which is a node above:
@@ -165,13 +165,13 @@ code path writes either.** A bank in a housing crash lends at the same 80% LTV a
 
 What *does* respond is the **price** of the loan: each bank quotes its own margin off its own
 vintages' measured loss (`bank-lending.ts:623-631`), and its capital gates the volume
-(`headroomUSD`). Both are real. But the tree distinguishes them deliberately — C5 is about the
+(`headroomLocal`). Both are real. But the tree distinguishes them deliberately — C5 is about the
 *terms* a lender will write, and "it tightens when it is worried" is what makes C5.a's loop
 (standard → price → collateral → standard) a cycle rather than a rate channel. Today the loop runs
 through the rate only, so the amplification housing is in this world for is roughly halved.
 
-**Becomes a §3 step**, small: the bank already measures everything a standard should respond to —
-`mortgageSeverity` off its own LTV cross-section, `bankHurdle`, `headroomUSD` — so the two
+**§3 step 37-HOUSING**, small: the bank already measures everything a standard should respond to —
+`mortgageSeverity` off its own LTV cross-section, `bankHurdle`, `headroomLocal` — so the two
 constants become reads of the same measurements the quote already uses.
 
 ### ✅ E2 — THE FORBID HOLDS, AND THE MECHANISM UNDER IT IS GOOD
@@ -179,13 +179,13 @@ constants become reads of the same measurements the quote already uses.
 Worth recording as clearly as the failures, because a walked house-price index is the single most
 common shortcut in a model like this and it is **not** what is here. `evolution.ts:986-1013`:
 rank the four wealth tiers by what each can pay
-(`affordableLoanUSD / MORTGAGE_LTV_AT_ORIGINATION`, where `affordableLoanUSD` is
+(`affordableLoanLocal / MORTGAGE_LTV_AT_ORIGINATION`, where `affordableLoanLocal` is
 `DSTI × weekly income / annuityFactor` at the **keenest bank quote in the region**), walk down the
 ranking absorbing the week's supply (turnover plus completed construction), and the price is what
 the last buyer needed to bid — floored at the construction sector's own cleared build cost. No
 speed constant, no clamp, no baseline multiplier: the file records that it replaced exactly that.
 B2, B2.a and B3 are ✅ on the strength of this one walk, and C3 is ✅ because every vintage
-remembers `originationHomePriceUSD` so `vintageCurrentLtv` genuinely moves when the price does.
+remembers `originationHomePriceLocal` so `vintageCurrentLtv` genuinely moves when the price does.
 
 It is ⚠️ at B1 for one reason only: it is an affordability **walk**, not a book. No named buyer
 and no named seller transact, and `A1.a`'s location is the region, so there is one price per
@@ -194,27 +194,27 @@ region and no sub-market. That is the same finding as A1 and it closes with step
 ### ⚠️ C4 / C4.a — DEFAULT IS A LOSS RATE, NOT A FORECLOSURE
 
 The vintage machinery is genuinely good: losses fall on each cohort at **its own** severity
-(`mortgageSeverityAtLtv(vintageCurrentLtv(v, medianHomePriceUSD))`) and its own frequency burden
+(`mortgageSeverityAtLtv(vintageCurrentLtv(v, medianHomePriceLocal))`) and its own frequency burden
 (`vBurden`, the vintage's coupon against today's market rate), which is `E[f(LTV)]` rather than
 `f(E[LTV])` and is what makes a mortgage credit event possible at all.
 
-What does not happen is the second half of C4. `vLossUSD` reduces the vintage's principal and the
+What does not happen is the second half of C4. `vLossLocal` reduces the vintage's principal and the
 bank's P&L, and that is the end of it: **no house is repossessed, nothing is sold, and no
 foreclosed supply reaches the market.** So C4.a's "losses are correlated exactly when they are
 largest" is only half true — severities correlate because they share one median price, but the
 extra supply that a wave of foreclosures puts on the market, which is what makes that price fall
 further, does not exist. The negative feedback loop is open.
 
-**Becomes a §3 step**, and it should be taken after 26b: a foreclosure needs a house to seize.
+**§3 step 37-HOUSING**, and it should be taken after 26b: a foreclosure needs a house to seize.
 
 ### ❌ C6 / B5 / B4.a / D5 — FOUR THINGS ABSENT
 
 - **C6 pooling.** `grep -i 'rmbs\|securitiz' src` finds nothing. Mortgages sit on the originating
   bank's book for life. `sme-pools.md`'s structure exists for a different asset and is not pointed
-  at this one — so the tree's "which moves the risk to a named holder" has no path. **Becomes a
-  §3 step** (medium, and it is a strict addition rather than a repair).
+  at this one — so the tree's "which moves the risk to a named holder" has no path. **§3 step
+  37-SECURITISE** (medium, and it is a strict addition rather than a repair).
 - **B5 the yield.** Rent (`housing_rental_services`) and the house price
-  (`medianHomePriceUSD`) both exist and clear, in two different subsystems, and **nothing ever
+  (`medianHomePriceLocal`) both exist and clear, in two different subsystems, and **nothing ever
   divides one by the other**. So the rental yield does not exist, it competes with no other yield,
   and `households.md` D5 has nothing to substitute against. This is the cheapest missing link in
   the tree: two cleared numbers, one division. **A measurement, for §3 step 38** — it becomes a
@@ -233,3 +233,9 @@ What is missing is the join to A1. The landlord is a *firm producing a service*,
 a dwelling somebody lives in, and the owner/renter split is `ownershipRatePct`, frozen at 0.62
 forever. So a household can never buy the house it rents, tenure never changes, and rent and
 ownership are two unconnected markets over the same absent asset. Closes with 26b.
+
+### Also marked, briefly
+
+- **A5 ❌** — nothing depreciates and nobody maintains anything — A1/A4/E1 above.
+- **B4 ⚠️** — `housingTurnoverAnnual` is a constant, so volumes cannot collapse before prices.
+- **C1 ⚠️** — a mortgage is a vintage secured on a median price, not on a house — A1.

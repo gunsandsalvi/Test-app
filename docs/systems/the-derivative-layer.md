@@ -94,7 +94,7 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a long-lived bilateral obligation | `src/domain/derivatives/contract.ts:DerivativeContract` | ✅ |
+| A1 a long-lived bilateral obligation | `src/domain/derivatives/contract.ts:DerivativeContract` | ⚠️ |
 | A2 the exposure is managed, and how is this system | `src/engine/simulation/stages/derivatives.ts:runDerivativesStage` | ✅ |
 | A3 the same obligation twice, one number from two sides | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ✅ |
 | **A4 VERIFY Σ marks = 0 per contract and in aggregate** | — | ❌ |
@@ -149,16 +149,15 @@ space it is in (`derivative-lifecycle.ts:buildDerivativeMarketView`). It is the 
 the field splits by class, or each class states its own reference. Not fixed here — it belongs
 with slice (d), where the instrument index decides what a reference names.
 
-**`DerivativeParty` is also a second party union** — `contract.ts:25` re-declares `PartyRef`'s
-COMPANY / BANK / INSTITUTION arms and no others, so the derivative book's notion of who a
-counterparty is drifts independently of the ledger's. §3.13-BOOK (c-then-3) ends that.
+`DerivativeParty` was a second party union re-declaring three of `PartyRef`'s arms; it is
+`CounterpartyRef`, an `Extract` view of the one union, since §9.13-BOOK c-then-3a.
 
 ### ❌ C2–C5 — THERE IS NO CENTRAL COUNTERPARTY, SO SECTION C IS HALF A SYSTEM
 
 Every contract in `derivativesBook` is bilateral (`contract.ts` `a`/`b`), and the model has no
 CCP for derivatives at all: no default fund, no member contributions, no waterfall, no clearing
 member. The `CLEARING_HOUSE` party that does exist
-(`ledger/accounts.ts:clearingHouseResidualUSD`, `audit/wires.ts` W2) is the **cash books'**
+(`ledger/accounts.ts:clearingHouseResidualLocal`, `audit/wires.ts` W2) is the **cash books'**
 settlement pass-through — flat by construction, holding no margin and bearing no loss — and the
 only waterfall in `src` is the estate's (`estate-resolution.ts:374`, secured → unsecured →
 equity), which is an issuer's liquidation and not a clearing house's.
@@ -190,7 +189,7 @@ drives the dead account further negative with no claim recorded against it, whic
 "the loss lands on named survivors" quietly stops being true.
 
 Adjacent to **§3 step 33** (seniority is decorative) but not the same defect: 33 is about ordering
-*within* the claim list, and this is a claimant that never reaches the list. **Becomes a §3 step**
+*within* the claim list, and this is a claimant that never reaches the list. **§3 step 37-ESTATE**
 — small (one `addClaim` at the right seniority instead of a `pay`), and it changes recovery for
 every defaulted issuer that had a swap or wrote protection.
 
@@ -208,7 +207,7 @@ The missing marks are **Already §3 step 17**. The missing measurement is
 **a measurement, for §3 step 38**: A4 and D2.b are the layer's own audit family and nothing
 produces either number.
 
-### ⚠️ D1 / D5 / F2 — MARGIN IS A STATED RATE, SO IT CANNOT RISE WHEN IT MATTERS
+### ⚠️ D1 / F2 / ❌ D5 — MARGIN IS A STATED RATE, SO IT CANNOT RISE WHEN IT MATTERS
 
 `profile.ts:initialMarginRate` is a flat per-class constant: `0` for IRS, CDS and commodity
 futures, `0.02` for FX forwards (`classes/*.ts`). Nothing reads volatility, a close-out horizon or
@@ -238,7 +237,7 @@ it never liquidates a holding. So the liquidity channel the node names (`prime-b
 C3.a — margin call → forced sale → price impact) is open at one end: a margin call always
 produces borrowing and never produces selling.
 
-**Becomes a §3 step.** It is the missing half of step 17's margin work and should be built with
+**§3 step 37-MARGIN**, . It is the missing half of step 17's margin work and should be built with
 it: risk-based margin with no failure path is a bigger number that still cannot fail.
 
 ### ⚠️ C1 / C1.a — BILATERAL WITHOUT AN AGREEMENT, GROSS WITHOUT A NETTING SET
@@ -255,11 +254,11 @@ untouched half. **Already §3 step 17.**
 
 ### ✅ F3 — NO NETTING ACROSS COUNTERPARTIES, AND THIS ONE IS HONESTLY CLEAN
 
-The tree's sharpest FORBID, and the code obeys it. `registry.ts:standingPfeChargeUSD` and
+The tree's sharpest FORBID, and the code obeys it. `registry.ts:standingPfeChargeLocal` and
 `standing-book.ts`'s `add` charge a party for **every live contract it stands on, on either
 side**, at the class's add-on, with no offsetting whatever — `if (bKey !== aKey)` charges both
 parties, and a long and a short in the same name against different counterparties consume the desk
-budget twice. `deskNotionalCapacityUSD` then spends that gross charge. Nothing nets an exposure to
+budget twice. `deskNotionalCapacityLocal` then spends that gross charge. Nothing nets an exposure to
 A against an exposure to B anywhere in the four markets.
 
 The one net figure in the layer is `dealer-derivatives.ts:FxDealerBook.netNotionalByRegion`, and
@@ -284,8 +283,8 @@ B4's novation is `⚠️` for a different reason: `10-mergers.ts:486` and `bank-
 re-key both parties of every contract onto the acquirer, which is a novation with no consent
 sought and no counterparty able to refuse. That is defensible for a merger and a resolution — they
 are the two cases where consent is legally overridden — but it means the node's *consensual*
-novation, the one that is a real change of who faces whom by choice, has no code. **Becomes a §3
-step**, small, and naturally part of 17's clearing-member work.
+novation, the one that is a real change of who faces whom by choice, has no code. **§3 step
+17**, small, and naturally part of its clearing-member work.
 
 ### ❌ E4 — THE LOSS CHAIN IS NOT TRACEABLE
 
@@ -299,6 +298,13 @@ is a VERIFY, and what it wants is a read of the loss chain, not a new mechanism.
 `releaseInitialMargin` returns the posted cash when the contract ends, which is the half that was
 missing before and now works. What is still absent is the poster's *claim*: the cash leaves the
 holder's balance (`fx-forward.ts:362`) and is carried only as the desk's liability
-(`FxDealerBook.initialMarginHeldUSD`, written to the sheet as `clientMarginUSD`). The poster's own
+(`FxDealerBook.initialMarginHeldLocal`, written to the sheet as `clientMarginLocal`). The poster's own
 books show the money simply gone. "Held, not consumed" is true of the desk's side and not of the
 poster's. Closes with step 17's margin rebuild.
+
+### Also marked, briefly
+
+- **C2.a / C4 ❌** — no CCP, so nothing concentrates and no waterfall exists — C2–C5 above.
+- **D2 ⚠️** — variation margin flows for the two classes that carry a mark and cannot for IRS and CDS — A4/D2.b.
+- **F1 ⚠️** — `O5` checks both parties are alive for the one book; the player's legacy positions have no `b` at all — `../instruments/derivative.md` D1.a.
+- **F4 ⚠️** — the commodity future cash-settles to `evolveCommodity`'s formula spot — 37-COMMODITY.

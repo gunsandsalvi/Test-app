@@ -148,8 +148,8 @@ checked by `scripts/check-atlas.sh`.
 declaration and nothing else. What happens instead is at `bank-lending.ts:243`:
 
 ```
-const lossUSD = (l.principalUSD * smePoolAnnualPd(seg) * (1 - creditRecoveryRate(reg))) / 52;
-return { ...l, principalUSD: l.principalUSD - lossUSD };
+const lossLocal = (l.principalLocal * smePoolAnnualPd(seg) * (1 - creditRecoveryRate(reg))) / 52;
+return { ...l, principalLocal: l.principalLocal - lossLocal };
 ```
 
 Every loan loses its expected loss, every week, continuously — `principal × PD × LGD / 52`. The
@@ -162,7 +162,7 @@ Consequence: **credit loss carries no information and no timing.** A borrower ca
 lender; a bad week cannot cluster into an event; `E1`'s "EVENT" — the thing every provisioning,
 workout and resolution mechanism keys off — has no representation, which is also why D2 and E2 have
 nowhere to attach. It is the loan-book twin of what §3.20-LLR says about liquidity: the failure mode
-exists as a field and never fires. **Becomes a §3 step**, and a substantial one — it needs a hazard
+exists as a field and never fires. **§3 step 37-LOSSRATE**, and a substantial one — it needs a hazard
 draw per borrower rather than a rate applied to principal, plus the reclassify/workout/write-off
 path behind it.
 
@@ -181,21 +181,21 @@ provision exists to show: that it saw the loss coming. Pairs with E1 above; the 
 
 ### ❌ D5 / B2.b — THE COLLATERAL AND LIQUIDITY WIRES ARE CUT AT THE LOAN BOOK
 
-D5: `collateralCapacityUSD` and `unencumberedByBucket` read `sheet.sovereignBondHoldingsByBond`
+D5: `collateralCapacityLocal` and `unencumberedByBucket` read `sheet.sovereignBondHoldingsByBond`
 and nothing else. `domain/repo.ts:16` states the scope decision explicitly — "Sovereign general
 collateral only, deliberately" — so a loan cannot be pledged, and a bank whose assets are loans has
 zero borrowing capacity however good the loans are. **That half is OUT OF SCOPE and says so**, and
 the money-market tree's B3.a is satisfied by it.
 
-B2.b is not out of scope and is simply missing. Origination is gated by `equityUSD /
-BANK_MIN_CAPITAL_RATIO - currentRwaUSD` (`bank-lending.ts:275`, `:661`) and by nothing about cash,
+B2.b is not out of scope and is simply missing. Origination is gated by `equityLocal /
+BANK_MIN_CAPITAL_RATIO - currentRwaLocal` (`bank-lending.ts:275`, `:661`) and by nothing about cash,
 collateral or funding. A bank at its buffer floor and financed entirely by the central bank writes
 the same book as one flush with reserves. Recorded on the funding tree as D4 and belongs to the same
 step; it is here because C's price and B2's constraint set are what it distorts.
 
 ### ❌ A3.a / A3.b — A COMMITTED LINE IS A FREE OPTION
 
-`committedLineHeadroomUSD` bounds ONE of the three draw paths (`stage08-back.ts:1189`, the liquidity
+`committedLineHeadroomLocal` bounds ONE of the three draw paths (`stage08-back.ts:1189`, the liquidity
 shortfall). The other two do not consult it at all: a withdrawn refinancing draws the whole maturing
 principal (`stage08-back.ts:1613`), and `overdraft-sweep.ts` converts any negative balance into a
 new facility tranche with no headroom test whatever — which §3 step 20 already names
@@ -212,7 +212,7 @@ over the contract book, and "a bank's large-exposure limit is a different concen
 different book". Nothing computes exposure to one name, one sector or one region on a bank's loan
 book, so a bank can hold its entire book against a single SME pool and nothing reads it. With E6
 (correlated losses) genuinely present through the shared unemployment print and the pool PDs, the
-absence of F3 means the model has the risk and not the constraint. **Becomes a §3 step**, small.
+absence of F3 means the model has the risk and not the constraint. **§3 step 37-SMALL**, small.
 
 ### ⚠️ C1.a / C1 — THE COST OF FUNDS IS THE POLICY RATE, FOR EVERY BANK
 
@@ -221,7 +221,7 @@ all-in rate is assembled at the call site as `policyRate + margin/10000`
 (`bank-lending.ts:266`; the mortgage quote as `tenor10Y + margin`, `:625`). C1.a's input therefore
 does not exist and the node it points at — `banks-funding-and-liquidity.md` B2 — is `❌` for the
 same reason. Full statement of the finding, including the second inconsistent rate on the
-central-bank loan, is on that tree's B2 row. **Becomes a §3 step** (recorded once, there).
+central-bank loan, is on that tree's B2 row. **§3 step 37-COSTOFCAPITAL** (recorded once, there).
 
 ### ⚠️ C2 / C2.a — THE BORROWER HAS A PRICE RESPONSE BUT NOT A CHOICE
 
@@ -232,12 +232,12 @@ hike moved origination 0.5%. What is missing is "elsewhere": the pool's demand i
 by `bankShare ≈ its share of the pool's existing loans`, so a bank that quotes wide loses no volume
 to a bank that quotes tight. Housing is the exception and shows what the rest should look like —
 `currentMortgageRateAnnual` takes `bestMortgageRateAnnual`, the KEENEST quote in the region, because
-a household shops. The business book should shop the same way. Small; **becomes a §3 step**, or
+a household shops. The business book should shop the same way. Small; is **§3 step 20c**, or
 folds into 20c's "reprice" branch.
 
 ### ⚠️ A4 / A5 / E3 / E4 — PRESENT AS PARAMETERS, ABSENT AS EVENTS
 
-`A4` security: only mortgages carry named collateral (`MortgageVintage.originationCollateralUSD`,
+`A4` security: only mortgages carry named collateral (`MortgageVintage.originationCollateralLocal`,
 marked against the region's median price). A `BankLoan` has no collateral field at all, so every
 business loan is unsecured by construction while being priced at a recovery rate that assumes
 otherwise (`CREDIT_RECOVERY_RATE = 0.4`). `A5` covenants: `SME_SERVICEABLE_LEVERAGE = 3.0` is a
@@ -250,8 +250,15 @@ happen.
 
 ### A measurement, for §3 step 38: C3.a, B2.d, F2
 
-`declinedOriginationUSD` is computed per bank, summed per region into
-`ctx.g2DeclinedOriginationUSD` — **and read by nothing.** Same for B2.d (which constraint bound) and
+`declinedOriginationLocal` is computed per bank, summed per region into
+`ctx.g2DeclinedOriginationLocal` — **and read by nothing.** Same for B2.d (which constraint bound) and
 F2 (the book's flow reconciliation), neither of which is computed at all. C3.a in particular is
 worth taking as a standing read the moment B2.b exists, because "a bank that never says no" is
 exactly what a capital-only gate produces.
+
+### Also marked, briefly
+
+- **A3 ⚠️** — a facility exists and its headroom gates one of three draw paths — the A3.a/A3.b entry.
+- **B2.c ⚠️** — `bankRequiredReturnAnnual` is a per-bank number, not an appetite that moves with the bank's state.
+- **C1.d ⚠️** — the mortgage quote carries `MORTGAGE_OPERATING_COST_BPS`; the business quote carries no operating cost at all.
+- **D3 ⚠️** — interest accrues and is received; non-payment is unobservable because there is no event — E1.

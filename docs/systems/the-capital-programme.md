@@ -114,7 +114,7 @@ checked by `scripts/check-atlas.sh`.
 `capital-programme.ts:157` is the decision, entire:
 
 ```
-desiredGrowthCapex = newRevenueUSD × baselineGrowthCapexToRevenueRatio
+desiredGrowthCapex = newRevenueLocal × baselineGrowthCapexToRevenueRatio
                    × (1 − rateDrag) × cashHealthFactor
                    × (1 + qCapexEffect + competitivenessCapexEffect)
                    × growthCapexAllocationShare × shortageCapexMultiple
@@ -132,7 +132,7 @@ is a market-cap ratio bolted on as `(q − 1) × 0.2`, not a comparison. The mod
 `afterTaxCostOfDebt` and compares them properly — but that comparison drives the **debt** decision
 only. The capital programme never sees it.
 
-This is the load-bearing node of the tree, and it deletes B1.c with it. Not in §3. **Becomes a §3
+This is the load-bearing node of the tree, and it deletes B1.c with it. **§3 step 37-COSTOFCAPITAL
 step, and a large one** — the investment decision has to become a project with a return and a
 hurdle, and the hurdle has to be the firm's own cleared cost of capital.
 
@@ -156,12 +156,12 @@ a stated slope of 2, which are the whole transmission gain. B1.c — "a change i
 changes real investment, and that is the transmission channel this whole atlas exists to make real"
 — is therefore present but running on the wrong input at a stated gain.
 
-Not in §3. **Becomes a §3 step**, and it should be the same one as B5: they are one decision.
+**§3 step 37-COSTOFCAPITAL**, and it should be the same one as B5: they are one decision.
 
 ### ⚠️ A3 — TWO DEPRECIATION SCHEDULES, AND THE P&L ONE IGNORES THE PLANT
 
 `front-core.ts:757` charges D&A against profit as `daShareOfRevenue: 0.05` — five percent of
-REVENUE. `capital-programme.ts:190` reduces the plant by `grossPPEUSD / (usefulLifeYears × 52)`.
+REVENUE. `capital-programme.ts:190` reduces the plant by `grossPPELocal / (usefulLifeYears × 52)`.
 They are different numbers for one fact, and the direction matters: a firm that doubles its plant
 takes **no extra depreciation charge against its earnings**, so building capacity is free in the
 income statement and the tax base built on it. A3 requires depreciation to be both a real cost
@@ -178,8 +178,8 @@ the cost of capital deepening from the P&L.
 Nothing in the programme is a function of uncertainty. `riskAversion` scales the cash buffer and the
 rate drag, which makes a cautious firm invest *less on average*, not *later*: irreversibility (C4,
 which is real — `capacityRetirement` scraps, it does not refund) has no value attached to it.
-Without B4 investment has no lumpy timing and no reason to pause in a volatile week. **Becomes a §3
-step**, and it should follow B1 — an option to wait needs a project to wait on.
+Without B4 investment has no lumpy timing and no reason to pause in a volatile week. **§3 step
+37-COSTOFCAPITAL**, and it should follow B1 — an option to wait needs a project to wait on.
 
 ### ⚠️ B3 — THE REASON TO EXPAND IS THE CATEGORY'S SHORTFALL, NOT THE FIRM'S OWN PLANT
 
@@ -189,13 +189,13 @@ across the firm's lines. That is a market signal and a good one, but B3 asks abo
 running its own plant flat out has a reason to expand that a firm with idle lines does not. The
 model MEASURES exactly that — `plantCapacityUnitsThisWeek` against `producedUnitsThisWeek`, in the
 same lane block — and spends it only on the Wright's-law learning curve. The number is there and the
-decision does not read it. Small. **Becomes a §3 step** (or a line of B1's).
+decision does not read it. Small. **§3 step 37-COSTOFCAPITAL** (or a line of B1's).
 
 ### ⚠️ E3 — ONLY UPKEEP CAN BE BORROWED FOR
 
-`bridgeCapacityUSD` gives an investment-grade firm with a house bank a bridge worth half its weekly
-maintenance need, and `debtFundedMaintenanceUSD` reports it. Growth capex has no such path:
-`growthFundingCapUSD = fcfBeforeGrowthCapex + deployableCash` — internal funds only. Debt-funded
+`bridgeCapacityLocal` gives an investment-grade firm with a house bank a bridge worth half its weekly
+maintenance need, and `debtFundedMaintenanceLocal` reports it. Growth capex has no such path:
+`growthFundingCapLocal = fcfBeforeGrowthCapex + deployableCash` — internal funds only. Debt-funded
 expansion happens in this model only indirectly, by `decideCorporateFinancing` raising money in one
 week and the cash raising next week's cap. E3 says investment is debt-funded *at the margin*, which
 is the link that makes credit growth and investment the same cycle; here they are two decisions that
@@ -203,7 +203,7 @@ communicate through a cash balance with a one-week lag and no shared hurdle. Fal
 
 ### ⚠️ A4 / A5 — PLANT IS ONE DOLLAR NUMBER
 
-`grossPPEUSD` is a scalar. It has no type, no vintage and no location beyond its owner, so A4's
+`grossPPELocal` is a scalar. It has no type, no vintage and no location beyond its owner, so A4's
 specificity exists only as an accident of ownership: `sellAssetsToPeers` will only sell a dead firm's
 plant to same-region, same-sector peers, and a buyer converts those dollars into capacity at **its
 own** `unitsPerNetPpeDollar` — a steel mill's plant becomes whatever the buyer makes. A5 is the same
@@ -219,3 +219,7 @@ a credit tightening through B1.b and B2.a to investment and then output (E4). E4
 of the tree, and it cannot be measured today because B1.b's input is the wrong rate — so it is
 blocked on B1's step rather than being a standing read. Both belong in **§3 step 38's standing
 measurements**; E4 to be taken only after B1 lands. **A measurement, for §3 step 38.**
+
+### Also marked, briefly
+
+- **B1.a ⚠️** — the return signal is the category's shortfall, not the firm's own expected demand and price — B3.

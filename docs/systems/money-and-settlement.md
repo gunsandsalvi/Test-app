@@ -175,7 +175,7 @@ draw or an SME facility draw — and none of the three can be refused: the fund'
 whether or not it is inside its line (`overdraft-sweep.ts:86`, "past the line it is still
 funded"), the pool's is split across the region's banks by market share with no test at all, and
 the firm's revolver is created out of nothing at its house bank. A bank short of reserves reaches
-`raiseCentralBankLoanUSD` (`bank-lending.ts:917`), which is still four lines and lends the
+`raiseCentralBankLoanLocal` (`bank-lending.ts:917`), which is still four lines and lends the
 shortfall unconditionally.
 
 So B3.c is genuinely satisfied — no negative is silent, every one has a named lender and a rate —
@@ -195,162 +195,34 @@ independently here: `unsoldStaysWithHolder: true` is set at 07b:482, 07c:504, 07
 07f:354/905, and the residual dealer is zero by construction on those books
 (`financial-clearing-engine.ts:887`).
 
-### E4 / C1.a — WHO A PARTY IS WAS ANSWERED IN THIRTY PLACES (§3.13-BOOK c-then-1)
+### ✅ E4 / C1.a / C4 / B1 — CLOSED: ONE ANSWER TO "WHO IS THIS", ONE PARTY UNION, ONE ID SPACE (§9.13-BOOK c-then-1 … c-then-4)
 
-Not a divergence in what E4 requires — the legs are settled or counted by name, and F4 catches the
-rest — but in how many copies of "who is this" the answer was spread across. Measured before
-`ledger/entity-index.ts` existed: **thirty index builds** over `companies` and
-`institutionalEntities`, three of them inside `settlement.ts`, where the region switch behind
-C2.a's interbank leg and F1.a's per-book statement was written **twice**, sixty lines apart, nine
-identical cases each (`partyRegionOf` and an inline `regionOfParty`). One builder now, one switch,
-and the memo policy stated once — memoised on the STATE in the audit, never in the engine, because
-`08-company-fundamentals.ts:470` replaces companies in place at the same length.
+What is true now, and where the record is:
 
-Four things the c-then-1 collapse found by reading, none of them E4's own:
+- **Who a party is** is answered once, by `ledger/entity-index.ts`, built by one function and
+  memoised on the STATE in the audit and never in the engine (`08-company-fundamentals.ts:470`
+  replaces companies in place). Thirty stage-local index builds and a hand-registered
+  `Map<id, ticker>` mirror are gone — §9 c-then-1 and c-then-2, which also record the four
+  filters `bankByTicker` had been and the fold that could never fire.
+- **One party union.** `domain/party.ts:PartyRef` is the type; `DerivativeParty`, `ClaimHolder`
+  and `RepoParty` are `Extract` views of it, and the 204 hand-built literals go through eight
+  constructors — §9 c-then-3a.
+- **One id space.** The five entity arms key by `EntityId`; the eleven stored fields that named an
+  entity by ticker (`homeBankId`, `leadBankId`, `facilityBankId`, `brokerId`, `borrowerId`,
+  `buyerId`, `sellerId`, `carrierId`, `parentId`, `acquiredById`, the tranche store's `bankRef`)
+  are entity ids, and the bank lane in `accounts.ts` holds the bank rather than its ticker — §9
+  c-then-3b, which also records the one live defect the rename found (an unbranded re-declaration
+  of `homeBankId` that read every corporate deposit line as zero for two commits) and the lesson:
+  a brand holds exactly as far as the last unchecked cast or unbranded re-declaration on the path.
+- **Where the two spaces still meet**, by name: the clearing books seat participants by keys that
+  embed a ticker (`participant-keys.ts`) and `book-settlement.ts:bankIdOfTickerFor` is the one
+  crossing back; the goods book's `byKey` holds either by design; the `companyUpdates` channel is
+  keyed by ticker, its own field. `O8` walks every party-keyed store through one `partyExists`
+  over the index — §9 c-then-4.
 
-- **`bankByTicker` was four different filters.** `isBankEntity` alone (the audit's O4, stage 08's
-  lanes), `bankBalanceSheet` alone (estate resolution), and live-sheet-and-active (`banksOf`, in
-  settlement). All four were right for their site — an estate resolves a bank that has DIED — so
-  the index carries no filter at all and each predicate now sits where it can be read.
-- **The private-firm fold was always a no-op**, in three files. `context.ts:432` opens the week as
-  `updatedCompanies: [...state.companies]` and every reassignment is a length-preserving `.map`,
-  so `prevActivePrivateFirms` — a `state.companies` FILTER — is a strict subset and the
-  `if (!has(id))` guard could not fire. All four are now deleted (`derivative-lifecycle.ts` ×2,
-  07b, 07d).
-- **`DerivativeContract.referenceId` is four id spaces in one `string` field**, discriminated by
-  `classId` alone: an entity id from the CDS book, a commodity id, a REGION from the FX forward,
-  and `''` from the swap. See `the-derivative-layer`.
-- **O3's fund-share line**, in `the-register`.
-
-### C1.a — AND THE `Map<id, ticker>` MIRROR THAT HAD TO BE HAND-REGISTERED (§3.13-BOOK c-then-2)
-
-The rest of the thirty builds, in twenty files, now go through the one builder. What that found:
-
-- **`ctx.issuerTickerById` was a mirror with a maintenance burden, and it is gone.** Built once at
-  context creation, it could not see a firm born mid-week — so `pe-lifecycle.ts` carried an
-  explicit `ctx.issuerTickerById?.set(c.id, c.ticker)` at the birth site, with a comment recording
-  what had gone wrong before it: *"a firm born mid-week was invisible to every coupon and
-  corporate-action payment that week — the money then flowed payer-less into the unbacked
-  ledger"*. Exactly the invalidation-at-every-writer invariant a parallel mirror demands. It was
-  also re-declared TWICE in `shared-helpers.ts` as `Map<string, string>` and cast back with
-  `as Ticker`. Its two readers index `ctx.updatedCompanies` now, which `core.ts:323` pushes the
-  newborn onto in the same pass — so the newborn is found with no registration step at all.
-- **A dead index in the audit.** `ownership.ts` built a `regionById` map over every company on
-  every pass of `ownershipCoverage`, kept alive only by a `void regionById;` to silence the
-  linter. Read by nothing. Deleted.
-- **`audit/wires.ts` built the same two maps three times**, two of them INSIDE a `forEach` so they
-  were rebuilt per gap row. One lazy getter now — the traces still pay nothing when off.
-- **`05-unit-bidding`'s `byKey` map resolved a ticker/id collision by walk order.** It is the one
-  map in the model that holds two id spaces on purpose (the goods book's buyer keys are either),
-  and its stated rule is "ids first, tickers after, so the ticker wins". It was implemented inside
-  the walk as `if (!byTicker.has(asTicker(c.id)))` — a test against the tickers seen SO FAR, so a
-  colliding firm later in the walk was missed and the id won instead. Two passes now, and the
-  `asTicker(c.id)` cast (an entity id branded a ticker to compare across spaces) is gone.
-
-### C4 — THERE WERE **FOUR** PARTY UNIONS, AND THREE KEY FORMATS (§3.13-BOOK c-then-3a)
-
-C4 says the money creators are enumerable, and `PARTY_KINDS` enumerates them — but `PartyRef` was
-not the only union naming a party. Three more existed, each re-declaring arms of it verbatim:
-
-| union | arms | where |
-|---|---|---|
-| `PartyRef` | 10 | `engine/ledger/party.ts` |
-| `DerivativeParty` | COMPANY, BANK, INSTITUTION | `domain/derivatives/contract.ts` |
-| `ClaimHolder` | COMPANY, BANK, INSTITUTION — **the same three, under a second name** | `domain/estate.ts` |
-| `RepoParty` | BANK, INSTITUTION, CENTRAL_BANK | `domain/repo.ts` |
-
-with **three key functions in three formats** for the same party: `partyKey` and
-`derivativePartyKey` write `INSTITUTION:<id>`, `repoPartyKey` writes `INST:<id>`. Nothing kept any
-of them in step — a new arm, or a change to how an arm is keyed, had to be made four times or it
-silently was not, which is the exact failure mode `PARTY_KINDS`' compile-loud completeness check
-exists to prevent *within* `PartyRef`.
-
-**Why it happened is structural and is fixed:** the union lived in `engine/ledger/`, beside the
-interning table, so the domain modules that also had to name a party could not import it. The type
-is `domain/party.ts` now — the dense-integer table stays in the ledger, which re-exports it so no
-importer moved — and the other three are `Extract` views. `DerivativeParty` and `ClaimHolder` are
-both `CounterpartyRef`; `RepoParty`'s central-bank arm is the one genuine variant, carrying no
-region because `reg.repoBook` is per region and `'CB'` is therefore unambiguous inside it (checked
-at `repo-clearing.ts:379,814`, not assumed).
-
-**And the 204 hand-built literals now go through eight constructors.** `{ kind: 'COMPANY', ticker:
-… }` and its three siblings were written out by hand 204 times. They split, and the split IS the
-measurement for (c-then-3b): **123 sites hold the entity** and pass it (`companyParty(c)`), and
-those survive a change of key untouched; **81 hold only a bare ticker** (`companyPartyOfTicker(t)`)
-and are exactly the sites that will need an entity found for them. `grep -c PartyOfTicker` is the
-size of what is left.
-
-### B1 — A PARTY NAMES ITS BANK BY ENTITY ID (§3.13-BOOK c-then-3b, first field)
-
-B1 says an account is (holder, issuer, currency). The ISSUER of a firm's deposit is its house bank,
-and the firm named it by TICKER — `homeBankTicker`, 69 sites — while the holder was named by entity
-id, so the two sides of one account row were in two id spaces. `homeBankId` closes the first of
-eleven such fields (`leadBankTicker` went with it: the same allocator mints both).
-
-**Branding is what made the rename safe, and that is the finding.** `rekeyBankLinks` — the function
-that repoints every link naming a failed bank at the bank assuming it — took two TICKERS. Rename
-the field to an id while both are `string`, and `if (c.homeBankTicker === from)` compiles, is
-always false, and **every client of a failed bank silently keeps pointing at a dead bank**. The
-compiler refused it. The function takes the two BANKS now, because the links are genuinely no
-longer in one space: `homeBankId` and `leadBankId` name a bank by entity id while `brokerTicker`
-and the party keys still name it by ticker, and handing it the firms lets each link be rekeyed in
-the space it is actually in.
-
-**Six full-array scans became lookups**, all of the form `updatedCompanies.find(b => b.ticker ===
-c.homeBankTicker)` — once per overdrawn firm in `overdraft-sweep` and `02b`, once per newborn in
-`pe-lifecycle`, once per fund in both prime-brokerage passes, once per offering in
-`primary-settlement`. The last of those also carried c-then-2's dead fold: a `prevActiveFirms`
-second scan that could never find a firm the first had not.
-
-**`chooseLeadBank` never reads a name at all** — its ranking is three numbers and a tie-break
-hashed off the ISSUER's id — so re-keying the allocator is provably outcome-preserving rather than
-hopefully so.
-
-**AND THEN THE LANE ITSELF (second commit).** `accounts.ts`'s dense bank lane was `Ticker[]`, so
-every tally read off it came out keyed by ticker while every party pointing AT a bank named it by
-entity id. It holds the BANK now — `{ id, ticker }` — so the four per-bank tallies
-(`reserveDeltaByBank`, `creditCreatedByBank`, `bankSecuritiesDeltaByBank`, `bankEquityDeltaByBank`)
-key by entity id, the translation table `bankIdxOf` needed is **gone rather than moved**, and the
-two sites that genuinely want the register's or the persistent store's ticker take `.ticker` and
-say so.
-
-**`asTicker` is how a brand stops helping, and this is where it showed.** Both consumers of those
-tallies did `map.get(asTicker(key))` — `settlement.ts` booking a bank's equity delta,
-`core.ts` attributing credit creation to a region. `asTicker` is `s as Ticker` by construction, so
-when the key underneath changed from a ticker to an entity id **the compiler had nothing to say**:
-both lookups would have missed every bank, silently, sending every equity delta to
-`unresolvedLocal` and every credit tally to `bankTallyUnmappedLocal`. Found by reading the two
-consumers rather than by the type system, which is the point: a brand is only as good as the last
-unchecked cast on the path. Both are lookups by id now.
-
-### C1.a / C4 — `PartyRef` IS A VIEW OF THE ENTITY STORE (§3.13-BOOK c-then-3b, closed)
-
-The four firm arms — COMPANY, BANK, BANK_CREDIT, BANK_SECURITIES — key by `EntityId` now, the
-same key INSTITUTION always had. Five entity arms, one key, and `partyKey` writes it: a payment's
-payer and a position's `bookId` are in one id space, which is the join the CROSS-TABLE CHECK
-needs and never had.
-
-What had to move first, because a `PartyRef` cannot be keyed by something its makers do not
-hold: **eleven stored fields that named an entity by ticker** — `homeBankTicker`,
-`leadBankTicker`, `facilityBankTicker`, `brokerTicker`, `borrowerTicker`, `buyerTicker`,
-`sellerTicker`, `carrierTicker`, `parentTicker`, `acquiredByTicker`, and the tranche store's
-`bankRef` column — are entity ids, along with the readers keyed on them (`facilityBookOf`,
-`facilityRowsOf`, `bankReservesOf`, `reserveRowOf`, `adjustBankReserves`, `moveBankReserves`,
-`repoBorrowedLocal`, `encumberedFaceByBond`, `lentByBroker`, the deposit-line readers, the
-freight and FX-forward desk maps). `PrimaryOffering.issuerTicker` survives as a display name
-beside `issuerId`.
-
-**Where the two spaces still meet, named:** the clearing books seat participants by keys that
-embed a TICKER (`participant-keys.ts`), and `book-settlement.ts:bankIdOfTickerFor` is the one
-crossing back, built once per stage and handed to `participantPartyOf` and `dealerDeskPartyOf`.
-The goods book's `byKey` (a ticker or an id, by design) and the `companyUpdates` channel (keyed
-by ticker, its own field) are the other two, both marked at the site.
-
-**The defect this found is recorded above under B1**: `accounts.ts`'s `Depositor` re-declared
-`homeBankId` as `string`, so two comparisons compiled and went always-false — every bank's
-corporate and institutional deposit line read zero, silently, with the type system unable to
-see it because the re-declaration was unbranded. Branding holds exactly as far as the last
-unbranded re-declaration or unchecked cast on the path; this slice found three of each.
+What the collapse handed to slice (d): `DerivativeContract.referenceId` holds four id spaces
+(`the-derivative-layer.md` A1), and `O3` passes a fund share whose fund is gone (`the-register.md`
+A1.b).
 
 ### ⚠️ E3 — "TWO INSTRUCTIONS THAT BOTH DRAW ON ONE BALANCE CANNOT BOTH SUCCEED BY LUCK"
 
@@ -364,7 +236,7 @@ it cannot while E1 is absent. Closes with E1.
 `audit/money.ts:170` fires M6 only when the unexplained change exceeds
 `max(5e8, moneyBefore * 0.005)` — half a percent of the money stock, which on a stock of trillions
 is billions of dollars of unexplained money creation per region per week, invisible. `m5`'s bank
-identity is `max(1e7, assets * 2e-3)`. Rule 28 says a tolerance is float dust, never a percentage.
+identity is `max(1e7, assets * 2e-3)`. Rule 7 says a tolerance is float dust, never a percentage.
 
 **Already §3 step 27** ("the audit measures what it claims — and its tolerances are float dust").
 Recorded here as a second witness: it is the money family's own headline identity that the band
@@ -372,7 +244,7 @@ is hiding.
 
 ### ❌ A1.c — CURRENCY IN CIRCULATION DOES NOT EXIST
 
-`close-seed.ts:83` sets `cb.currencyInCirculationUSD = 0` and `audit/money.ts:68` reports any
+`close-seed.ts:83` sets `cb.currencyInCirculationLocal = 0` and `audit/money.ts:68` reports any
 non-zero value as "a residual nobody issued". Nothing ever issues notes.
 
 **OUT OF SCOPE**, and correctly so: every party in this world banks, so a bearer liability has no

@@ -164,7 +164,7 @@ to its own price: a wage boom draws nobody in and a collapse pushes nobody out, 
 much" (hours) does not exist at all — labour is heads, never hours. The discouraged-worker margin,
 which is a large part of why measured unemployment lags a recovery, cannot occur.
 
-**Becomes a §3 step.** It is small in code and it pairs naturally with step 24: once a wage is a
+**§3 step 37-SMALL**, . It is small in code and it pairs naturally with step 24: once a wage is a
 price, a household's reservation wage is what decides whether it posts itself, and the two stated
 drift constants die together.
 
@@ -180,7 +180,7 @@ P&L: a firm's shed decision costs it nothing, which means labour hoarding throug
 a speed limit rather than a calculation.
 
 `DISTRESS_LAYOFF_SPEED` (`:621`) is the one place the decision has a cause — a firm that cannot
-make payroll sheds — and that one is right. **Becomes a §3 step**, small, and it belongs beside
+make payroll sheds — and that one is right. **§3 step 37-EMPLOYMENT**, small, and it belongs beside
 step 24 for the same reason A4 does: a severance payment needs an employment relationship to be
 severed.
 
@@ -222,3 +222,8 @@ failed identity. D4's two series are both published (`unemploymentRate`, `vacanc
 `laborMarketTightness`) and nothing ever reads one against the other.
 
 Both are **a measurement, for §3 step 38**.
+
+### Also marked, briefly
+
+- **C1 ⚠️** — a firm posts toward a target headcount from its plan, not from a marginal-product test against the wage — step 24.
+- **E4 ⚠️** — job loss reaches debt service as `(u − nairu) × 0.02`, a region aggregate — `households.md` E4.

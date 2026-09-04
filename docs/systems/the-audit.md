@@ -119,7 +119,7 @@ particular is honoured absolutely — no family mutates state.
 Everything below is already a §3 step. This tree's contribution is that it says WHICH NODE each
 step is, so a future reader can tell a known gap from a new one.
 
-### ❌ A4 / A4.a — PERCENTAGE TOLERANCES, AND THE ATLAS AGREES WITH RULE 28
+### ❌ A4 / A4.a — PERCENTAGE TOLERANCES, AND THE ATLAS AGREES WITH RULE 7
 
 `ownership.ts:59` forgives `max(5e7, o * AUDIT_BOOKS_TOLERANCE)`; `money.ts:135` forgives
 `max(1e7, assets * 2e-3)`. Node A4 is rule 7 restated from the domain side and reaches the same

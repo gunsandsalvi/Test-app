@@ -89,11 +89,11 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a holding is holder + instrument + quantity | `src/domain/banking.ts:ItemizedHolding` | ✅ |
 | A1.a the holder exists and can be paid | `src/engine/ledger/holdings-ledger.ts:holderIdOf` | ⚠️ |
-| A1.b the instrument is one the issuer issued | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
+| A1.b the instrument is one the issuer issued | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | A1.c the quantity is in the instrument's own unit | `src/engine2/holdings.ts:HoldingStore` | ✅ |
 | A2 a holding is a claim on a named issuer | `src/engine2/holdings.ts:pushBookRow` | ✅ |
 | A2.a it pays to whoever the register says holds it, then | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
-| **A4 FORBID no holding without an issuer** — the SEED's half | `src/engine/ledger/holdings-ledger.ts:issuerOfHoldingRow` · `src/domain/entity-keys.ts:governmentEntityId` | ✅ |
+| A4 · the seed's half: every opening row names its issuer | `src/engine/ledger/holdings-ledger.ts:issuerOfHoldingRow` · `src/domain/entity-keys.ts:governmentEntityId` | ✅ |
 | **A3 FORBID no holding without a holder** | `src/engine2/holdings.ts:bookHeadOf` | ✅ |
 | **A4 FORBID no holding without an issuer** | `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
 | B1 an instrument has an issued amount | `src/engine/ledger/tranche-ledger.ts:issueTranche` | ✅ |
@@ -129,7 +129,7 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ⚠️ B1 — O3 EXEMPTS A FUND SHARE WHOSE FUND IS GONE (§3.13-BOOK c-then-1)
+### ⚠️ A1.b — O3 EXEMPTS A FUND SHARE WHOSE FUND IS GONE (found at §9.13-BOOK c-then-1)
 
 The register keys a fund's shares by the **FUND'S OWN ENTITY ID** — `etfShareRegisterId` is the
 identity function, and `peFundInterestId` is the same — which is the two-keys conflation slice (a)
@@ -144,7 +144,7 @@ if (h.instrumentType === 'PE_FUND_INTEREST' || h.instrumentType === 'ETF_SHARE')
 
 Both types are entity-id-keyed, so the first line already passes every fund share whose fund still
 exists. **The second line passes exactly the rest — a share of a fund that no longer exists**,
-which is the orphan B1 asks O3 to find. Left as it stands (rule 11); it closes with slice (d),
+which is the orphan A1.b asks O3 to find. Left as it stands (rule 11); it closes with slice (d),
 which deletes one of the ETF share's two keys and gives the row an instrument to be checked
 against.
 
@@ -159,14 +159,14 @@ That is survivable on its own — one pass, one week. What is not is the primary
 states the asymmetry outright. `book-settlement.ts:89`:
 
 ```
-const primaryUSD = Math.max(0, Math.min(takeTotalUSD, Math.max(0, tradingUSD)));
+const primaryLocal = Math.max(0, Math.min(takeTotalLocal, Math.max(0, tradingLocal)));
 ```
 
 …and then, ten lines later, the paper moves for the **whole** take, with the reason given in the
 comment: *"the money above is what the CCP could pay; the paper placed is what the book took"*
 (`book-settlement.ts:97-100`). When the dealer's trading residual comes up short of what the
 participants actually took, the issuer delivers all the paper and is paid less than all the money,
-and the shortfall is absorbed silently — `leftoverUSD` (line 106) is zero in exactly that case, so
+and the shortfall is absorbed silently — `leftoverLocal` (line 106) is zero in exactly that case, so
 the defect guard beneath it cannot fire.
 
 **Consequence.** DvP is the property that makes a settlement fail *representable*: if neither leg
@@ -176,10 +176,10 @@ Here the paper always arrives, so there is no such event anywhere in the model �
 because there is nothing for it to describe. It is the ownership-side twin of
 `money-and-settlement.md` E1.
 
-**Becomes a §3 step.** Medium: the two legs already exist and already name the same parties; what
+**§3 step 37-DVP**, . Medium: the two legs already exist and already name the same parties; what
 is missing is one settlement point that writes both or neither.
 
-### ✅ F1 — CLOSED ON THE KEYING SIDE: NINE REF COLUMNS, SEVEN SPACES, SEVEN NUMBERINGS
+### ⚠️ F1 — THE KEYING SIDE IS CLOSED: NINE REF COLUMNS, SEVEN SPACES, SEVEN NUMBERINGS
 
 A columnar store cannot hold a string, so every string a row names is an integer into an intern
 table: `H.instrRef`, `H.typeRef`, `H.regionRef`, `TS.idRef`, `TS.issuerRef`, `TS.bankRef`,
@@ -210,7 +210,7 @@ among thousands of ids — and it is the question slice (d)'s instrument index i
 
 F1 stays `⚠️` overall for the reason below, which is about a key, not about the spaces.
 
-### ✅ A4 — CLOSED AT THE SEED: EVERY OPENING CREDIT ROW NAMED AN ISSUER THAT DOES NOT EXIST
+### ⚠️ A4 — THE SEED'S HALF IS CLOSED: EVERY OPENING CREDIT ROW NAMED AN ISSUER THAT DOES NOT EXIST
 
 A4 forbids a holding without an issuer. The seed opens every institution's book by wiring each
 holding FROM its issuer, and it found that issuer by looking the row's `instrumentId` up in a map
@@ -259,9 +259,9 @@ wherever it is used, and the ETF pair is where it is not.
 
 ### ❌ D4 — NOTHING RECORDS WHAT A POSITION COST
 
-`ItemizedHolding` (`domain/banking.ts:28-56`) carries `quantityOrNotionalUSD`, `quantityShares`,
-`units` and `faceUSD`. There is no basis field, and `grep -rn 'costBasis\|basisUSD\|realizedGain'`
-over `src/` returns nothing. The doc comment on `quantityOrNotionalUSD` even says *"market value
+`ItemizedHolding` (`domain/banking.ts:28-56`) carries `quantityOrNotionalLocal`, `quantityShares`,
+`units` and `faceLocal`. There is no basis field, and `grep -rn 'costBasis\|basis\|realizedGain'`
+over `src/` returns nothing. The doc comment on `quantityOrNotionalLocal` even says *"market value
 at cost"* — two different quantities named as one, which is how the field came to be re-marked
 every week by `markBookToMarket` without anybody noticing the cost was gone.
 
@@ -269,7 +269,7 @@ every week by `markBookToMarket` without anybody noticing the cost was gone.
 `the-treasury.md` C1 wants taxes on real bases; a capital-gains base does not exist here. It also
 means a fund's P&L cannot separate what it earned from what it was handed by a re-mark.
 
-**Becomes a §3 step.** Small on the register (one column, written where a row is credited),
+**§3 step 37-DVP**, . Small on the register (one column, written where a row is credited),
 larger where it lands (the tax base, the P&L split).
 
 ### ❌ B2.b — THE HELD-EQUALS-ISSUED CHECK FORGIVES 2% OF THE ISSUE
@@ -352,7 +352,7 @@ checked. `holdings-ledger.ts:debitRow` (line 138) defects when the walk leaves m
 noise undelivered, with the residue scaled to the position walked rather than to the amount asked
 for; `holdings-store.ts:addShares` defects on the same condition for the stock-loan delivery path
 that writes rows directly. The clearing kernel cannot produce a negative fill either —
-`filledUSD = max(core, min(wanted, affordable))` with all three non-negative
+`filledLocal = max(core, min(wanted, affordable))` with all three non-negative
 (`financial-clearing-engine.ts:812`). A deliberate short exists only as a borrowed position in
 `securities-lending`, which is what the node asks for.
 
@@ -364,3 +364,8 @@ sheets — the register is the institutions'. The O-family checks then reconcile
 against the ladders (O1, O6, O7) rather than the register doing it by construction. Not a defect
 of this tree so much as a statement of its true boundary; recorded so the next reader does not
 assume `A1` covers every holder in the world.
+
+### Also marked, briefly
+
+- **B2 ⚠️** — `O1` holds the identity at a 2% band — B2.b.
+- **C3 ⚠️** — the paper leg and the cash leg are two stages apart — C3.a/C3.b, 37-DVP.

@@ -173,20 +173,20 @@ upstream extraction per dollar of refined-products REVENUE**, not a quantity per
 `front-core.ts:659-666` then does exactly what that implies:
 
 ```
-const neededUSD   = lineProductionUSD * RECIPE_INTENSITY[r];   // dollars in, fixed share
-const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice); // …divided by the price
+const neededLocal   = lineProductionLocal * RECIPE_INTENSITY[r];   // dollars in, fixed share
+const neededUnits = neededLocal / Math.max(0.01, inputUnitPrice); // …divided by the price
 ```
 
 So when an input's cleared price doubles, the firm draws **half the physical units** and its input
 bill is unchanged. A supply shock cannot bite as a real production constraint, because the firm
 economises on the scarce input by exactly the amount that keeps its cost share constant — the
 smoothing A2.a exists to forbid. It runs the other way too: when the firm's own OUTPUT price
-rises, `lineProductionUSD` (revenue ÷ 52) rises and it draws more input units for the same
+rises, `lineProductionLocal` (revenue ÷ 52) rises and it draws more input units for the same
 physical output.
 
-Not named in `MASTER_PLAN.md` §3. **Becomes a §3 step**, and a large one: it is the recipe's unit
+**§3 step 37-GOODS-RECIPE**, and a large one: it is the recipe's unit
 of account, so it touches the registry's 37 sub-unit BOMs, `firmInputIntensities`, the stage-05
-input bid (`computeRecipeInputNeedUSD`, same shape), the intermediate-demand solve
+input bid (`computeRecipeInputNeedLocal`, same shape), the intermediate-demand solve
 (`totalOutputFromFinalDemand`) and the kernel draw together.
 
 ### ❌ B1.b / ⚠️ B2 — THE INPUT SHORTAGE IS MEASURED, AND NOTHING READS IT
@@ -209,13 +209,13 @@ than this week's planned units). The stock identity `W4` (`audit/wires.ts`) stil
 consumption is recorded wherever it happens — but what a firm consumes and what it decided to make
 are two numbers with no arithmetic between them.
 
-**Becomes a §3 step** (one step, since the fix is the same wiring: production decides, the draw
+**§3 step 37-SMALL** (one step, since the fix is the same wiring: production decides, the draw
 follows, and the shortfall caps output).
 
 ### ❌ E2 / E2.c — FINISHED STOCK IS MARKED TO MARKET, IN BOTH DIRECTIONS
 
-`goods-ledger.ts:110` and `:123` both write `valueUSD = heldUnits * unitPriceUSD`, and
-`05-unit-bidding.ts:1839` passes `results[plan.regionId].clearedPriceUSD` — **this week's cleared
+`goods-ledger.ts:110` and `:123` both write `valueLocal = heldUnits * unitPriceLocal`, and
+`05-unit-bidding.ts:1839` passes `results[plan.regionId].clearedPriceLocal` — **this week's cleared
 price**. There is no cost basis on finished goods anywhere: not a lot chain, not a weighted
 average, not a field. So the stock is revalued up when the market rises (E2.c's exact FORBID —
 profit the firm has not earned), revalued down when it falls, and neither move is a P&L event
@@ -245,11 +245,11 @@ new flow convention.
   shock does to a firm.
 
 The inputs for a real PPI are all present and already measured per sub-unit:
-`demandState.exWorksUnitPriceUSD` (05-unit-bidding:2306) is the factory gate, and
-`totalUnitsSuppliedThisWeek` is the production weight. **Becomes a §3 step** — small, and it is
+`demandState.exWorksUnitPriceLocal` (05-unit-bidding:2306) is the factory gate, and
+`totalUnitsSuppliedThisWeek` is the production weight. **§3 step 37-BENCHMARK** — small, and it is
 the measurement §3 step 23 will need to prove it deleted the right index.
 
-### ❌ B4 / E4 / B1.d — THREE THINGS THAT NEVER HAPPEN TO A UNIT
+### ❌ B4 / B1.d / ⚠️ E4 — THREE THINGS THAT NEVER HAPPEN TO A UNIT
 
 - **B4 yield.** `advanceProductionPipeline` (05-unit-bidding:240) returns exactly what was started
   `leadWeeks` ago: `arrivedUnits === startedUnits`, always. No scrap, no defect rate, no loss.
@@ -267,7 +267,7 @@ are **a measurement, for §3 step 38**.
 
 ### ⚠️ B5 / F5 — THE COST OF A UNIT AND THE COST OF THE UNITS THAT LEFT
 
-B5's three terms are two. `05-unit-bidding.ts:945` builds `firmWeeklyCostUSD` as current payroll +
+B5's three terms are two. `05-unit-bidding.ts:945` builds `firmWeeklyCostLocal` as current payroll +
 real input lots consumed + the trailing residual; the capital charge is not in it. Capital appears
 only as `marginPremium = costOfCapital * 1.5` on the *ask* (`:1188`), so a firm's break-even test
 is taken against a cost that excludes the return on its plant, and the `1.5` is a stated shape
@@ -284,3 +284,9 @@ delivery chain is complete end to end: three price levels with three real payees
 landed, shelf), freight paid by the buyer to a named carrier, a consignment held by that carrier
 while it moves, trade credit with terms and a write-off, and a stock identity (`W4`) that audits
 Δstock = produced − consumed − scrapped + wires, in units, per region and sub-unit, every week.
+
+### Also marked, briefly
+
+- **A2.b ⚠️** — labour enters the unit cost; capital services do not — B5.
+- **E2.b ❌** — no broker-dealer carries a commodity at fair value, because no commodity is held — `commodities-spot.md` A4.
+- **G2 ⚠️** — inflation is the CPI's change and nothing says so, because there is no second index to name — G1.

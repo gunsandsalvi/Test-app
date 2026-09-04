@@ -75,21 +75,21 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 a complete, consistent state, all present at once | `src/engine/simulation/initialization.ts:buildSeededGameState` | ⚠️ |
-| **A2 it must pass the audit at week zero** | `src/engine/audit/index.ts:auditWeek` | ❌ |
+| **A2 it must pass the audit at week zero** | `src/engine/audit/index.ts:auditSeed` | ✅ |
 | A2.a a violation at week zero is the seed's | `src/engine/audit/index.ts:lastSnapshot` | ⚠️ |
 | A3 it is a stock, and the flows act on it | `src/engine/simulation/initialization.ts:createInitialGameState` | ✅ |
 | **A4 FORBID no free money and no free assets** | `src/engine/bootstrap/close-seed.ts:closeSeedMoney` | ✅ |
 | A5 reproducible from a seed value | `src/engine/rng.ts:setSimulationSeed` | ✅ |
 | B1 a population of each type | `src/engine/bootstrap/firms.ts:generateFirmSeeds` | ✅ |
-| B1 (private tier, carriers) | `src/engine/bootstrap/private-firms.ts:generatePrivateFirmSeeds` | ✅ |
+| B1 · private tier, carriers | `src/engine/bootstrap/private-firms.ts:generatePrivateFirmSeeds` | ✅ |
 | B2 an identity that survives the whole run | `src/engine2/world.ts:rowOf` | ✅ |
 | B3 placed in a region; the region determines its money | `src/engine/simulation/initialization.ts:openAccount` | ✅ |
 | B4 each has a size, and the sizes are dispersed | `src/domain/stated.ts:SEED_FIRM_CONCENTRATION_DECAY` | ⚠️ |
 | **B5 FORBID no observed real-world ratio is copied in** | `src/engine/macro/initialization.ts:HOUSEHOLD_DEBT_RATIOS` | ❌ |
 | C1 every party's balance sheet balances at week zero | `src/engine/bootstrap/close-seed.ts:closeSeedMoney` | ✅ |
 | C2 each asset is somebody's liability, party by party | `src/engine/ledger/holdings-ledger.ts:seedBook` | ✅ |
-| C2 (the issuers' side) | `src/engine/ledger/tranche-ledger.ts:seedLadder` | ✅ |
-| **C3 instruments have terms and a REMAINING LIFE** | `src/engine/companyGenerator.ts:debtLadderShape` | ❌ |
+| C2 · the issuers' side | `src/engine/ledger/tranche-ledger.ts:seedLadder` | ✅ |
+| **C3 instruments have terms and a REMAINING LIFE** | `src/engine/companyGenerator.ts:debtLadderShape` | ✅ |
 | **C3.a a maturity profile that is spread** | `src/engine/macro/initialization.ts:GOV_DEBT_TENOR_WEIGHTS` | ⚠️ |
 | C4 prices at week zero are the first clearing's inputs | `src/engine/bootstrap/yield-curves.ts:getRegionYieldCurveParams` | ⚠️ |
 | **C4.a a seeded price that never clears is rule 3's defect, seeded** | `src/engine/bootstrap/commodities-and-fx.ts:getInitialFxRate` | ⚠️ |
@@ -107,7 +107,7 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ A2 / D3 — THE TWO NODES THAT WOULD CATCH EVERYTHING ELSE ARE BOTH UNASSERTED
+### ✅ A2 (closed, §9.37-SEED) / ❌ D3 — THE TWO NODES THAT WOULD CATCH EVERYTHING ELSE WERE BOTH UNASSERTED
 
 **A2 — nothing audits the seed.** `auditWeek(state, w)` is called from inside the harness's week
 loop (`scripts/harness.ts:2408`), on the state that comes back from `advanceWeeklyStep`. Before
@@ -130,12 +130,12 @@ the END of the run, comparing the seed against week 60. It is a report, judged b
 answers "where did the world settle", not "was week one quiet". The one quantity D3 actually
 wants — the size of the first week's flows against a steady week's — is never taken.
 
-**Becomes a §3 step**, and it is the cheapest step in this tree: `auditWeek(state, 0)` before the
+**Closed at §9.37-SEED** — `auditSeed` runs all six families at week 0 and the seed opens its own wire journal. D3 is still not measured. The step was the cheapest in this tree: `auditWeek(state, 0)` before the
 loop, plus a probe at week 1 and week 2 through the machinery `burn-in.ts` already has. It is also
 the step that should be done FIRST, because every other finding below would then arrive with a
 number attached instead of a reading.
 
-### ❌ C3 / C3.a — EVERY CORPORATE BOND IN THE WORLD IS ISSUED IN WEEK ZERO, AND THERE ARE FOUR MATURITY DATES
+### ✅ C3 (closed, §9.37-SEED) / ⚠️ C3.a — EVERY CORPORATE BOND IN THE WORLD WAS ISSUED IN WEEK ZERO, WITH FOUR MATURITY DATES
 
 `companyGenerator.ts:317-321`:
 
@@ -163,14 +163,15 @@ each bucket mid-life (`originationWeek: -tenorWeeks/2`, `maturityWeek: +tenorWee
 `⚠️` for C3.a — seven buckets means the 5-year bucket's whole 24.6% comes due in one week
 (`GOV_DEBT_TENOR_WEIGHTS:313`) — but the shape is right and the corporate generator can copy it.
 
-**Becomes a §3 step.** Small to write (a draw over remaining life, per tranche), large in effect:
+**§3 step 37-SEED (§9)**, . Small to write (a draw over remaining life, per tranche), large in effect:
 it is a world relabel, every credit number moves, and it will make things look worse before better
 (rule 11).
 
 ### ❌ E1 / ⚠️ C4 / C4.a — THE SPREAD CURVE, THE YIELD CURVE AND THE FX RATE ARE ALL SEEDED ANSWERS
 
 E1 forbids a seeded spread curve by name, and there is one:
-`companyGenerator.ts:521` sets `oasSpreadBps = RATING_OAS_SPREADS[tmpl.initialRating].baseBps`,
+`companyGenerator.ts:561` reads `RATING_OAS_SPREADS[tmpl.initialRating].baseBps` to strike the
+seed's opening PRICE per tranche (the company field is gone — §9.13-CREDIT row 1),
 and `:522` sets the CDS spread to that plus a ±5bp jitter. The rating→spread map is the answer the
 corporate credit auction is supposed to produce, written down before it runs. The seeded ladder's
 coupons (`:352`) and the loan margins (`:363`) are derived from the same table, so the CASH FLOWS
@@ -186,7 +187,7 @@ they are genuinely first inputs. The OAS table is not: it is re-read every time 
 **Already §3 step 13 and step 21** in part — 13 makes the spread a derived measure of a cleared
 price, and until it lands the seeded table has nowhere else to go. The specific finding that is
 NEW is the coupon: a cleared spread in week one does not touch `couponRate`, so the seed's rating
-table is the permanent cash flow of every bond the world opened with. **Becomes a §3 step**, and
+table is the permanent cash flow of every bond the world opened with. **§3 step 13 (a)**, and
 it pairs naturally with the C3 fix above (both are one pass over `generateDebtTranches`).
 
 ### ❌ B5 — THE OBSERVED RATIOS ARE THERE, AND ONE OF THEM SAYS SO

@@ -99,6 +99,7 @@ exactly as a corporate bond does, and they are not repeated here. Where it answe
 
 ### E. THE HOLDERS
 - **E1** REASON — a register: who holds how much of **which line**
+  - E1.a VERIFY — one walk answers it, over every store that keeps a position
 - **E2** REASON — holder classes hold for **different reasons**, which is what gives an auction two
   sides
   - E2.a banks — the regulatory liquidity buffer (and E5 is why)
@@ -221,39 +222,10 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 
 ## 3. THE DIFF
 
-### ⚠️ E1.a — A SIXTH COPY OF THE WALK, AND IT WAS OFFERING PAPER THAT WAS ALREADY HELD
-
-`sovereign-register.ts` exists because five places open-coded the walk over the five stores that
-keep a government bond, and its header says so. **07c held a sixth**, and being a copy is not what
-made it interesting — it had rotted twice over:
-
-- It summed `quantityOrNotionalLocal`, the MARK, and subtracted it from `outstandingLocal`, which
-  is the ladder's FACE. Since §9.13's register marking began pricing sovereign rows at their
-  cleared print, mark < face for any bond below par — so the shortfall was overstated by the whole
-  discount. That shortfall is not a diagnostic: `07c` assigns it straight to
-  `primaryOfferingLocal`, so **the treasury re-offered paper somebody already held**, every week,
-  by the size of the discount on its own curve.
-- It read `e.itemizedHoldings` from inside the window where `context.ts` states those arrays are
-  stale week-start snapshots (the store is authoritative between the build before 07b and the
-  write-back after 07e; 07c runs between them).
-
-Replaced by `sovereignHeldByBond`, which returns `units` — the face — off the store, so both sides
-of the subtraction are now the same quantity and the walk sees the week's real positions.
-
-**07f had the same defect, worse.** Its `primaryOfferingLocal` subtracted `tradableFloatLocal` —
-what the BIDDERS hold, at the MARK — from the ladder's FACE. A bill is discount paper, so its mark
-is below par every week of its life: the offering was overstated by the whole discount
-*systematically*, not occasionally. And a holder that was not a bidder counted as nobody —
-`regionEntities` is filtered by mandate weight, and the household books are not in that book at all.
-Both books now ask `forEachSovereignPosition`, which reports face across every store, so E1.a
-closes: the walk is one, and both callers use it.
-
-
-**68 rows: 30 ✅, 13 ⚠️, 25 ❌** — COUNTED at §9.13-BILL and again at §9.13-OUTSIDE, which added
-E1.a's row, not adjusted. It read 25/15/27 against a
-table that held 28/12/27, so it had drifted by three in each of two columns while every citation in
-it still resolved: `check-atlas.sh` proves a citation RESOLVES and can say nothing about whether a
-mark is TRUE, which is §5's lesson and the third file to demonstrate it.
+**68 rows: 31 ✅, 12 ⚠️, 25 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
+drifted three times by hand (25/15/27 against 28/12/27, then 30/13/25 against 31/12/25 in the very
+paragraph that lectured about drift): `check-atlas.sh` proves a citation RESOLVES and can say
+nothing about whether a mark is TRUE, which is §5's lesson, and the test is the answer to it.
 
 The mapping is still the weakest of the four credit trees, and the reason is one thing said twice:
 **the sovereign is not an instrument here, and it cannot fail.** What has closed since is the first
@@ -282,13 +254,40 @@ stays ⚠️ because the walk is a plaster over the shape: it exists precisely B
 stores, and §3's **13-OUTSIDE** is the step that removes them. The seed keeps its own walk, and the
 reason is the moment rather than the shape — it runs before the register exists.
 
+**A sixth copy of the walk, and it was offering paper that was already held (§9.13-OUTSIDE).**
+
+`sovereign-register.ts` exists because five places open-coded the walk over the five stores that
+keep a government bond, and its header says so. **07c held a sixth**, and being a copy is not what
+made it interesting — it had rotted twice over:
+
+- It summed `quantityOrNotionalLocal`, the MARK, and subtracted it from `outstandingLocal`, which
+  is the ladder's FACE. Since §9.13's register marking began pricing sovereign rows at their
+  cleared print, mark < face for any bond below par — so the shortfall was overstated by the whole
+  discount. That shortfall is not a diagnostic: `07c` assigns it straight to
+  `primaryOfferingLocal`, so **the treasury re-offered paper somebody already held**, every week,
+  by the size of the discount on its own curve.
+- It read `e.itemizedHoldings` from inside the window where `context.ts` states those arrays are
+  stale week-start snapshots (the store is authoritative between the build before 07b and the
+  write-back after 07e; 07c runs between them).
+
+Replaced by `sovereignHeldByBond`, which returns `units` — the face — off the store, so both sides
+of the subtraction are now the same quantity and the walk sees the week's real positions.
+
+**07f had the same defect, worse.** Its `primaryOfferingLocal` subtracted `tradableFloatLocal` —
+what the BIDDERS hold, at the MARK — from the ladder's FACE. A bill is discount paper, so its mark
+is below par every week of its life: the offering was overstated by the whole discount
+*systematically*, not occasionally. And a holder that was not a bidder counted as nobody —
+`regionEntities` is filtered by mandate weight, and the household books are not in that book at all.
+Both books now ask `forEachSovereignPosition`, which reports face across every store, so E1.a
+closes: the walk is one, and both callers use it.
+
 ### ✅ D1 / D2 / E1 — THE FIVE PARALLEL STRUCTURES, FOUR OF THEM CLOSED
 
 **KNOWN(13-SOV).** All five rows of the step's table verified against the code as it stands today:
 
 | row | the step says | confirmed at |
 |---|---|---|
-| 1 type | `GovDebtTranche` is a strict subset of `DebtTranche` | `region-macro.ts:312` — `{id, principalUSD, couponRate, originationWeek, maturityWeek, tenorAtIssuanceYears}`, six fields, every one of them also on `company.ts:75`. No `seniority`, no `rateType`, no `callProtection`, no `paymentsPerYear`, no currency |
+| 1 type | `GovDebtTranche` is a strict subset of `DebtTranche` | `region-macro.ts:312` — `{id, principalLocal, couponRate, originationWeek, maturityWeek, tenorAtIssuanceYears}`, six fields, every one of them also on `company.ts:75`. No `seniority`, no `rateType`, no `callProtection`, no `paymentsPerYear`, no currency |
 | 2 store | ✅ DONE — the ONE tranche store | `reg.govDebtTranches` — 20 read sites across `src`, all of them `(reg.govDebtTranches ?? []).filter/reduce`; the withdrawal rebuilt the array with `.map(t => ({...t}))` |
 | 3 holdings | ✅ DONE — every store keys by BOND | `banking.ts:129` `sovereignBondHoldingsByBond` for banks, `centralBankSheet.sovereignHoldingsByBond` for the CB, `sovBondDealerInventory[].bondId` for the desks, `GOV_BOND` register rows on the tranche id for institutions. Four stores, one id space; `audit/ownership.ts:o11` is the invariant and `o3` no longer exempts sovereigns |
 | 4 clearing | ✅ DONE — `07c` clears a **PRICE** | §9.13-SOV row 4: `statKind: 'PRICE_LIKE'`, each holder's reservation YIELD stated as the price it implies on that bond's own schedule and the yield read back with `yieldFromPrice`. It used to be `YIELD_LIKE`, so the engine valued every sovereign fill at `1` |
@@ -318,7 +317,7 @@ debt ratio and the real deficit, on thresholds, every 26 weeks — whose **only 
 five UI strings** (`curve.tsx:47`, `region.tsx:67`, `macro.tsx:95`, `curves.tsx:78`,
 `statements.tsx:240`). Nothing prices off it, nothing is bound by it, nothing sells on a downgrade.
 That is `ratings-and-assessment.md` **E1** — a rating with no consequence — failing for the
-sovereign as completely as it is possible to fail. **Becomes a §3 step**, and a medium one: the
+sovereign as completely as it is possible to fail. **§3 step 37-OVERDRAFT**, and a medium one: the
 mechanism is small (a missed-payment definition, an exchange, a market-access consequence) but it
 cannot be built before the treasury's overdraft goes, because today a treasury short of cash draws
 `waysAndMeansOf` and the question never arises.
@@ -328,7 +327,7 @@ cannot be built before the treasury's overdraft goes, because today a treasury s
 **Already reported in full in `the-treasury.md` §3 D3**, and it belongs here too because it is what
 drains branch C of consequence. `accounts.ts:waysAndMeansOf` is `max(0, −treasuryNetOf(region))`,
 and `11-fiscal:647` makes it the FIRST TERM of the quarterly issue:
-`quarterlyFundingNeedUSD = waysAndMeansOf(v2, regionId) + 13 * marketFundedDeficitUSD`. So the
+`quarterlyFundingNeedLocal = waysAndMeansOf(v2, regionId) + 13 * marketFundedDeficitLocal`. So the
 sequence is spend into an overdraft, then issue to clear it. C5 and C7 are both ✅ —
 07c/07f genuinely retire paper nobody bought, off the bond's own row, which is the right mechanism —
 but a failed auction costs the treasury nothing, because the advance absorbs the gap and the next
@@ -364,10 +363,10 @@ the price's RATIO, and the book ends each week at neither face nor `face × pric
 compares that value against a ladder's face. It cannot be fixed inside the accretion: it needs
 those two books in the register, which is A1.a's boundary in `the-register.md` and §3's.
 
-Not named in the plan. **Becomes a §3 step** — small, and it folds naturally into 13-SOV, which has
+**§3 step 13-BOOK (d3)** — small, and it folds naturally into 13-SOV, which has
 to give the bill a stored issue price anyway to become a `DebtTranche`.
 
-### ❌ C1.a / C3 / C3.a / C3.b / C4 — THE AUCTION HAS NO CALENDAR, NO PRIMARY DEALERS AND NO STATISTICS
+### ❌ C1.a / C3.a / C3.b / C4 / ⚠️ C3 — THE AUCTION HAS NO CALENDAR, NO PRIMARY DEALERS AND NO STATISTICS
 
 Four absences, one shape: the sovereign auction is a clearing session and not an auction.
 `11-fiscal:630` gates issuance on `nextWeek % 13 === 0` and the tranche is created and placed in
@@ -409,15 +408,15 @@ precisely "assuming the liquidity this system is supposed to generate". **Alread
 ### ⚠️ A2 / A2.a / A2.b — A CALENDAR, NOT A PROGRAMME
 
 **Already reported in `the-treasury.md` §3 D4.** From this tree's side the one thing to add is
-A2.a: the funding need is `waysAndMeansOf + 13 × marketFundedDeficitUSD` and **redemptions are not
-in it at all** — `maturedPrincipalUSD` is computed at `11-fiscal:185` for the repayment leg and
+A2.a: the funding need is `waysAndMeansOf + 13 × marketFundedDeficitLocal` and **redemptions are not
+in it at all** — `maturedPrincipalLocal` is computed at `11-fiscal:185` for the repayment leg and
 never reaches the sizing. The maturity profile is fully knowable (`sovereign-calendar.ts` walks it
 weekly), so this is an inputs defect, not a missing mechanism.
 
-### ⚠️ B1 / B3 / B3.a / B6 — ONE TYPE WHERE THE TREE ASKS FOR TWO, AND A BUCKET WHERE IT ASKS FOR A LINE
+### ⚠️ B1 / B6 / ❌ B3 / B3.a — ONE TYPE WHERE THE TREE ASKS FOR TWO, AND A BUCKET WHERE IT ASKS FOR A LINE
 
 B1: a bill and a bond are one `GovDebtTranche` separated by `isDiscountBill(tenor) → tenor < 1.5`,
-and every downstream reader carries the test (`weeklyInterestExpenseUSD` filters bills out,
+and every downstream reader carries the test (`weeklyInterestExpenseLocal` filters bills out,
 `sovereignCouponByBond` filters them out, `bill-accretion.ts` exists to give them the return the
 coupon path does not). B3/B3.a: the tree asks for a benchmark LINE that a re-opening taps; the code
 issues each week's paper as its own tranche, so a re-opening has nothing to tap: the line/tranche
@@ -457,4 +456,11 @@ real bases and remitted by named payers, outlays decompose to named payees, and 
 residual of the two. D4 and D5 are ✅ — the sovereign really is the benchmark every credit spread is
 struck over and really does carry the smallest haircut, and `computeSovereignRepoHaircuts` derives
 that haircut from the bucket's own observed repricing rather than stating it. E5's zero risk weight
-is a literal `sovereignUSD * 0.0` in the RWA sum, which is exactly why E2.a's banks hold it.
+is a literal `sovereignLocal * 0.0` in the RWA sum, which is exactly why E2.a's banks hold it.
+
+### Also marked, briefly
+
+- **A4.a ❌** — willingness to pay has no variable because there is no choice to pay — A4 above.
+- **E2.e ❌** — funds hold sovereigns for duration fit, never for relative value — 17f.
+- **F4 ⚠️** — the refinancing issue's coupon is read off the fitted curve — `the-treasury.md` E3, step 25.
+- **G2 / G3 / G4 ❌** — no foreign-money debt, no negotiated default, no exchange offer — the A4/G entry above, 37-OVERDRAFT.

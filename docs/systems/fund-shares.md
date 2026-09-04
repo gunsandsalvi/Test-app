@@ -133,15 +133,15 @@ Counts: 18 `✅` · 12 `⚠️` · 2 `❌`.
 ### ❌ D4 — THE MONEY FUND'S NAV IS ONE DOLLAR BY CONSTRUCTION, AND IT CANNOT BREAK
 
 The node the user's own doctrine writes twice, and the code has its opposite in the most literal
-possible form. A money fund's liability is `mmfSharesOutstandingUSD` — **a number of DOLLARS, not
+possible form. A money fund's liability is `mmfSharesOutstandingLocal` — **a number of DOLLARS, not
 a number of shares** (`institutions.ts:174`: *"the fund's share liabilities at its fixed $1 NAV"*).
-Its holders' claims are dollar fields too: `company.mmfSharesUSD` and
-`householdState.mmfSharesUSD`. There is no share count anywhere in the money-fund complex, so
+Its holders' claims are dollar fields too: `company.mmfSharesLocal` and
+`householdState.mmfSharesLocal`. There is no share count anywhere in the money-fund complex, so
 there is no quantity a price could be per.
 
 `distributeMoneyFundIncome:252` is the whole mechanism:
 
-    const paidToHoldersUSD = Math.max(0, bookUSD - feeUSD - (e.mmfSharesOutstandingUSD ?? 0));
+    const paidToHoldersLocal = Math.max(0, bookLocal - feeLocal - (e.mmfSharesOutstandingLocal ?? 0));
 
 A gain becomes NEW SHARES issued pro rata (`:280`), which is right — that is how a stable-NAV fund
 distributes. **A LOSS does nothing.** `Math.max(0, …)` returns zero, the share liability stands
@@ -149,7 +149,7 @@ where it was, and every holder's claim is still worth exactly what it was worth.
 comment states the intent and then states the gap: *"a genuine LOSS leaves book below shares and
 distributes nothing, which is what breaking the buck looks like and exactly what the harness's
 departure check should catch"* — so the buck breaking is a MEASUREMENT of a divergence, never an
-event that reaches a holder. `corporateSweepDecision:187` then redeems at `paidUSD = wantedUSD`,
+event that reaches a holder. `corporateSweepDecision:187` then redeems at `paidLocal = wantedLocal`,
 one dollar of cash per dollar of shares, whatever the fund's assets are worth.
 
 **What this makes impossible.** The saver's choice in D2 is between a deposit that can fail with
@@ -159,9 +159,9 @@ biases every flow the yield gap drives. A run on a money fund is unrepresentable
 fund is the one vehicle in this world whose runs are the thing worth having. The guarantor is
 nobody, which is exactly what the node forbids.
 
-**Becomes a §3 step.** It is the same shape as step 13 one class over: the fix is a share COUNT
+**§3 step 37-MMF**, . It is the same shape as step 13 one class over: the fix is a share COUNT
 and a NAV that is `assets / shares`, at which point breaking the buck is a read and needs no new
-mechanism. Medium size — the holders' claims (`mmfSharesUSD` on companies and on
+mechanism. Medium size — the holders' claims (`mmfSharesLocal` on companies and on
 `householdState`) have to become quantities too, and `assets/index.ts:200` already anticipates an
 `MMF_SHARE` holding type that `HoldingType` does not have (**Already §3 step 32** for that half).
 
@@ -176,19 +176,19 @@ into a market that must clear:
    of a real ETF. But it means C4/C4.a's cost to remaining holders is genuinely zero, so the
    channel the tree calls "the point" is absent from the largest fund complex in the model.
 2. **A household ETF redemption is cash**, and is rationed by the fund's cash rather than met by
-   selling: `householdCashFillRatio = min(1, fundCashAvailableUSD / -householdUSD)`. What the fund
+   selling: `householdCashFillRatio = min(1, fundCashAvailableLocal / -householdLocal)`. What the fund
    cannot pay is simply not paid this week, and there is no queue — the unfilled part is dropped.
 3. **A money fund redemption** is bounded the same way (`openCorporateSweepBooks` sets
-   `redeemableUSD` to the fund's OPENING cash and `corporateSweepDecision` draws it down).
+   `redeemableLocal` to the fund's OPENING cash and `corporateSweepDecision` draws it down).
 
 The one place a redemption does reach a market is indirect and a week late: `indexFundsForBook`
-computes `investableUSD = (holdings + cash) × (1 − expenseRatio)` with cash SIGNED, so a fund left
+computes `investableLocal = (holdings + cash) × (1 − expenseRatio)` with cash SIGNED, so a fund left
 short of money next week targets a smaller basket and the next clearing session sells it back to
 solvency. That is a real refill path and it is deliberate (`etf-demand.ts:76-81`). It is not the
 node: the sale is driven by the fund's cash position at the following week's open, not by the
 redemption, and it goes through the index target rather than a seller with an obligation.
 
-**Becomes a §3 step**, and it is the open-ended fund the model does not have. An ETF that redeems
+**§3 step 37-OPENFUND, with 37-MARGIN owning the sale**, and it is the open-ended fund the model does not have. An ETF that redeems
 in kind is correct; a MUTUAL fund — same tree, `fund-shares` covers all three vehicles — redeems
 in cash and must sell, and that vehicle has no representation at all. Sizing it: the vehicle
 exists (an `ASSET_MANAGER` with a book), what is missing is a redeemable share on it and the
@@ -200,9 +200,9 @@ Checked per kind, because the answer differs:
 
 | kind | equity | NAV |
 |---|---|---|
-| ETF | `equityCapitalUSD: 0` at seed (`initialization.ts:1449`) and never written again — `household-balance-sheet.ts:51` skips every kind whose `beneficiariesAreHouseholds` is false | `fundNavUSD` is a live row walk plus cash: **a READ** ✅ |
+| ETF | `equityCapitalLocal: 0` at seed (`initialization.ts:1449`) and never written again — `household-balance-sheet.ts:51` skips every kind whose `beneficiariesAreHouseholds` is false | `fundNavLocal` is a live row walk plus cash: **a READ** ✅ |
 | MONEY_MARKET_FUND | `0` at seed, never written; the book exceeds the share liability by exactly the undistributed fee, which `distributeMoneyFundIncome` clears each week | a stored constant, 1 — see D4 |
-| PRIVATE_EQUITY | **`equityCapitalUSD: investedUSD`** (`initialization.ts:1488`) — a non-zero seed, never updated again | `sponsorPortfolioUSD`, a model mark (`private-equity.md` C5.a) |
+| PRIVATE_EQUITY | **`equityCapitalLocal: investedLocal`** (`initialization.ts:1488`) — a non-zero seed, never updated again | `sponsorPortfolioLocal`, a model mark (`private-equity.md` C5.a) |
 | HEDGE_FUND | a live RESIDUAL, `totalAssets − beneficiaryLiability`, which absorbs every gain and loss the investors should bear (`hedge-funds.md` A2) | a read ✅ |
 
 So A3 holds for the two vehicles it most matters for and fails on the other two, and in no case is
@@ -211,7 +211,7 @@ header says total assets are a read and the liability is a residual; the equity 
 
 Two related representation gaps, both real:
 - **A2**: an ETF share is a register row (`ETF_SHARE`) with a share count. A money fund share is
-  not on the register at all — it is `mmfSharesUSD`, a dollar scalar on the holder. So half the
+  not on the register at all — it is `mmfSharesLocal`, a dollar scalar on the holder. So half the
   fund complex's liabilities are invisible to `auditOwnership`, which is why `ownership.ts:99`
   skips vehicle claims entirely and why **C5 has no check at all**: nothing anywhere reconciles Σ
   created − Σ redeemed against `sharesOutstanding`. That is a measurement, **for §3 step 38**.
@@ -234,11 +234,15 @@ worth adding to that step's walk rather than becoming a step of its own.
 ### ⚠️ F2 — AN ETF CAN BE LEVERED BY A SWEEP NOBODY DECIDED
 
 `institution-profiles.ts` says `leverage: 'NONE'` for ETF and MONEY_MARKET_FUND, and
-`availablePurchaseCapacityUSD` honours it — no allowance enters the budget. But
+`availablePurchaseCapacityLocal` honours it — no allowance enters the budget. But
 `overdraft-sweep.ts:73` lends to **a fund of any kind** whose close balance is negative:
 `if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankId) return fund;` — no
 kind test — and the draw goes on the region's prime-brokerage book past the struck line at a
 penalty. The node is satisfied in letter (the lender is named and the loan is priced) and broken
 in spirit: the registry states a fact about the kind that a different file contradicts every week
-an index fund overspends, which `etf-demand.ts:85` says happens routinely. **Becomes a §3 step**,
+an index fund overspends, which `etf-demand.ts:85` says happens routinely. **§3 step 37-MARGIN**,
 small: either the sweep respects the kind's `leverage` row, or the row stops claiming `NONE`.
+
+### Also marked, briefly
+
+- **C2 ⚠️ / C2.a ⚠️** — a redemption retires shares at NAV and is rationed by the fund's opening cash, never met by selling — C2.b/C4.a above, 37-OPENFUND and 37-MARGIN.

@@ -187,7 +187,7 @@ and `07e:248` fall back to when `quantityShares` is absent
 (`quantityOrNotionalLocal / stockPrice`), so the two representations are load-bearing for each
 other in two stages, not one.
 
-### ❌ A5 / F3 — THERE IS NO VOTE, SO CONTROL IS A PERCENTAGE AND NOT A CLAIM
+### ⚠️ A5 / ❌ F3 — THERE IS NO VOTE, SO CONTROL IS A PERCENTAGE AND NOT A CLAIM
 
 Nothing in `src` contains a vote (`grep -rni vote src` returns nothing about equity). Control is
 `company.ts:ownership` — `founderPct`, `peSponsorPct` — a share of the register carried as a
@@ -202,7 +202,7 @@ all. The consequences are specific rather than cosmetic:
 - a merger cannot be contested, blocked, or won at a higher price by a rival bidder, because
   nobody holds anything that could be voted.
 
-**Becomes a §3 step**, and a small one: a vote is a read of the register (`shares`), not a new
+**§3 step 37-SMALL**, and a small one: a vote is a read of the register (`shares`), not a new
 store. What it unlocks — contested bids, a board that answers to holders, a founder block that
 can refuse — is larger than the change.
 
@@ -225,13 +225,13 @@ to test.
 ### ⚠️ C4 — A HOLDER'S EQUITY P&L NEVER REACHES ITS INCOME
 
 `accrueInstitutionalIncome` walks the holder's book and accrues `GOV_BOND` coupons only; the loop
-skips every `EQUITY` row. An institution's equity gains therefore change `institutionTotalAssetsUSD`
+skips every `EQUITY` row. An institution's equity gains therefore change `institutionTotalAssetsLocal`
 (a read of the marked rows, so the wealth is real) and change nothing on any income statement —
-`lastWeeklyInvestmentIncomeUSD` is bond income alone. That matters beyond reporting, because
+`lastWeeklyInvestmentIncomeLocal` is bond income alone. That matters beyond reporting, because
 `household-balance-sheet.ts:70` grows the household claim on every fund by exactly
-`lastWeeklyInvestmentIncomeUSD`: **a fund's equity performance never reaches its beneficiaries**,
-and the whole difference lands in the fund's own `equityCapitalUSD` residual. Same defect as
-`hedge-funds.md` A2, seen from the equity side. **Becomes a §3 step** (shared with that one).
+`lastWeeklyInvestmentIncomeLocal`: **a fund's equity performance never reaches its beneficiaries**,
+and the whole difference lands in the fund's own `equityCapitalLocal` residual. Same defect as
+`hedge-funds.md` A2, seen from the equity side. **§3 step 37-SMALL** (shared with that one).
 
 ### ❌ C2.d — A BUYBACK RETIRES, IT DOES NOT CREATE TREASURY STOCK
 
@@ -242,7 +242,7 @@ economics. Recorded so it is not re-found.
 
 ### ⚠️ G1 / G3 — INDEX WEIGHTS ARE FULL MARKET CAP, AND THE COMPARABLE MULTIPLE PRICES PRIVATE FIRMS
 
-`index-calculation.ts:121` weights by `indexValueUSD`, which for an equity index is `marketCapOf`
+`index-calculation.ts:121` weights by `indexValueLocal`, which for an equity index is `marketCapOf`
 — the WHOLE share count, not the free float 07e already computes for the same names
 (`heldByInstitutionsShares + deskHeldShares`). So an index fund buys weight in a name the register
 says is mostly unsellable, and the index level moves with holdings nobody could trade. The float
@@ -270,3 +270,8 @@ holder class in the model is a one-way participant that can be forced to sell (�
 never bid. That is a mechanism, not a representation, and it is what C2.a will close on.
 **C5.a**: the margin call on a levered equity holder is real money (`prime-brokerage.ts:158`) but
 an unmet one has no consequence — see `prime-brokerage.md` C3/C5, which owns it.
+
+### Also marked, briefly
+
+- **D2.c ⚠️** — `buybackShare` is a stated split between dividend and buyback, not a choice against investment.
+- **D3.b ⚠️** — a dividend cut is decided and paid, and no participant reacts to the cut as an event.

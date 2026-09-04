@@ -171,9 +171,9 @@ population inside it:
 `delinquencyExposureOf` is convex (`1/(1+b)`), so a spread **across** the four wealth bands does
 move the aggregate — the node is not violated outright, which is why this is ⚠️ and not ❌. But a
 spread **within** a band is invisible, and the stress that triggers everything is one scalar per
-region. **Becomes a §3 step** (medium): the cohorts already carry `debtServiceUSD` and
-`disposableIncomeUSD` per cell — the arrival rate can be read off the cells that cannot pay rather
-than off a tier's average buffer, which is the same operation `squeezedSavingsUSD` already
+region. **§3 step 37-LOSSRATE** (medium): the cohorts already carry `debtServiceLocal` and
+`disposableIncomeLocal` per cell — the arrival rate can be read off the cells that cannot pay rather
+than off a tier's average buffer, which is the same operation `squeezedSavingsLocal` already
 performs one file away.
 
 ### ❌ D5.a — HOUSEHOLDS NEVER MOVE BETWEEN DEPOSITS, MONEY FUNDS AND BILLS
@@ -183,13 +183,13 @@ from `(earningsYield − depositYield) / earningsYield` — a real yield substit
 seller on the way down (`:238-249`, sell the buffer first, then fund shares, then announce a
 direct-equity sale). That is the mechanism D5 asks for.
 
-The *cash* leg of the same choice does not exist. `hs.mmfSharesUSD` is written in exactly two
+The *cash* leg of the same choice does not exist. `hs.mmfSharesLocal` is written in exactly two
 places: `evolution.ts:1240` carries it forward unchanged, and `money-market-fund.ts:283` credits
 new shares **pro rata to what is already held** — an issuance allocation, not a decision. No
 household ever moves a dollar from a deposit into a money fund because the fund yields more, and
 households hold no bills at all. That is the channel D5.a names as *how a policy rate reaches a
 saver*, and it is the same channel `sovereign-credit.md` E2.f is relying on from the other side.
-**Becomes a §3 step**, small: the deposit-vs-fund decision is the one `etf-flows` already makes
+**§3 step 37-SMALL**, small: the deposit-vs-fund decision is the one `etf-flows` already makes
 for equities, with the money fund's own cleared net yield (`mmfNetYieldAnnual`) already in hand.
 
 ### ❌ F2 — NOBODY INHERITS ANYTHING
@@ -199,7 +199,7 @@ moves when they do. `grep -i 'inherit\|bequest' src` finds no wealth transfer. T
 household's assets do not go anywhere named — the sector's net worth is simply re-derived next
 week from the same marked components over a slightly smaller population, so the wealth of the
 deceased is absorbed silently into the per-capita arithmetic. F1's demography exists precisely so
-that F2 can happen and it does not. **Becomes a §3 step** — and note the shape it must not take:
+that F2 can happen and it does not. **§3 step 37-SMALL** — and note the shape it must not take:
 a share of net worth reallocated across tiers by a table would be the stated-split defect
 `household-balance-sheet.ts` already spent nine tables getting rid of.
 
@@ -208,8 +208,8 @@ a share of net worth reallocated across tiers by a table would be the stated-spl
 `household-balance-sheet.ts:293` computes net worth as a sum over **marked** lines every week —
 deposits, money-fund shares, the real claims (`etfHoldings + directEquity + privateBusinessEquity
 + institutionalClaims`), the housing stock, less the three debts. That is a read, and it is taken
-from this week's clears. It is then **stored** as `hs.netWorthUSD` and read by
-`evolution.ts:474-484`, one week stale, alongside `priorNetWorthUSD`. The store is deliberate (the
+from this week's clears. It is then **stored** as `hs.netWorthLocal` and read by
+`evolution.ts:474-484`, one week stale, alongside `priorNetWorthLocal`. The store is deliberate (the
 wealth effect needs a *change*), so this is D3's letter broken for a real reason rather than
 carelessness — but it is a stored derived quantity of exactly the class `check-hygiene.sh`'s
 §5-WIRES D rule forbids for firms, and it should be a two-vintage read, not a field.
@@ -222,9 +222,9 @@ statement of A2.d and it closes when A2.d does.
 ### ⚠️ B3.a / B4 — TWO NUMBERS THAT ARE STILL SHARES OF SOMETHING ELSE
 
 The tree's B3.a is honoured where it matters — the budget is credited with
-`annualCapitalReceiptsUSD`, which is measured deposit interest plus measured dividends
+`annualCapitalReceiptsLocal`, which is measured deposit interest plus measured dividends
 (`02-region-macro.ts:42`, `reason === 'dividend to the public float'`). But the *gross income*
-line the tax is levied on adds `totalCapitalUSD = totalWageUSD × (1 + payroll tax) ×
+line the tax is levied on adds `totalCapitalLocal = totalWageLocal × (1 + payroll tax) ×
 HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR` (`household-cohorts.ts:407`) — capital income as a
 stated multiple of the wage bill, which is income no payer paid. The level is then rescaled to the
 measured total (`incomeScale`, `:459`), so the aggregate does not leak; what is distorted is the
@@ -247,3 +247,8 @@ outcome — but the cohort **cells** are occupation × wealth only, so no cell i
 switch from wages to drawdown happens to the sector, not to a cohort. Neither is a missing
 mechanism; both are **a measurement, for §3 step 38** — except that A2.b becomes real for free
 if F2's inheritance step gives the cells an age axis.
+
+### Also marked, briefly
+
+- **C3 ⚠️** — `budgetDemandLadder` allocates by stated preference ranks; relative price enters through the auction, not the ladder — step 31.
+- **E4 ⚠️ / E4.a ⚠️** — default is an arrival RATE on a band mean, and its consequence is a severity curve, never a repossession — the A2.d entry above; 37-LOSSRATE.

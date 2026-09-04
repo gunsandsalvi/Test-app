@@ -162,7 +162,7 @@ up"*) is therefore satisfied by the wrong number: the player's XCS carry moves w
 differential and a coin flip, never with anybody's funding shortage. It is also a rule-3 shape:
 one real thing, two representations, no owner.
 
-**Becomes a §3 step.** Small and clean: delete `evolveFxPair`'s basis line and point every reader
+**§3 step 37-SMALL**, . Small and clean: delete `evolveFxPair`'s basis line and point every reader
 at `reg.crossCurrencyBasisBps`. It is the last thing `evolveFxPair` still does — the rate half
 already moved to the cleared FX auction (`domain/fx-market.ts:4` says so) — so the step ends with
 the function gone.
@@ -194,7 +194,7 @@ spot-adjusted-for-funding-costs when the funding costs are not in the forward. A
 single largest reason anyone trades an FX forward — is absent from the instrument: rolling a
 13-week hedge costs the basis and nothing else, whatever the two policy rates are.
 
-**Becomes a §3 step.** Medium. The pieces exist (both policy rates, a cleared spot, a cleared
+**§3 step 37-FX-CROSS**, . Medium. The pieces exist (both policy rates, a cleared spot, a cleared
 basis, a working auction); what is missing is that the auction should print the forward *rate* and
 the basis should be read out of it against parity — which is B2.a's direction and rule 3's.
 
@@ -219,7 +219,7 @@ market, then the lines"*; but 17b is about central-bank swap lines, and the priv
 on is not itself listed. Recorded here as the prerequisite: an XCS needs the two-currency contract
 that `../instruments/derivative.md` D5 says is missing for every class.
 
-### ❌ A1.b / A2 / E3 — THE FORWARD NEVER DELIVERS
+### ❌ A1.b / E3 / ⚠️ A2 — THE FORWARD NEVER DELIVERS
 
 `classes/fx-forward.ts` has `periodicLegUSDToB: () => null` and a mark leg only. At maturity
 `settleDerivativeClass` pays the final mark delta (`markReasonFinal: 'fx forward variation
@@ -234,7 +234,7 @@ anybody's account: `fx-funding.ts` still has to go and buy it in spot, paying th
 again. And the contract is economically a CFD on the rate rather than a forward, which means
 `the-register.md` C3's delivery obligation is not tested here at all.
 
-**Becomes a §3 step.** It cannot be built before `../instruments/derivative.md` D5 (a currency per
+**§3 step 37-FX-CROSS**, . It cannot be built before `../instruments/derivative.md` D5 (a currency per
 leg); the two are one commit.
 
 ### ❌ A4 — THERE IS NO FX SWAP, AND THE THING NEAREST TO ONE IS SPOT-FOR-SPOT
@@ -252,7 +252,7 @@ so a bank's foreign-currency funding is done by buying spot and holding it
 (`fx-funding.ts:fundForeignCurrencyShortfalls`) — an outright position, not a swap. That is why D3
 below is `❌`.
 
-**Becomes a §3 step**, and it is the same step as C1: a two-currency contract with a near leg and
+**§3 step 37-FX-CROSS**, and it is the same step as C1: a two-currency contract with a near leg and
 a far leg answers A4 and C1 together.
 
 ### ❌ D3 — THE BANKS, WHO NEED THIS MARKET MOST, ARE NOT IN IT
@@ -266,7 +266,7 @@ institutional entities (`hedgeableExposureByRegion`) and non-bank corporates
 in one money and loans in another has no hedge available and no swap to fund with; its mismatch
 simply sits as a nostro balance that `fx-revaluation.ts` re-marks.
 
-**Becomes a §3 step**, and it is the demand side that would make A4's FX swap worth building —
+**§3 step 37-FX-CROSS**, and it is the demand side that would make A4's FX swap worth building —
 `banks-funding-and-liquidity.md` E and `currency-and-fx.md` B5 both point at it.
 
 ### ❌ B2 / B4 / ⚠️ E4 — THE THREE MEASUREMENTS
@@ -278,7 +278,7 @@ foreign-currency funding deficit actually pays the basis; the ingredients exist
 **E4** — `fx-revaluation.ts:runFxRevaluationStage` re-marks foreign positions and the forward's
 mark settles in `settleDerivativeClass`, so both halves move; nothing puts them side by side to
 show that the residual is the basis and the hedge's imperfection rather than zero. Since the
-forward's mark is `notionalUSD × (strike − rate)/strike` on a notional set equal to the hedged
+forward's mark is `notional × (strike − rate)/strike` on a notional set equal to the hedged
 exposure, the residual is in fact near-zero by construction *for the covered part* — which is the
 node's own warning.
 
@@ -287,7 +287,7 @@ rate exists.
 
 ### ⚠️ B2.a / B2.b — THE ARBITRAGE IS PRICED BUT NOBODY TAKES IT
 
-B2.b is the node this model does best: `registry.ts:deskNotionalCapacityUSD` makes the desk's
+B2.b is the node this model does best: `registry.ts:deskNotionalCapacityLocal` makes the desk's
 willingness to write forwards a function of its remaining leverage headroom through the FX PFE
 add-on, shared with every other derivative class it runs — so a persistent basis *is* possible and
 *is* a statement about balance sheet, exactly as the node requires. `✅`, and it is the reason the
@@ -300,3 +300,9 @@ the basis clears against hedging demand and desk capacity only, with no arbitrag
 side, and there is nothing to be a limit *to*. It is 17f's relative-value book, which names *"the
 cross-currency basis (`fx-forward`'s CIP basis)"* as one of its comparables. **Already §3 step
 17f.**
+
+### Also marked, briefly
+
+- **A1 ⚠️** — the profile satisfies the contract except D5 (one currency per contract) and delivery — A1.b above.
+- **A1.d ❌** — every leg settles in `currencyOf(c.regionId)`; a currency per leg does not exist — `../instruments/derivative.md` D5.
+- **C2 ⚠️** — a foreign book is funded by buying spot and holding it, an outright position rolled for ever — A4/D3.

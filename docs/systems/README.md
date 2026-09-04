@@ -26,10 +26,14 @@ no price". A sweep finds defects. Only a reference model finds absences.
 - **The required tree is written from the domain, and the git history proves it.** Each system's
   required tree is committed with every code cell empty, before any mapping is done.
 - **A citation is machine-checked.** `scripts/check-atlas.sh` fails when a cited file or symbol
-  stops existing, and when a stage `core.ts` runs or a module in `src/domain` appears in neither a
-  tree nor `UNMAPPED`. It runs inside `check-hygiene.sh`, so it gates every commit. **What it does
-  NOT yet cover, stated here rather than left to be found:** `src/engine2`, `src/engine/ledger`,
-  `src/engine/macro`, `src/ui`. Extend it the same way when a tree needs them.
+  stops existing, when a stage `core.ts` runs or ANY file under `src` appears in neither a tree nor
+  `UNMAPPED`, and when `UNMAPPED` names a file that is gone or one a tree already cites. It runs
+  inside `check-hygiene.sh`, so it gates every commit. It proves a citation RESOLVES and nothing
+  about whether a mark is TRUE — that half is `test/atlas-marks.test.ts`, which reads every tree
+  against itself: each tree node has one row and each row names a node, every diff heading opens
+  with a mark and agrees with the row it re-marks, every ⚠️ or ❌ row is argued somewhere in the
+  diff, and a tally line counts the table it claims to. Both run on every commit; neither can say a
+  node has become WRONG. That part is the reader's.
 - **A node is never deleted to make the tree green.** If the model deliberately does not have
   something, the node stays and says so, with the reason. `MISSING` and `OUT OF SCOPE` are
   different answers and the file must distinguish them.
@@ -52,6 +56,36 @@ no price". A sweep finds defects. Only a reference model finds absences.
 
   If a node is none of the three, it is an outcome, and it does not belong in a required tree.
 
+## The legend, stated once
+
+Every mapping table uses the same three marks, and this is their one definition — a tree does not
+restate it:
+
+- `✅` **present** — the node's requirement is met, at the citation.
+- `⚠️` **present but diverging** — something answers the node and it is not what the node asks for.
+- `❌` **absent** — nothing answers the node; **or, on a FORBID node, the forbidden thing is there**.
+  A `❌` row may still carry a citation: it names the nearest thing, or the site where the forbidden
+  thing lives, so the reader has somewhere to start.
+
+**Evidence sub-rows.** A node has exactly one primary row. Where a second citation is worth
+recording (the seed's half of a check, a second population of the same kind), it is written as
+`<id> · <what this row is>` and carries its own mark; it never re-decides the node's.
+
+**Diff headings.** Every entry in §3 THE DIFF opens with the mark it gives the node(s) it names —
+`### ❌ E1 / ⚠️ E1.a — …` — and those marks agree with the table. The only unmarked headings are
+these titles: *A measurement, for §3 step 38*, *Present and not worth re-checking*, *Scoped out,
+deliberately*, *What is solid*, *What this tree found working*, *The rest maps cleanly*, *Also
+marked, briefly* (one line per ⚠️/❌ row the longer entries do not reach).
+
+**A diff entry is a diff, not a log.** When a step closes a node, the entry becomes one paragraph
+that says what is true now and points at the §9 entry (`closed, §9.13-CREDIT row 3`); what the
+commit found and did stays in §9, where rule 16 puts it. A tree that narrates a session is a second
+log, and rule 4 applies to prose too.
+
+**"Becomes a §3 step" is not an owner.** A finding names the step that owns it — `§3 step 37-MMF` —
+so the plan and the atlas cannot say different things about who closes what. Where the plan holds
+several findings in one step (37-SMALL), the tree names the step and the step names the node.
+
 ## Instrument contracts
 
 A tree whose subject is an instrument cites a **contract** rather than restating it:
@@ -72,8 +106,8 @@ contracts.** The required side was written first and committed first, which is w
 mapping mean anything: a node with no citation is a FINDING, and until every system had a required
 side, an uncited node could always have been an unwritten tree instead.
 
-Roughly **1,400 nodes** now carry a mark — `✅` present · `⚠️` present but diverging · `❌` absent —
-and **910 machine-checked citations** resolve on every commit. The findings are in each file's
+Roughly **1,400 nodes** now carry a mark, and every citation resolves on every commit (the gate
+prints the live count). The findings are in each file's
 §3 THE DIFF, and the ones that became work are in `MASTER_PLAN.md` §3; the ones that were already
 known are marked with the step that owns them, so a reader can tell a new gap from an old one.
 

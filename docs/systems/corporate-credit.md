@@ -272,7 +272,7 @@ What the original re-walk added, still standing:
    linearised out of the cleared discount margin, which `index-calculation` used as the loan index's
    price and `12-portfolio` showed the player as `currentPrice`. N7.b's "arithmetic wearing a
    market's clothes", in the model and on the surface. **CLOSED by §9.13-CREDIT row 3**, with the
-   function itself deleted; what is left of the FORBID is 07f's.
+   function itself deleted; nothing is left of the FORBID on any book after row 4.
 2. **E3's mechanism was BUILT AND SWITCHED OFF, and §9.13-CREDIT row 5 turned it on.** The stage
    (`register-marking.ts`) had existed and been correct for weeks while `core.ts` declined to run
    it, because half a mark does not converge while later stages write rows back in par space. What
@@ -283,9 +283,9 @@ What the original re-walk added, still standing:
    own three lines and **nothing else**; `countedIn`'s exported reader is called from nowhere
    (two comments mention it). The two fields step 13 leans on are declarations no code consumes,
    so the price/stat distinction lives only as a hard-coded `statKind` at each of the five clearing
-   adapters. **Becomes part of §3 step 13:** the registry row has to be what the adapter reads.
-   STILL OPEN after row 1 — `assets/index.ts` now says CORP_BOND is `quotedAs: 'PRICE'` and 07b
-   says `statKind: 'PRICE_LIKE'` separately, which is the same two-representations defect the row
+   adapters. **§3 step 13-BOOK (d):** the registry row has to be what the adapter reads.
+   Still open after rows 1–4 — `assets/index.ts` says `quotedAs: 'PRICE'` and each adapter says
+   `statKind: 'PRICE_LIKE'` separately, which is the same two-representations defect the rows
    did not close.
 
 ### ⚠️ A2.a / B3 / G5 / G5.a / H3 — SENIORITY IS DECORATIVE, AND `SUBORDINATED` IS NEVER ISSUED
@@ -307,11 +307,11 @@ nothing for the waterfall to rank. §9.13-CREDIT row 1 changed WHAT that arm com
 senior against a five-year subordinated, both off their own cleared prices, so a rank difference can
 no longer be read as a maturity difference — and it still has nothing to compare.
 
-### ❌ B2.a / B2.b / G1 / G2 — A CREDIT EVENT IS ONLY EVER A BALANCE-SHEET STATE
+### ❌ B2.a / B2.b / G2 / ⚠️ G1 — A CREDIT EVENT IS ONLY EVER A BALANCE-SHEET STATE
 
 **Already §3 step 34.** Confirmed exactly: zero covenant terms on `DebtTranche`; zero `accelerat`
 hits that are not tax depreciation; and the default definition is
-`credit-standing.ts:isInDefault` — `wasDefaulted || (cashUSD < 0 && coverage < coverageFloor)`.
+`credit-standing.ts:isInDefault` — `wasDefaulted || (cashLocal < 0 && coverage < coverageFloor)`.
 Not a missed payment, not a breach: a state of the firm, computed inside stage 08, that no holder
 is notified of. The two covenant CONSTANTS that do exist —
 `corporate-financing.ts:66,69` (`COVENANT_INTEREST_COVERAGE`, `COVENANT_LEVERAGE_CEILING`) — are a
@@ -325,7 +325,7 @@ trigger.
 **Already §3 step 35.** Re-confirmed mechanically: `grep -rni restructur src` returns **0**.
 Liquidation through `runEstateResolutionStage` is default's only path.
 
-### ❌ A4 / A4.a / A4.b — ONE RATING, HELD BY NOBODY, AND NOTHING REACTS TO THE CHANGE
+### ⚠️ A4 / ❌ A4.a / A4.b — ONE RATING, HELD BY NOBODY, AND NOTHING REACTS TO THE CHANGE
 
 **Already §3 step 36.** `Company.creditRating` is one field on the firm, written at
 `stage08-back.ts:2376` from `simulation/credit.ts:determineCreditRating`. Every participant in
@@ -344,7 +344,7 @@ LEVEL from scratch each week. A downgrade is therefore a headline and never an e
 
 `dealer-desk.ts:56`'s `DESK_SPREAD_BPS_BY_BOOK` is a fixed table, charged identically whatever the
 desk's inventory, capital or the week's flow. D3.b's capacity bound is real
-(`dealerDeskCapacityUSD`) and it bites; the PRICE of intermediation does not move with it, so a desk
+(`dealerDeskCapacityLocal`) and it bites; the PRICE of intermediation does not move with it, so a desk
 filling up gets smaller and never dearer. The node asks for a reason and the code has a rule.
 **Already named in §3 step 26** ("`dealer-desk.ts:117` charges a stated real-market spread table as a
 real cost in five books").
@@ -353,7 +353,7 @@ real cost in five books").
 
 Better than the depth-2 mapping recorded, and still not N9.b. `shared-helpers.ts:872`
 apportions each issuer's WEEKLY interest across holders of record, accumulates it per
-(instrument, holder) in `holderAccruedInterestUSD`, and at the coupon date pays every accrued
+(instrument, holder) in `holderAccruedInterestLocal`, and at the coupon date pays every accrued
 balance — **including a holder that has since sold out** (`:1041`). So the coupon is not a windfall
 to whoever holds it on the date, which is what the depth-2 diff claimed. What is still missing is
 the leg N9.b actually names: a buyer does not pay the seller its accrued at settlement, so the
@@ -376,7 +376,7 @@ nothing at all until it was repaired.
 
 ### ⚠️ G4 — THE ESTATE SELLS AT A DISCOUNT OFF BOOK, NOT AT A PRICE
 
-`estate-resolution.ts:214` sells plant as `estate.assets.ppeUSD / weeksLeft(ppeWeeks)` and
+`estate-resolution.ts:214` sells plant as `estate.assets.ppeLocal / weeksLeft(ppeWeeks)` and
 `:224-225` prices the slice at `sold × (1 − hurdle × weeks/52)`. The RATE is real and well argued
 (the region's own capital-goods absorption, the company's own inventory turnover) and the BUYERS are
 real named peers who pay. The PRICE is a formula discount off a book value. That is not G4's "sold
@@ -392,11 +392,12 @@ spread and the basis is exactly zero — a restatement, which H4.a forbids by na
 (`derivative-markets/cds.ts:CDS_MARKET`) is real and clears against real hedging demand, so H4 is ⚠️
 rather than ❌. **Already §3 step 26.**
 
-### ⚠️ C3 / E5.d — THE CLEARED LEVEL CAN BE THE SEARCH BRACKET
+### ⚠️ E5.d — THE CLEARED LEVEL CAN BE THE SEARCH BRACKET
 
 `solveClearingStat` returns the bracket end when level-independent demand exceeds the float, and
-that print becomes `comp.oasSpreadBps` at `07b:507`. E5.d asks for the marginal holder's
-reservation and sometimes gets −2000 or 100,000 bps instead. **Already §3 steps 21 and 21-BRACKET**,
+that print is deposited in the price store like any other (`engine2/prices.ts`), so the marks, the
+curve and every derived spread read it. E5.d asks for the marginal holder's reservation and
+sometimes gets the bracket instead — in price space, 1% or 100× of last week's print. **Already §3 steps 21 and 21-BRACKET**,
 measured there at 67 tight and 139 wide prints over the 16-week reference.
 
 ### ❌ A2.c — ONE VERIFY NODE NOBODY MEASURES
@@ -421,13 +422,21 @@ off its holders' equity — contagion with no correlation parameter anywhere, ex
 
 ### SCOPED OUT, DELIBERATELY
 
-- **E7** is ⚠️ and not ❌ on purpose: banks consume capital (`leverageHeadroomUSD`) and insurers and
+- **E7** is ⚠️ and not ❌ on purpose: banks consume capital (`leverageHeadroomLocal`) and insurers and
   pensions carry a real spread-risk charge in their reservation (`spreadRiskCapitalChargeRate`), but
   no non-bank has a capital constraint that BOUNDS its size — its budget is cash
-  (`maxNetPurchaseUSD`). The node itself says a pension fund's constraint is a mandate rather than a
+  (`maxNetPurchaseLocal`). The node itself says a pension fund's constraint is a mandate rather than a
   charge; which of the two each holder faces is a modelling choice, not an omission.
 - **E9** is ⚠️ for one reason only: the statement shows the position, its income and its P&L, and it
   cannot show a price, because D2 has none to show. It closes when step 13 does.
 - **F3** is ⚠️ because every corporate tranche in the model is a bullet — there is no amortiser and
   therefore no scheduled principal (A3.a's other half). Whether a corporate amortiser should exist
   is a modelling choice; that coverage never counts principal is not, and it is A3.a's finding.
+
+### Also marked, briefly
+
+- **B2 ⚠️** — default is `isInDefault`'s state test, never a missed payment or a breach — G1/G2.
+- **E4 ⚠️ / E4.a ⚠️** — the mark's change is P&L for the player's portfolio (stage 12) and reaches no holder's own income statement; realised and unrealised are split there and nowhere else.
+- **E8 ⚠️** — only sovereign paper is pledgeable (`domain/repo.ts`, deliberately) — a corporate bond cannot be encumbered.
+- **F5 ⚠️** — a refinancing's fair rate is read off the fitted curve — step 25.
+- **H2 ⚠️** — `P3` measures it behind a breach quota, so a minority of inverted names passes.

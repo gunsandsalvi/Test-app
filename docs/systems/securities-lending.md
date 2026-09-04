@@ -114,7 +114,7 @@ negative equity exposure anywhere in the model is a `SecurityLoan` — a named l
 borrower, delivered shares, posted collateral. Nothing creates a short by writing a negative
 number. E2: the register never double-counts. `deliver()` moves the shares off the lender's rows
 and onto the borrower's, so Σ rows = shares issued at every instant; the lender's retained
-exposure is carried once, as the scalar `stockLoanNetUSD` (mark − collateral), and 07e lowers the
+exposure is carried once, as the scalar `stockLoanNetLocal` (mark − collateral), and 07e lowers the
 lender's own holding ceiling by `lentSharesByLender` so it does not walk back into the auction to
 re-buy what it just lent. Both sides net to zero at the strike price and diverge with the mark,
 which is the short's P&L and the only place it lives. The findings below are all elsewhere.
@@ -129,15 +129,15 @@ back. A2 is exactly why: legal title really does pass here, which is right, and 
 leg that makes A3 true was never written.
 
 A5.b compounds it in the same direction. The borrower posts CASH collateral at 100% of market
-value (`collateralUSD = shares * c.stockPrice`) and earns **nothing** on it — no rebate, no
+value (`collateralLocal = shares * c.stockPrice`) and earns **nothing** on it — no rebate, no
 interest, no reinvestment share. It also pays the cleared `feeBps`. So a borrow costs the full
 fee plus the entire carry on the collateral, while the lender receives the fee, the free use of
 the cash, and any dividend that falls. The borrow fee this book clears is therefore not the price
 the tree describes: it is the price of one side of a two-sided trade, and the borrower's true cost
 is the fee plus the funding cost of the collateral it cannot earn on.
 
-**Becomes a §3 step**, and a compact one: the manufactured dividend is a payment on an existing
-book at an existing date, and the rebate is `collateralUSD × the overnight rate` credited back —
+**§3 step 37-SECLENDING**, and a compact one: the manufactured dividend is a payment on an existing
+book at an existing date, and the rebate is `collateralLocal × the overnight rate` credited back —
 both read numbers that already exist. It changes who is willing to lend and how large a short can
 get, which is the whole subject of B4.
 
@@ -152,7 +152,7 @@ is paid for the risk) and is not covered by the COLLATERAL (the risk is not remo
 be true; C1 asks for the second.
 
 Real, and directly measurable: the book knows its own gap per name, so the haircut is
-`1 + loanOneWeekGap(name)` and the arithmetic already exists in the file. **Becomes a §3 step**,
+`1 + loanOneWeekGap(name)` and the arithmetic already exists in the file. **§3 step 37-SECLENDING**,
 small.
 
 ### ❌ C5 / B3 — NO CHAIN, NO AGENT, AND A LATENT RE-LEND
@@ -164,7 +164,7 @@ IS reachable: `deliverable()` reads the shared holdings store, and a borrower's 
 are ordinary rows in it, so a borrower that has not yet sold them is a candidate LENDER in the
 next week's auction. A chain can form; nothing would record it, and `lenderPositionAtStrike`
 would treat the re-lender's onward loan as an ordinary one. Untraceable by construction, which is
-what the node forbids. **Becomes a §3 step** — but it should be sized together with prime
+what the node forbids. **§3 step 37-SECLENDING, and 13-BOOK (d5) for the lien** — but it should be sized together with prime
 brokerage's collateral leg, because rehypothecation without a pledged custody book is half a
 mechanism.
 
@@ -184,14 +184,14 @@ KEEPS the collateral and goes and buys the security itself, at whatever it costs
 So a failure to deliver is an infinite obligation rather than a loss crystallised on a named
 party, and the lender's exposure never resolves.
 
-**Becomes a §3 step**, small: after N weeks recalled the collateral is forfeit, the lender buys in
+**§3 step 37-SECLENDING**, small: after N weeks recalled the collateral is forfeit, the lender buys in
 the market with it, and any shortfall is the lender's loss. It also gives the collateral a reason
 to be more than 100% (C1).
 
 ### ⚠️ B2.a / C3 — TWO NODES SATISFIED BY ACCIDENT RATHER THAN BY A DECISION
 
 **B2.a**: every holder offers its ENTIRE inventory to the borrow auction —
-`maxHoldingUSD: held + lent`, with a reservation fee but no mandate test, no acceptable-collateral
+`maxHoldingLocal: held + lent`, with a reservation fee but no mandate test, no acceptable-collateral
 schedule, and no per-counterparty limit. An insurer with a liability-matching mandate lends its
 whole equity book to a hedge fund on the same terms a hedge fund would. The restraint is the
 price alone, which is real but is not the constraint the node asks for.
@@ -200,5 +200,5 @@ from any other cash, so it goes into the same overnight sleeve as everything els
 return. It is reinvested — but nothing marks it as OTHER PEOPLE'S money that has to come back, so
 the loss the node points at ("this is where a lending programme actually loses money") cannot
 happen: the lender can spend the collateral on securities and still owe it. That is the same
-class of defect as `repoLentUSD` being excluded from purchase capacity, and the fix is the same
-one line: posted cash collateral is not spendable capacity. **Becomes a §3 step**, small.
+class of defect as `repoLentLocal` being excluded from purchase capacity, and the fix is the same
+one line: posted cash collateral is not spendable capacity. **§3 step 37-SECLENDING**, small.

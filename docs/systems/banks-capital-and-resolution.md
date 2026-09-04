@@ -124,14 +124,14 @@ checked by `scripts/check-atlas.sh`.
 
 ### ⚠️ C1 / C1.a — THE ONLY WAY TO FAIL IS CAPITAL, AND THE TEST IS A BOOK RATIO. KNOWN(20-LLR)
 
-`isBankUnderPca` is `sheet.bankEquityUSD < bankRwaUSD(sheet) * PCA_CAPITAL_RATIO` (2%), and
+`isBankUnderPca` is `sheet.bankEquityLocal < bankRwaLocal(sheet) * PCA_CAPITAL_RATIO` (2%), and
 `bank-resolution.ts:116` is the only caller that closes a bank. So:
 
 - **the trigger is not C1's test.** C1 says insolvency is assets < liabilities. This is book equity
   against RISK-WEIGHTED assets, which is a regulatory ratio — a sovereign book is weight ZERO
-  (`macro/banking.ts:463`: `sovereignUSD * 0.0`), so a bank whose entire balance sheet is
-  government bonds has `rwaUSD ≈ 0` and falls into `isBankUnderPca`'s second branch,
-  `bankEquityUSD < 0`. Its equity has to go outright negative before anything happens.
+  (`macro/banking.ts:463`: `sovereignLocal * 0.0`), so a bank whose entire balance sheet is
+  government bonds has `rwaLocal ≈ 0` and falls into `isBankUnderPca`'s second branch,
+  `bankEquityLocal < 0`. Its equity has to go outright negative before anything happens.
 - **there is no other trigger at all.** C1.a's two-by-two — solvent/illiquid and insolvent/liquid —
   has only one live cell, and 20-LLR states the count: "the overwhelming majority of bank failures
   are funding events" and the model has none.
@@ -143,15 +143,15 @@ D1 below.
 
 ### ❌ D1 / D2.a — THERE IS NO VALUATION, SO THERE IS NO HOLE. NEW
 
-`planBankResolution` computes `netBookUSD = bankSheetAssetsUSD(...) - bankAssumedLiabilitiesUSD(...)
-- centralBankLoanUSD` — every asset at **book**: `loanBooksOf` is Σ principal, the sovereign book is
+`planBankResolution` computes `netBookLocal = bankSheetAssetsLocal(...) - bankAssumedLiabilitiesLocal(...)
+- centralBankLoanLocal` — every asset at **book**: `loanBooksOf` is Σ principal, the sovereign book is
 its carried tenor amounts, the desks at inventory. Nothing is marked, nothing is discounted for a
 forced sale, no distressed bid is taken.
 
-So what the code calls the hole is not D1.a's hole. `guaranteeUSD = max(0, acquirerCapitalUSD -
-netBookUSD)` — the shortfall of the book's net against **the regulatory capital the acquirer needs
-to carry it** (`bankRwaUSD × 0.11`). A bank whose loans are worth 70 cents resolves with
-`guaranteeUSD = 0` as long as its book equity clears 11% of RWA, and a perfectly solvent bank
+So what the code calls the hole is not D1.a's hole. `guaranteeLocal = max(0, acquirerCapitalLocal -
+netBookLocal)` — the shortfall of the book's net against **the regulatory capital the acquirer needs
+to carry it** (`bankRwaLocal × 0.11`). A bank whose loans are worth 70 cents resolves with
+`guaranteeLocal = 0` as long as its book equity clears 11% of RWA, and a perfectly solvent bank
 generates a "guarantee" payment merely because its book is large. The public cost is therefore
 uncorrelated with the loss, and D2.a (no creditor worse off than in liquidation) has no liquidation
 value to be compared against — it cannot even be stated.
@@ -159,7 +159,7 @@ value to be compared against — it cannot even be stated.
 Consequence: resolution moves the right money between the right parties and conveys **no
 information about how bad the failure was.** Every loss the tree can produce has already been taken
 week by week through `bookPnL` before the bank closes (see `banks-lending.md` E1), so by the time
-the resolution runs there is nothing left to discover. **Becomes a §3 step**, medium: it needs a
+the resolution runs there is nothing left to discover. **§3 step 37-LOSSRATE**, medium: it needs a
 mark on the failed book — the sovereign and desk lines already have cleared prices, and the loan
 book needs the `banks-lending.md` E1 event before "worth less than book" means anything. Sequence
 after that.
@@ -167,7 +167,7 @@ after that.
 ### ❌ D3.b — THE ACQUIRER IS ASSIGNED, NOT CHOOSING. NEW
 
 `chooseAssumingBank` takes the largest equity among peers that clear the floor, and failing that
-the largest that is not itself under PCA. It never consults the deal: not `netBookUSD`, not the
+the largest that is not itself under PCA. It never consults the deal: not `netBookLocal`, not the
 capital it will have to find, not what the book is worth to it. It cannot decline. `bank-resolution.ts:127`
 handles "no candidate" only as *no peer exists* — and then the treasury recapitalises the failing
 bank in place, with the code's own comment recording that "the shareholders are not diluted here
@@ -175,16 +175,16 @@ bank in place, with the code's own comment recording that "the shareholders are 
 
 This is the same defect the atlas found in the treasury's D5.a and the auction books' OWN7: a
 residual party that absorbs by construction. A bank that must take the books whatever they contain
-is a forced buyer, and it is the reason `guaranteeUSD`'s size never has to be negotiated. **Becomes
-a §3 step**, small: the acquirer bids (its bid IS `estateUSD`, which already exists), and a
+is a forced buyer, and it is the reason `guaranteeLocal`'s size never has to be negotiated. **§3
+step 37-SMALL**: the acquirer bids (its bid IS `estateLocal`, which already exists), and a
 resolution with no bid falls through to the public path that already exists beside it.
 
-### ❌ A2.b / A2.c / C2 — NO BAIL-IN LAYER, AND NO PRIVATE RECAPITALISATION
+### ❌ A2.b / A2.c / ⚠️ C2 — NO BAIL-IN LAYER, AND NO PRIVATE RECAPITALISATION
 
 `seniority` is `'SENIOR' | 'SUBORDINATED'` and the type is honoured throughout the corporate ladder
 (`audit/prices.ts:33` even asserts subordinated trades wider) — but **no bank issues a subordinated
 tranche**, so A2.b's layer is empty and the ladder that gets bailed in
-(`ladderBailedInUSD`) is a bank's SENIOR paper, which A2.c puts at the back with depositors. The
+(`ladderBailedInLocal`) is a bank's SENIOR paper, which A2.c puts at the back with depositors. The
 order the code executes is therefore: equity → senior bonds → the public purse, with depositors
 never touched — one layer short at the top and one layer over-punished in the middle.
 
@@ -192,7 +192,7 @@ C2 is worse: there is no private recapitalisation path at all. `evolveBankingSec
 the old equity-rescale write was deleted and that a bank "stays undercapitalized until a real equity
 raise exists"; `stage08-back.ts` runs the financing decision for every firm and no bank equity issue
 comes out of it. So C2, C2.a and C2.b — recap first, priced by whoever provides it, and able to fail
-— have no representation, and a bank goes from breach straight to closure. **Becomes a §3 step**,
+— have no representation, and a bank goes from breach straight to closure. **§3 step 37-BANKEQUITY**,
 and it is the same step as `banks-funding-and-liquidity.md` A3: give a bank a capital raise and both
 close.
 
@@ -209,13 +209,13 @@ absorbed silently by the strongest peer in the same week it happens.
 
 The path the money market's E3 needs is exactly this one, inverted — when there IS no acquirer, or
 when the acquirer declines, the failed bank's lenders should take a loss by name. Sequence after
-D3.b; **becomes a §3 step** with it.
+D3.b; is **§3 step 37-SMALL** with it.
 
 ### ⚠️ B2 / A3 — THE BUFFER AND THE CAPITAL SUPPLY ARE BOTH CONSTANTS
 
 B2 asks for a buffer the bank chooses. `BANK_WORKING_CAPITAL_RATIO = 0.11` is one number for every
 bank in every region and every week — used to price the capital charge in `quoteLoanMarginBps`, to
-size `assumingCapitalUSD` in resolution, and as the payout threshold. The dividend policy is a
+size `assumingCapitalLocal` in resolution, and as the payout threshold. The dividend policy is a
 three-branch ladder on the SAME prior ratio (`>0.14 → 90%`, `<0.11 → 5%`, else 40%), which is the
 B3 consequence and is genuinely present, so what is missing is only the *choice*: a bank cannot run
 a thicker buffer because it is riskier. Its natural owner is §3 step 30 (the stated-number registry)
@@ -228,7 +228,7 @@ A3's issuance half is `❌` and is stated on the C2 row above.
 The guarantee is paid GOVERNMENT → the acquirer (`bank-resolution.ts:191`) and the treasury acquires
 nothing for it: no claim on the estate is created, so the recovery that would normally come back to
 the insurer is lost, and the fiscal cost is final on the day. E1's estate is real for the shell's own
-bondholders and shareholders (`estateUSD` is paid to the receivership and
+bondholders and shareholders (`estateLocal` is paid to the receivership and
 `runEstateResolutionStage` works it out), but the public claim never joins that queue. Small, and it
 belongs with D1 — the estate's realisation is only meaningful once the book had a value to be
 realised against.
@@ -236,6 +236,11 @@ realised against.
 ### A measurement, for §3 step 38: B1.c, B3.a, D2.a
 
 B1.c (which of the risk-weighted and leverage constraints binds) is computable today — both
-`headroomUSD` expressions exist side by side in `bank-lending.ts` and `leverageHeadroomUSD` in
+`headroomLocal` expressions exist side by side in `bank-lending.ts` and `leverageHeadroomLocal` in
 `macro/banking.ts` — and nothing records which one bound. B3.a would be visible in the payout
 ladder's branches. D2.a cannot be measured until D1 exists. The first two are standing reads.
+
+### Also marked, briefly
+
+- **A2 ⚠️** — the ladder is layered (`seniority`) and a bank's own has one layer — A2.b above.
+- **D2 ⚠️** — `planBankResolution` respects the hierarchy as far as it has layers: equity, then senior paper, then the purse; A2.b's layer is empty and depositors are never reached.

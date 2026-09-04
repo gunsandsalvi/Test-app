@@ -169,9 +169,9 @@ It cannot be fixed inside this stage: it needs those books in the register (`the
 is that boundary), and it is §3's.
 
 A2.a has no code at all: nothing in `07f`, `government.ts` or `commercial-paper.ts` names a
-day-count or a quoting convention. `discountBillProceedsUSD` is `face/(1 + y·t)` — simple money-market
+day-count or a quoting convention. `discountBillProceedsLocal` is `face/(1 + y·t)` — simple money-market
 discount, which is a convention, but it is a convention nothing declares and no other consumer
-shares. Rule 9 wants it at the type. **Becomes part of §3 step 28b** (the units sweep), which is
+shares. Rule 9 wants it at the type. **§3 step 28b** (the units sweep), which is
 where every unstated convention belongs.
 
 ### ⚠️ A3 — THERE IS NO CERTIFICATE OF DEPOSIT
@@ -183,8 +183,8 @@ wholesale funding, none of which is a SECURITY somebody else can hold, price and
 This is **MISSING rather than OUT OF SCOPE**, and the reason is C1. The buyer side of this tree is
 money funds and corporate treasurers, and in reality a large part of what they hold is bank paper —
 so the model's cash investors face a choice between bills and CP where a real one faces bills, CP
-and CDs, and the bank is absent from the market that prices its own short funding. **Becomes a §3
-step**, medium: the instrument is a `DebtTranche` with a bank issuer and the book already exists
+and CDs, and the bank is absent from the market that prices its own short funding. **§3 step
+20b**, medium: the instrument is a `DebtTranche` with a bank issuer and the book already exists
 (it clears beside CP in `07f`), but it has to be reconciled with the wholesale-funding roll that
 represents the same money today — which is `banks-funding-and-liquidity.md`'s territory and the G2
 unification the code keeps deferring to.
@@ -208,13 +208,13 @@ as a discriminated union), and this tree is its clearest single case.
 
 ### ⚠️ B4 — THE BACKSTOP IS FREE
 
-`committedLineHeadroomUSD` sizes a real committed line off what the borrower's earnings can service,
+`committedLineHeadroomLocal` sizes a real committed line off what the borrower's earnings can service,
 and `07f:960-976` draws it at policy + 300bp when a roll fails, which is the mechanism B3.b needs
 and it works. What is missing is the other half of B4: **a committed line costs money in every week
 it is not drawn**, and `grep -rn "commitmentFee\|undrawn" src` finds no corporate commitment fee
 anywhere. So every CP issuer carries free insurance against its own rollover risk, which makes CP
 strictly cheaper than term debt with no offsetting cost — the funding-mix decision B2 asks for is
-being made against an incomplete price. **Becomes a §3 step**, small: it is one weekly payment from
+being made against an incomplete price. **§3 step 37-SMALL**, small: it is one weekly payment from
 the borrower to the named house bank on the undrawn headroom the model already computes.
 
 ### ⚠️ C1 / C2.a — THE BUYER BASE IS RIGHT AND ITS CONSTANT IS NOT
@@ -232,16 +232,14 @@ corporate treasurers genuinely bid (`treasuryParticipantId`). **Households canno
 all**, so the channel this node exists for — a policy rate reaching a saver who is not a bank's
 customer — runs only through the money fund. Same finding as `sovereign-credit.md` E2.f.
 
-### ⚠️ D1 / D2 / D3 / D4 — THE SECONDARY MARKET IS THINNER THAN THE PRIMARY
+### ⚠️ D3 — CP IS NOT REPO COLLATERAL
 
-D1: the secondary float trades, and it trades in stored-value units at face (`07f:365` says so in
-terms) — the discount exists at issue and nowhere after. D3: bills are repo collateral with a
-derived haircut (`computeSovereignRepoHaircuts`), and **CP is not repo collateral at all** —
-`prime-brokerage.ts:60` returns haircuts for EQUITY, CORP_BOND, LEVERAGED_LOAN and GOV_BOND, so CP
-falls to `DEFAULT`, the max of the three. D4: the audit's CP spread is
-`(cp.couponRate − policyRate) × 1e4` (`prices.ts:30`) — a spread over the POLICY RATE, where the node
-asks for a spread over the equivalent-tenor bill, which is the thing the same stage clears fifty
-lines earlier. All four close with step 13 and the last one is a two-line audit fix.
+Bills are repo collateral with a derived haircut (`computeSovereignRepoHaircuts`), and **CP is not
+repo collateral at all** — `prime-brokerage.ts:60` returns haircuts for EQUITY, CORP_BOND,
+LEVERAGED_LOAN and GOV_BOND, so CP falls to `DEFAULT`, the max of the three, and the repo book's
+scope is sovereign general collateral only (`domain/repo.ts:16`, deliberately). D1, D2 and D4 closed
+with the price (above): the secondary trades at a cleared price per piece of paper, and the spread
+is read off it at the paper's own tenor.
 
 ### ⚠️ C4 — A VERIFY NODE WITH A GOOD MECHANISM AND NO MEASUREMENT
 

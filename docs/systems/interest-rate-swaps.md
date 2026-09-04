@@ -175,7 +175,7 @@ It is broken in the legacy layer. `pricing.ts:calculateParSwapRate` is
 (`12-portfolio-and-positions.ts:250`, passing `updatedRegions[pos.region].yieldCurveParams`). The
 player's swap market **is** a restatement of a formula, which is the node's own sentence. Those
 positions also have no counterparty (`../instruments/derivative.md` D1.a) and their P&L reaches
-`state.portfolio.cashUSD` through `13-news-and-turn-summary.ts:25`.
+`state.portfolio.cashLocal` through `13-news-and-turn-summary.ts:25`.
 
 **Already §3 step 17b / step 26** — 17b for moving stage 12's positions onto the one book, 26 for
 deleting the formula prices. Neither names `calculateParSwapRate` explicitly; step 12b names its
@@ -197,7 +197,7 @@ tenor carries last week's rate as a quote. It also means C3's swap spread — th
 cross-market basis — moves only when capital and covenants move, never when somebody thinks rates
 are wrong.
 
-**Becomes a §3 step.** It is the swap-book instance of the same absence 17c records for CDS
+**§3 step 37-VIEW**, . It is the swap-book instance of the same absence 17c records for CDS
 (*"an asset manager or credit fund taking a VIEW rather than a hedge — the other side of the
 market, and the reason a spread is a price rather than a bank's internal transfer"*), and the two
 should be built together; 17f's `RELATIVE_VALUE` book is the natural home for B4.
@@ -205,13 +205,13 @@ should be built together; 17f's `RELATIVE_VALUE` book is the natural home for B4
 ### ❌ A2 — ONE PERIODICITY, NO ACCRUAL CONVENTION
 
 Both legs pay weekly and divide by 52: `irs.ts:40` is
-`(c.notionalUSD * (c.strike - m.overnightRateAnnual(c.regionId))) / 52`. There is no fixed-leg
+`(c.notional * (c.strike - m.overnightRateAnnual(c.regionId))) / 52`. There is no fixed-leg
 frequency, no floating-leg frequency, no day count, and no accrual. The node's point is that the
 mismatch between the two legs is **real and part of the price**; here there is one leg computed as
 a difference, so a basis swap, a quarterly-versus-semi-annual mismatch and a stub period are all
 unrepresentable, and rule 8's convention question has no answer to give.
 
-**Becomes a §3 step** — small, and shared with `../instruments/derivative.md` D6.a, which records
+**§3 step 28b** — small, and shared with `../instruments/derivative.md` D6.a, which records
 the same absence for every class.
 
 ### ⚠️ A3 — THE FLOATING LEG DOES NOT FIX, IT READS
@@ -251,3 +251,7 @@ institutions closing a duration gap (B2), which is a different reason.
 So the float is one-directional by construction, and a week in which the natural hedging flow
 should be the other way — rates falling, corporates wanting to swap fixed debt to floating — is
 not expressible. Same family as B4/B5 above and closes with them.
+
+### Also marked, briefly
+
+- **A1 ⚠️** — the profile satisfies the contract except D8/D9 — no mark, no margin — section D above.

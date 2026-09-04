@@ -155,7 +155,7 @@ the credit, because there is only one opinion and it is a function. It is also w
 ratings-and-assessment.md`'s single-opinion problem (§3 step 36) has no market-side escape:
 the spread is the rating's own arithmetic run forward.
 
-**Becomes a §3 step.** Medium: an inversion (spread → hazard → PD) plus deciding who reads it.
+**§3 step 37-CDS-DIRECTION**, . Medium: an inversion (spread → hazard → PD) plus deciding who reads it.
 The natural pair for it is step 17f's registry of comparables, which needs an implied PD to state
 what the CDS-versus-bond relationship *should* be.
 
@@ -172,7 +172,7 @@ single most informative thing a credit market prints before a default — cannot
 removes the tenor half of C2's inversion: a term structure is what you need to bootstrap hazard
 rates from spreads at all.
 
-**Becomes a §3 step.** Small mechanically (the contract already carries `termKey`, and the swap
+**§3 step 17d**, . Small mechanically (the contract already carries `termKey`, and the swap
 book proves the multi-tenor clearing shape works — `irs.ts:SWAP_TENORS`), meaningful in what it
 opens. It belongs beside 17d's index, which is the other missing CDS product.
 
@@ -186,7 +186,7 @@ blends that rolling mean against a prior with weight `n/(n+8)`. `CREDIT_RECOVERY
 this world has resolved anything. The payoff really does move with what estates deliver.
 
 **What diverges is the granularity.** `classes/cds.ts:eventTermination` pays
-`notionalUSD × (1 − m.recoveryRate(c.regionId))` — the **region's** average, not the estate's own
+`notional × (1 − m.recoveryRate(c.regionId))` — the **region's** average, not the estate's own
 workout on the name that just defaulted. The auction the node asks for exists
 (`runEstateResolutionStage` sells the issuer's real assets and pays claims in order) and its
 answer is discarded for this contract: protection on a firm whose assets fetch 5 cents pays
@@ -211,8 +211,8 @@ realised recovery is more than 0.2 away from `0.4` with the message *"every spre
 
 The demand side of this market is a single formula applied to a single class of participant.
 `runCdsMarket:56-80` builds hedge demand from **banks only**, and within a bank only from
-`facilityRowsOf` — its loan book — through `protectionNeedUSD`, which is exposure above
-`0.25 × bankEquityUSD` net of standing cover. Nobody else in the world can buy protection at all:
+`facilityRowsOf` — its loan book — through `protectionNeedLocal`, which is exposure above
+`0.25 × bankEquityLocal` net of standing cover. Nobody else in the world can buy protection at all:
 not a bank against its **bond** book, not a firm against a receivable, not a fund taking a view.
 
 So B3's naked positions are one-sided: naked *sellers* exist and are properly motivated (credit
@@ -228,14 +228,14 @@ adds one observation 17c does not make: with only a large-exposure *need* on the
 float this auction prices is a regulatory quantity rather than an opinion, and that is the second
 reason (after C2) the spread cannot express a view.
 
-### ❌ D5 / E2 / E3 — THREE THINGS NOBODY ADDS UP
+### ❌ D5 / E2 / ⚠️ E3 — THREE THINGS NOBODY ADDS UP
 
 **D5** (Σ protection paid = Σ received, and a default is a transfer). Never computed. It is true
 by construction — `payToB` moves one amount between the contract's two parties — and it is exactly
 the kind of "true by construction" that stops being true the first time a class settles twice.
 **A measurement, for §3 step 38.**
 
-**E3** (net notional per reference entity). `StandingBook.coverUSD` answers *"how much protection
+**E3** (net notional per reference entity). `StandingBook.coverLocal` answers *"how much protection
 does this party hold on this name"* — per party, per side. Nothing sums the book by reference
 across the world, so the concentration the node calls "a real number and a real concentration" is
 not a number anywhere. `09-concentration-risk.ts:runConcentrationRiskStage` measures a bank's
@@ -244,16 +244,16 @@ exposure concentration and does not see protection at all. **A measurement, for 
 **E2** (wrong-way risk) is not a measurement but a missing mechanism: nothing correlates a
 seller's own solvency with the reference it wrote protection on, and — per
 `../instruments/derivative.md` D10.a — the seller's identity is in no price, so it could not be
-priced even if it were. **Becomes a §3 step**, and it is the same term D10.a needs.
+priced even if it were. **§3 step 37-SMALL**, and it is the same term D10.a needs.
 
 ### ⚠️ E1 — THE RISK MOVES, AND THEN NOBODY LOOKS
 
 E1 is the system's point: the bank looks hedged and the risk sits with whoever sold it. The first
-half works — `protectionNeedUSD` nets `alreadyHedgedUSD` off the bank's need, so a hedged bank
+half works — `protectionNeedLocal` nets `alreadyHedgedLocal` off the bank's need, so a hedged bank
 genuinely reports a smaller concentration. The second half has no reader:
 `runConcentrationRiskStage` measures gross exposure per name and never adds the protection a fund
 has written, so the risk arrives at the credit funds and is invisible from there on. Bank capital
-is relieved (through `standingPfeChargeUSD`'s much smaller add-on) and no capital is raised
+is relieved (through `standingPfeChargeLocal`'s much smaller add-on) and no capital is raised
 anywhere against the position it moved to. That asymmetry *is* E1, so the node is present as an
 economics — and `⚠️` because it is present as an unmeasured one. Closes with E3's read.
 
@@ -267,5 +267,13 @@ the private set — triggers a full par-less-recovery payout on every contract w
 protection buyer is paid for an event that did not happen.
 
 The `derivativesBook` re-key on merger (`10-mergers.ts:486`) covers the contract's *parties*; a
-CDS's `referenceId` is not re-keyed there. **Becomes a §3 step**, small, and it pairs with §3 step
+CDS's `referenceId` is not re-keyed there. **§3 step 34, and 13-BOOK (d) for the `referenceId` re-key**, small, and it pairs with §3 step
 34 (*a credit event is only ever a missed payment*), which owns the definition side.
+
+### Also marked, briefly
+
+- **A1 ⚠️** — the profile satisfies the contract as far as D8/D9 do — no mark between nets, no margin.
+- **A1.b ⚠️** — the payoff is `par − the REGION's recovery`, not the estate's own — D2/D2.a above.
+- **A3 ⚠️** — the protection leg is valued only at close-out (`closeOutLocalToB`), at replacement value, never as a survival-weighted read of the cleared spread.
+- **C3.b ⚠️** — `P2` reports the basis and fires only above a quota, so a persistently large one on a minority of names is invisible.
+- **C4 ⚠️** — `P3` measures it with the same quota.

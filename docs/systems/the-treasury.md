@@ -95,6 +95,7 @@ checked by `scripts/check-atlas.sh`.
 | B1 spends on named things | `src/domain/government.ts:decomposeGovernmentSpending` | ✅ |
 | B2 interest is Σ over its own bonds | `src/domain/government.ts:weeklyInterestExpenseLocal` | ✅ |
 | B3 outlays have causes that vary | `src/domain/government.ts:governmentOutlaysLocal` | ✅ |
+| B3.a a downturn raises them while lowering receipts | `src/domain/government.ts:decomposeGovernmentSpending` | ✅ |
 | B4 maturing debt is repaid in cash | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ✅ |
 | C1 taxes on real bases | `src/domain/company-week/income-statement.ts:corporateTax` | ✅ |
 | C1.a paid by named payers from accounts | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:runFiscalAndSovereignDebtStage` | ✅ |
@@ -129,12 +130,12 @@ checked by `scripts/check-atlas.sh`.
 The one node in this tree the user stated in their own words, and the code has its opposite.
 `accounts.ts:waysAndMeansOf` is `max(0, −treasuryNetOf(region))`: the treasury's account at the
 central bank is **one signed row**, and when it goes negative that negative IS a ways-and-means
-advance — an asset of the central bank, carried in `centralBankAssetsUSD`, charged policy-rate
+advance — an asset of the central bank, carried in `centralBankAssetsLocal`, charged policy-rate
 interest every week by `central-bank.ts:49`. `ui/objects/centralbank.tsx:67` labels it for the
 player: *"the treasury's overdraft here"*.
 
 **It is not a leftover; it is load-bearing.** `11-fiscal:647` sizes the quarterly issue as
-`waysAndMeansOf(v2, regionId) + 13 * marketFundedDeficitUSD` — the advance is the first term. So
+`waysAndMeansOf(v2, regionId) + 13 * marketFundedDeficitLocal` — the advance is the first term. So
 the sequence is: spend freely all quarter into an overdraft, then issue to clear it. That inverts
 D1 (raise it *before* you spend it), makes D4.b's cash buffer unnecessary (D4.b is `❌` for exactly
 this reason — the overdraft IS the buffer), and drains D5 of consequence: the withdrawal
@@ -143,13 +144,13 @@ overdraft absorbs whatever the auction did not place and the next calendar week 
 more. **A treasury that cannot be told no is not funding-constrained**, and every price in
 `sovereign-credit.md` is being set against a borrower with no funding constraint.
 
-Not a §3 step today. **Becomes one.**
+**§3 step 37-OVERDRAFT.**
 
 ### ⚠️ D4 / E2 — ISSUANCE IS A CALENDAR, NOT A PROGRAMME
 
 `11-fiscal:630` gates all issuance on `nextWeek % 13 === 0`. Between those weeks the treasury
 issues nothing whatever it owes, which is what forces D3's overdraft to exist. The size is a
-backward-looking `13 × marketFundedDeficitUSD` plus the accumulated advance: it reads what has
+backward-looking `13 × marketFundedDeficitLocal` plus the accumulated advance: it reads what has
 already been spent, never what is about to fall due. D4 requires the opposite — forward-looking,
 sized against a known maturity profile. The profile is knowable (`sovereign-calendar.ts` walks it),
 so this is an ordering-and-inputs defect, not a missing mechanism.
@@ -175,3 +176,8 @@ balance against private-sector net saving. Both are measurements, not mechanisms
 checks Σ held = issued for the sovereign books, but the sovereign holding is a tenor BUCKET rather
 than an instrument (13-SOV row 3), so what reconciles is not the debt outstanding node D6 means.
 Both close when D3 and 13-SOV do.
+
+### Also marked, briefly
+
+- **D2.a ⚠️** — the treasury picks size and maturity; the price of a NEW issue's coupon is read off the fitted curve, not struck — E3.
+- **D4.a ⚠️** — `sovereign-calendar.ts` walks the maturity profile every week and the sizing never reads it — D4/E2.

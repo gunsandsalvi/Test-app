@@ -113,25 +113,11 @@ Counts: 16 `✅` · 6 `⚠️` · 6 `❌`.
 
 ## 3. THE DIFF
 
-### ⚠️ C5 — THE SAME PORTFOLIO MARKED TO TWO NUMBERS, AND THE ENGINE'S WAS STALE (§3.13-BOOK c-then-2)
+### ✅ C5 — ONE POPULATION MARKS THE PORTFOLIO (closed, §9.13-BOOK c-then-2)
 
-`sponsorPortfolioLocal` took a `privateById` map, and its two callers built that map from two
-DIFFERENT populations. `institutionTotalAssetsLocal` (the engine) passed `prevActivePrivateFirms`
-— active, unlisted, and **last week's objects**. `institutionTotalAssetsFromState` (the UI and the
-harness) passed `state.companies.filter(c => !c.isBankEntity)` — this week's, but including public
-and inactive firms and excluding banks. So a fund's NAV depended on who asked, and the harness
-compared its own answer against the engine's (rule 4).
-
-**The engine's was the wrong one and it was stale.** A company taken private THIS week is appended
-to `portfolioCompanyIds` and has `listingStatus` set to `'PRIVATE'` in the same pass
-(`pe-lifecycle.ts:698`) — but it was PUBLIC last week, so it is not in `prevActivePrivateFirms`,
-and this marked **a brand-new LBO at zero for the rest of the week**: C5's mark, missing, on
-exactly the deal that just happened. Rule 19's stale mirror.
-
-Neither filter was doing any work. `portfolioCompanyIds` already names precisely the companies
-that count, and a portfolio company is private by construction — every path that adds one takes it
-private, and the IPO path removes it (`pe-lifecycle.ts:767`). Both callers now pass the whole
-entity index and the liveness test lives in `sponsorPortfolioLocal`, once. C5.a below is
+`sponsorPortfolioLocal` is marked over `portfolioCompanyIds` against the one entity index, in the
+engine and in the harness alike. It used to take two populations — the engine's a week stale, so
+a firm taken private THIS week was marked at zero — and §9 c-then-2 records it. C5.a below is
 untouched: the mark is still an EV multiple on the sponsor's own books.
 
 ### ❌ C5.a — THE UNLISTED MARK IS THE SPONSOR'S BALANCE SHEET
@@ -139,13 +125,13 @@ untouched: the mark is still an EV multiple on the sponsor's own books.
 The FORBID node, and it is violated by the sponsor's total-assets read itself.
 `institutional-balance-sheet.ts:186-190`:
 
-    return a + Math.max(0, evMultiple * c.ebitda - ladderTotalUSD(v2, c.id)) * (c.ownership?.peSponsorPct ?? 0);
+    return a + Math.max(0, evMultiple * c.ebitda - ladderTotalLocal(v2, c.id)) * (c.ownership?.peSponsorPct ?? 0);
 
-and `institutionTotalAssetsUSD:195-198` substitutes exactly that for a `PRIVATE_EQUITY` entity's book.
+and `institutionTotalAssetsLocal:195-198` substitutes exactly that for a `PRIVATE_EQUITY` entity's book.
 So a model mark — the median listed `(marketCap + debt) / EBITDA` in the region, times this
 private firm's EBITDA, less its ladder — **is** the sponsor's assets, and everything downstream
-treats it as one: `entityRequiredReturn(entity, totalAssetsUSD)`, the sleeve target in
-`availablePurchaseCapacityUSD`, the money-fund fee split, the UI's equity ratio, and — through
+treats it as one: `entityRequiredReturn(entity, totalAssetsLocal)`, the sleeve target in
+`availablePurchaseCapacityLocal`, the money-fund fee split, the UI's equity ratio, and — through
 `comparableMultiple` — the price of the next buyout. The honest answer C5.a asks for is
 *"marked, not cleared"*, and there is nowhere in the model to say it: a position is a value, and a
 value does not carry the fact that nobody paid it.
@@ -155,7 +141,7 @@ made the private sector's value independent of the market it lives in). The prob
 multiple; it is that its output has the same TYPE as a cleared price and is used in the same
 places. That is the same defect §3 step 13 names for cost-carried inventory — *"an asset genuinely
 not traded is carried at COST, and carried at cost is a DECLARED property in the asset
-registry"* — one class over. **Becomes a §3 step, and it should be folded into step 13**: the
+registry"* — one class over. **§3 step 13-BOOK (d)**: the
 declared property step 13 already requires is exactly the one this node needs, and doing it twice
 would produce two ways of saying "not a price".
 
@@ -167,9 +153,9 @@ first real price the holding has had"* only happens on the listing route.
 
 ### ⚠️ A2 / ❌ A2.a — A CALL THE INVESTOR CAN REFUSE BY BEING SHORT OF CASH
 
-`callCapitalUSD:159-165` bounds each LP's contribution by
+`callCapitalLocal:159-165` bounds each LP's contribution by
 `min(committed − drawn, max(0, cash + pendingSettlement))`, and `settlePeLifecycleDeals:580`
-abandons the deal when `calledUSD < equityUSD * 0.999` (returning what was raised). The file's own
+abandons the deal when `calledLocal < equityLocal * 0.999` (returning what was raised). The file's own
 comment states the doctrine: *"a call that comes up short is a deal that does not close."*
 
 For the FUND that is right. For the INVESTOR it inverts A2. A commitment is supposed to be an
@@ -178,11 +164,11 @@ exists (an insurer or pension has to hold liquidity against it, and in a stress 
 own troubles arrive together). Here the LP is never obliged: it pays what it happens to have, and
 if it has nothing it pays nothing and suffers nothing. No LP ever sells an asset to meet a call,
 no LP ever defaults on a commitment, and the liquidity drag A2.a describes — the one real cost of
-being an LP — does not exist. `dryPowderUSD` embeds the same assumption on the other side: the
+being an LP — does not exist. `dryPowderLocal` embeds the same assumption on the other side: the
 fund's dry powder is `min(undrawn, LP cash)`, so a fund's capacity to act is its investors' spare
 change rather than their promise.
 
-**Becomes a §3 step**, medium: the call is a payment the LP must fund, which means it draws the
+**§3 step 37-SMALL**, medium: the call is a payment the LP must fund, which means it draws the
 LP's own liquidity ladder (sell the sleeve, then the book — the same ladder
 `etf-flows.ts` already gives households) and, failing that, an LP default with a real consequence.
 It also closes D4.a, which is the same fact seen from the exit side: today distributions and calls
@@ -193,21 +179,21 @@ never collide, because calls simply do not arrive when there is no cash.
 Sources and uses do not balance, and the gap is the size of the loan. Trace an LBO
 (`settlePeLifecycleDeals:573-612`):
 
-- **Uses**: `priceUSD = equityValueUSD(target, markEvMultiple)` — the whole equity value of the
+- **Uses**: `priceLocal = equityValueLocal(target, markEvMultiple)` — the whole equity value of the
   firm being bought.
-- **Sources**: `debtUSD` raised on the TARGET (a real 07d primary; proceeds are paid to the
-  ISSUER by `settlePricedOfferings`, i.e. to the company itself) plus `equityUSD = priceUSD −
-  debtUSD` called from the LPs.
-- **The payment to the sellers**: `pay(sponsor → HOUSEHOLD, calledUSD)` — the equity cheque only.
+- **Sources**: `debtLocal` raised on the TARGET (a real 07d primary; proceeds are paid to the
+  ISSUER by `settlePricedOfferings`, i.e. to the company itself) plus `equityLocal = priceLocal −
+  debtLocal` called from the LPs.
+- **The payment to the sellers**: `pay(sponsor → HOUSEHOLD, calledLocal)` — the equity cheque only.
 
-So the founding households sell a company worth `priceUSD` and receive `priceUSD − debtUSD`,
-while the target ends the week holding `debtUSD` of cash it did not have and did not need. In a
+So the founding households sell a company worth `priceLocal` and receive `priceLocal − debtLocal`,
+while the target ends the week holding `debtLocal` of cash it did not have and did not need. In a
 real buyout the new debt is raised BY the target and paid THROUGH to the sellers; here it stops at
 the target. The sponsor gets 95% of a firm that is both levered and over-capitalised by the same
 number, the sellers are underpaid by it, and household net worth is credited only the equity slice
-(`sellerRegion.householdState.netWorthUSD += calledUSD`).
+(`sellerRegion.householdState.netWorthLocal += calledLocal`).
 
-**Becomes a §3 step**, small and mechanical: the LBO's debt proceeds are a payment from the target
+**§3 step 37-SMALL**, small and mechanical: the LBO's debt proceeds are a payment from the target
 to the sellers on the settlement date. It moves real money in every deal, so it is not
 byte-identical — which is the right kind of change.
 
@@ -217,22 +203,22 @@ byte-identical — which is the right kind of change.
 management fee on committed capital, no carried interest on the gains, and no manager entity
 distinct from the fund: `PRIVATE_EQUITY` has `beneficiariesAreHouseholds: false` and
 `liabilityHurdle: undefined`, so nobody is paid for running it and the entire gain accrues to the
-LPs' `drawnUSD` reduction. Two consequences worth naming: `distributeToLps` returns 100% of exit
+LPs' `drawnLocal` reduction. Two consequences worth naming: `distributeToLps` returns 100% of exit
 proceeds, so the fund's incentive is symmetric where a real sponsor's is not; and a fee on
 COMMITTED capital is the reason real funds call capital at all rather than sitting on it, which is
-one of A2's motives. **Becomes a §3 step**, small — and it is the same step as `hedge-funds.md`
+one of A2's motives. **§3 step 31**, small — and it is the same step as `hedge-funds.md`
 A3's missing performance fee, because both are the asymmetric-incentive half of a manager
 contract.
 
 ### ❌ D5 / ⚠️ A4 — THE LP'S CLAIM IS FROZEN AT THE SEED, AND THE FUND NEVER WINDS UP
 
 **D5**: an LP's holding of the fund is a `PE_FUND_INTEREST` register row, written ONCE at
-`initialization.ts:1507` and never again. `callCapitalUSD` moves cash and increments `drawnUSD`;
+`initialization.ts:1507` and never again. `callCapitalLocal` moves cash and increments `drawnLocal`;
 `distributeToLps` moves cash and decrements it; **neither touches the row.** So the register says
 an LP owns a fixed dollar interest in a fund whose size, drawn capital and portfolio have all
 moved, and `ownership.ts:99` explicitly skips `PE_FUND_INTEREST` from every ownership sum, so
 nothing can catch the drift. The node's read — returns as D3's cash against A2's cash — has no
-denominator anybody maintains. **Becomes a §3 step** (the row follows the commitment), and the
+denominator anybody maintains. **§3 step 37-IMMORTAL** (the row follows the commitment), and the
 measurement itself is **for §3 step 38**.
 
 **A4**: `PE_FUND_LIFE_WEEKS = 10 * 52` is real and does force sponsor-to-sponsor sales — but it
@@ -248,8 +234,8 @@ A portfolio company's investment, costs and dividends are decided by the same
 `ownership.peSponsorId` when those decisions are taken. The sponsor buys the company, levers it
 and marks it, and then owns a firm that behaves exactly as it did before. The one real
 owner action is C3's recap, which is the sponsor extracting cash rather than running the business.
-`the-capital-programme.md`, which this node cites, is where the hook belongs. **Becomes a §3
-step**, and its size depends entirely on that tree — recorded here as the demand for it.
+`the-capital-programme.md`, which this node cites, is where the hook belongs. **§3 step
+20d**, and its size depends entirely on that tree — recorded here as the demand for it.
 
 ### ⚠️ B1 / D1 — REAL DEALS, BUT THE SELLER NEVER SAYS NO
 

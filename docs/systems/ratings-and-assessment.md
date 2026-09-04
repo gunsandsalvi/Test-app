@@ -128,7 +128,7 @@ is built around exactly that disagreement — a multi-notch gap or an IG/HY cros
 immediate re-rate ("fallen angel"), while ordinary drift waits on a 25%-a-week coin flip. A3 is ✅
 for the same code.
 
-### ❌ A5 / B2.a / A1 — THERE IS NO ASSESSOR, AND NO INSTRUMENT RATING
+### ❌ A5 / B2.a / ⚠️ A1 — THERE IS NO ASSESSOR, AND NO INSTRUMENT RATING
 
 **Already §3 step 36** for the core of it ("one rating, held by nobody"). Two things the step does
 not currently say and should:
@@ -171,7 +171,7 @@ premium (`computeSovereignReservationYieldBps`) with no credit term at all — c
 `assets/index.ts:71`'s `hasCreditRisk: false`. So a region can be downgraded AAA → BBB and not one
 number in the simulation moves. That is decoration by this tree's own definition.
 
-Not in the plan. **Becomes a §3 step**, and it is the same step as `sovereign-credit.md` branch G:
+**§3 step 37-OVERDRAFT, and 37-SMALL for the UI half**, and it is the same step as `sovereign-credit.md` branch G:
 a sovereign rating cannot have a consequence until a sovereign can fail, so the two land together.
 
 ### ❌ C3 — HAIRCUTS ARE DERIVED FROM VOLATILITY, NOT FROM THE RATING
@@ -188,7 +188,7 @@ This is a real gap and it is **NOT the same as saying the code is wrong**: deriv
 observed volatility is a better mechanism than indexing it to a letter, and it is what the rest of
 this repo's rules ask for. What is missing is that the haircut is per TYPE where it should be per
 POSITION: one number for every corporate bond in the region means a CCC name and a AAA name are
-equally good collateral. **Becomes a §3 step**, small: the same median-move machinery, computed on
+equally good collateral. **§3 step 37-SMALL**, small: the same median-move machinery, computed on
 the issuer's own OAS ring rather than the region's median, gets C3's effect with no rating table
 anywhere. It is worth doing precisely because it is the one leg of the D-loop that is entirely
 absent, and D's whole claim is that a cliff edge is the three legs compounding.

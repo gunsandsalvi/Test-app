@@ -118,7 +118,7 @@ missing mechanism.
 `trade-settlement.ts:53`, when an invoice comes due and its buyer is not active:
 
 ```
-if (!activeByTicker.get(invoice.buyerTicker)) { ctx.tradeInvoiceWriteOffUSD += bookedUSD; return; }
+if (!activeById.get(invoice.buyerId)) { ctx.tradeInvoiceWriteOffLocal += bookedLocal; return; }
 ```
 
 The receivable is written off in full. It never becomes a claim, because `openEstate`
@@ -136,11 +136,11 @@ workout would have gone pari passu to its suppliers, and the realised recovery r
 (`realisedDebtRecoveryRate`, which feeds back and calibrates every priced recovery in the model) is
 **biased high by exactly the omitted trade payables**.
 
-Not in §3. **Becomes a §3 step**, and it is not large: `openEstate` needs a third claim source
-(the invoice book keyed by `buyerTicker`), and `trade-settlement` needs to file rather than write
+**§3 step 37-ESTATE**, and it is not large: `openEstate` needs a third claim source
+(the invoice book keyed by `buyerId`), and `trade-settlement` needs to file rather than write
 off.
 
-### ❌ A3 / B4 / C2 — TRADE CREDIT HAS NO PRICE
+### ❌ C2 / ⚠️ A3 / B4 — TRADE CREDIT HAS NO PRICE
 
 `paymentTermWeeks` returns a NUMBER OF WEEKS and nothing else. There is no 2/10-net-30, no early-
 payment discount, no late-payment charge — so the implicit interest rate A3 names does not exist,
@@ -157,7 +157,7 @@ consequences the tree cares about:
   or sold to a bank; `grep`ing `src` for factoring or receivable finance returns nothing. The bridge
   from trade credit into bank credit does not exist.
 
-**Becomes a §3 step.** The rate is already derivable from what the file computes: the seller's
+**§3 step 37-TRADECREDIT**, . The rate is already derivable from what the file computes: the seller's
 expected loss over the term *is* the price it should be charging.
 
 ### ❌ B2 / B3 / D4.a — TERMS ARE A FORMULA, NOT A DECISION, AND THEY CANNOT BE WITHDRAWN
@@ -176,7 +176,7 @@ Every sale to a named buyer gets at least one week of credit, whatever the buyer
   and `deliveryReliability`) does not read terms at all, so offering better terms wins no business
   and terms are not a competitive instrument.
 
-**Becomes a §3 step**, together with A3's price: once terms have a price, offering them is a bid and
+**§3 step 37-TRADECREDIT**, together with A3's price: once terms have a price, offering them is a bid and
 refusing them is a decision.
 
 ### ❌ C4 — THE CHEAPEST CHECK IN THE SYSTEM IS NOT TAKEN
@@ -212,7 +212,7 @@ most trade-credit-dependent part of an economy in both directions, and `sme-pool
 explicitly. Today a pool's receivables are zero, so `D3`'s contagion chain stops dead the moment it
 reaches the small tier — which is where a real one accelerates.
 
-**Becomes a §3 step**, and it is naturally part of `sme-pools.md`'s resolution question: what the
+**§3 step 37-TRADECREDIT**, and it is naturally part of `sme-pools.md`'s resolution question: what the
 pool can owe and be owed depends on what a pool IS.
 
 ### ❌ D1 / D3.a — LATENESS DOES NOT EXIST, AND THE CHAIN IS NOT TRACED
@@ -221,9 +221,9 @@ An invoice settles in full on `weekDue` or its buyer is dead. There is no partia
 extension, no arrears state — so the observable that precedes a supplier's loss, and the one a real
 credit manager actually watches, is absent. D3's contagion IS emergent and real (the write-off is
 cash the seller genuinely lent and never gets back, and it can push the seller through its own
-default trigger), but `tradeInvoiceWriteOffUSD` is a single world-level scalar: nothing records which
+default trigger), but `tradeInvoiceWriteOffLocal` is a single world-level scalar: nothing records which
 seller lost how much to which buyer, so D3.a's "traceable firm to firm" cannot be checked. The
-mechanism is right and the instrument to see it is missing. D1 **becomes a §3 step**; D3.a is
+mechanism is right and the instrument to see it is missing. D1 is **§3 step 37-TRADECREDIT**; D3.a is
 **a measurement, for §3 step 38**.
 
 ### ✅ What is genuinely here

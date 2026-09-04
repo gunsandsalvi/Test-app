@@ -145,7 +145,7 @@ revenue** for ever. Two consequences, and B5 is the second:
   operating leverage as a consequence of the cost STRUCTURE, and a third of the structure has been
   defined away.
 
-Not in §3. **Becomes a §3 step** — small in code (the residual must become named cost lines with
+**§3 step 37-FIRMCOST** — small in code (the residual must become named cost lines with
 real payees, which the input/output registry can already supply), large in what it unlocks.
 
 ### ⚠️ D4 — A FIRM CAN ONLY FAIL ONE WAY, AND IT IS A CONJUNCTION
@@ -153,7 +153,7 @@ real payees, which the input/output registry can already supply), large in what 
 `credit-standing.ts:99` is the whole trigger:
 
 ```
-return i.wasDefaulted || (i.cashUSD < 0 && i.coverage < i.coverageFloor);
+return i.wasDefaulted || (i.cashLocal < 0 && i.coverage < i.coverageFloor);
 ```
 
 D4 states two distinct failures and says a firm can be in either without the other. The code
@@ -175,9 +175,9 @@ covenant/acceleration half of this; the **absent insolvency limb is new**. Relat
 `companyGenerator.ts:231-233`:
 
 ```
-workingCapitalUSD = annualRevenue * 0.08
-accountsReceivable = workingCapitalUSD * 0.6
-accountsPayable    = workingCapitalUSD * 0.4
+workingCapitalLocal = annualRevenue * 0.08
+accountsReceivable = workingCapitalLocal * 0.6
+accountsPayable    = workingCapitalLocal * 0.4
 ```
 
 Every firm in the world reports receivables at 4.8% of revenue and payables at 3.2%, for ever,
@@ -189,7 +189,7 @@ driven by a constant. The same defect gives `WORKING_CAPITAL_SHARE_OF_REVENUE` t
 values — 0.08 in `shared-helpers.ts:1127`, 0.15 in `corporate-financing.ts:86` — used in the same
 week for the CP sleeve and for invested capital.
 
-Not in §3. **Becomes a §3 step**, and it is small: sum the invoice book per party.
+**§3 step 37-FIRMCOST**, and it is small: sum the invoice book per party.
 
 ### ⚠️ F2 — THE FIRM'S BASELINE REVENUE COMPOUNDS ON A STATED TREND
 
@@ -197,7 +197,7 @@ Not in §3. **Becomes a §3 step**, and it is small: sum the invoice book per pa
 
 ```
 trendWeeklyGrowth = (reg.potentialGdpGrowth + reg.targetInflation) / 52
-newBaselineAnnualRevenue = baselineAnnualRevenueUSD * (1 + trendWeeklyGrowth)
+newBaselineAnnualRevenue = baselineAnnualRevenueLocal * (1 + trendWeeklyGrowth)
 ```
 
 Reported revenue is a real measurement of cleared sales, so F2 is not violated at the P&L. But
@@ -206,7 +206,7 @@ line's opening capacity anchor, and `01-macro-feedback.ts:27` reads `(annualReve
 baselineAnnualRevenue)/baselineAnnualRevenue` as the region's tracked health signal. So a stated
 macro path compounds inside every firm and is then differenced against its measured revenue to
 produce a macro signal — the growth rate is being fed in and read back out. Related to §3 step 31
-(the real-world equilibria) but not named there. **Becomes a §3 step**, small.
+(the real-world equilibria) but not named there. **§3 step 37-FIRMCOST**, small.
 
 ### ⚠️ E3 — THE INVESTMENT DECISION IS `the-capital-programme.md`'S FINDING
 

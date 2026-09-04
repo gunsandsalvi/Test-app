@@ -98,8 +98,8 @@ checked by `scripts/check-atlas.sh`.
 | C3 an investor may buy the physical, to hold | — | ❌ |
 | C4 VERIFY small imbalances produce large price moves | `src/engine/macro/evolution.ts:supplyDemandDrift` | ❌ |
 | **D1 the price clears, per grade and location** | `src/engine/macro/evolution.ts:evolveCommodity` | ❌ |
-| **D2 inventory is the buffer** | `src/engine/simulation/stages/04-input-output.ts:totalAvailableSupply` | ⚠️ |
-| **D2.a a state variable that carries across weeks, and price depends on it** | `src/engine/simulation/stages/04-input-output.ts:decayedInventory` | ⚠️ |
+| **D2 inventory is the buffer** | `src/engine/simulation/stages/04-input-output.ts:totalAvailableSupply` | ❌ |
+| **D2.a a state variable that carries across weeks, and price depends on it** | `src/engine/simulation/stages/04-input-output.ts:decayedInventory` | ❌ |
 | D3 storage costs money, paid to somebody | — | ❌ |
 | D4 spot–forward is a consequence of storage, financing and scarcity | `src/engine/simulation/stages/derivative-markets/commodity-future.ts:impliedConvenienceYield` | ✅ |
 | **D5 VERIFY Σ produced + opening = Σ consumed + closing** | — | ❌ |
@@ -108,7 +108,7 @@ checked by `scripts/check-atlas.sh`.
 | E3 a producing region's terms of trade move with the price | — | ❌ |
 | E4 VERIFY the shock propagates along the chain, not directly | — | ❌ |
 | **F1 FORBID no consumption without production or inventory** | `src/engine/macro/evolution.ts:demandUnits` | ❌ |
-| **F2 FORBID no negative inventory** | `src/engine/simulation/stages/04-input-output.ts:inventoryLevelLocal` | ⚠️ |
+| **F2 FORBID no negative inventory** | `src/engine/simulation/stages/04-input-output.ts:inventoryLevelLocal` | ❌ |
 | **F3 FORBID no price from a written path** | `src/engine/macro/evolution.ts:safeDriftExponent` | ❌ |
 
 ---
@@ -173,7 +173,7 @@ Contrast the goods side, which has all of this: `audit/wires.ts`'s **W4** checks
 out`, per region and sub-unit, **in units**, every week, with a float-dust tolerance. The
 machinery D2/D5/F2 need already exists one directory away and is not pointed at commodities.
 
-**Becomes a §3 step**, and it should be taken *with* step 22 rather than after it: an auction
+**§3 step 37-COMMODITY**, and it should be taken *with* step 22 rather than after it: an auction
 needs a float to allocate, and a physical commodity's float is its inventory. Sizing: the same
 shape as the goods ledger's flows (`produceGoods` / `consumeGoods` / `scrapGoods`) plus a holder,
 which is what A4 and D3 also need.
@@ -193,7 +193,7 @@ location, no owner and no storage cost**, and no party's balance sheet carries a
 - **B4 / C3** — with no stock and no owner, a producer cannot withhold and an investor cannot buy
   the physical to hold. `commodity-futures.md`'s hedgers exist; a physical holder does not.
 
-**Becomes a §3 step**, folded into the one above — these are the same absence stated five ways.
+**§3 step 37-COMMODITY**, folded into the one above — these are the same absence stated five ways.
 
 ### ⚠️ THE TWO REPRESENTATIONS, AND WHICH ONE IS REAL
 
@@ -236,7 +236,7 @@ fundamentals read any commodity price. E4's propagation cannot be measured while
 is cut.
 
 E1 and E4 are **a measurement, for §3 step 38**, once step 23 has deleted the formula index and
-the PPI `goods.md` G1.a asks for exists. E3 **becomes a §3 step** and belongs to
+the PPI `goods.md` G1.a asks for exists. E3 is **§3 step 37-COMMODITY** and belongs to
 `cross-border.md`/`fx-spot.md` rather than here; recorded so it is not lost.
 
 ### ✅ D4 / B3 — TWO NODES THAT ARE RIGHT
@@ -252,3 +252,9 @@ B3 is right too: a weather event destroys a share of the **yield** (`yieldLossSh
 file's own comment records that it used to add a price impact instead. The disruption is a loss of
 units; it is only the absence of a stock for those units to come out of that keeps it from being
 fully real.
+
+### Also marked, briefly
+
+- **A1 ⚠️** — a unit and a symbol, no grade and no location — A1.a above.
+- **A3 ⚠️** — storable as a percentage on a random walk; nothing is paid to store it — D3.
+- **B2.a ⚠️ / C2 ⚠️** — `supplyElasticity` and `demandElasticity` are the constants the auction replaces — F3/D1 above.

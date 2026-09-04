@@ -1,8 +1,8 @@
 # INSTRUMENT CONTRACT: THE BOND
 
 Not a system — an **instrument contract**. Every tree whose instrument is a bond must satisfy all
-of it, and says per node HOW it satisfies it. Cited by `../systems/corporate-credit.md` and `../systems/sovereign-credit.md`, and by
-`../systems/short-term-debt.md` when that is written.
+of it, and says per node HOW it satisfies it. Cited by `../systems/corporate-credit.md`, `../systems/sovereign-credit.md` and
+`../systems/short-term-debt.md`.
 
 **Why this file exists** (user, 2026-09-03: *"we can have a different type of bond for sovereign,
 but it need to still have all the necessary characteristics of a bond"*). A sovereign bond and a
@@ -94,6 +94,12 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 | N4 · sov a MATURITY | `src/domain/region-macro.ts:GovDebtTranche` | ✅ |
 | N5 · corp a COUPON in exactly one of three shapes | `src/domain/company.ts:DebtTranche` | ✅ |
 | N5 · sov a COUPON in exactly one of three shapes | `src/domain/government.ts:isDiscountBill` | ⚠️ |
+| N5.a · corp a FIXED rate, locked at issuance | `src/domain/company.ts:couponRate` | ✅ |
+| N5.a · sov a FIXED rate, locked at issuance | `src/domain/region-macro.ts:GovDebtTranche` | ✅ |
+| N5.b · corp a FLOATING margin over a named reference | `src/engine/simulation/stages/07d-leveraged-loan-clearing.ts:runLeveragedLoanClearingStage` | ⚠️ |
+| N5.b · sov a FLOATING margin (answer: none) | `src/domain/region-macro.ts:GovDebtTranche` | ✅ |
+| N5.c · corp ZERO — the return is the discount to par | `src/domain/company.ts:isCommercialPaper` | ⚠️ |
+| N5.c · sov ZERO — the return is the discount to par | `src/engine/simulation/stages/bill-accretion.ts:printedWeeklyReturn` | ✅ |
 | N6 · corp a PERIODICITY and an accrual convention | `src/domain/company.ts:paymentsPerYear` | ✅ |
 | N6 · sov a PERIODICITY and an accrual convention | `src/domain/government.ts:sovereignCouponDueShare` | ⚠️ |
 | N7 · corp a PRICE per unit of par it changes hands at | `src/engine2/prices.ts:setClearedPrice` | ✅ |
@@ -131,7 +137,7 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-**42 rows — 21 nodes (the fourteen plus their seven sub-nodes) × 2 types: 26 ✅, 12 ⚠️, 4 ❌.**
+**48 rows — 24 nodes (the fourteen plus their ten sub-nodes) × 2 types: 30 ✅, 14 ⚠️, 4 ❌** — counted by `test/atlas-marks.test.ts` on every commit now.
 
 *Re-marked 2026-09-04 at §9.13-CREDIT row 2, catching up four rows the commits that closed them
 left behind, and again at row 4, which closed N7 · corp and N7.b · corp: commercial paper was the
@@ -194,7 +200,7 @@ There is no sovereign default path anywhere: no missed-payment test, no exchange
 The contract requires N13 to be answered **even when the answer is "nothing seizable"**, and that is
 precisely the difference between a stated answer and an absence. Today it is an absence: a treasury
 that runs out of money draws its central-bank overdraft (`accounts.ts:waysAndMeansOf`), so the
-question never arises. **Becomes a §3 step**, small on its own and properly folded into the treasury
+question never arises. **§3 step 37-OVERDRAFT**, small on its own and properly folded into the treasury
 tree's overdraft finding — until the overdraft goes, a sovereign default has nothing to be triggered
 by. It is `sovereign-credit.md` branch G's whole finding, and it is stated here because the contract
 is where the two types are meant to differ and this is the row where the difference was never
@@ -219,7 +225,7 @@ this class ("the contracts with no denomination"); the two bond types belong on 
 
 A bill and a bond are different instruments (`sovereign-credit.md` B1), and here they are one type
 separated by `isDiscountBill(t.tenorAtIssuanceYears) → tenor < 1.5`. Everything downstream then
-carries the test: `weeklyInterestExpenseUSD` filters bills out, `sovereignCouponByBond` filters
+carries the test: `weeklyInterestExpenseLocal` filters bills out, `sovereignCouponByBond` filters
 them out, `bill-accretion.ts` exists to give them the return the coupon path does not. N6 · sov is
 the same shape one level down — `sovereignCouponDueShare` hard-codes `PAYMENTS_PER_YEAR = 2` for
 every bond (it now counts the payment week from the bond's own issue date), and each holder accrues
@@ -241,12 +247,12 @@ same amount, and the net — the accrued on seasoned paper the primary placed �
 whose receivable rose with it. The apportionment is still weekly rather than daily, which is the
 model's clock everywhere.
 
-**The corporate BOND book has it too** (§9.13-CREDIT rows 1 and 2). The reason it could not
-before was never this node: `07b` cleared one instrument per COMPANY while the accrual ledger is
-keyed per TRANCHE, so there was no face delta on a tranche to carry an accrued. Row 1 made the clear
-name the paper and row 2 settled the leg (`moveCorporateAccrued`). Still ⚠️ for the class: `07d`
-(loans) and `07f` (commercial paper) clear per issuer and carry no leg, and they are §3.13's rows 3
-and 4.
+**The corporate books have it too** (§9.13-CREDIT rows 1–4). The reason they could not before was
+never this node: `07b` cleared one instrument per COMPANY while the accrual ledger is keyed per
+TRANCHE, so there was no face delta on a tranche to carry an accrued. Row 1 made the bond clear
+name the paper and row 2 settled the leg (`moveCorporateAccrued`); rows 3 and 4 did the same for
+the loans and the paper. Still ⚠️ for one reason: the apportionment is weekly rather than daily,
+which is the model's clock everywhere.
 
 ### ⚠️ N13.a · corp — A RANKING THAT NOTHING EVER RANKS
 
@@ -264,3 +270,8 @@ a real maturity week, real transferability, and a two-legged settlement that net
 one clearing house. N11/N11.a/N13.a are the three rows where the two types answer DIFFERENTLY and
 both answers are right — which is the evidence that splitting this contract out was the correct
 call, and the model already has the shape 13-SOV is meant to converge on.
+
+### Also marked, briefly
+
+- **N5.b · corp ⚠️** — a floater's margin resets against the POSTED policy rate, not a transacted reference (`../systems/indices.md` D3, 37-BENCHMARK).
+- **N5.c · corp ⚠️** — commercial paper is issued at par with a coupon rather than at a discount (`../systems/short-term-debt.md` A1.a).

@@ -145,7 +145,7 @@ E3 is `❌` rather than `⚠️`: the requirement is that no free arbitrage stan
 arbitrage is not merely unclosed, it is unobservable — the divergence between the cleared cross and
 the triangulated cross is never computed anywhere.
 
-**Becomes a §3 step**, jointly with `currency-and-fx.md` C3. It is small and it is at the seam:
+**§3 step 37-FX-CROSS**, jointly with `currency-and-fx.md` C3. It is small and it is at the seam:
 carry the cross prints through `publishFxRates` into the rate object, teach `convert` to prefer a
 cleared cross over a triangulated one, and the difference between them becomes a measurable
 arbitrage the desks are already positioned to take.
@@ -166,3 +166,7 @@ price (rule 6) and rule 6 says no bounds of any kind; if a week's flow implies a
 bound is the mechanism that is missing — most likely the elastic participants' size. It belongs to
 §3 step 18's inventory of bounds to delete and is recorded there, with this tree as the reason the
 deletion must be paired with sizing the elastic side.
+
+### Also marked, briefly
+
+- **E2 ⚠️** — the rate clears; `evolveFxPair` still walks the cross-currency basis by formula — `fx-forwards-and-xcs.md` B3, 37-SMALL.

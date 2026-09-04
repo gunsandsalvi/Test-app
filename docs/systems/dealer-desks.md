@@ -139,7 +139,7 @@ forbidden shape:
 1. **A fee on the mid.** Each book passes the constant into the clearing engine as
    `dealerSpreadBps` (`07b:479`, `07c:501`, `07d:437`, `07e:453`, `07f:351,902`), and
    `financial-clearing-engine.ts:872` charges every participant
-   `feeUSD = |tradedUSD| × (dealerSpreadBps / 10000)` **on top of the single cleared price**. That
+   `feeLocal = |tradedLocal| × (dealerSpreadBps / 10000)` **on top of the single cleared price**. That
    is C5.a verbatim: one price with a spread bolted on. The client pays it whether a desk was on
    the other side or not, and it cannot skew, widen, or refuse.
 2. **The width of the desk's own schedule.** `dealer-desks.ts:150` sets
@@ -148,7 +148,7 @@ forbidden shape:
    for a desk to go from flat to full is the same constant.
 
 **And the fee does not reach the desk that earned it.** `book-settlement.ts:117-125` splits
-`dealer.feeUSD` across `feeDesksForRegion`, which is *every bank in the region pro rata by
+`dealer.feeLocal` across `feeDesksForRegion`, which is *every bank in the region pro rata by
 `bankMarketShare`* (`:131`) — an assigned share, which is rule 2's own anti-pattern. A bank whose
 desk took no position at all collects fee income proportional to its size.
 
@@ -161,10 +161,10 @@ desk took no position at all collects fee income proportional to its size.
   moving, the widening is imposed"*. Here spreads never widen at all — the failure mode is the
   opposite one, and it is invisible for the same reason.
 - **D4 is half-present** (`⚠️`). A full desk shrinks its size and stops quoting
-  (`dealerDeskCapacityUSD` returns 0), which is two of the node's three responses; **widening is
+  (`dealerDeskCapacityLocal` returns 0), which is two of the node's three responses; **widening is
   the one it cannot do**, because the width is not the desk's.
 - **F3 is diverging** (`⚠️`). The desk's own P&L is honestly built — `applyDealerDeskFills:274`
-  computes `residualUSD = cashDeltaUSD + (newUSD − prevMarkedUSD)` plus `markToMarketUSD`, both
+  computes `residualLocal = cashDeltaLocal + (newLocal − prevMarkedLocal)` plus `markToMarketLocal`, both
   booked through `bookPnL`, so a desk genuinely loses money on inventory. But the fee income
   running beside it *is* spread × volume, paid by market share, and it is not what any desk earned.
 
@@ -181,7 +181,7 @@ selection, with the fee being what the client actually crossed.
 Stated plainly because it is the atlas's own test of this system and it passes.
 
 A desk is an **ordinary participant**: `buildDealerDeskParticipants` posts a schedule into the same
-auction as everyone else, its size is `dealerDeskCapacityUSD` — a share of the balance sheet its
+auction as everyone else, its size is `dealerDeskCapacityLocal` — a share of the balance sheet its
 own equity supports, less what its other desks already carry, floored by the leverage headroom —
 and its cash is `bankReservesOf` above the bank's own deposit buffer. It is **not** derived from
 the residual imbalance: the flow books pass `unsoldStaysWithHolder: true`
@@ -205,15 +205,15 @@ on the other side of a desk's fill, so:
   its own fills (`priorPositions` next week) and nothing else; it never sees a client's direction,
   and no decision anywhere in the model reads a desk's order flow.
 
-**Becomes a §3 step**, and it is a real one rather than a cosmetic one: B2 is one of the three
+**§3 step 37-VIEW**, and it is a real one rather than a cosmetic one: B2 is one of the three
 reasons the tree gives for why a desk quotes at all, and C4 is a term the replacement quote in C5
 needs. Note the prerequisite — the clearing engine would have to return *who traded with whom*, not
 just each participant's net fill.
 
 ### ⚠️ D3 — INVENTORY CONSUMES CASH AND CAPITAL, AND IS NEVER CHARGED RENT
 
-The desk's two real constraints are both present and both good: `bankTotalAssetsUSD:99` adds
-`dealerDeskGrossUSD(sheet.dealerDeskInventory)` to the leverage denominator one-for-one (D2 `✅`,
+The desk's two real constraints are both present and both good: `bankTotalAssetsLocal:99` adds
+`dealerDeskGrossLocal(sheet.dealerDeskInventory)` to the leverage denominator one-for-one (D2 `✅`,
 F2 `✅`), and `buildDealerDeskParticipants:121` limits net purchases to reserves above the bank's
 deposit buffer, so a well-capitalised desk can still be unable to bid.
 
@@ -224,7 +224,7 @@ sits on a position for a year pays nothing for the year, and the *carry* half of
 economics — the thing that makes it want to turn its book over — is absent. Its only pressure to
 sell is the inventory skew in C2.
 
-**Becomes a §3 step**, small: the desk's book should be financed like any other asset the bank
+**§3 step 37-COSTOFCAPITAL**, small: the desk's book should be financed like any other asset the bank
 holds. It pairs with the repo demand step 17e is looking for.
 
 ### ⚠️ E1 / E3 / ❌ E2 — ONE DESK HEDGES, IN ONE MARKET
@@ -247,7 +247,7 @@ shorts at the rate in force. That is a genuine interdealer market and it does wh
 two bank desks in the same region, one long and one short the same bond, never trade with each
 other — they only meet through the auction, and only via the anonymous aggregate.
 
-**Becomes a §3 step.** The cash-book interdealer market is the smaller half; desk hedging (E1/E2)
+**§3 step 37-VIEW**, . The cash-book interdealer market is the smaller half; desk hedging (E1/E2)
 is the larger, and it is the natural consumer of the IRS and CDS books that
 `interest-rate-swaps.md` B5 and `cds.md` B4 record as having no dealer.
 
@@ -274,8 +274,8 @@ current inventory. That is *behaviourally* two-sided (it buys below the neutral 
 above it, which is C2 working correctly) but it is not two quotes, and it is why the bid–offer has
 to be bolted on separately in C5.
 
-C1's four inputs: **inventory** `✅` (`neutralFraction = priorUSD / maxHoldingUSD`), **risk limit**
-`✅` (`dealerDeskCapacityUSD`), **cost of funds** `❌` (D3), **view** `❌` (nothing anywhere gives a
+C1's four inputs: **inventory** `✅` (`neutralFraction = priorLocal / maxHoldingLocal`), **risk limit**
+`✅` (`dealerDeskCapacityLocal`), **cost of funds** `❌` (D3), **view** `❌` (nothing anywhere gives a
 desk an opinion about a level — `dealer-desk.ts`'s own header says so: *"inventory-driven price
 discovery, not a view"*, which is a deliberate simplification worth naming rather than a defect).
 Recorded as `⚠️`: two of four, with the missing two being D3's funding cost and a view the model

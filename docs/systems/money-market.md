@@ -145,7 +145,7 @@ checked by `scripts/check-atlas.sh`.
 `runRegionalRepoSession` is called from `02b-bank-diversification.ts:413`. Every book that moves
 reserves runs after it — 07b, 07c, 07d, 07e, 07f, the derivatives, stage 08's whole cash walk,
 `settlement` at 308, `overdraft-sweep` at 403, `settlement-close` at 412. So the shortfall the
-session sizes (`shortfallUSD = householdDepositsAt × MIN_CASH_BUFFER_RATIO - settledCashUSD`,
+session sizes (`shortfallLocal = householdDepositsAt × MIN_CASH_BUFFER_RATIO - settledCashLocal`,
 `repo-clearing.ts:300`) is measured against a Monday-morning balance, and the week's actual drains
 arrive afterwards.
 
@@ -164,10 +164,10 @@ node any of them needs.
 Worth stating precisely because **the model contains a correct facility and an incorrect one**, and
 the difference is this tree's whole C section:
 
-| | the SRF seat (`repo-clearing.ts:414`) | `raiseCentralBankLoanUSD` (`bank-lending.ts:917`) |
+| | the SRF seat (`repo-clearing.ts:414`) | `raiseCentralBankLoanLocal` (`bank-lending.ts:917`) |
 |---|---|---|
 | collateral | pledged paper, per bucket, encumbered | none |
-| size | bounded by `unencumberedBorrowingCapacityUSD` | the whole shortfall, always |
+| size | bounded by `unencumberedBorrowingCapacityLocal` | the whole shortfall, always |
 | price | `srfBps − 1bp`, a posted rate cleared in the book | policy + 125bp, flat |
 | refusal | a bank with no free paper never becomes a borrower | unreachable |
 | when | stage 3, before the flows | stage 417, after them |
@@ -181,7 +181,7 @@ amount unsecured. **Already §3 step 20-LLR.**
 ### ❌ B2 / B2.a / B2.b — THERE IS NO UNSECURED MARKET, SO NO NAME IS EVER PRICED. Already §3 step 20b
 
 A grep for `interbank` across `src` returns only FX squaring. Every contract in `reg.repoBook` is
-secured general collateral, and `lenderSchedule(reservationBps, maxHoldingUSD)` carries a
+secured general collateral, and `lenderSchedule(reservationBps, maxHoldingLocal)` carries a
 reservation and a size and **no borrower argument at all** — at one cleared GC rate a lender's cash
 is fungible and each borrower draws pro rata (`strike`, `repo-clearing.ts:510`). So a lender cannot
 have a view on a name, B2.a's "no bid at all" cannot happen, and B2.b's strong-to-weak spread does
@@ -191,7 +191,8 @@ not exist because there is only one rate.
 surplus banks lend to short ones at policy plus the borrower's own spread, and only what no bank
 will lend reaches a standing facility"). Two things this mapping adds to that step: it should be
 sequenced AFTER 20-LLR's move (an unsecured book held at stage 3 would price nothing either), and
-the borrower's own spread already exists as a cleared number — `bank.oasSpreadBps`, which 02b
+the borrower's own spread already exists as a cleared number — its credit curve
+(`engine/credit-price.ts`, read off the bank's own cleared paper), which 02b
 already reads at `:294`.
 
 ### ⚠️ A2.a — THREE ANSWERS TO ONE BUFFER, AND ALL THREE ARE THE SAME CONSTANT. Already §3 step 30b (sibling)
@@ -202,13 +203,13 @@ ways that do not agree:
 
 - `repo-clearing.ts:300` — the borrower's need: `householdDepositsAt × MIN_CASH_BUFFER_RATIO`, bare;
 - `repo-clearing.ts:376` — the lender's surplus: the same bare expression;
-- `bank-lending.ts:902` (`operatingCashBufferUSD`) — the close's raise and repay:
+- `bank-lending.ts:902` (`operatingCashBufferLocal`) — the close's raise and repay:
   `householdDepositsAt × bankCashBufferRatioOf(bank)`, i.e. the constant weighted by the bank's own
   risk aversion.
 
 So the same bank has a different buffer in the session than at the close, and neither reads its
 corporate, institutional or SME lines at all — a bank funded entirely by wholesale money computes a
-buffer of zero. `stressedOutflowUSD` (retail 10%, everything else 40%) is the derived read the node
+buffer of zero. `stressedOutflowLocal` (retail 10%, everything else 40%) is the derived read the node
 wants and it exists already, used only for the HQLA floor. §3 step 30b names the identical shape on
 the LENDER side of this market (`CASH_SLEEVE_OVERNIGHT_SHARE`); this is its borrower-side twin and
 should be the same step.
@@ -223,21 +224,21 @@ panels. Everything that prices real credit reads `reg.policyRate` directly: the 
 policy rate reaches the economy by assertion, with a correctly-cleared corridor running beside it —
 the same finding as `the-central-bank.md` B3, recorded there as the step.
 
-E2's guards exist and are the right ones: `fundableNeedUSD` and `repoClearedVolumeUSD` were added
+E2's guards exist and are the right ones: `fundableNeedLocal` and `repoClearedVolumeLocal` were added
 precisely so a quiet week can be told from a dead market. Nothing reads them into a funding cost
 anywhere else, so E2 is a channel that is instrumented and not connected. **A measurement, for §3
 step 38**, and it becomes a real read the week E1 is wired.
 
-### ⚠️ B7 / D1 / D2 — THE SQUEEZE EXISTS IN ONE BOOK AND IS ABSORBED IN THE OTHER
+### ⚠️ B7 / D2 / ✅ D1 — THE SQUEEZE EXISTS IN ONE BOOK AND IS ABSORBED IN THE OTHER
 
 B7 is genuinely representable in the TERM book and the code says why: `withWindow: false` for term,
 so "a term need the private market will not fund simply is not funded, and falls back to overnight
 below. That is a funding squeeze, and it could not previously happen"
 (`repo-clearing.ts:473`). But the overnight book always has the window in it at full size, so
-`unfundedTermUSD` is never a failure — it is a maturity shift. The only genuine non-clearing is a
+`unfundedTermLocal` is never a failure — it is a maturity shift. The only genuine non-clearing is a
 bank with no unencumbered paper, and C5's facility catches that at the close.
 
-D1 is real and good: a bank's 07c schedule has `minHoldingUSD = max(encumbered face, liquidity
+D1 is real and good: a bank's 07c schedule has `minHoldingLocal = max(encumbered face, liquidity
 floor)`, so it can sell down to what it must keep and no further, at whatever the auction prints.
 D2 is real too — `contestedShare = max(fundingPressure, liquidityShortfallShare)` makes a bank short
 of its stressed-outflow cover pay its full alternative cost — but the response side is regional:
@@ -247,7 +248,7 @@ bank that raised its rate is not the bank that gets the money. That last part is
 
 ### ⚠️ E3 — THE CONTAGION PATH IS BUILT AND NOTHING TRAVELS DOWN IT
 
-Every repo contract names both parties (`RepoContract.lender` as a `RepoParty` union, `borrowerTicker`),
+Every repo contract names both parties (`RepoContract.lender` as a `RepoParty` union, `borrowerId`),
 so "a failure lands on its lenders by name" is one map away — and `rekeyBankLinks`
 (`bank-resolution.ts:62`) walks `reg.repoBook` on exactly that key. What it does with it is re-point
 every contract at the assuming bank, so no lender ever takes a loss. Recorded as
@@ -276,3 +277,8 @@ decoration, and it is unmeasurable today for the reason C5 gives: missing the bu
 policy + 125bp and nothing else. B6.a's term/overnight spread exists as two printed numbers
 (`repoRateAnnual`, `repoTermRateAnnual`) and is never differenced. B2.b and D5.b cannot be measured
 until B2 and D5 exist.
+
+### Also marked, briefly
+
+- **A2 ⚠️ / A3 ⚠️** — the position is held for a buffer that is a constant (A2.a), and the need is sized at stage 3 before the flows (A3.a).
+- **C3 ⚠️** — `X1` asserts the print inside ±150bp of policy; the width is a stated band, not a measured one.
