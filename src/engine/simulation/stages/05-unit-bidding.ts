@@ -20,7 +20,7 @@
  */
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
-import { bankParty, companyParty, companyPartyOfTicker } from '../../../domain/party';
+import { bankParty, companyParty, companyPartyOf } from '../../../domain/party';
 import { partyId } from '../../ledger/party';
 import { defect } from '../../../domain/defect';
 import { categoryPriceTier, householdBudgetReachMultiple, budgetDemandLadder, DEMAND_LADDER_RUNGS } from '../../../domain/industry';
@@ -557,7 +557,7 @@ interface WeekResolution {
   updateOf: (comp: Company) => import('./context').CompanyWeekUpdate;
   /** Settlement pid for any seller key (company, segment, aggregate), per origin. */
   pidOfSeller: (key: string, origin: RegionId) => number;
-  pidOfCarrier: (ticker: Ticker) => number;
+  pidOfCarrier: (carrierId: EntityId) => number;
   hhPid: Map<RegionId, number>;
   govPid: Map<RegionId, number>;
 }
@@ -1927,7 +1927,7 @@ function runSubUnitMarkets(
   });
   // The lane's carriers with pid and region resolved ONCE — built lazily at the lane's first
   // paying lot, so pid interning keeps the old first-use order.
-  const laneCarrierCache = new Map<string, { share: number; ticker: Ticker; pid: number; region: RegionId | undefined }[] | undefined>();
+  const laneCarrierCache = new Map<string, { share: number; id: EntityId; pid: number; region: RegionId | undefined }[] | undefined>();
   demandPlans.forEach(plan => {
     if (!plan.company || !plan.key) return;
     if (!purchasedKeys.has(plan.key)) return;
@@ -1959,11 +1959,11 @@ function runSubUnitMarkets(
         const shares = ctx.freightClearing?.carrierShareByLane.get(laneK);
         if (shares) {
           laneCarriers = [];
-          shares.forEach((share, carrierTicker) => {
+          shares.forEach((share, carrierId) => {
             if (!(share > 0)) return; // a zero share never paid, so it never resolved either
             laneCarriers!.push({
-              share, ticker: carrierTicker, pid: pidOfCarrier(carrierTicker),
-              region: lookup.byTicker.get(carrierTicker)?.region,
+              share, id: carrierId, pid: pidOfCarrier(carrierId),
+              region: lookup.byId.get(carrierId)?.region,
             });
           });
         }
@@ -1998,7 +1998,7 @@ function runSubUnitMarkets(
         const freightLocal = l.units * (perUnit - exWorksBuyerMoney);
         if (freightLocal > 0) {
           let paidLocal = 0;
-          laneCarriers?.forEach(({ share, ticker: carrierTicker, pid: carrierPid, region: carrierRegion }) => {
+          laneCarriers?.forEach(({ share, id: carrierId, pid: carrierPid, region: carrierRegion }) => {
             const amountLocal = freightLocal * share;
             if (!(amountLocal > 0)) return;
             paidLocal += amountLocal;
@@ -2007,7 +2007,7 @@ function runSubUnitMarkets(
             // line a currency salad and its margin an FX artifact. The carrier's income stat
             // accrues in the carrier's OWN money; the payment instruction below keeps today's
             // buyer-money convention until Money<C> lands at the pay seam.
-            ctx.carrierFreightRevenue[carrierTicker] = (ctx.carrierFreightRevenue[carrierTicker] ?? 0)
+            ctx.carrierFreightRevenue[carrierId] = (ctx.carrierFreightRevenue[carrierId] ?? 0)
               + (carrierRegion ? convertLocal(amountLocal, plan.regionId, carrierRegion, sourcing.fxToUsd) : amountLocal);
             payByIds(ctx, buyerPid, carrierPid, amountLocal, currencyOf(plan.regionId), R_FREIGHT);
           });
@@ -2040,21 +2040,21 @@ function runSubUnitMarkets(
           // fleets by their shares, the origin's transport pool for the share no fleet serves —
           // and reaches the buyer at arrival (goods-arrival.ts). One consignment per holder.
           let consignedUnits = 0;
-          laneCarriers?.forEach(({ share, ticker: carrierTicker, region: carrierRegion }) => {
+          laneCarriers?.forEach(({ id: carrierId, region: carrierRegion, share }) => {
             const units = l.units * share;
             if (!(units > 1e-9)) return;
             consignedUnits += units;
-            deliverGoods(sellerParty, companyPartyOfTicker(carrierTicker), subUnitId, units, perUnit, 'goods sold: consigned to the carrier');
+            deliverGoods(sellerParty, companyPartyOf(carrierId), subUnitId, units, perUnit, 'goods sold: consigned to the carrier');
             ctx.shipmentsDispatched.push({
-              buyerTicker: comp.ticker, sellerKey: asTicker(l.sellerKey), subUnitId,
-              units, landedCostPerUnit: perUnit, arrivalWeek, carrierTicker, carrierRegion: carrierRegion ?? origin,
+              buyerId: comp.id, sellerKey: asTicker(l.sellerKey), subUnitId,
+              units, landedCostPerUnit: perUnit, arrivalWeek, carrierId, carrierRegion: carrierRegion ?? origin,
             });
           });
           const poolUnits = l.units - consignedUnits;
           if (poolUnits > 1e-9) {
             deliverGoods(sellerParty, { kind: 'SEGMENT', region: origin, industry: 'AutomotiveTransport' }, subUnitId, poolUnits, perUnit, 'goods sold: consigned to the carrier');
             ctx.shipmentsDispatched.push({
-              buyerTicker: comp.ticker, sellerKey: asTicker(l.sellerKey), subUnitId,
+              buyerId: comp.id, sellerKey: asTicker(l.sellerKey), subUnitId,
               units: poolUnits, landedCostPerUnit: perUnit, arrivalWeek, carrierRegion: origin,
             });
           }
@@ -2120,8 +2120,8 @@ function runSubUnitMarkets(
           sellerWeeklySalesLocal: (seller.annualRevenue ?? 0) / 52,
         });
         ctx.tradeInvoicesBooked.push({
-          sellerTicker: l.sellerKey, sellerRegion: origin,
-          buyerTicker: comp.ticker, buyerRegion: plan.regionId,
+          sellerId: seller.id, sellerRegion: origin,
+          buyerId: comp.id, buyerRegion: plan.regionId,
           subUnitId, currency,
           amountCurrency: invoicedLocal / usdPerCurrency,
           bookedUsdPerCurrency: usdPerCurrency,
@@ -2232,11 +2232,11 @@ function runSubUnitMarkets(
         subUnitId, buyerReg?.zeroRates?.tenor3M ?? buyerReg?.policyRate ?? 0);
       if (!(channelLocal > 0)) return;
       // A region with no distribution firm has no channel to pay and no margin is charged.
-      ctx.channelShareByRegion[buyerRegion]?.forEach((share, distributorTicker) => {
+      ctx.channelShareByRegion[buyerRegion]?.forEach((share, distributorId) => {
         const amountLocal = channelLocal * share;
         if (!(amountLocal > 0)) return;
-        ctx.channelMarginRevenue[distributorTicker] = (ctx.channelMarginRevenue[distributorTicker] ?? 0) + amountLocal;
-        payByIds(ctx, hhPid.get(buyerRegion)!, pidOfCarrier(distributorTicker), amountLocal, currencyOf(buyerRegion), R_CHANNEL);
+        ctx.channelMarginRevenue[distributorId] = (ctx.channelMarginRevenue[distributorId] ?? 0) + amountLocal;
+        payByIds(ctx, hhPid.get(buyerRegion)!, pidOfCarrier(distributorId), amountLocal, currencyOf(buyerRegion), R_CHANNEL);
       });
     });
     // The FX spread's LAST payers: a household or a treasury buying abroad converts at the same
@@ -2528,7 +2528,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   const pidByComp = new Map<Company, number>();
   const updByComp = new Map<Company, import('./context').CompanyWeekUpdate>();
   const sellerPidByKey = new Map<string, number>();
-  const carrierPidByTicker = new Map<Ticker, number>();
+  const carrierPidByTicker = new Map<EntityId, number>();
   const hhPid = new Map<RegionId, number>();
   const govPid = new Map<RegionId, number>();
   MARKET_REGION_IDS.forEach((r) => {
@@ -2562,9 +2562,9 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
       if (v === undefined) { v = partyId(partyOfKey(key, origin, lookup)); sellerPidByKey.set(k, v); }
       return v;
     },
-    pidOfCarrier: (ticker) => {
-      let v = carrierPidByTicker.get(ticker);
-      if (v === undefined) { v = partyId(companyPartyOfTicker(ticker)); carrierPidByTicker.set(ticker, v); }
+    pidOfCarrier: (carrierId) => {
+      let v = carrierPidByTicker.get(carrierId);
+      if (v === undefined) { v = partyId(companyPartyOf(carrierId)); carrierPidByTicker.set(carrierId, v); }
       return v;
     },
     hhPid,
@@ -2634,9 +2634,9 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
       const origin = lane.split('>')[0] as RegionId;
       const shares = clearing.carrierShareByLane.get(lane);
       if (!shares || shares.size === 0) return;
-      shares.forEach((share, ticker) => {
-        if (!lookup.byTicker.get(ticker)) return;
-        ctx.carrierTonneNm[ticker] = (ctx.carrierTonneNm[ticker] ?? 0)
+      shares.forEach((share, carrierId) => {
+        if (!lookup.byId.get(carrierId)) return;
+        ctx.carrierTonneNm[carrierId] = (ctx.carrierTonneNm[carrierId] ?? 0)
           + tonnes * share * laneDistanceNm(origin, lane.split('>')[1] as RegionId);
       });
     });

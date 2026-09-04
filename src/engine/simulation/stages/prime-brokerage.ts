@@ -1,6 +1,7 @@
 import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
+import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
-import { bankPartyOfTicker, bankSecuritiesParty, bankSecuritiesPartyOfTicker } from '../../../domain/party';
+import { bankPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf } from '../../../domain/party';
 /**
  * HF1 — the prime brokerage session: a fund's leverage becomes a named bank's loan.
  *
@@ -31,7 +32,6 @@ import { trancheIdOf, facilityBookOf, ladderRowsOf } from '../../../engine2/tran
 import { weeklyPriceMoveOf } from '../../../engine2/prices';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { sovereignTenorResolver } from '../../../domain/government';
-import type { Ticker } from '../../../domain/ids';
 
 /**
  * The haircut a broker takes on each kind of collateral: the most that market's own clearing
@@ -102,7 +102,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       if (!(interestLocal > 0)) return;
       pay(ctx, {
         payer: { kind: 'INSTITUTION', id: line.fundId },
-        payee: bankPartyOfTicker(line.brokerTicker),
+        payee: bankPartyOf(line.brokerId),
         amount: interestLocal,
         currency: currencyOf(line.regionId),
         reason: 'prime brokerage financing',
@@ -127,14 +127,14 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       // a filter is a claim, and here the claim is that a broker must have a book to lend from.
       const brokerCandidate = fund.homeBankId ? companyById.get(fund.homeBankId) : undefined;
       const broker = brokerCandidate?.bankBalanceSheet ? brokerCandidate : undefined;
-      const brokerTicker = broker?.ticker;
+      const brokerId = broker?.ticker;
       const drawnLocal = drawnByFund(priorBook, fund.id);
-      if (!broker || !brokerTicker) {
+      if (!broker || !brokerId) {
         // No broker, no leverage. The fund has to repay what it has drawn.
         if (drawnLocal > 0) {
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: fund.id },
-            payee: bankSecuritiesPartyOfTicker(priorBook.find((l) => l.fundId === fund.id)!.brokerTicker),
+            payee: bankSecuritiesPartyOf(priorBook.find((l) => l.fundId === fund.id)!.brokerId),
             amount: drawnLocal,
             currency: currencyOf(fund.region),
             reason: 'prime brokerage repayment',
@@ -142,7 +142,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
         }
         return;
       }
-      const sheet = ctx.companyUpdates[brokerTicker]?.bankBalanceSheet ?? broker.bankBalanceSheet!;
+      const sheet = ctx.companyUpdates[brokerId]?.bankBalanceSheet ?? broker.bankBalanceSheet!;
 
       // The haircut on THIS fund's book: its own asset mix at each market's own one-week move,
       // widened by how concentrated the book is. A concentrated position is not just riskier, it
@@ -163,7 +163,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
 
       // What the fund's OWN capital supports at that haircut, and what the broker can carry.
       const fundEquityLocal = Math.max(0, institutionTotalAssetsLocal(ctx, fund) - drawnLocal);
-      const brokerRoomLocal = Math.max(0, leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, broker.ticker), facilityBookOf(ctx.v2, broker.ticker))) + lentByBroker(priorBook, broker.ticker);
+      const brokerRoomLocal = Math.max(0, leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, broker.id), facilityBookOf(ctx.v2, broker.id))) + lentByBroker(priorBook, broker.id);
       const lineLocal = Math.min(maxDrawnLocal(fundEquityLocal, haircutRate), brokerRoomLocal);
 
       // The price: what the broker's own money costs it, plus the return it needs on the capital
@@ -217,7 +217,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
         nextBook.push({
           id: `${regionId}-PB-${fund.id}`,
           regionId,
-          brokerTicker: broker.ticker, // `PrimeBrokerageLine.brokerTicker` is its own (c-then-3b) commit
+          brokerId: broker.id,
           fundId: fund.id,
           drawnLocal: Math.round(targetDrawnLocal),
           haircutRate: Number(haircutRate.toFixed(4)),
@@ -230,15 +230,17 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
     reg.primeBrokerageBook = nextBook;
 
     // The brokers' asset line, derived from the book — one writer, the G2 pattern.
-    const brokerTickers = new Set(nextBook.map((l) => l.brokerTicker));
-    priorBook.forEach((l) => brokerTickers.add(l.brokerTicker));
-    brokerTickers.forEach((ticker) => {
-      const company = ctx.updatedCompanies.find((c) => c.ticker === ticker && c.bankBalanceSheet);
-      if (!company) return;
-      const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
+    const brokerIds = new Set(nextBook.map((l) => l.brokerId));
+    priorBook.forEach((l) => brokerIds.add(l.brokerId));
+    brokerIds.forEach((bankId) => {
+      // §3.13-BOOK (c-then-3b): a line names its broker by ENTITY id; a lookup, not a scan.
+      const company = companyById.get(bankId);
+      if (!company?.bankBalanceSheet) return;
+      const ticker = company.ticker;
+      const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet;
       updateBankSheet(ctx, ticker, {
         ...sheet,
-        primeBrokerageLoansLocal: Math.round(lentByBroker(nextBook, ticker)),
+        primeBrokerageLoansLocal: Math.round(lentByBroker(nextBook, bankId)),
       });
     });
   });
@@ -262,12 +264,12 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
     const book: PrimeBrokerageLine[] = reg.primeBrokerageBook ?? [];
-    const drawnByBroker = new Map<Ticker, number>();
+    const drawnByBroker = new Map<EntityId, number>();
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
       if (fund.region !== regionId || fund.entityType !== 'HEDGE_FUND' || fund.isDefaulted) return fund;
       const broker = fund.homeBankId ? companyById.get(fund.homeBankId) : undefined;
       if (!broker) return fund;
-      const brokerTicker = broker.ticker; // `PrimeBrokerageLine.brokerTicker` is its own commit
+      const brokerBankId = broker.id;
       // §1.19: the SIGNED figure, because this is an overdraft test and the clamped
       // `institutionSpendableLocal` would report every fund as solvent. The collateral it is only
       // holding is netted here for the first time: a fund sitting on stock-loan collateral looked
@@ -291,7 +293,7 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
         book.push({
           id: `${regionId}-PB-${fund.id}`,
           regionId,
-          brokerTicker: broker.ticker, // `PrimeBrokerageLine.brokerTicker` is its own (c-then-3b) commit
+          brokerId: broker.id,
           fundId: fund.id,
           drawnLocal: Math.round(drawLocal),
           // An emergency draw on a line the morning struck at zero balance carries the standing
@@ -301,14 +303,14 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
           struckWeek: ctx.nextWeek,
         });
       }
-      drawnByBroker.set(brokerTicker, (drawnByBroker.get(brokerTicker) ?? 0) + drawLocal);
+      drawnByBroker.set(brokerBankId, (drawnByBroker.get(brokerBankId) ?? 0) + drawLocal);
       return { ...fund, primeBrokerageAvailableLocal: Math.max(0, (fund.primeBrokerageAvailableLocal ?? 0) - drawLocal) };
     });
     reg.primeBrokerageBook = book;
     if (drawnByBroker.size > 0) {
       // Post-08: the live sheet is the only bank-sheet write that survives (§7.250).
       ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
-        const drawnLocal = drawnByBroker.get(c.ticker);
+        const drawnLocal = drawnByBroker.get(c.id);
         if (!drawnLocal || !c.bankBalanceSheet) return c;
         return {
           ...c,

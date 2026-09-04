@@ -5,7 +5,8 @@
  */
 
 import { journalPayment, partyId, PendingNetCtx } from './settlement';
-import { bankSecuritiesParty, bankSecuritiesPartyOfTicker, companyPartyOfTicker } from '../../../domain/party';
+import type { EntityId } from '../../../domain/ids';
+import { bankSecuritiesParty, bankSecuritiesPartyOf, companyPartyOf } from '../../../domain/party';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { currencyOf } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
@@ -109,7 +110,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
   // PD ~0.5, which is what a bank at the floor is.
   if (comp.isBankEntity && comp.bankBalanceSheet) {
     const sheet = comp.bankBalanceSheet;
-    const rwaLocal = Math.max(1, bankRwaLocal(sheet, facilityBookOf(v2, comp.ticker)));
+    const rwaLocal = Math.max(1, bankRwaLocal(sheet, facilityBookOf(v2, comp.id)));
     const bufferLocal = sheet.bankEquityLocal - rwaLocal * BANK_MIN_CAPITAL_RATIO;
     // The book's own measured provision rate (02b re-derives it weekly from the pools' real
     // default experience); the floor is consumerAnnualLossRate's own de-minimis.
@@ -411,10 +412,14 @@ function deskHoldingsByInstrument(
 /** §3.13-BOOK (c2b): the argument spans TWO id spaces — a desk's participant id
  *  (`<ticker>::DESK`) or a holder's entity id — so it stays a string, and the entity arm is
  *  reached only by ELIMINATION, once `dealerDeskTicker` has said this is not a desk. */
-function holderPayee(holderId: string): import('./settlement').PartyRef {
+function holderPayee(holderId: string, bankIdOfTicker: (t: Ticker) => EntityId | undefined): import('./settlement').PartyRef {
   const ticker = dealerDeskTicker(holderId);
-  return ticker !== undefined
-    ? bankSecuritiesPartyOfTicker(ticker)
+  const deskBankId = ticker !== undefined ? bankIdOfTicker(ticker) : undefined;
+  // §3.13-BOOK (c-then-3b): a desk's participant id embeds its bank's TICKER, and a `PartyRef`
+  // names that bank by entity id — so the crossing back is a lookup, handed in by the caller
+  // that holds the index. A desk whose bank cannot be found is not a party at all.
+  return deskBankId !== undefined
+    ? bankSecuritiesPartyOf(deskBankId)
     : { kind: 'INSTITUTION', id: asEntityId(holderId) };
 }
 
@@ -490,8 +495,9 @@ export function applyPendingCorporateActionSettlements(
   // §3.13-BOOK (c-then-2): read off the entity index rather than a `Map<id, ticker>` mirror that
   // had to be hand-registered at every firm birth to stay complete.
   const { companyById } = buildEntityIndex(ctx.updatedCompanies ?? [], []);
-  const issuerTickerOf = (instrumentId: string): Ticker | undefined =>
-    companyById.get(issuerIdOf(v2, instrumentId))?.ticker;
+  // §3.13-BOOK (c-then-3b): the issuer's ENTITY id — what a `PartyRef` names it by.
+  const issuerPartyIdOf = (instrumentId: string): EntityId | undefined =>
+    companyById.get(issuerIdOf(v2, instrumentId))?.id;
   const pairKeyOf = (r: number): number => pairOf(H.typeRef[r], H.instrRef[r]);
   const toPairs = (byType: Map<string, Map<string, number>>): Map<number, number> => {
     const out = new Map<number, number>();
@@ -534,7 +540,7 @@ export function applyPendingCorporateActionSettlements(
         const newRows = rows.map((p) => {
           const ratio = byId.get(p.instrumentId);
           if (ratio === undefined || !(p.inventoryLocal > 0) || Math.abs(ratio - 1) < 1e-9) return p;
-          const issuerTicker = issuerTickerOf(p.instrumentId);
+          const issuerTicker = issuerPartyIdOf(p.instrumentId);
           const issuerRegion = companyById.get(issuerIdOf(v2, p.instrumentId))?.region;
           if (!issuerTicker || !issuerRegion) return p;
           const deltaLocal = p.inventoryLocal * (ratio - 1);
@@ -542,10 +548,10 @@ export function applyPendingCorporateActionSettlements(
           const desk = bankSecuritiesParty(bank);
           const spec = { instrumentType: type as ItemizedHolding['instrumentType'], instrumentId: p.instrumentId, issuerRegion, valueLocal: Math.abs(deltaLocal) };
           if (deltaLocal < 0) {
-            journalPayment(ctx, { payer: companyPartyOfTicker(issuerTicker), payee: desk, amount: -deltaLocal, currency: currencyOf(issuerRegion), reason: 'principal redeemed to holder of record' });
+            journalPayment(ctx, { payer: companyPartyOf(issuerTicker), payee: desk, amount: -deltaLocal, currency: currencyOf(issuerRegion), reason: 'principal redeemed to holder of record' });
             transferHolding(ctx.v2, desk, house, spec, 'corporate action: desk paper retired pro rata');
           } else {
-            journalPayment(ctx, { payer: desk, payee: companyPartyOfTicker(issuerTicker), amount: deltaLocal, currency: currencyOf(issuerRegion), reason: 'placement paid by holder of record' });
+            journalPayment(ctx, { payer: desk, payee: companyPartyOf(issuerTicker), amount: deltaLocal, currency: currencyOf(issuerRegion), reason: 'placement paid by holder of record' });
             transferHolding(ctx.v2, house, desk, spec, 'corporate action: desk paper placed pro rata');
           }
           touched = true;
@@ -609,7 +615,8 @@ export function applyPendingCorporateActionSettlements(
   const denomByPair = new Map<number, number>();
   const deskIncomeByTicker = new Map<Ticker, number>();
   if (hasCash && ctx.updatedCompanies) {
-    const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
+    const { companyById, companyByTicker: cbt2 } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
+    const bankIdOfTicker = (t: Ticker) => cbt2.get(t)?.id;
     pendingCashByType.forEach((byId, type) => {
       const t = typeRefOf(v2, type);
       if (t < 0) return;
@@ -623,7 +630,7 @@ export function applyPendingCorporateActionSettlements(
         // the tranche store. Two spaces, one line, and now it says which is which.
         const issuerId = t === equityRef ? equityIssuerId(asInstrumentId(instrumentId)) : issuerIdOf(v2, instrumentId);
         const issuer = companyById.get(issuerId);
-        const issuerTicker = issuerTickerOf(issuerId);
+        const issuerTicker = issuerPartyIdOf(issuerId);
         // Every desk holds the named instrument itself — the action names one piece of paper and
         // so does the position.
         const byDesk = deskByInstrument?.get(instrumentId);
@@ -645,7 +652,7 @@ export function applyPendingCorporateActionSettlements(
         if (!(denomLocal > 0)) return;
         denomByPair.set(k, denomLocal);
         if (!issuerTicker || !ctx.paymentJournal) return;
-        const payer = companyPartyOfTicker(issuerTicker);
+        const payer = companyPartyOf(issuerTicker);
         // §9.13-EQUITY — THE REASON SAYS WHICH PAYMENT THIS IS. Every holder of record used to be
         // paid under one reason while the household sector was paid its share under a second
         // ("dividend to the public float"), and the household income line read THAT string. With
@@ -658,7 +665,7 @@ export function applyPendingCorporateActionSettlements(
             const amountLocal = owedLocal * (usd / denomLocal);
             if (!(amountLocal > 0)) return;
             journalPayment(ctx, {
-              payer, payee: holderPayee(deskId), amount: amountLocal,
+              payer, payee: holderPayee(deskId, bankIdOfTicker), amount: amountLocal,
               // The paper's own money, off the ISSUER — which is the payer here. Read from the
               // party rather than from `issuer`, which is `undefined` for every non-equity
               // instrument at this site and would have thrown the moment a credit desk was paid.
@@ -704,14 +711,14 @@ export function applyPendingCorporateActionSettlements(
           // the money has a payer and a payee instead of appearing on the holder's book while
           // the issuer's ledger says it left.
           const shareLocal = owedLocal * (rowUnits(H, r) / (denomByPair.get(k) ?? totalLocal));
-          const issuerTicker = issuerTickerOf(instrumentIdAt(v2, r));
+          const issuerTicker = issuerPartyIdOf(instrumentIdAt(v2, r));
           // A holder paid by an issuer nobody can name is money from nobody: a defect at the
           // site that recorded the action, never a credit.
           if (!ctx.paymentJournal || !issuerTicker) {
             defect(`security payment of ${(shareLocal / 1e6).toFixed(3)}M to ${entity.id} from an issuer with no ticker (${instrumentIdAt(v2, r)})`);
           }
           journalPayment(ctx, {
-            payer: companyPartyOfTicker(issuerTicker),
+            payer: companyPartyOf(issuerTicker),
             payee: entity.payee,
             amount: shareLocal,
             currency: currencyOf(regionOf(v2, H.regionRef[r]) as RegionId),
@@ -754,11 +761,11 @@ export function applyPendingCorporateActionSettlements(
       }
       // CASH: and it comes FROM THE ISSUER, by name — a float INCREASE runs the same
       // instruction backwards, because a placement is paid for.
-      const principalIssuerTicker = issuerTickerOf(instrumentIdAt(v2, r));
+      const principalIssuerTicker = issuerPartyIdOf(instrumentIdAt(v2, r));
       if (ctx.paymentJournal && principalIssuerTicker && Math.abs(principalCashLocal) > 0) {
         journalPayment(ctx, principalCashLocal > 0
           ? {
-            payer: companyPartyOfTicker(principalIssuerTicker),
+            payer: companyPartyOf(principalIssuerTicker),
             payee: entity.payee,
             amount: principalCashLocal,
             currency: currencyOf(regionOf(v2, H.regionRef[r]) as RegionId),
@@ -766,7 +773,7 @@ export function applyPendingCorporateActionSettlements(
           }
           : {
             payer: entity.payee,
-            payee: companyPartyOfTicker(principalIssuerTicker),
+            payee: companyPartyOf(principalIssuerTicker),
             amount: -principalCashLocal,
             currency: currencyOf(regionOf(v2, H.regionRef[r]) as RegionId),
             reason: 'placement paid by holder of record',
@@ -815,15 +822,15 @@ export function applyPendingCorporateActionSettlements(
       // Equity has no ladder, so its issuer's side of the action is
       // wired HERE — a buyback returns the shares from the house to the issuer, a placement
       // creates them from the issuer to the house — and the house nets to zero on equity too.
-      const equityIssuerTicker = heldInShares(a.type) ? issuerTickerOf(a.id) : undefined;
+      const equityIssuerTicker = heldInShares(a.type) ? issuerPartyIdOf(a.id) : undefined;
       if (a.retiredLocal > 0) {
         const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueLocal: a.retiredLocal, shares: a.anyShares ? a.retiredSh : undefined };
         transferHolding(v2, holder, house, spec, 'corporate action: paper retired pro rata');
-        if (equityIssuerTicker) transferHolding(v2, house, companyPartyOfTicker(equityIssuerTicker), spec, 'corporate action: shares retired by the issuer');
+        if (equityIssuerTicker) transferHolding(v2, house, companyPartyOf(equityIssuerTicker), spec, 'corporate action: shares retired by the issuer');
       }
       if (a.placedLocal > 0) {
         const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueLocal: a.placedLocal, shares: a.anyShares ? a.placedSh : undefined };
-        if (equityIssuerTicker) transferHolding(v2, companyPartyOfTicker(equityIssuerTicker), house, spec, 'corporate action: shares placed by the issuer');
+        if (equityIssuerTicker) transferHolding(v2, companyPartyOf(equityIssuerTicker), house, spec, 'corporate action: shares placed by the issuer');
         transferHolding(v2, house, holder, spec, 'corporate action: paper placed pro rata');
       }
     });
@@ -1095,20 +1102,21 @@ export function applyHolderInterestAccruals(
   // §3.13-BOOK (c-then-2): the issuers, read off the entity index rather than the `Map<id, ticker>`
   // mirror that had to be hand-registered at every firm birth. Built here, after the early
   // returns, so a week with no payout pays nothing for it.
-  const { companyById: issuersById } = buildEntityIndex(ctx.updatedCompanies ?? [], []);
+  const { companyById: issuersById, companyByTicker: issuersByTicker } = buildEntityIndex(ctx.updatedCompanies ?? [], []);
+  const bankIdOfTicker = (t: Ticker) => issuersByTicker.get(t)?.id;
   const deskCouponByTicker = new Map<Ticker, number>();
   payouts.forEach((instrumentKey) => {
     const byHolder = ctx.holderAccruedInterestLocal.get(instrumentKey);
     if (!byHolder) return;
     const issuerId = instrumentKey.slice(instrumentKey.indexOf(':') + 1);
-    const ticker = issuersById.get(issuerIdOf(ctx.v2, issuerId))?.ticker; // a tranche key names its issuer through the store
+    const ticker = issuersById.get(issuerIdOf(ctx.v2, issuerId))?.id; // §3.13-BOOK (c-then-3b): the issuer's entity id
     if (!ticker || !ctx.paymentJournal) {
       // A coupon due from an issuer nobody can name is a defect at the site that accrued it,
       // not a receivable that quietly survives.
       const owedLocal = Array.from(byHolder.values()).reduce((a, v) => a + Math.max(0, v), 0);
       return defect(`coupon of ${(owedLocal / 1e6).toFixed(3)}M due on ${instrumentKey} from an issuer with no ticker`);
     }
-    const payer = companyPartyOfTicker(ticker) as import('./settlement').PartyRef;
+    const payer = companyPartyOf(ticker) as import('./settlement').PartyRef;
     // A coupon is paid in the paper's own money, which is the issuer's.
     const couponCurrency = obligationCurrencyOf(ctx.v2, payer);
     byHolder.forEach((accruedLocal, holderId) => {
@@ -1122,7 +1130,7 @@ export function applyHolderInterestAccruals(
       }
       journalPayment(ctx, {
         payer,
-        payee: holderPayee(holderId),
+        payee: holderPayee(holderId, bankIdOfTicker),
         amount: accruedLocal,
         currency: couponCurrency,
         reason: 'coupon payment',

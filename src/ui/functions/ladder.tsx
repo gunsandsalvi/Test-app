@@ -60,7 +60,7 @@ export const ladder: FunctionModule = {
       const policy = regionOf(world, c.region)?.policyRate ?? 0;
       const rows: Row[] = materializeLadder(world.v2, c.id).map((t) => ({
         id: t.id, key: trancheId(c.id, t.id),
-        kind: t.isCommercialPaper ? 'paper' : t.isBankFacility ? `facility${t.facilityBankTicker ? ` · ${t.facilityBankTicker}` : ''}` : t.seniority === 'SUBORDINATED' ? 'sub bond' : t.rateType === 'FLOATING' ? 'loan' : 'bond',
+        kind: t.isCommercialPaper ? 'paper' : t.isBankFacility ? `facility${t.facilityBankId ? ` · ${t.facilityBankId}` : ''}` : t.seniority === 'SUBORDINATED' ? 'sub bond' : t.rateType === 'FLOATING' ? 'loan' : 'bond',
         principalLocal: t.principalLocal, rate: t.rateType === 'FLOATING' ? policy + (t.floatingMarginBps ?? 0) / 10_000 : (t.couponRate ?? 0),
         maturityWeek: t.maturityWeek, originationWeek: t.originationWeek,
       })).sort((a, b) => a.maturityWeek - b.maturityWeek);

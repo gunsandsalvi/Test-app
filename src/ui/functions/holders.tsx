@@ -51,10 +51,11 @@ function CompanyHolders({ world, id, nav, tab }: { world: World; id: string; nav
   if (!c) return null;
   const rows = holdersOf(world, id);
   // Step 10: the lenders' claims are the facility rows on this firm's own ladder.
-  const bankIdByTicker = new Map(banksOf(world.state.companies).map((b) => [b.ticker, b.id]));
+  // §3.13-BOOK (c-then-3b): a facility row names its lender by ENTITY id — no translation left.
+  const liveBanks = new Set(banksOf(world.state.companies).map((b) => b.id));
   const facilities = facilitiesOfBorrower(ensureV2(world.state), id)
-    .filter((f) => bankIdByTicker.has(f.bankTicker))
-    .map((f) => ({ holderId: bankIdByTicker.get(f.bankTicker)!, instrumentType: 'BANK_FACILITY', usd: f.principalLocal, shares: NaN }));
+    .filter((f) => liveBanks.has(f.bankId))
+    .map((f) => ({ holderId: f.bankId, instrumentType: 'BANK_FACILITY', usd: f.principalLocal, shares: NaN }));
   const kinds = ['equity', 'debt'];
   const active = kinds.includes(tab) ? tab : 'equity';
   const [sort, setSort] = useState('usd');

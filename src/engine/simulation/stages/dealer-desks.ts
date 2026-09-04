@@ -9,7 +9,7 @@
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 import type { EntityId } from '../../../domain/ids';
-import { bankSecuritiesParty, bankSecuritiesPartyOfTicker } from '../../../domain/party';
+import { bankSecuritiesParty, bankSecuritiesPartyOf } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { bankCashBufferRatioOf } from '../../macro/banking';
 import { Company, RegionId } from '../../../types';
@@ -95,7 +95,7 @@ export function buildDealerDeskParticipants(args: {
     const prior = priorPositions(sheet.dealerDeskInventory, book);
     const capacityLocal = dealerDeskCapacityLocal({
       balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
+      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
@@ -106,7 +106,7 @@ export function buildDealerDeskParticipants(args: {
     // A desk pays for inventory with the bank's own reserves, above the buffer it must keep —
     // the same real constraint the bank's investment book faces in 07c, and the reason a desk
     // with capital ratio to spare can still be unable to bid.
-    const settledCashLocal = bankReservesOf(ctx.v2, bank.ticker)
+    const settledCashLocal = bankReservesOf(ctx.v2, bank.id)
       + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
     const fundableLocal = Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * bankCashBufferRatioOf(bank));
 
@@ -317,7 +317,7 @@ export function totalDeskCapacityLocal(ctx: WeeklyStepContext, banks: Company[],
     if (!sheet) return;
     capacityLocal += dealerDeskCapacityLocal({
       balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
+      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id)),
       inventory: sheet.dealerDeskInventory,
       book,
     });
@@ -340,13 +340,13 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
     if (!sheet) return;
     freeLocal.set(bank.ticker, dealerDeskCapacityLocal({
       balanceSheetCapacityLocal: sheet.bankEquityLocal / BASEL_MIN_LEVERAGE_RATIO,
-      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)),
+      leverageHeadroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id)),
       inventory: sheet.dealerDeskInventory,
       book,
     }));
     const byBorrower = new Map<string, number>();
     // The relationship is the facilities this bank has lent — its rows on the ladders.
-    facilityRowsOf(ctx.v2, bank.ticker).forEach((l) => {
+    facilityRowsOf(ctx.v2, bank.id).forEach((l) => {
       byBorrower.set(l.borrowerId, (byBorrower.get(l.borrowerId) ?? 0) + l.principalLocal);
     });
     lentByBankByBorrower.set(bank.ticker, byBorrower);
@@ -370,10 +370,15 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
 }
 
 /** Route a desk's participant id to the bank whose reserves fund it. */
-export function dealerDeskPartyOf(participantId: string, deskTickers: ReadonlySet<Ticker>): PartyRef | undefined {
+export function dealerDeskPartyOf(
+  participantId: string, deskTickers: ReadonlySet<Ticker>,
+  bankIdOfTicker: (ticker: Ticker) => EntityId | undefined,
+): PartyRef | undefined {
   const ticker = dealerDeskTicker(participantId);
   if (ticker === undefined || !deskTickers.has(ticker)) return undefined;
-  return bankSecuritiesPartyOfTicker(ticker);
+  // §3.13-BOOK (c-then-3b): a desk seat embeds its bank's TICKER; a party names it by entity id.
+  const bankId = bankIdOfTicker(ticker);
+  return bankId === undefined ? undefined : bankSecuritiesPartyOf(bankId);
 }
 
 /** The tickers whose desks were built, for the settle pass's routing. */

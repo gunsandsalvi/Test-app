@@ -5,7 +5,7 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, sum } from './types';
 import { marketCapOf } from '../../domain/company';
-import { ensureV2, entityOf, regionOf, tickerOf, typeRefOf } from '../../engine2/world';
+import { ensureV2, entityOf, regionOf, typeRefOf } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
 import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf, trancheKindOfRow, trancheIdOf } from '../../engine2/tranches';
 import { materializeBook, instrumentIdAt, rowUnits } from '../../engine2/holdings';
@@ -236,14 +236,14 @@ function o4(state: GameState, week: number): AuditFinding[] {
   const v2 = ensureV2(state);
   const S = v2.tranches;
   const { companyById: byId } = partyIndexOfState(state);
-  const bankByTicker = new Map(state.companies.filter((c) => c.isBankEntity).map((c) => [c.ticker, c]));
+  const bankById = new Map(state.companies.filter((c) => c.isBankEntity).map((c) => [c.id, c]));
   const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   let orphanLoans = 0, orphanLocal = 0, lenderless = 0, lenderlessLocal = 0;
   for (let r = 0; r < S.used; r++) {
     if (!(S.flags[r] & TR_FACILITY) || S.bankRef[r] < 0 || S.issuerRef[r] < 0 || !(S.principalLocal[r] > 0.01)) continue;
     const c = byId.get(entityOf(v2, S.issuerRef[r]));
     if (!c || !(isActiveCompany(c) || openEstates.has(c.id))) { orphanLoans++; orphanLocal += S.principalLocal[r]; }
-    const b = bankByTicker.get(tickerOf(v2, S.bankRef[r]));
+    const b = bankById.get(entityOf(v2, S.bankRef[r]));
     if (!b || !b.bankBalanceSheet || !isActiveCompany(b)) { lenderless++; lenderlessLocal += S.principalLocal[r]; }
   }
   if (orphanLoans) out.push({ family: 'O', check: 'O4 every facility has a live borrower', week, usd: orphanLocal, message: `${orphanLoans} facilities (${B(orphanLocal)}) sit on the ladders of firms that are gone or dead with no open estate` });
@@ -450,7 +450,7 @@ function o5(state: GameState, week: number): AuditFinding[] {
   const why = new Map<string, number>();
   const bump = (k: string) => why.set(k, (why.get(k) ?? 0) + 1);
   (state.goodsInTransit ?? []).forEach((g) => {
-    const b = tickers.get(g.buyerTicker);
+    const b = byId5.get(g.buyerId);
     if (!b || !(isActiveCompany(b) || openEstates.has(b.id))) {
       deadBuyerShip++;
       const landed = g.arrivalWeek <= week ? 'landed' : 'afloat';

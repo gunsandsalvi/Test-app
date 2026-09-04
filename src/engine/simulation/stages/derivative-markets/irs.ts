@@ -97,7 +97,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
     );
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-      const rwaLocal = loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.ticker));
+      const rwaLocal = loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.id));
       const absorbableLocal = Math.max(0, sheet.bankEquityLocal - rwaLocal * BANK_WORKING_CAPITAL_RATIO);
       const bookByTenor = new Map<SwapTenorKey, number>();
       Object.entries(sheet.sovereignBondHoldingsByBond ?? {}).forEach(([bondId, usd]) => {
@@ -113,7 +113,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
         if (lossLocal <= absorbableLocal) return;
         // Hedge the notional whose repricing loss is the excess — the rest it can carry.
         const wantedLocal = ((lossLocal - absorbableLocal) / Math.max(1e-9, lossLocal)) * bookLocal;
-        const alreadyPayingLocal = standing.coverLocal('IRS', 'a', bankPartyKey(bank.ticker), undefined, k);
+        const alreadyPayingLocal = standing.coverLocal('IRS', 'a', bankPartyKey(bank.id), undefined, k);
         const hedgeLocal = Math.max(0, wantedLocal - alreadyPayingLocal);
         if (!(hedgeLocal > 0)) return;
         payDemandByTenor.get(k)!.push({ party: bankParty(bank), usd: hedgeLocal });
@@ -143,7 +143,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       if (shockCostLocal <= headroomLocal) return;
       const wantedLocal = Math.min(floatingLocal, ((shockCostLocal - headroomLocal) / Math.max(1e-9, shockCostLocal)) * floatingLocal);
       // Floating corporate debt is short-dated relative to the curve; it hedges at the 5-year.
-      const alreadyPayingLocal = standing.coverLocal('IRS', 'a', companyPartyKey(comp.ticker), undefined, 's5');
+      const alreadyPayingLocal = standing.coverLocal('IRS', 'a', companyPartyKey(comp.id), undefined, 's5');
       const hedgeLocal = Math.max(0, wantedLocal - alreadyPayingLocal);
       if (!(hedgeLocal > 0)) return;
       payDemandByTenor.get('s5')!.push({ party: companyParty(comp), usd: hedgeLocal });

@@ -587,7 +587,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const xborderByPair = process.env.XBORDER_TRACE ? new Map<string, number>() : undefined;
   const traceUnresolved = process.env.UNRESOLVED_TRACE === '1';
   const sheetByTicker = traceUnresolved
-    ? new Map(ctx.updatedCompanies.filter((c) => c.isBankEntity).map((c) => [c.ticker, !!c.bankBalanceSheet]))
+    ? new Map(ctx.updatedCompanies.filter((c) => c.isBankEntity).map((c) => [c.id, !!c.bankBalanceSheet]))
     : undefined;
   const week = settlementWeek();
   // A: the pass store, opened from the persistent accounts, takes every settled row by
@@ -627,8 +627,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
       // A leg addressed to a bank that has no sheet any more (resolved, merged) is money with
       // no account; name the stage's reason here, where the leg is still legible.
       [payerRef, payeeRef].forEach((ref, side) => {
-        if ((ref.kind === 'BANK' || ref.kind === 'BANK_SECURITIES' || ref.kind === 'BANK_CREDIT') && sheetByTicker.get(ref.ticker) === false) {
-          console.log(`  [unresolved] ${ref.kind} ${ref.ticker} (${side === 0 ? 'payer' : 'payee'}) ${(amountLocal / 1e6).toFixed(3)}M '${reasonText(journal.reasonId[n])}' — no sheet`);
+        if ((ref.kind === 'BANK' || ref.kind === 'BANK_SECURITIES' || ref.kind === 'BANK_CREDIT') && sheetByTicker.get(ref.id) === false) {
+          console.log(`  [unresolved] ${ref.kind} ${ref.id} (${side === 0 ? 'payer' : 'payee'}) ${(amountLocal / 1e6).toFixed(3)}M '${reasonText(journal.reasonId[n])}' — no sheet`);
         }
       });
     }

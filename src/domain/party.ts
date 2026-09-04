@@ -26,22 +26,29 @@
  */
 
 import type { RegionId } from './geography';
-import type { EntityId, Ticker } from './ids';
+import type { EntityId } from './ids';
 
 export type PartyRef =
-  | { kind: 'COMPANY'; ticker: Ticker }
-  | { kind: 'BANK'; ticker: Ticker }
+  /**
+   * §3.13-BOOK (c-then-3b) — THE FOUR FIRM ARMS KEY BY `EntityId`, which is what makes `PartyRef`
+   * a VIEW of the entity store rather than a parallel union. They keyed by TICKER while
+   * `INSTITUTION` keyed by id, so `entity-index.ts` had to carry two indexes over one store and
+   * the CROSS-TABLE CHECK — every position names a holder that exists — had no join between a
+   * position's `bookId` and a payment's `partyKey`. One key now, and `partyKey` writes it.
+   */
+  | { kind: 'COMPANY'; id: EntityId }
+  | { kind: 'BANK'; id: EntityId }
   /** SETL2b — the bank's own CREDIT, not its reserves. A loan does not move money from anywhere:
    *  the bank writes a loan on one side and a deposit on the other, and both appear at once. So
    *  a drawdown paid by BANK_CREDIT creates the borrower's balance WITHOUT any reserve leaving
    *  the lender — endogenous money, and the reason a banking system can fund itself. Reserves
    *  move only when the borrower then SPENDS it to a customer of another bank, which happens as
    *  an ordinary payment. (The loan asset stays owned by bank-lending.ts — one writer.) */
-  | { kind: 'BANK_CREDIT'; ticker: Ticker }
+  | { kind: 'BANK_CREDIT'; id: EntityId }
   /** SETL6 — a bank settling its OWN securities trade. Reserves move and equity does NOT: the
    *  security is the other leg and the clearing stage books it in the same pass (rule 5).
    *  `BANK` above is the income case, where nothing else arrives and equity is the other side. */
-  | { kind: 'BANK_SECURITIES'; ticker: Ticker }
+  | { kind: 'BANK_SECURITIES'; id: EntityId }
   /** SETL6 — the central counterparty a cleared book settles through. Every participant, the
    *  dealer and the fee-earning desks settle against it, so it is flat by construction: a
    *  non-zero net is a leg some book forgot to name, reported rather than absorbed. */
@@ -77,26 +84,30 @@ export type EntityParty = PartyOfKind<'COMPANY' | 'BANK' | 'BANK_CREDIT' | 'BANK
  */
 export type CounterpartyRef = PartyOfKind<'COMPANY' | 'BANK' | 'INSTITUTION'>;
 
-// ---- THE CONSTRUCTORS (§3.13-BOOK c-then-3a) ----
+// ---- THE CONSTRUCTORS (§3.13-BOOK c-then-3a, re-keyed in c-then-3b) ----
 //
-// 197 object literals built these four arms by hand. They go through these now, for the reason
-// 13-READ gave every entity-id writer a constructor first: (c-then-3b) changes how a firm is
-// keyed, and a change made in a constructor is made once. The split is the measurement —
-// `…Party` takes the ENTITY and survives that change untouched; `…PartyOfTicker` takes a bare
-// ticker and is exactly the set of sites that will need an entity found for them, so
-// `grep -c PartyOfTicker` is the size of what is left.
+// 204 object literals built the four firm arms by hand. They go through these now, for the
+// reason 13-READ gave every entity-id writer a constructor first: a change of key made in a
+// constructor is made once. (c-then-3a) split them by what a site HELD — the entity, or only a
+// ticker — and `grep -c PartyOfTicker` was the size of the job left; (c-then-3b) did that job by
+// moving the eleven stored ticker references into the entity space, so the ticker forms are
+// gone and every site either passes the firm or an id it already holds.
 
 /** A firm, from the firm. */
-export const companyParty = (c: { ticker: Ticker }): PartyOfKind<'COMPANY'> => ({ kind: 'COMPANY', ticker: c.ticker });
+export const companyParty = (c: { id: EntityId }): PartyOfKind<'COMPANY'> => ({ kind: 'COMPANY', id: c.id });
 /** A bank's own account, from the bank. */
-export const bankParty = (c: { ticker: Ticker }): PartyOfKind<'BANK'> => ({ kind: 'BANK', ticker: c.ticker });
+export const bankParty = (c: { id: EntityId }): PartyOfKind<'BANK'> => ({ kind: 'BANK', id: c.id });
 /** The deposit a bank writes when it lends (SETL2b), from the bank. */
-export const bankCreditParty = (c: { ticker: Ticker }): PartyOfKind<'BANK_CREDIT'> => ({ kind: 'BANK_CREDIT', ticker: c.ticker });
+export const bankCreditParty = (c: { id: EntityId }): PartyOfKind<'BANK_CREDIT'> => ({ kind: 'BANK_CREDIT', id: c.id });
 /** A bank's trading book (SETL6), from the bank. */
-export const bankSecuritiesParty = (c: { ticker: Ticker }): PartyOfKind<'BANK_SECURITIES'> => ({ kind: 'BANK_SECURITIES', ticker: c.ticker });
+export const bankSecuritiesParty = (c: { id: EntityId }): PartyOfKind<'BANK_SECURITIES'> => ({ kind: 'BANK_SECURITIES', id: c.id });
 
-/** The same four from a bare ticker — the sites (c-then-3b) has to find an entity for. */
-export const companyPartyOfTicker = (ticker: Ticker): PartyOfKind<'COMPANY'> => ({ kind: 'COMPANY', ticker });
-export const bankPartyOfTicker = (ticker: Ticker): PartyOfKind<'BANK'> => ({ kind: 'BANK', ticker });
-export const bankCreditPartyOfTicker = (ticker: Ticker): PartyOfKind<'BANK_CREDIT'> => ({ kind: 'BANK_CREDIT', ticker });
-export const bankSecuritiesPartyOfTicker = (ticker: Ticker): PartyOfKind<'BANK_SECURITIES'> => ({ kind: 'BANK_SECURITIES', ticker });
+/**
+ * The same four from a bare id, for the sites that hold one without the firm — a register row's
+ * lender, a stored reference. The `…PartyOfTicker` forms these replace are gone: there is no
+ * ticker in a `PartyRef` any more, so a site that has only a ticker must find the firm first.
+ */
+export const companyPartyOf = (id: EntityId): PartyOfKind<'COMPANY'> => ({ kind: 'COMPANY', id });
+export const bankPartyOf = (id: EntityId): PartyOfKind<'BANK'> => ({ kind: 'BANK', id });
+export const bankCreditPartyOf = (id: EntityId): PartyOfKind<'BANK_CREDIT'> => ({ kind: 'BANK_CREDIT', id });
+export const bankSecuritiesPartyOf = (id: EntityId): PartyOfKind<'BANK_SECURITIES'> => ({ kind: 'BANK_SECURITIES', id });

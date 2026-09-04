@@ -34,7 +34,8 @@
  */
 
 import { CurrencyCode, CURRENCY_CODES, RegionId, currencyOf } from '../../../domain/geography';
-import { bankSecuritiesPartyOfTicker } from '../../../domain/party';
+import type { EntityId } from '../../../domain/ids';
+import { bankSecuritiesPartyOf } from '../../../domain/party';
 import { convert } from '../../../domain/currency';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { Company, banksOf } from '../../../domain/company';
@@ -42,7 +43,6 @@ import { balanceOf, homeCurrencyOf } from '../../ledger/accounts';
 import { PartyRef, partyOf } from '../../ledger/party';
 import { WeeklyStepContext } from './context';
 import { PaymentJournal, pay, rowDue } from './settlement';
-import type { Ticker } from '../../../domain/ids';
 
 /** One quote, shared with every other FX charge in the model (`domain/dealer-desk.ts`). */
 const FX_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK.fx;
@@ -50,12 +50,12 @@ const FX_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK.fx;
 const MIN_TRADE = 1e-6;
 
 /** The desks a region's conversions go through: its banks, pro rata by market share. */
-function deskSharesOf(firms: readonly Company[], region: RegionId): { ticker: Ticker; share: number }[] {
+function deskSharesOf(firms: readonly Company[], region: RegionId): { id: EntityId; share: number }[] {
   const banks = banksOf(firms, region);
   const total = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
   if (banks.length === 0) return [];
   return banks.map((b) => ({
-    ticker: b.ticker,
+    id: b.id,
     share: total > 0 ? (b.bankMarketShare ?? 0) / total : 1 / banks.length,
   }));
 }
@@ -102,7 +102,7 @@ export function fundForeignCurrencyShortfalls(
 ): void {
   const net = netByPartyAndCurrency(journal, week);
   if (net.size === 0) return;
-  const desksByRegion = new Map<RegionId, { ticker: Ticker; share: number }[]>();
+  const desksByRegion = new Map<RegionId, { id: EntityId; share: number }[]>();
   const desksFor = (region: RegionId) => {
     let d = desksByRegion.get(region);
     if (!d) { d = deskSharesOf(ctx.updatedCompanies, region); desksByRegion.set(region, d); }
@@ -110,11 +110,11 @@ export function fundForeignCurrencyShortfalls(
   };
 
   /** The client buys `amount` of `cur` and pays for it in `home`, plus the desk's spread. */
-  const buy = (client: PartyRef, desks: { ticker: Ticker; share: number }[], cur: CurrencyCode, home: CurrencyCode, amount: number) => {
+  const buy = (client: PartyRef, desks: { id: EntityId; share: number }[], cur: CurrencyCode, home: CurrencyCode, amount: number) => {
     const costHome = convert(amount, cur, home, ctx.fx) * (1 + FX_SPREAD_BPS / 10000);
-    desks.forEach(({ ticker, share }) => {
+    desks.forEach(({ id: deskBankId, share }) => {
       if (share <= 0) return;
-      const desk: PartyRef = bankSecuritiesPartyOfTicker(ticker);
+      const desk: PartyRef = bankSecuritiesPartyOf(deskBankId);
       pay(ctx, { payer: client, payee: desk, amount: costHome * share, currency: home, reason: 'fx conversion: currency bought' });
       pay(ctx, { payer: desk, payee: client, amount: amount * share, currency: cur, reason: 'fx conversion: currency delivered' });
     });
@@ -150,9 +150,9 @@ export function fundForeignCurrencyShortfalls(
       const surplus = balanceOf(ctx.v2, ref, cur) + (byCur.get(CURRENCY_CODES.indexOf(cur)) ?? 0);
       if (!(surplus > MIN_TRADE)) return;
       const proceeds = convert(surplus, cur, home, ctx.fx) * (1 - FX_SPREAD_BPS / 10000);
-      desks.forEach(({ ticker, share }) => {
+      desks.forEach(({ id: deskBankId, share }) => {
         if (share <= 0) return;
-        const desk: PartyRef = bankSecuritiesPartyOfTicker(ticker);
+        const desk: PartyRef = bankSecuritiesPartyOf(deskBankId);
         pay(ctx, { payer: ref, payee: desk, amount: surplus * share, currency: cur, reason: 'fx conversion: currency sold' });
         pay(ctx, { payer: desk, payee: ref, amount: proceeds * share, currency: home, reason: 'fx conversion: proceeds delivered' });
       });

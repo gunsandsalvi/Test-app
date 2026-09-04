@@ -9,10 +9,10 @@
  * wire first, so a money row without a wire cannot exist (W1). Other asset kinds arrive in W2–W5.
  */
 import { PartyRef, partyId, partyOf } from './party';
+import type { EntityId } from '../../domain/ids';
 import { CurrencyCode, CURRENCY_CODES, NUMERAIRE } from '../../domain/geography';
 import { FxTable, PARITY_FX, toNumeraire } from '../../domain/currency';
 import { isVehicleClaim } from '../../domain/assets';
-import type { Ticker } from '../../domain/ids';
 
 export type AssetKind =
   | 'MONEY' | 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER'
@@ -193,7 +193,7 @@ export interface WireSummary {
  * four monies have to be brought to the numéraire before they can be added. Every other kind's
  * price is already in one money by construction (an instrument has one quote currency).
  */
-export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number; byCurrency: Record<string, number> } = { numeraire: 0, byCurrency: {} }, regionOfIssuer?: (ticker: Ticker) => string | undefined, reasonTextOf?: (id: number) => string, fx: FxTable = PARITY_FX): WireSummary {
+export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number; byCurrency: Record<string, number> } = { numeraire: 0, byCurrency: {} }, regionOfIssuer?: (issuerId: EntityId) => string | undefined, reasonTextOf?: (id: number) => string, fx: FxTable = PARITY_FX): WireSummary {
   const moneyPendingLocal = moneyPending.numeraire;
   const moneyPendingByCurrency = moneyPending.byCurrency;
   const byKind: Record<string, number> = {}; const valueUSDByKind: Record<string, number> = {};
@@ -214,7 +214,7 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
   const goodsInByTicker: Record<string, number> | undefined = goodsTrace ? {} : undefined;
   const holderRegionOf = (p: PartyRef): string | undefined => {
     switch (p.kind) {
-      case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': return regionOfIssuer?.(p.ticker);
+      case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': return regionOfIssuer?.(p.id);
       // A pool sells from no stock and consumes what it buys: a source and a sink, never a
       // holder — the consignments the transport pool carries on lanes no named fleet serves
       // pass through it the same way (a NAMED carrier holds its consignments; a pool's own
@@ -243,7 +243,7 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
       if (rf) { const key = `${rf}|${asset}`; goodsNetUnitsByKey[key] = (goodsNetUnitsByKey[key] ?? 0) - j.quantity[i]; if (goodsOutUnitsByKey) goodsOutUnitsByKey[key] = (goodsOutUnitsByKey[key] ?? 0) + j.quantity[i]; }
       if (rt) { const key = `${rt}|${asset}`; goodsNetUnitsByKey[key] = (goodsNetUnitsByKey[key] ?? 0) + j.quantity[i]; if (goodsInUnitsByKey) goodsInUnitsByKey[key] = (goodsInUnitsByKey[key] ?? 0) + j.quantity[i]; }
       if (goodsInByTicker && rt) { const kk = `${rt}|${asset}|KIND:${to.kind}`; goodsInByTicker[kk] = (goodsInByTicker[kk] ?? 0) + j.quantity[i]; }
-      if (goodsInByTicker && to.kind === 'COMPANY') { const tk = `${to.ticker}|${asset}|${reasonTextOf?.(j.reasonId[i]) ?? j.reasonId[i]}`; goodsInByTicker[tk] = (goodsInByTicker[tk] ?? 0) + j.quantity[i]; }
+      if (goodsInByTicker && to.kind === 'COMPANY') { const tk = `${to.id}|${asset}|${reasonTextOf?.(j.reasonId[i]) ?? j.reasonId[i]}`; goodsInByTicker[tk] = (goodsInByTicker[tk] ?? 0) + j.quantity[i]; }
       continue;
     }
     // AN ISSUER IS NOT A HOLDER OF ITS OWN INSTRUMENT. A vehicle's shares are issued BY the
@@ -264,8 +264,8 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
     if (to.kind === 'CLEARING_HOUSE') { const key = `${to.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) + valueLocal; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) + valueLocal; } }
     if (from.kind === 'CLEARING_HOUSE') { const key = `${from.region}|${k}`; houseNetUSDByKey[key] = (houseNetUSDByKey[key] ?? 0) - valueLocal; if (houseNetUSDByAsset) { const ak = `${key}|${assetText(j.assetRef[i])}`; houseNetUSDByAsset[ak] = (houseNetUSDByAsset[ak] ?? 0) - valueLocal; } }
     if (regionOfIssuer) {
-      if (from.kind === 'COMPANY') { const rg = regionOfIssuer(from.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) + valueLocal; if (issuerNetUSDByTicker) { const tk = `${from.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) + valueLocal; } } }
-      if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.ticker); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueLocal; if (issuerNetUSDByTicker) { const tk = `${to.ticker}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueLocal; } } }
+      if (from.kind === 'COMPANY') { const rg = regionOfIssuer(from.id); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) + valueLocal; if (issuerNetUSDByTicker) { const tk = `${from.id}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) + valueLocal; } } }
+      if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.id); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueLocal; if (issuerNetUSDByTicker) { const tk = `${to.id}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueLocal; } } }
     }
   }
   return { count: j.n, byKind, valueUSDByKind, moneyPendingLocal, moneyByCurrency, moneyPendingByCurrency, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };

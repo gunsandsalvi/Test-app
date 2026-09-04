@@ -69,13 +69,12 @@ export function buildEntityIndex(
  * without a company row — so this answers `undefined` for them by construction rather than by a
  * failed lookup, and a caller that needs to tell those apart switches on `ref.kind` itself.
  *
- * §3.13-BOOK (c-then-3) will key those four arms by `EntityId` instead of `Ticker`; this function
- * is the seam that change happens behind.
+ * §3.13-BOOK (c-then-3b) keyed those four arms by `EntityId`; this function was the seam.
  */
 export function companyOfParty(index: EntityIndex, ref: PartyRef): Company | undefined {
   switch (ref.kind) {
     case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES':
-      return index.companyByTicker.get(ref.ticker);
+      return index.companyById.get(ref.id);
     case 'INSTITUTION': case 'SEGMENT': case 'HOUSEHOLD':
     case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE':
       return undefined;
@@ -98,7 +97,7 @@ export function companyOfParty(index: EntityIndex, ref: PartyRef): Company | und
 export function regionOfParty(index: EntityIndex, ref: PartyRef): RegionId | undefined {
   switch (ref.kind) {
     case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES':
-      return index.companyByTicker.get(ref.ticker)?.region;
+      return index.companyById.get(ref.id)?.region;
     case 'INSTITUTION': return index.institutionById.get(ref.id)?.region;
     case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK':
       return ref.region;

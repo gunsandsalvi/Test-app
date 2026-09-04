@@ -16,7 +16,7 @@
  *                     P retires it when value becomes price × quantity by construction)
  */
 import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
-import { companyPartyOfTicker } from '../../domain/party';
+import { companyParty } from '../../domain/party';
 import {
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
@@ -103,11 +103,11 @@ export function issuerOfHoldingRow(
   if (holdingClassOf(h.instrumentType) === 'SOVEREIGN') return { kind: 'GOVERNMENT', region: h.issuerRegion };
   // A tranche resolves to its issuer; anything else — equity, a fund's own shares — is its own
   // issuer, so those two resolve exactly as they did before.
-  const ticker = companyById.get(issuerIdOf(v2, h.instrumentId))?.ticker;
+  const issuer = companyById.get(issuerIdOf(v2, h.instrumentId));
   // §3.13-BOOK (c2b): no ticker resolved, so the row names something the company table does not
   // carry — a fund share, keyed on the register by the fund ENTITY itself. That crossing is why
   // an instrument id can stand here, and slice (d)'s registry is what removes the need.
-  return ticker ? companyPartyOfTicker(ticker) : { kind: 'INSTITUTION', id: asEntityId(h.instrumentId) };
+  return issuer ? companyParty(issuer) : { kind: 'INSTITUTION', id: asEntityId(h.instrumentId) };
 }
 
 /**

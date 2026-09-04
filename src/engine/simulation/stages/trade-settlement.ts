@@ -15,14 +15,14 @@
  */
 
 import { GameState, RegionId } from '../../../types';
-import { companyPartyOfTicker } from '../../../domain/party';
+import type { EntityId } from '../../../domain/ids';
+import { companyPartyOf } from '../../../domain/party';
 import { CURRENCY_BY_REGION, CurrencyCode } from '../../../domain/geography';
 import { isActiveCompany } from '../../../domain/company';
 import { TradeInvoice } from '../../../domain/trade-invoice';
 import { WeeklyStepContext } from './context';
 import { getFxToUsd } from './06-fx-and-trade';
 import { pay } from './settlement';
-import type { Ticker } from '../../../domain/ids';
 
 export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext): void {
   ctx.tradeInvoiceFxGainLocal = 0;
@@ -34,8 +34,9 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
   (Object.keys(CURRENCY_BY_REGION) as RegionId[]).forEach(r => {
     usdPerCurrency[CURRENCY_BY_REGION[r]] = getFxToUsd(state.fxPairs, r);
   });
-  const activeByTicker = new Map<Ticker, boolean>();
-  state.companies.forEach(c => activeByTicker.set(c.ticker, isActiveCompany(c)));
+  // §3.13-BOOK (c-then-3b): an invoice names its two sides by ENTITY id.
+  const activeById = new Map<EntityId, boolean>();
+  state.companies.forEach(c => activeById.set(c.id, isActiveCompany(c)));
 
   const stillOutstanding: TradeInvoice[] = [];
   const { companyUpdates } = ctx;
@@ -52,7 +53,7 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
     // where the workout now draws its distributions from. Killing it here wrote off a
     // receivable the estate was simultaneously "collecting" from the UNMODELED boundary —
     // the same claim represented twice, one copy funded by nobody.
-    if (!activeByTicker.get(invoice.buyerTicker)) {
+    if (!activeById.get(invoice.buyerId)) {
       ctx.tradeInvoiceWriteOffLocal += bookedLocal;
       return;
     }
@@ -60,17 +61,17 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
     const rateNow = usdPerCurrency[invoice.currency];
     const settledLocal = rateNow > 0 && isFinite(rateNow) ? invoice.amountCurrency * rateNow : bookedLocal;
 
-    const seller = companyUpdates[invoice.sellerTicker] ?? (companyUpdates[invoice.sellerTicker] = {});
+    const seller = companyUpdates[invoice.sellerId] ?? (companyUpdates[invoice.sellerId] = {});
     seller.tradeReceivableCollectedLocal = (seller.tradeReceivableCollectedLocal ?? 0) + settledLocal;
-    const buyer = companyUpdates[invoice.buyerTicker] ?? (companyUpdates[invoice.buyerTicker] = {});
+    const buyer = companyUpdates[invoice.buyerId] ?? (companyUpdates[invoice.buyerId] = {});
     buyer.tradePayableSettledLocal = (buyer.tradePayableSettledLocal ?? 0) + settledLocal;
     // CASH: the money goes from the buyer to the seller, because that is who owes whom. Stage
     // 08 used to post each side against the UNMODELED boundary and let the two halves find each
     // other in the aggregate — a payment whose counterparty is known has no business at a
     // boundary. It settles at TODAY's rate, which is where the transaction FX exposure lands.
     pay(ctx, {
-      payer: companyPartyOfTicker(invoice.buyerTicker),
-      payee: companyPartyOfTicker(invoice.sellerTicker),
+      payer: companyPartyOf(invoice.buyerId),
+      payee: companyPartyOf(invoice.sellerId),
       amount: settledLocal,
       currency: invoice.currency as CurrencyCode,
       reason: 'trade invoice settled',

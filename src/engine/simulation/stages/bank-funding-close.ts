@@ -35,7 +35,7 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
     ctx.updatedCompanies.forEach((bank) => {
       if (!bank.isBankEntity || !bank.bankBalanceSheet || !isActiveCompany(bank)) return;
       const sheet = bank.bankBalanceSheet;
-      const reservesLocal = bankReservesOf(ctx.v2, bank.ticker);
+      const reservesLocal = bankReservesOf(ctx.v2, bank.id);
       const raisedLocal = raiseCentralBankLoanLocal(sheet, householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)), reservesLocal, bankCashBufferRatioOf(bank));
       if (raisedLocal <= 0) return;
       raisedAny = true;

@@ -21,9 +21,7 @@
 import { GameState, Region, RegionId, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { laneDistanceNm } from '../../../domain/geography';
-import {
-  FreightAsset, laneKey, marginalCostPerTonneNmLocal, weeklyCapacityTonnes,
-} from '../../../domain/carrier';
+import { FreightAsset, laneKey, marginalCostPerTonneNmLocal, weeklyCapacityTonnes } from '../../../domain/carrier';
 import { getBaseAnnualWageLocal } from '../../bootstrap/labor-and-wages';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { convertLocal, FxToUsd } from '../../../domain/currency';
@@ -31,7 +29,7 @@ import { LaneBooking, SOURCING_REGION_IDS } from './sourcing-intent';
 import { WeeklyStepContext } from './context';
 import { getFxToUsd } from './06-fx-and-trade';
 import { clearDoubleAuction, AuctionBid, AuctionOffer } from './double-auction';
-import type { Ticker } from '../../../domain/ids';
+import type { EntityId } from '../../../domain/ids';
 import { asTicker } from '../../../domain/ids';
 
 /** The good a ship burns. Its cleared price per tonne IS the bunker price. */
@@ -54,7 +52,9 @@ export interface FreightClearing {
   /** Each carrier's share of a lane's cleared tonnage, so what actually ships can be paid to
    *  the operators that carried it: lane key -> ticker -> share. */
   /** §3.13-BOOK slice (c2c): lane key → CARRIER TICKER → share of that lane's freight. */
-  carrierShareByLane: Map<string, Map<Ticker, number>>;
+  /** §3.13-BOOK (c-then-3b): the carriers that took a lane's tonnage, by ENTITY id — the
+   *  goods auction pays them as parties, and a party is an entity id. */
+  carrierShareByLane: Map<string, Map<EntityId, number>>;
   /** Capacity offered and taken, for the diagnostics a freight market is judged on. */
   laneCapacityTonnes: Record<string, number>;
   laneBookedTonnes: Record<string, number>;
@@ -195,6 +195,7 @@ export function runFreightClearing(args: {
   const result = emptyFreightClearing();
 
   const { offersByLane, marginalByLane, capacityByLane } = buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd);
+  const carrierByTicker = new Map(carriers.map((c) => [c.ticker, c]));
   result.marginalRatePerTonneLaneMoneyByLane = marginalByLane;
   result.laneCapacityTonnes = capacityByLane;
   // FREIGHT_TRACE=1 — the same print for the SEED's clearing and every live week, because the
@@ -245,8 +246,11 @@ export function runFreightClearing(args: {
     // What each carrier carried, earned, and burned doing it.
     const distanceNm = laneDistanceNm(...(key.split('>') as [RegionId, RegionId]));
     if (cleared.clearedQuantity > 0) {
-      const shares = new Map<Ticker, number>();
-      cleared.sales.forEach((fill, ticker) => shares.set(asTicker(ticker), fill.quantity / cleared.clearedQuantity));
+      const shares = new Map<EntityId, number>();
+      cleared.sales.forEach((fill, ticker) => {
+        const id = carrierByTicker.get(asTicker(ticker))?.id;
+        if (id !== undefined) shares.set(id, fill.quantity / cleared.clearedQuantity);
+      });
       result.carrierShareByLane.set(key, shares);
     }
     if (FREIGHT_TRACE) {
@@ -259,7 +263,7 @@ export function runFreightClearing(args: {
     cleared.sales.forEach((fill, ticker) => {
       result.carrierTonnesCarried.set(ticker, (result.carrierTonnesCarried.get(ticker) ?? 0) + fill.quantity);
       result.carrierRevenueLocal.set(ticker, (result.carrierRevenueLocal.get(ticker) ?? 0) + fill.amount);
-      const carrier = carriers.find(c => c.ticker === ticker);
+      const carrier = carrierByTicker.get(asTicker(ticker)); // §3.13-BOOK (c-then-3b): a lookup, not a scan per fill
       const asset = carrier?.carrierFleet?.assets.find((a: FreightAsset) => laneKey(a.laneFrom, a.laneTo) === key);
       if (asset && asset.capacityTonnes > 0) {
         // Fuel burned is the voyages this tonnage actually required, at the hull's real burn rate.

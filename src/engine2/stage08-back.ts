@@ -11,15 +11,12 @@
  */
 
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
-import { bankCreditPartyOfTicker, bankPartyOfTicker, companyPartyOfTicker } from '../domain/party';
+import { bankCreditPartyOf, bankPartyOf, companyPartyOf } from '../domain/party';
 import { currencyOf, RegionId } from '../domain/geography';
 import { GameState, Company, DebtTranche, NewsItem, SegmentFinancial } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { BackLanes } from './stage08-lanes';
-import {
-  isActiveCompany, isPubliclyListed, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare,
-  TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE,
-} from '../domain/company';
+import { isActiveCompany, isPubliclyListed, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare, TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../domain/call-protection';
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
 import { industryOfSubUnit, firmInputIntensities, financingProfileOf } from '../domain/industry-registry';
@@ -30,10 +27,7 @@ import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '.
 import { determineCreditRating } from '../engine/simulation/credit';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../engine/simulation/constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../engine/companyGenerator';
-import {
-  getRatingBucket, settleCorporateActionOnHolders, payHoldersCash, DEFAULT_COVERAGE_FLOOR,
-  creditRecoveryRate, accrueHoldersInterest, payHoldersAccruedInterest,
-} from '../engine/simulation/stages/shared-helpers';
+import { getRatingBucket, settleCorporateActionOnHolders, payHoldersCash, DEFAULT_COVERAGE_FLOOR, creditRecoveryRate, accrueHoldersInterest, payHoldersAccruedInterest } from '../engine/simulation/stages/shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, findRegionMmf } from '../engine/simulation/stages/money-market-fund';
 import { decideCorporateFinancing, committedLineHeadroomLocal } from '../engine/simulation/stages/corporate-financing';
 import { PrimaryOffering } from '../domain/primary-market';
@@ -56,7 +50,7 @@ import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
 import { ladderRowsOf, materializeTranche, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY, trancheIdOf } from './tranches';
 import { issueTranche, retireTranche, commitLadder } from '../engine/ledger/tranche-ledger';
-import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World, tickerOf } from './world';
+import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World, entityOf } from './world';
 import { totalInputValueLocal } from './lots';
 import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../domain/primary-market';
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/stated';
@@ -172,7 +166,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   capexCommissionedThisWeekLocal: number;
   nextWeek: number;
   priorOccupationMixDrift: Company['occupationMixDrift'];
-  homeBankId: Ticker | undefined;
+  homeBankId: EntityId | undefined;
   /** §3.13: what a bridge on this borrower costs, in bps over the curve. It arrives as an
    *  argument because it is a read of the borrower's OWN printed paper and this core is
    *  lane-only by design (§7.317: no world reads, so it stays worker-safe). */
@@ -310,7 +304,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
       seniority: 'SENIOR',
       // G2: a bridge is BANK debt — it lives on the house bank's itemized book.
       isBankFacility: true,
-      facilityBankTicker: homeBankId,
+      facilityBankId: homeBankId,
     }];
   }
 
@@ -370,7 +364,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
 /** §7.317 — the closure-wide cash primitive as a FACTORY: one mutable cash box, one ledger,
  *  one post; the walk and every later block write through the same instance, exactly as the
  *  closure binding did. */
-function makeCashPoster(ticker: Ticker, region: Company['region'], cashLocal: number, ctx: WeeklyStepContext, retainCashLedger: boolean): {
+function makeCashPoster(companyId: EntityId, region: Company['region'], cashLocal: number, ctx: WeeklyStepContext, retainCashLedger: boolean): {
   post: (label: string, amountLocal: number, counterparty?: PartyRef, settle?: boolean) => void;
   cash: { usd: number };
   cashLedger: { label: string; amountLocal: number }[];
@@ -385,7 +379,7 @@ function makeCashPoster(ticker: Ticker, region: Company['region'], cashLocal: nu
     // as later slices name each flow, not a plug (rule 2).
     // SCALE §7.303 — the walk's own party ids, interned once per company: every settled leg
     // used to re-probe two string maps (partyId x2) per post, ~40k+ legs a week.
-    const selfPartyId = partyId(companyPartyOfTicker(ticker));
+    const selfPartyId = partyId(companyPartyOf(companyId));
     // §3.13c: a firm's cash walk is in the firm's own money — every leg it posts is
     // denominated there, and a counterparty in another money converts on receipt.
     const money = currencyOf(region as RegionId);
@@ -395,7 +389,7 @@ function makeCashPoster(ticker: Ticker, region: Company['region'], cashLocal: nu
       // moving no cash until its week (settlement moves the deposit then). The walk's running
       // cash is what the firm can spend this week, and a dated row is not that.
       if (settleWeek !== undefined && settleWeek > settlementWeek()) {
-        const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted dated '${label}' for ${ticker} with no counterparty`);
+        const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted dated '${label}' for ${companyId} with no counterparty`);
         const reasonId = internReason(label);
         if (amountLocal > 0) payByIds(ctx, otherId, selfPartyId, amountLocal, money, reasonId, settleWeek);
         else payByIds(ctx, selfPartyId, otherId, -amountLocal, money, reasonId, settleWeek);
@@ -419,7 +413,7 @@ function makeCashPoster(ticker: Ticker, region: Company['region'], cashLocal: nu
       // one here as well would move the same money twice.
       if (!settle) return;
       // §5-CLOSE: a settled leg with no counterparty is a defect at the site that posted it.
-      const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted '${label}' for ${ticker} (${(amountLocal / 1e6).toFixed(3)}M) with no counterparty`);
+      const otherId = counterparty ? partyId(counterparty) : defect(`stage 08 posted '${label}' for ${companyId} (${(amountLocal / 1e6).toFixed(3)}M) with no counterparty`);
       const reasonId = internReason(label);
       if (amountLocal > 0) payByIds(ctx, otherId, selfPartyId, amountLocal, money, reasonId);
       else payByIds(ctx, selfPartyId, otherId, -amountLocal, money, reasonId);
@@ -438,11 +432,11 @@ function runCashWalk(args: {
   ctx: WeeklyStepContext;
   // §7.317 step 1.4 — the walk reads NO company object: identity strings and the few
   // object-derived scalars arrive resolved (from the seam lanes at the call site).
-  companyId: string;
+  companyId: EntityId;
   ticker: Ticker;
   region: string;
   isBanksSector: boolean;
-  homeBankId: Ticker | undefined;
+  homeBankId: EntityId | undefined;
   carrierFreightRevenueLocal: number;
   channelMarginRevenueLocal: number;
   declaredDividendYield: number;
@@ -479,7 +473,7 @@ function runCashWalk(args: {
   row: number;
   taxCapture?: { accrueLocal: Float64Array };
 }): void {
-  const { ctx, companyId, ticker, region, isBanksSector, homeBankId,
+  const { ctx, companyId, region, isBanksSector, homeBankId,
     carrierFreightRevenueLocal, channelMarginRevenueLocal, declaredDividendYield, marketCapLocal,
     maxPayoutRatio, hasVehicle, boundaryTraceKey,
     wuSalesLocal, wuPurchasesLocal, wuTradeReceivableBookedLocal, wuTradeReceivableCollectedLocal,
@@ -635,12 +629,12 @@ function runCashWalk(args: {
       if (carryingCostLocal > 0) {
         const holders = ctx.channelShareByRegion[region];
         let paidLocal = 0;
-        holders?.forEach((share, holderTicker) => {
-          if (holderTicker === ticker) return; // a distributor warehouses its own stock
+        holders?.forEach((share, holderId) => {
+          if (holderId === companyId) return; // a distributor warehouses its own stock
           const amountLocal = carryingCostLocal * share;
           if (!(amountLocal > 0)) return;
           paidLocal += amountLocal;
-          post('inventory carrying cost', -amountLocal, companyPartyOfTicker(holderTicker));
+          post('inventory carrying cost', -amountLocal, companyPartyOf(holderId));
         });
         // §5-CLOSE: stock nobody else warehouses is warehoused by the firm itself, at its own
         // cost already inside its operating expense — no payment leaves, and nothing is paid to
@@ -652,8 +646,8 @@ function runCashWalk(args: {
       post('interest paid', -weeklyInterest, undefined, false);
       if (facilityInterestWeeklyLocal > 0 && homeBankId) {
         pay(ctx, {
-          payer: companyPartyOfTicker(ticker),
-          payee: bankPartyOfTicker(homeBankId),
+          payer: companyPartyOf(companyId),
+          payee: bankPartyOf(homeBankId),
           amount: facilityInterestWeeklyLocal,
           currency: currencyOf(region as RegionId),
           reason: 'facility interest to the lending bank',
@@ -750,7 +744,7 @@ export type ShippedBackCoreA = Omit<ReturnType<typeof runBackCoreA>,
  *  pass-throughs re-attached from main's own F and benchmark tables. */
 export function rebuildBackCoreA(shipped: ShippedBackCoreA, row: number, d: BackKernelDeps): ReturnType<typeof runBackCoreA> {
   const L8 = d.backLanes;
-  const { post, cash, cashLedger } = makeCashPoster(L8.ticker[row], L8.region[row], shipped.cashAfterALocal, d.ctx, false);
+  const { post, cash, cashLedger } = makeCashPoster(L8.companyId[row], L8.region[row], shipped.cashAfterALocal, d.ctx, false);
   // In place, not a spread: the shipped object is already this firm's own fresh clone, and a
   // second ~50-field materialization per firm measured as the pool's single largest overhead.
   const a = shipped as unknown as ReturnType<typeof runBackCoreA> & { cashAfterALocal?: number };
@@ -811,7 +805,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // the borrower's balance appears against it, in the same statement (settlement.ts). Naming
     // the house bank's CREDIT is what tells settlement no reserve should move.
     const bankCredit: PartyRef | undefined = L8.homeBankId[row]
-      ? bankCreditPartyOfTicker(L8.homeBankId[row])
+      ? bankCreditPartyOf(L8.homeBankId[row])
       : undefined;
 
     // SCALE §7.303 — ONE PASS OVER THE LADDER, now made in the front pass (same walk, same
@@ -971,7 +965,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
 
     const __k1 = S08K_PROF ? performance.now() : 0;
     if (S08K_PROF) s08k.capital += __k1 - __k0;
-    const { post, cash, cashLedger } = makeCashPoster(L8.ticker[row], L8.region[row], L8.cashLocal[row], ctx, retainCashLedger);
+    const { post, cash, cashLedger } = makeCashPoster(L8.companyId[row], L8.region[row], L8.cashLocal[row], ctx, retainCashLedger);
     runCashWalk({
       ctx,
       companyId: L8.companyId[row],
@@ -1183,12 +1177,12 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           seniority: 'SENIOR',
           // G2: a committed line is BANK debt on the house bank's own itemized book.
           isBankFacility: true,
-          facilityBankTicker: L8.homeBankId[row],
+          facilityBankId: L8.homeBankId[row],
         };
         drawnRevolverRow = issueTranche(v2, issuer, revolver, 'revolver drawn: liquidity shortfall');
         newTotalDebt += drawLocal;
         post('revolver drawn: liquidity shortfall', drawLocal,
-          L8.homeBankId[row] ? bankCreditPartyOfTicker(L8.homeBankId[row]) : undefined);
+          L8.homeBankId[row] ? bankCreditPartyOf(L8.homeBankId[row]) : undefined);
       }
     }
 
@@ -1641,7 +1635,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         seniority: 'SENIOR',
         // G2: the revolver is a committed BANK line — the house bank funds it and books it.
         isBankFacility: true,
-        facilityBankTicker: L8.homeBankId[row],
+        facilityBankId: L8.homeBankId[row],
       };
       rowList.push(issueTranche(v2, issuer, revolverTranche, 'revolver draw: withdrawn refinancing'));
       debtIssuanceThisWeek += revolverTranche.principalLocal;
@@ -1740,7 +1734,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           // together). Register paper keeps its own path (settleCorporateActionOnHolders pays
           // the holders); its cash line stays report-only. Before this, a prepaid facility left
           // the ladder while the bank kept the loan and nobody received the cash.
-          const facilityRepaidByBank = new Map<Ticker, number>();
+          const facilityRepaidByBank = new Map<EntityId, number>();
           let facilityRepaidLocal = 0;
           // Cheapest debt to be rid of first, and only paper that is actually worth retiring.
           // SCALE — the economics are computed ONCE per tranche (they read only per-dollar
@@ -1761,12 +1755,12 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
               toPrepayLocal -= repaid * (1 + premiumPerDollar);
               recordPremium(rTr, repaid * premiumPerDollar);
               if ((TS.flags[rTr] & TR_FACILITY) && TS.bankRef[rTr] >= 0 && repaid > 0) {
-                // The deposit destruction is posted to the facility's LENDER (t.facilityBankTicker),
+                // The deposit destruction is posted to the facility's LENDER (t.facilityBankId),
                 // not the home bank — splitting the two put the deposit on one bank and the
                 // asset on another (measured: PGNX +292.7M of prepay credit against a −4.1M
                 // loan move, identity −151.8M). Step 10: the asset half is the ladder row
                 // `retireTranche` reduces below; the lender's book is a read of it.
-                const bankTicker = tickerOf(v2, TS.bankRef[rTr]);
+                const bankTicker = entityOf(v2, TS.bankRef[rTr]);
                 facilityRepaidByBank.set(bankTicker,
                   (facilityRepaidByBank.get(bankTicker) ?? 0) + repaid);
                 facilityRepaidLocal += repaid;
@@ -1779,7 +1773,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           const prepaidLocal = Math.min(ladderTotalLocal, ladderTotalLocal - postPrepaySumLocal);
           facilityRepaidByBank.forEach((repaidLocal, bankTicker) => {
             post('facility prepaid: the loan and the deposit die together', -repaidLocal,
-              bankCreditPartyOfTicker(bankTicker));
+              bankCreditPartyOf(bankTicker));
           });
           post('surplus-cash debt prepayment', -(prepaidLocal - facilityRepaidLocal), undefined, false);
           debtRepaymentThisWeek += prepaidLocal;
@@ -2228,12 +2222,12 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // sweep below would move goes home instead, as a real cross-border payment through the same
     // settlement/FX path as every other. (The dividend path cannot serve here: a private sub
     // has no market cap for a declared yield to price, and its holder of record IS the parent.)
-    if (comp.parentTicker && !isDefaulted) {
+    if (comp.parentId && !isDefaulted) {
       const bufferLocal = L8.annualRevenueLocal[row] * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * L8.mgmtRiskAversion[row];
       const excessLocal = Math.max(0, cash.usd - bufferLocal);
       if (excessLocal > 1e6) {
         post('subsidiary excess cash repatriated to the parent', -excessLocal,
-          companyPartyOfTicker(comp.parentTicker));
+          companyPartyOf(comp.parentId));
       }
     }
     if (!comp.isBankEntity && !comp.isInstitutionalEntity && !isDefaulted && comp.listingStatus !== 'PRIVATE') {

@@ -37,7 +37,7 @@
  */
 import { WeeklyStepContext } from '../simulation/stages/context';
 import type { EntityId } from '../../domain/ids';
-import { bankCreditParty, bankParty, bankPartyOfTicker, bankSecuritiesParty, companyParty } from '../../domain/party';
+import { bankCreditParty, bankParty, bankPartyOf, bankSecuritiesParty, companyParty } from '../../domain/party';
 import { PartyRef } from './party';
 import { partyId, partyOf, partyKey, partyFromKey } from './party';
 import { RegionId, CurrencyCode, CURRENCY_CODES, currencyOf, NUMERAIRE } from '../../domain/geography';
@@ -287,48 +287,59 @@ export const householdDepositsAt = (v2: V2World, bankTicker: Ticker, currency: C
 // institutions' — summed in the holders' order, the order the pass rows sum in, so the read
 // is the number the projection used to write. No field carries either. ----
 
-type Depositor = { homeBankId?: string };
-/** The money a bank keeps its book in, off the bank itself. */
-const bankMoneyOf = (companies: readonly { ticker: Ticker; region?: RegionId }[], bankTicker: Ticker): CurrencyCode => {
-  for (const c of companies) if (c.ticker === bankTicker && c.region) return currencyOf(c.region);
-  return NUMERAIRE;
-};
+/**
+ * §3.13-BOOK (c-then-3b): `EntityId`, BECAUSE IT WAS `string` AND THAT COST A LIVE DEFECT.
+ *
+ * This re-declared `Company.homeBankTicker` as a bare `string`, so when the field became
+ * `homeBankId` — an entity id — the two comparisons below still compiled and became **always
+ * false**: every bank's corporate and institutional deposit line read ZERO, silently, and the
+ * banks' balance sheets would have stopped closing with no error anywhere. `asTicker` at a map
+ * boundary and an unbranded re-declaration of a branded field are the same hole, and this is the
+ * second one this slice has found. A structural re-declaration of a domain field must carry the
+ * domain type or it is a hole in the brand by construction.
+ */
+type Depositor = { homeBankId?: EntityId };
+/** The bank a deposit line is read at: its identity in both spaces, and its money. */
+type BankRef = { id: EntityId; ticker: Ticker; region?: RegionId };
 /** A bank's corporate deposit line: every firm banking there, its account. */
-export function corporateDepositsAt(v2: V2World, companies: readonly (Depositor & Pick<Company, 'ticker' | 'isBankEntity' | 'bankBalanceSheet'>)[], bankTicker: Ticker): number {
+export function corporateDepositsAt(v2: V2World, companies: readonly (Depositor & Pick<Company, 'id' | 'isBankEntity' | 'bankBalanceSheet'>)[], bank: BankRef): number {
   let usd = 0;
   for (const c of companies) {
-    if (c.homeBankId !== bankTicker || (c.isBankEntity && c.bankBalanceSheet)) continue;
+    if (c.homeBankId !== bank.id || (c.isBankEntity && c.bankBalanceSheet)) continue;
     usd += cashOf(v2, c);
   }
   return usd;
 }
 /** A bank's institutional deposit line: every institution banking there, its account. */
-export function institutionalDepositsAt(v2: V2World, entities: readonly (Depositor & Pick<InstitutionalEntity, 'id'>)[], bankTicker: Ticker): number {
+export function institutionalDepositsAt(v2: V2World, entities: readonly (Depositor & Pick<InstitutionalEntity, 'id'>)[], bank: BankRef): number {
   let usd = 0;
-  for (const e of entities) if (e.homeBankId === bankTicker) usd += entityCashOf(v2, e);
+  for (const e of entities) if (e.homeBankId === bank.id) usd += entityCashOf(v2, e);
   return usd;
 }
 /** A bank's four deposit lines, read off the ledger. */
 export function depositLinesAt(
   v2: V2World,
-  companies: readonly (Depositor & Pick<Company, 'ticker' | 'isBankEntity' | 'bankBalanceSheet'> & { region?: RegionId })[],
+  companies: readonly (Depositor & Pick<Company, 'id' | 'isBankEntity' | 'bankBalanceSheet'> & { region?: RegionId })[],
   entities: readonly (Depositor & Pick<InstitutionalEntity, 'id'>)[],
-  bankTicker: Ticker
+  bank: BankRef
 ): DepositLines {
-  const money = bankMoneyOf(companies, bankTicker);
+  // §3.13-BOOK (c-then-3b): the bank's own money, off the bank. `bankMoneyOf` scanned every
+  // company for the one whose ticker matched, per deposit-line read — a full scan to recover a
+  // field the caller was already holding.
+  const money = bank.region ? currencyOf(bank.region) : NUMERAIRE;
   return {
-    householdLocal: householdDepositsAt(v2, bankTicker, money),
-    corporateLocal: corporateDepositsAt(v2, companies, bankTicker),
-    institutionalLocal: institutionalDepositsAt(v2, entities, bankTicker),
-    smeLocal: smeDepositsAt(v2, bankTicker, money),
+    householdLocal: householdDepositsAt(v2, bank.ticker, money),
+    corporateLocal: corporateDepositsAt(v2, companies, bank),
+    institutionalLocal: institutionalDepositsAt(v2, entities, bank),
+    smeLocal: smeDepositsAt(v2, bank.ticker, money),
   };
 }
 /** The lines in the week: the pass's own holders. */
-export const bankDepositLines = (ctx: WeeklyStepContext, bankTicker: Ticker): DepositLines =>
-  depositLinesAt(ctx.v2, ctx.updatedCompanies, ctx.updatedInstitutionalEntities, bankTicker);
+export const bankDepositLines = (ctx: WeeklyStepContext, bank: BankRef): DepositLines =>
+  depositLinesAt(ctx.v2, ctx.updatedCompanies, ctx.updatedInstitutionalEntities, bank);
 /** The lines off a state (the audits, the UI, the harness). */
-export const stateDepositLines = (state: { companies: readonly Company[]; institutionalEntities: readonly InstitutionalEntity[]; v2?: unknown }, bankTicker: Ticker): DepositLines =>
-  depositLinesAt(ensureV2(state as never), state.companies, state.institutionalEntities, bankTicker);
+export const stateDepositLines = (state: { companies: readonly Company[]; institutionalEntities: readonly InstitutionalEntity[]; v2?: unknown }, bank: BankRef): DepositLines =>
+  depositLinesAt(ensureV2(state as never), state.companies, state.institutionalEntities, bank);
 
 /**
  * A3.4 — A BANK'S OWN BOOK MOVES A SECTOR ROW. The household loan pass and the evolution move a
@@ -372,23 +383,23 @@ export function moveSectorRowsToBank(v2: V2World, fromTicker: Ticker, toTicker: 
 
 /** A bank's reserves, in its own money: every account it holds, converted at the cleared rate.
  *  (A3.6c — the sheet carries no line; this is the one read.) */
-export function bankReservesOf(v2: V2World, bankTicker: Ticker): number {
-  return ownMoneyBalanceOf(v2, bankPartyOfTicker(bankTicker));
+export function bankReservesOf(v2: V2World, bankId: EntityId): number {
+  return ownMoneyBalanceOf(v2, bankPartyOf(bankId));
 }
 
 /** The bank's reserve row in ITS OWN money; a bank the seed did not open (no central bank in its
  *  region, a sheet scaled from the aggregate) opens at its line the first time a pass sees it. */
-export function reserveRowOf(v2: V2World, bankTicker: Ticker, currency: CurrencyCode, opening: number): number {
-  const party: PartyRef = bankPartyOfTicker(bankTicker);
+export function reserveRowOf(v2: V2World, bankId: EntityId, currency: CurrencyCode, opening: number): number {
+  const party: PartyRef = bankPartyOf(bankId);
   const r = accountRowOf(v2, party, currency);
   return r >= 0 ? r : openAccount(v2, party, currency, opening);
 }
 
 /** A bank's own book moves its reserves line between passes: the row moves by the same amount.
  *  A bank with no row yet is opened at its line by the next mirror, which already carries the move. */
-export function adjustBankReserves(v2: V2World, bankTicker: Ticker, delta: number): void {
+export function adjustBankReserves(v2: V2World, bankId: EntityId, delta: number): void {
   if (delta === 0) return;
-  const party: PartyRef = bankPartyOfTicker(bankTicker);
+  const party: PartyRef = bankPartyOf(bankId);
   const home = homeCurrencyOf(v2, party);
   if (home === undefined) return;
   const r = accountRowOf(v2, party, home);
@@ -396,14 +407,14 @@ export function adjustBankReserves(v2: V2World, bankTicker: Ticker, delta: numbe
 }
 
 /** A bank leaves whole (a merger): its reserves join the acquirer's rows, money by money. */
-export function moveBankReserves(v2: V2World, fromTicker: Ticker, toTicker: Ticker): void {
-  const from: PartyRef = bankPartyOfTicker(fromTicker);
+export function moveBankReserves(v2: V2World, fromBankId: EntityId, toBankId: EntityId): void {
+  const from: PartyRef = bankPartyOf(fromBankId);
   const fromRef = partyKeyRefOf(v2, partyKey(from));
   const rows = fromRef < 0 ? undefined : v2.accounts.rowsByPartyRef.get(fromRef);
   if (!rows) return;
   rows.forEach((r) => {
     const cur = currencyOfId(v2.accounts.currencyId[r]);
-    const to = reserveRowOf(v2, toTicker, cur, 0);
+    const to = reserveRowOf(v2, toBankId, cur, 0);
     mutableAccounts(v2).balance[to] += v2.accounts.balance[r];
     mutableAccounts(v2).balance[r] = 0;
   });
@@ -431,8 +442,8 @@ export function waysAndMeansOf(v2: V2World, region: RegionId): number { return M
 
 /** A company's cash: its account. A bank's cash IS its reserves (A3.1b,, rule 4): its
  *  goods-market self settles on its reserve row and it has no company row at all. */
-export function cashOf(v2: V2World, c: Pick<Company, 'ticker'> & { isBankEntity?: boolean; bankBalanceSheet?: unknown }): number {
-  if (c.isBankEntity && c.bankBalanceSheet) return bankReservesOf(v2, c.ticker);
+export function cashOf(v2: V2World, c: Pick<Company, 'id'> & { isBankEntity?: boolean; bankBalanceSheet?: unknown }): number {
+  if (c.isBankEntity && c.bankBalanceSheet) return bankReservesOf(v2, c.id);
   return ownMoneyBalanceOf(v2, companyParty(c));
 }
 
@@ -613,7 +624,7 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     const money = currencyOf(b.region);
     const ownAccount: PartyRef = bankParty(b);
     const row = openRow(s, partyId(ownAccount), AT_CENTRAL_BANK, 'RESERVES', money,
-      ctx.v2.accounts.balance[reserveRowOf(ctx.v2, b.ticker, money, 0)]);
+      ctx.v2.accounts.balance[reserveRowOf(ctx.v2, b.id, money, 0)]);
     s.reserveRowOfBank[bi] = row;
     // Any other money the bank carried into the week is its foreign liquidity row.
     (a.rowsByPartyRef.get(internPartyKey(ctx.v2, partyKey(ownAccount))) ?? []).forEach((pr) => {

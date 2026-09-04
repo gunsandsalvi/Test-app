@@ -40,7 +40,9 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
-import { bankParty, bankPartyOfTicker, bankSecuritiesParty, bankSecuritiesPartyOfTicker } from '../../../domain/party';
+import type { EntityId } from '../../../domain/ids';
+import { buildEntityIndex } from '../../ledger/entity-index';
+import { bankParty, bankPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { RegionId, Region } from '../../../types';
 import { overPledgedByBond } from '../../../domain/collateral';
@@ -274,11 +276,16 @@ export interface RepoSessionResult {
 export function runRegionalRepoSession(
   regionId: RegionId,
   reg: Region,
-  banks: { ticker: Ticker; region: RegionId }[],
+  banks: { id: EntityId; ticker: Ticker; region: RegionId }[],
   sheetByTicker: Map<string, BankingSector>,
   ctx: WeeklyStepContext
 ): RepoSessionResult {
   const week = ctx.nextWeek;
+  // §3.13-BOOK (c-then-3b): the auction's SEATS are participant ids that embed a ticker
+  // (`participant-keys.ts`), while a contract names its parties by entity id — so the crossing
+  // back is one map, built once, rather than a scan per fill.
+  const bankIdByTicker = new Map(banks.map((b) => [b.ticker, b.id]));
+  const tickerOfBankId = new Map(banks.map((b) => [b.id, b.ticker]));
   const priorRepoRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
   const policyBps = reg.policyRate * 10000;
   // The window's interest income this week, remitted by the central-bank stage.
@@ -313,7 +320,7 @@ export function runRegionalRepoSession(
       reg.centralBankSheet.lastStandingFacilityInterestLocal = (reg.centralBankSheet.lastStandingFacilityInterestLocal ?? 0) + repoInterestToMaturityLocal(c);
     }
     pay(ctx, {
-      payer: bankSecuritiesPartyOfTicker(c.borrowerTicker),
+      payer: bankSecuritiesPartyOf(c.borrowerId),
       payee: repoLenderParty(c.lender, regionId),
       amount: dueLocal,
       currency: currencyOf(regionId),
@@ -323,7 +330,7 @@ export function runRegionalRepoSession(
 
   // What each bank still has pledged against contracts that did NOT mature.
   const encumberedByTicker = new Map<Ticker, Map<InstrumentId, number>>();
-  banks.forEach((b) => encumberedByTicker.set(b.ticker, encumberedFaceByBond(carriedBook, b.ticker)));
+  banks.forEach((b) => encumberedByTicker.set(b.ticker, encumberedFaceByBond(carriedBook, b.id)));
 
   // ---- Borrowers: real shortfall to the buffer, bounded by unencumbered collateral. ----
   // The need splits by how long it has already lasted. Money a bank has needed every
@@ -331,10 +338,10 @@ export function runRegionalRepoSession(
   // is structural funding and belongs at term; the increment on top of it is this week's cash
   // dip and belongs overnight. A treasury that funds a permanent book overnight is running the
   // maturity mismatch a funding squeeze is made of, and this is what lets it.
-  const rolledByTicker = new Map<Ticker, number>();
-  maturedNow.forEach((c) => rolledByTicker.set(c.borrowerTicker, (rolledByTicker.get(c.borrowerTicker) ?? 0) + c.principalLocal));
+  const rolledByTicker = new Map<EntityId, number>();
+  maturedNow.forEach((c) => rolledByTicker.set(c.borrowerId, (rolledByTicker.get(c.borrowerId) ?? 0) + c.principalLocal));
 
-  const needByTicker = new Map<Ticker, { onLocal: number; termLocal: number }>();
+  const needByTicker = new Map<EntityId, { onLocal: number; termLocal: number }>();
   let totalOnNeedLocal = 0;
   let totalTermNeedLocal = 0;
   banks.forEach((bank) => {
@@ -343,16 +350,16 @@ export function runRegionalRepoSession(
     // CASH: reserves plus what this week's already-posted legs will settle — the maturity it has
     // just been billed for is real money leaving, and a bank that cannot see it cannot know it is
     // short. The same read 07c makes before it bids.
-    const settledCashLocal = bankReservesOf(ctx.v2, bank.ticker)
+    const settledCashLocal = bankReservesOf(ctx.v2, bank.id)
       + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
     const shortfallLocal = householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO - settledCashLocal;
     if (shortfallLocal <= 0) return;
     const capacityLocal = unencumberedBorrowingCapacityLocal(sheet, haircuts, encumberedByTicker.get(bank.ticker));
     const needLocal = Math.min(shortfallLocal, capacityLocal);
     if (needLocal <= 0) return;
-    const termLocal = Math.min(needLocal, rolledByTicker.get(bank.ticker) ?? 0);
+    const termLocal = Math.min(needLocal, rolledByTicker.get(bank.id) ?? 0);
     const onLocal = needLocal - termLocal;
-    needByTicker.set(bank.ticker, { onLocal, termLocal });
+    needByTicker.set(bank.id, { onLocal, termLocal });
     totalOnNeedLocal += onLocal;
     totalTermNeedLocal += termLocal;
   });
@@ -385,11 +392,11 @@ export function runRegionalRepoSession(
       if (!sheet) return;
       sheetByTicker.set(bank.ticker, {
         ...sheet,
-        repoBorrowedLocal: Math.round((repoBorrowedLocal(book, bank.ticker) - srfBorrowedLocal(book, bank.ticker))),
-        srfBorrowingLocal: Math.round(srfBorrowedLocal(book, bank.ticker)),
+        repoBorrowedLocal: Math.round((repoBorrowedLocal(book, bank.id) - srfBorrowedLocal(book, bank.id))),
+        srfBorrowingLocal: Math.round(srfBorrowedLocal(book, bank.id)),
         repoLentLocal: Math.round(repoLentLocal(book, bankParty(bank))),
         repoEncumberedCollateralLocal: Number(
-          Array.from(encumberedFaceByBond(book, bank.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
+          Array.from(encumberedFaceByBond(book, bank.id).values()).reduce((a, b) => a + b, 0).toFixed(0)
         ),
       });
     });
@@ -424,7 +431,7 @@ export function runRegionalRepoSession(
   banks.forEach((bank) => {
     const sheet = sheetByTicker.get(bank.ticker);
     if (!sheet) return;
-    const surplusLocal = bankReservesOf(ctx.v2, bank.ticker)
+    const surplusLocal = bankReservesOf(ctx.v2, bank.id)
       + pendingSettlementLocal(ctx, bankSecuritiesParty(bank))
       - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO;
     if (surplusLocal > 0) bankSurplusLocal.set(bank.ticker, surplusLocal);
@@ -562,14 +569,15 @@ export function runRegionalRepoSession(
     totalLentLocal: number,
     rateAnnual: number,
     termWeeks: number,
-    needOf: (t: Ticker) => number,
+    needOf: (bankId: EntityId) => number,
     totalNeedForBookLocal: number
   ) => {
     if (totalLentLocal <= 0 || totalNeedForBookLocal <= 0) return 0;
     const fundedShare = Math.min(1, totalLentLocal / totalNeedForBookLocal);
     let struckLocal = 0;
-    needByTicker.forEach((_need, ticker) => {
-      const wantLocal = needOf(ticker) * fundedShare;
+    needByTicker.forEach((_need, bankId) => {
+      const ticker = tickerOfBankId.get(bankId)!;
+      const wantLocal = needOf(bankId) * fundedShare;
       if (wantLocal <= 0) return;
       const sheet = sheetByTicker.get(ticker)!;
       const worked = encumberedWorking.get(ticker)!;
@@ -581,11 +589,12 @@ export function runRegionalRepoSession(
         if (raisedLocal <= 1) return;
         const principalLocal = Math.min(shareLocal, raisedLocal);
         pledges.forEach((pl) => worked.set(pl.bondId, (worked.get(pl.bondId) ?? 0) + pl.faceLocal));
-        const lenderBank = bankTickerOfParticipant(pid);
+        const lenderBankTicker = bankTickerOfParticipant(pid);
+        const lenderBank = lenderBankTicker !== undefined ? bankIdByTicker.get(lenderBankTicker) : undefined;
         const lender: RepoParty = pid === CB_SRF_SEAT_ID
           ? { kind: 'CENTRAL_BANK' }
           : lenderBank !== undefined
-            ? bankPartyOfTicker(lenderBank)
+            ? bankPartyOf(lenderBank)
             // §3.13-BOOK (c2b): the seat's tail IS the entity id — `repoInstitutionSeatId`
             // wrote it from one; a seat that parses as neither is the CB's, handled above.
             : { kind: 'INSTITUTION', id: asEntityId(repoInstitutionIdOfSeat(pid) ?? pid) };
@@ -593,7 +602,7 @@ export function runRegionalRepoSession(
           id: `${regionId}-REPO-${week}-${contractSeq++}`,
           regionId,
           lender,
-          borrowerTicker: ticker,
+          borrowerId: bankId,
           principalLocal: Math.round(principalLocal),
           rateAnnual,
           struckWeek: week,
@@ -634,7 +643,7 @@ export function runRegionalRepoSession(
     }
     pay(ctx, {
       payer: repoLenderParty(c.lender, regionId),
-      payee: bankSecuritiesPartyOfTicker(c.borrowerTicker),
+      payee: bankSecuritiesPartyOf(c.borrowerId),
       amount: c.principalLocal,
       currency: currencyOf(regionId),
       reason: 'repo drawdown',
@@ -750,20 +759,24 @@ function returnParkedCash(ctx: WeeklyStepContext, regionId: RegionId): void {
  * model could not previously have.
  */
 export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
+  // §3.13-BOOK (c-then-3b): a repo borrower is named by its entity id.
+  const repoIndex = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     const book = reg?.repoBook;
     if (!reg || !book || book.length === 0) return;
-    const borrowers = new Set(book.map((c) => c.borrowerTicker));
-    borrowers.forEach((ticker) => {
-      const company = ctx.updatedCompanies.find((c) => c.ticker === ticker && c.bankBalanceSheet);
-      if (!company) return;
-      const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
+    const borrowers = new Set(book.map((c) => c.borrowerId));
+    borrowers.forEach((bankId) => {
+      // §3.13-BOOK (c-then-3b): a repo borrower is named by its ENTITY id; a lookup, not a scan.
+      const company = repoIndex.companyById.get(bankId);
+      if (!company?.bankBalanceSheet) return;
+      const ticker = company.ticker;
+      const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet;
       // step 3 — one definition of "over-pledged" (domain/collateral.ts). This used a
       // 1-dollar tolerance and the harness used 1e6, so a bank could be a million dollars
       // over-pledged, pass this reconcile, and fail the check in the same week — which is most of
       // why row survived two attempts at it.
-      const pledged = encumberedFaceByBond(book, ticker);
+      const pledged = encumberedFaceByBond(book, bankId);
       const shortfallByBond = overPledgedByBond({
         pledgedByBond: pledged,
         heldByBond: new Map(instrumentEntries(sheet.sovereignBondHoldingsByBond)
@@ -773,7 +786,7 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
 
       let repaidLocal = 0;
       book.forEach((c) => {
-        if (c.borrowerTicker !== ticker || c.principalLocal <= 0) return;
+        if (c.borrowerId !== bankId || c.principalLocal <= 0) return;
         let releasedFaceLocal = 0;
         let pledgedFaceLocal = 0;
         c.collateral = c.collateral.map((p) => {
@@ -794,7 +807,7 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
           : c.lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: c.lender.id }
             : { kind: 'CENTRAL_BANK', region: regionId };
         pay(ctx, {
-          payer: bankSecuritiesPartyOfTicker(ticker),
+          payer: bankSecuritiesPartyOf(bankId),
           payee,
           amount: callLocal,
           currency: currencyOf(regionId),
@@ -804,10 +817,10 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       if (repaidLocal <= 0) return;
       updateBankSheet(ctx, ticker, {
         ...sheet,
-        repoBorrowedLocal: Math.round((repoBorrowedLocal(book, ticker) - srfBorrowedLocal(book, ticker))),
-        srfBorrowingLocal: Math.round(srfBorrowedLocal(book, ticker)),
+        repoBorrowedLocal: Math.round((repoBorrowedLocal(book, bankId) - srfBorrowedLocal(book, bankId))),
+        srfBorrowingLocal: Math.round(srfBorrowedLocal(book, bankId)),
         repoEncumberedCollateralLocal: Number(
-          Array.from(encumberedFaceByBond(book, ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
+          Array.from(encumberedFaceByBond(book, bankId).values()).reduce((a, b) => a + b, 0).toFixed(0)
         ),
       });
     });

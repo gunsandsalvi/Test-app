@@ -87,7 +87,7 @@ checked by `scripts/check-atlas.sh`.
 | **A3 the client can have more than one broker** | — | ❌ |
 | A4 financing spread, stock-borrow fees and commissions | `src/domain/prime-brokerage.ts:weeklyFinancingLocal` | ⚠️ |
 | B1 the broker lends the difference against the assets | `src/engine/simulation/stages/prime-brokerage.ts:targetDrawnLocal` | ✅ |
-| B1.a leverage is a loan from a named lender | `src/domain/prime-brokerage.ts:brokerTicker` | ✅ |
+| B1.a leverage is a loan from a named lender | `src/domain/prime-brokerage.ts:brokerId` | ✅ |
 | B2 the loan has a rate above the broker's cost of funds | `src/engine/simulation/stages/prime-brokerage.ts:rateAnnual` | ✅ |
 | B3 the broker's balance sheet grows and its capital is consumed | `src/engine/macro/banking.ts:leverageHeadroomLocal` | ✅ |
 | B4 the short side is financed too | `src/engine/simulation/stages/securities-lending.ts:fundableLocal` | ⚠️ |

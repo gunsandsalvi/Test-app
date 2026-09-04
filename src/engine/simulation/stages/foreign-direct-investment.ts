@@ -16,7 +16,7 @@
  * sells — with the parent's own margin, no leverage (FDI is equity), and the parent's money:
  * the opening balance is PAID cross-border from the parent's deployable cash (the
  * financing discipline: the money must exist first), through the same FX path every
- * cross-border payment takes. The parent's stake is `parentTicker` + `founderPct: 0`, so the
+ * cross-border payment takes. The parent's stake is `parentId` + `founderPct: 0`, so the
  * household private-business residual excludes it by construction (OWN4).
  *
  * WHAT IS DELIBERATELY ABSENT: an export-substitution rule. Once the subsidiary produces in B,
@@ -80,12 +80,12 @@ export function runForeignDirectInvestment(
 ): Company[] {
   const born: Company[] = [];
   const subsidiaryExists = (parent: Company, region: RegionId): boolean =>
-    ctx.updatedCompanies.some((c) => c.parentTicker === parent.ticker && c.region === region);
+    ctx.updatedCompanies.some((c) => c.parentId === parent.id && c.region === region);
 
   let armedFirms = 0;
   let maxCounter = 0;
   ctx.updatedCompanies.forEach((comp) => {
-    if (comp.isBankEntity || comp.isInstitutionalEntity || comp.parentTicker) return;
+    if (comp.isBankEntity || comp.isInstitutionalEntity || comp.parentId) return;
     if (!isActiveCompany(comp) || !(comp.productLines?.length)) return;
 
     // ---- Weekly: the disadvantage counter per foreign market, shape — reset on any
@@ -149,7 +149,7 @@ export function runForeignDirectInvestment(
         Math.max(0, openingCashOf(sub)), sub.region as RegionId, comp.region as RegionId, ctx.getFxToUsd);
       const openingCashLocal = Math.min(needParentMoneyLocal, deployableLocal);
       if (!(openingCashLocal > 0)) continue;
-      sub.parentTicker = comp.ticker;
+      sub.parentId = comp.id;
       // The stake is the PARENT's, not a founder household's: the private-business residual
       // (OWN4) excludes it by the same founderPct subtraction that defines it.
       sub.ownership = { ...(sub.ownership ?? {}), founderPct: 0 };

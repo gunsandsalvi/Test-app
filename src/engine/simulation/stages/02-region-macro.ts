@@ -117,9 +117,9 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         occupationDemand: regionOccDemand,
         avgListedDividendYieldAnnual: regionAvgDividendYield,
         householdDepositsLocal: householdDepositsOf(ctx.v2, regionId),
-        bankReservesLocal: ctx.updatedCompanies.reduce((a, c) => a + (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? bankReservesOf(ctx.v2, c.ticker) : 0), 0),
-        bankDepositLines: ctx.updatedCompanies.reduce((a, c) => (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? addDepositLines(a, bankDepositLines(ctx, c.ticker)) : a), ZERO_DEPOSIT_LINES),
-        bankLoanBooks: regionLoanBooksLocal(banksOf(ctx.updatedCompanies, regionId), (b) => facilityBookOf(ctx.v2, b.ticker)),
+        bankReservesLocal: ctx.updatedCompanies.reduce((a, c) => a + (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? bankReservesOf(ctx.v2, c.id) : 0), 0),
+        bankDepositLines: ctx.updatedCompanies.reduce((a, c) => (c.region === regionId && c.isBankEntity && c.bankBalanceSheet ? addDepositLines(a, bankDepositLines(ctx, c)) : a), ZERO_DEPOSIT_LINES),
+        bankLoanBooks: regionLoanBooksLocal(banksOf(ctx.updatedCompanies, regionId), (b) => facilityBookOf(ctx.v2, b.id)),
         householdWeek: householdWeekOf(ctx, regionId, state.regions[regionId].householdDepositInterestWeeklyLocal ?? 0),
         // §3.13-SOV row 2: the ladder is the store's, read here and passed in.
         govLadder: materializeGovLadder(ctx.v2, regionId),

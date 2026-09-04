@@ -24,7 +24,7 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
     ? Object.values(own.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0)
     : reg.bankingSector.sovereignBondHoldingsLocal * share;
   // §5-WIRES D: the credit books are the sheet's rows; a bank with no sheet holds no rows.
-  const creditBookLocal = own ? loanBooksOf(own, facilityBookOf(ensureV2(input.state), comp.ticker)) : 0;
+  const creditBookLocal = own ? loanBooksOf(own, facilityBookOf(ensureV2(input.state), comp.id)) : 0;
   const totalAssets = creditBookLocal + sovLocal;
   const weeklyNim = bs.netInterestMarginPct / 52;
   const impliedNimRev = totalAssets * weeklyNim;

@@ -494,32 +494,9 @@ written from here):
       forward, `''` from the swap. Same shape, same resolution.
 
     **WHAT IS LEFT OF (c), and it is two commits:**
-    c-then-3b. **THE STORED TICKER CROSS-REFERENCES BECOME ENTITY IDS**, and the party arms fall
-       out at the end. Reading the 81 `PartyOfTicker` sites (c-then-3a's measurement) showed the
-       job is not at those sites at all: they hold a ticker because a RECORD handed them one.
-       **Eleven fields store a reference to an entity as a ticker** — ~~`homeBankTicker` (69)~~ and
-       ~~`leadBankTicker` (11)~~ **DONE, in §9**; still open: `brokerTicker` (26), `borrowerTicker`
-       (20), `buyerTicker` (18), `issuerTicker` (18), `facilityBankTicker` (16), `carrierTicker`
-       (15), `parentTicker` (14), `sellerTicker` (7), `acquiredByTicker` (4) — 138 sites left.
-       *(`accounts.ts`'s dense bank lane and the settlement report's four per-bank maps are DONE,
-       in §9.)* Resolving ticker→id AT the
-       81 party sites instead would add 81 lookups and leave the references in the other space,
-       which is a mirror wearing a fix's clothes. So each field is its own commit, and the arms
-       take an `EntityId` last, when every site that must supply one already holds one.
-
-       **WHY, given PART I's KEY POLICY explicitly allows a ticker as "a party address":** the
-       CROSS-TABLE CHECK above cannot be written while it does. A position's holder is a
-       `bookId` (an entity id) and a payment's payer is a `partyKey` (`COMPANY:<ticker>`), so
-       "every position names a holder that exists" has no join without a translation table — and a
-       translation table between two names for one thing is the defect this whole step exists to
-       remove. It is also why `entity-index.ts` carries `companyById` AND `companyByTicker`: two
-       indexes over one store, because the ledger asks one way and everything else the other.
-
-       `partyKey`'s string changes at the end, so `holderAccruedInterestLocal` and
-       `sovereignAccruedInterestLocal` move with it, and `repoPartyKey`'s `INST:` reconciles with
-       `partyKey`'s `INSTITUTION:` there. *(The synthetic party tickers c-then-3a's measurement
-       turned up — `'DESK'`, `'ME'`, `'HEDGER'` — are all in `test/`, checked: no live `PartyRef`
-       names a company that does not exist.)*
+    c-then-3b. **THE STORED TICKER CROSS-REFERENCES BECOME ENTITY IDS, AND THE ARMS TAKE ONE —
+       DONE, in §9.** `PartyRef`'s five entity arms key by `EntityId`; the eleven fields are in
+       the entity space; the seat→party crossing is one named function per stage.
     c-then-4. **`O8`'S PARTY ARM WIDENS** from the derivatives book to every party-keyed store,
        which one index can now answer.
 
@@ -1604,6 +1581,47 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c-then-3b, CLOSED) — `PartyRef` IS A VIEW OF THE ENTITY STORE, AND THE ROAD
+THERE RAN THROUGH A LIVE DEFECT OF MY OWN MAKING.** The four firm arms key by `EntityId` now; the
+five entity arms share one key and `partyKey` writes it, so a payment's payer and a position's
+`bookId` sit in one id space — the join the cross-table check needs and never had. Getting there
+meant moving the eleven stored ticker references (`facilityBankTicker`, `brokerTicker`,
+`borrowerTicker`, `buyerTicker`, `sellerTicker`, `carrierTicker`, `parentTicker`,
+`acquiredByTicker`, plus the two already done and the tranche store's `bankRef` column) into the
+entity space, with every reader keyed on them — `facilityBookOf`, `facilityRowsOf`,
+`bankReservesOf`, `reserveRowOf`, `moveBankReserves`, `repoBorrowedLocal`, `encumberedFaceByBond`,
+`lentByBroker`, the deposit-line readers, the freight and FX-forward desk maps. `issuerTicker`
+survives on an offering as a display name beside `issuerId`.
+
+**THE DEFECT.** Two commits ago `homeBankTicker` became `homeBankId`. `accounts.ts` carried
+`type Depositor = { homeBankTicker?: string }` — a structural re-declaration of the domain field,
+UNBRANDED — and its two comparisons, `c.homeBankId !== bankTicker`, compiled and went always-false.
+**Every bank's corporate and institutional deposit line read zero from that commit until this
+one**, silently; the banks' balance sheets would not have closed and no gate could say why. It is
+the same hole as `asTicker` at a map boundary, seen from the other side: a brand protects a rename
+exactly as far as the last unbranded re-declaration or unchecked cast on the path, and this slice
+found three of each. `Depositor` is `{ homeBankId?: EntityId }`, and the rule it teaches is on the
+type: a structural re-declaration of a domain field must carry the domain type or it is a hole in
+the brand by construction.
+
+**WHERE THE TWO SPACES STILL MEET, ALL NAMED.** The clearing books seat participants by keys that
+embed a ticker (`participant-keys.ts`); `book-settlement.ts:bankIdOfTickerFor` is the one crossing
+back, built once per stage and handed to `participantPartyOf` and `dealerDeskPartyOf`, and the
+CDS and commodity books cross the same way at their seats. The goods book's `byKey` is two spaces
+by design. The `companyUpdates` channel is keyed by ticker — its own field, marked at
+`goods-arrival`. `entity-index.ts` keeps `companyByTicker` for those eleven readers, which is the
+honest count of what is still addressed by ticker on purpose.
+
+**THE MEASUREMENT THAT OPENED c-then, CLOSED.** `.ticker` references 845 → 468 and `ByTicker`
+maps 155 → 129 across the four c-then-3b commits; the rest are display names and the goods book.
+Six more full-array scans became lookups (freight's carrier per fill, prime brokerage's broker
+per line, repo's borrower per contract, the trace's focus bank per dump). `PrimaryOffering` still
+names its issuer twice (`issuerId` and `issuerTicker`) — one is a display name and the other the
+key, and that is fine so long as nothing keys on the name.
+
+84 files, +737 −637. Atlas: `money-and-settlement` C1.a/C4 closed, three citations re-pointed at
+the renamed fields. Gates green (150 tests); no run.
 
 **13-BOOK slice (c-then-3b, THE BANK LANE) — `asTicker` IS HOW A BRAND STOPS HELPING.** The
 account store's dense bank lane was `Ticker[]`, so every tally read off it came out keyed by ticker

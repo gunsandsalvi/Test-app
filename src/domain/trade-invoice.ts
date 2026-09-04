@@ -13,12 +13,12 @@
  */
 
 import { RegionId } from './geography';
-import type { Ticker } from './ids';
+import type { EntityId } from './ids';
 
 export interface TradeInvoice {
-  sellerTicker: Ticker;
+  sellerId: EntityId;
   sellerRegion: RegionId;
-  buyerTicker: Ticker;
+  buyerId: EntityId;
   buyerRegion: RegionId;
   subUnitId: string;
   /** The market's emergent invoice currency — nobody's default, an outcome. */

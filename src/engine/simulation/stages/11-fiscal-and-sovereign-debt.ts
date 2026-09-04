@@ -8,7 +8,7 @@
  */
 
 import { treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
-import { bankSecuritiesParty, bankSecuritiesPartyOfTicker, companyParty } from '../../../domain/party';
+import { bankSecuritiesParty, bankSecuritiesPartyOf, companyParty } from '../../../domain/party';
 import { retireTranche, issueTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { materializeGovLadder, ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
 import { govBillTrancheId, govBondTrancheId } from '../../../domain/sovereign-id';
@@ -247,10 +247,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           if (releasedFaceLocal <= 0 || pledgedFaceLocal <= 0) return;
           const callLocal = Math.min(ct.principalLocal, ct.principalLocal * (releasedFaceLocal / pledgedFaceLocal));
           ct.principalLocal -= callLocal;
-          collateralCalledByBorrower.set(ct.borrowerTicker,
-            (collateralCalledByBorrower.get(ct.borrowerTicker) ?? 0) + callLocal);
+          collateralCalledByBorrower.set(ct.borrowerId,
+            (collateralCalledByBorrower.get(ct.borrowerId) ?? 0) + callLocal);
           pay(ctx, {
-            payer: bankSecuritiesPartyOfTicker(ct.borrowerTicker),
+            payer: bankSecuritiesPartyOf(ct.borrowerId),
             payee: ct.lender.kind === 'BANK' ? bankSecuritiesParty(ct.lender)
               : ct.lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: ct.lender.id }
                 : { kind: 'CENTRAL_BANK', region: regionId },
@@ -296,10 +296,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             ...c.bankBalanceSheet,
             sovereignBondHoldingsByBond: newByTenor,
             sovereignBondHoldingsLocal: Math.round(Object.values(newByTenor).reduce((sum, v) => sum + v, 0)),
-            repoBorrowedLocal: Math.round(repoBorrowedLocal(book, c.ticker) - srfBorrowedLocal(book, c.ticker)),
-            srfBorrowingLocal: Math.round(srfBorrowedLocal(book, c.ticker)),
+            repoBorrowedLocal: Math.round(repoBorrowedLocal(book, c.id) - srfBorrowedLocal(book, c.id)),
+            srfBorrowingLocal: Math.round(srfBorrowedLocal(book, c.id)),
             repoEncumberedCollateralLocal: Number(
-              Array.from(encumberedFaceByBond(book, c.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
+              Array.from(encumberedFaceByBond(book, c.id).values()).reduce((a, b) => a + b, 0).toFixed(0)
             ),
           },
         };

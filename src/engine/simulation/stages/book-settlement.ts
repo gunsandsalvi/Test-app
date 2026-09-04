@@ -33,7 +33,8 @@
  */
 
 import { RegionId } from '../../../types';
-import { bankParty, bankSecuritiesPartyOfTicker, companyPartyOfTicker } from '../../../domain/party';
+import { buildEntityIndex } from '../../ledger/entity-index';
+import { bankParty, bankSecuritiesPartyOf, companyPartyOf } from '../../../domain/party';
 import { CurrencyCode } from '../../../domain/geography';
 import { WeeklyStepContext } from './context';
 import { pay, PartyRef } from './settlement';
@@ -52,7 +53,7 @@ import type { EntityId, Ticker } from '../../../domain/ids';
 import { asTicker } from '../../../domain/ids';
 
 /** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
-export interface FeeDesk { ticker: Ticker; share: number }
+export interface FeeDesk { id: EntityId; ticker: Ticker; share: number }
 
 /**
  * Settle one region's session of one book.
@@ -207,6 +208,17 @@ export function writeBackClearedFills(args: {
   });
 }
 
+/**
+ * §3.13-BOOK (c-then-3b) — the crossing `participantPartyOf` needs, built once per stage. Every
+ * clearing book seats its participants by keys that embed a firm's TICKER, and a `PartyRef` names
+ * a firm by its entity id; this is the one function that carries a book from one space to the
+ * other, so it is named here rather than five times.
+ */
+export function bankIdOfTickerFor(ctx: WeeklyStepContext): (ticker: Ticker) => EntityId | undefined {
+  const { companyByTicker } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
+  return (ticker: Ticker) => companyByTicker.get(ticker)?.id;
+}
+
 export function participantPartyOf(args: {
   regionId: RegionId;
   /** The institutions this book admitted, by their own entity ids. */
@@ -215,8 +227,20 @@ export function participantPartyOf(args: {
   deskTickers: ReadonlySet<Ticker>;
   /** 07c only: banks that bid under their plain ticker rather than `bankParticipantId`. */
   bankTickers?: ReadonlySet<Ticker>;
+  /**
+   * §3.13-BOOK (c-then-3b) — THE ONE CROSSING OUT OF THE PARTICIPANT SPACE. Every seat id below
+   * embeds a firm's TICKER (`participant-keys.ts`), and a `PartyRef` names a firm by its ENTITY
+   * id, so this is where the two spaces meet — once, here, with the caller's own index rather
+   * than a scan per fill. A ticker this cannot resolve is not a party: the seat named a firm the
+   * book does not have, and `undefined` is the answer the callers already handle.
+   */
+  bankIdOfTicker: (ticker: Ticker) => EntityId | undefined;
 }): (participantId: string) => PartyRef | undefined {
-  const { regionId, entityIds, deskTickers, bankTickers } = args;
+  const { regionId, entityIds, deskTickers, bankTickers, bankIdOfTicker } = args;
+  const securities = (t: Ticker): PartyRef | undefined => {
+    const id = bankIdOfTicker(t);
+    return id === undefined ? undefined : bankSecuritiesPartyOf(id);
+  };
   return (id: string): PartyRef | undefined => {
     // §3.13-BOOK (c2b): membership of the admitted set is what PROVES this string is an entity
     // id — `isKnownEntity` is that proof written as a narrowing, from slice (a).
@@ -224,12 +248,12 @@ export function participantPartyOf(args: {
     if (id === CENTRAL_BANK_PARTICIPANT_ID) return { kind: 'CENTRAL_BANK', region: regionId };
     if (householdRegionOfParticipant(id) !== undefined) return { kind: 'HOUSEHOLD', region: regionId };
     const bank = bankTickerOfParticipant(id);
-    if (bank !== undefined) return bankSecuritiesPartyOfTicker(bank);
+    if (bank !== undefined) return securities(bank);
     const treasury = treasuryTickerOfParticipant(id);
-    if (treasury !== undefined) return companyPartyOfTicker(treasury);
+    if (treasury !== undefined) { const tid = bankIdOfTicker(treasury); return tid === undefined ? undefined : companyPartyOf(tid); }
     // 07c seats a bank under its bare ticker; membership of that set is the proof.
-    if (bankTickers?.has(asTicker(id))) return bankSecuritiesPartyOfTicker(asTicker(id));
-    return dealerDeskPartyOf(id, deskTickers);
+    if (bankTickers?.has(asTicker(id))) return securities(asTicker(id));
+    return dealerDeskPartyOf(id, deskTickers, bankIdOfTicker);
   };
 }
 
@@ -333,7 +357,7 @@ export function settleClearedBook(
 /** The desks that share a region's clearing fees: its named banks, weighted by market share. */
 export function feeDesksForRegion(ctx: WeeklyStepContext, regionId: RegionId): FeeDesk[] {
   const banks = banksOf(ctx.prevActiveFirms, regionId);
-  return banks.map((b) => ({ ticker: b.ticker, share: b.bankMarketShare ?? 1 / Math.max(1, banks.length) }));
+  return banks.map((b) => ({ id: b.id, ticker: b.ticker, share: b.bankMarketShare ?? 1 / Math.max(1, banks.length) }));
 }
 
 /**

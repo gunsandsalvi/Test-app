@@ -108,7 +108,7 @@ export interface BackLanes {
   name: string[];
   /** §3.13-BOOK slice (c2c): the lanes hold entity ids and tickers, and say which. */
   companyId: EntityId[];
-  homeBankId: (Ticker | undefined)[];
+  homeBankId: (EntityId | undefined)[];
   // --- strings for diagnostics and the bridge tranche (main-side only) ---
   /** §3.13-BOOK slice (c2c): the lane holds tickers, so it says so. */
   ticker: Ticker[];
@@ -166,7 +166,7 @@ export function buildBackLanes(
     carrierFreightRevenueLocal: f(), channelMarginRevenueLocal: f(),
     wasDefaulted: new Uint8Array(n), wasMergerAcquired: new Uint8Array(n), publiclyListed: new Uint8Array(n),
     creditRating: T.creditRating as string[], name: T.name as string[],
-    companyId: T.id as EntityId[], homeBankId: T.homeBankId as (Ticker | undefined)[],
+    companyId: T.id as EntityId[], homeBankId: T.homeBankId as (EntityId | undefined)[],
     ticker: T.ticker as Ticker[], region: T.region as Company['region'][], sector: T.sector as Company['sector'][],
   };
   const NaN_ = Number.NaN;

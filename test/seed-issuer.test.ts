@@ -13,7 +13,7 @@
  * the issuer read resolves a tranche to its company rather than to itself.
  */
 import { test } from 'node:test';
-import { companyPartyOfTicker } from '../src/domain/party';
+import { companyPartyOf } from '../src/domain/party';
 import assert from 'node:assert/strict';
 import { corporateTrancheId } from '../src/domain/instrument-keys';
 import { ensureV2 } from '../src/engine2/world';
@@ -60,7 +60,8 @@ test('a seeded CORPORATE BOND row is issued by its company, not by a party that 
     originationWeek: 0, maturityWeek: 260, seniority: 'SENIOR',
   }]);
   // §3.13-BOOK (c-then-2): `issuerOfHoldingRow` takes the ENTITY INDEX now, not a `Map<id, ticker>`
-  // mirror of it. Only the ticker is read, so a one-firm index is all this needs.
+  // mirror of it — and since (c-then-3b) the party it returns names the issuer by ENTITY id, so
+  // a one-firm index is all this needs and the assertion below is on the id, not the ticker.
   const companyById = buildEntityIndex(
     [{ id: asEntityId('USA_ACME'), ticker: asTicker('ACME') } as Company], []).companyById;
   const row: ItemizedHolding = {
@@ -68,13 +69,14 @@ test('a seeded CORPORATE BOND row is issued by its company, not by a party that 
     quantityOrNotionalLocal: 1_000, units: 1_000,
   };
   // Before the fix this was `{ kind: 'INSTITUTION', id: 'ACME-T1' }`.
-  assert.deepEqual(issuerOfHoldingRow(v2, row, companyById), companyPartyOfTicker(asTicker('ACME')));
+  assert.deepEqual(issuerOfHoldingRow(v2, row, companyById), companyPartyOf(asEntityId('USA_ACME')));
 });
 
 test('a seeded FUND SHARE row is still issued by the fund itself', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
   // §3.13-BOOK (c-then-2): `issuerOfHoldingRow` takes the ENTITY INDEX now, not a `Map<id, ticker>`
-  // mirror of it. Only the ticker is read, so a one-firm index is all this needs.
+  // mirror of it — and since (c-then-3b) the party it returns names the issuer by ENTITY id, so
+  // a one-firm index is all this needs and the assertion below is on the id, not the ticker.
   const companyById = buildEntityIndex(
     [{ id: asEntityId('USA_ACME'), ticker: asTicker('ACME') } as Company], []).companyById;
   const row: ItemizedHolding = {

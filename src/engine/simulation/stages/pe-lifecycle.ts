@@ -805,7 +805,7 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
     maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
     seniority: 'SENIOR',
     isBankFacility: true,
-    facilityBankTicker: bank?.ticker, // still the TICKER space — its own (c-then-3b) commit
+    facilityBankId: bank?.id,
   };
   issueTranche(ctx.v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'firm birth: facility lent by the home bank');
   pay(ctx, {

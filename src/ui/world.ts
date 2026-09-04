@@ -127,10 +127,10 @@ export function recordTape(tape: Tape, state: GameState): void {
     const s = c.bankBalanceSheet;
     put(`bank:${c.id}:capital ratio`, s.bankCapitalRatio);
     put(`bank:${c.id}:nim`, s.netInterestMarginPct);
-    put(`bank:${c.id}:deposits`, spendableDepositsOf(s, stateDepositLines(state, c.ticker)));
-    put(`bank:${c.id}:reserves`, bankReservesOf(ensureV2(state), c.ticker));
+    put(`bank:${c.id}:deposits`, spendableDepositsOf(s, stateDepositLines(state, c)));
+    put(`bank:${c.id}:reserves`, bankReservesOf(ensureV2(state), c.id));
     put(`bank:${c.id}:central bank loan`, s.centralBankLoanLocal ?? 0);
-    put(`bank:${c.id}:loans`, loanBooksOf(s, facilityBookOf(ensureV2(state), c.ticker)));
+    put(`bank:${c.id}:loans`, loanBooksOf(s, facilityBookOf(ensureV2(state), c.id)));
   });
   const boundByBook = new Map<string, number>();
   (state.lastWeekDamperBoundIds ?? []).forEach((id) => { const book = id.split(':')[0]; boundByBook.set(book, (boundByBook.get(book) ?? 0) + 1); });
@@ -275,9 +275,8 @@ export function sovereignHoldersOf(world: World, regionId: string): { holderId: 
 
 /** The bank lines to one borrower — its facility rows, seen from each lender (step 10). */
 export function bankLinesTo(world: World, borrowerId: string): { bankId: string; principalLocal: number; marginBps: number; maturityWeek: number; status: string }[] {
-  const bankIdByTicker = new Map(world.state.companies.filter((b) => b.isBankEntity).map((b) => [b.ticker, b.id]));
   return facilitiesOfBorrower(world.v2, borrowerId).map((f) => ({
-    bankId: bankIdByTicker.get(f.bankTicker) ?? f.bankTicker, principalLocal: f.principalLocal, marginBps: f.marginBps, maturityWeek: f.maturityWeek, status: 'PERFORMING',
+    bankId: f.bankId, principalLocal: f.principalLocal, marginBps: f.marginBps, maturityWeek: f.maturityWeek, status: 'PERFORMING',
   }));
 }
 

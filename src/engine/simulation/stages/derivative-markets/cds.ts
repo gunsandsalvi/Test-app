@@ -19,8 +19,9 @@
  */
 
 import { bankReservesOf } from '../../../ledger/accounts';
-import { bankParty, bankPartyOfTicker } from '../../../../domain/party';
-import { RegionId, Company } from '../../../../types';
+import { buildEntityIndex } from '../../../ledger/entity-index';
+import { bankParty, bankPartyOf } from '../../../../domain/party';
+import { RegionId } from '../../../../types';
 import { ensureV2 } from '../../../../engine2/world';
 import { institutionProfile } from '../../../../domain/institution-profiles';
 import { CDS_TENOR_WEEKS, protectionNeedLocal } from '../../../../domain/derivatives/classes/cds';
@@ -44,11 +45,14 @@ import { cdsInstrumentId } from '../../../../domain/instrument-keys';
 import type { InstrumentId, EntityId } from '../../../../domain/ids';
 import { asEntityId } from '../../../../domain/ids';
 import { asTicker } from '../../../../domain/ids';
+import type { Ticker } from '../../../../domain/ids';
 function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
   const v2cds = ensureV2(state);
-  const companyById = new Map<string, Company>(
-    [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].map((c) => [c.id, c])
-  );
+  // §3.13-BOOK (c-then-2/3b): the ONE index — the two-array union it replaces was a strict subset
+  // of `updatedCompanies` — and the seat→party crossing built off it once per session.
+  const cdsIndex = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
+  const companyById = cdsIndex.companyById;
+  const bankIdOfTicker = (t: Ticker) => cdsIndex.companyByTicker.get(t)?.id;
 
   REGION_IDS.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
@@ -71,12 +75,12 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
     const regionBanks = ctx.prevActiveFirms.filter(
       (c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c)
     );
-    const hedgeDemandByIssuer = new Map<string, { party: DerivativeParty; usd: number }[]>();
+    const hedgeDemandByIssuer = new Map<EntityId, { party: DerivativeParty; usd: number }[]>();
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-      const exposureByIssuer = new Map<string, number>();
+      const exposureByIssuer = new Map<EntityId, number>();
       // Step 10: the bank's exposure to a name is its facility rows on that name's ladder.
-      facilityRowsOf(ctx.v2, bank.ticker).forEach((l) => {
+      facilityRowsOf(ctx.v2, bank.id).forEach((l) => {
         exposureByIssuer.set(l.borrowerId, (exposureByIssuer.get(l.borrowerId) ?? 0) + Math.max(0, l.principalLocal));
       });
       const party: DerivativeParty = bankParty(bank);
@@ -86,7 +90,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
         const needLocal = protectionNeedLocal({
           exposureLocal,
           bankEquityLocal: sheet.bankEquityLocal,
-          alreadyHedgedLocal: standing.coverLocal('CDS', 'a', bankPartyKey(bank.ticker), issuerId),
+          alreadyHedgedLocal: standing.coverLocal('CDS', 'a', bankPartyKey(bank.id), issuerId),
         });
         if (needLocal <= 1) return;
         const list = hedgeDemandByIssuer.get(issuerId) ?? [];
@@ -137,7 +141,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
       const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       const capacityLocal = deskNotionalCapacityLocal(
-        leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeLocal(bankPartyKey(bank.ticker)), 'CDS');
+        leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id)), standing.pfeChargeLocal(bankPartyKey(bank.id)), 'CDS');
       if (!(capacityLocal > 0)) return;
       referenceIssuers.forEach((c) => {
         const annualPd = pdByIssuerId.get(c.id)!;
@@ -242,8 +246,10 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
           if (notional <= 1) return;
           // §3.13-BOOK (c2b): a participant id is its own space. A `CDSDESK-` seat is a bank's
           // desk; anything else in this book is an institution bidding under its entity id.
-          const seller: DerivativeParty = participantId.startsWith('CDSDESK-')
-            ? bankPartyOfTicker(asTicker(participantId.slice('CDSDESK-'.length)))
+          const deskBankId = participantId.startsWith('CDSDESK-')
+            ? bankIdOfTicker(asTicker(participantId.slice('CDSDESK-'.length))) : undefined;
+          const seller: DerivativeParty = deskBankId !== undefined
+            ? bankPartyOf(deskBankId)
             : { kind: 'INSTITUTION', id: asEntityId(participantId) };
           struck.push({
             id: `${regionId}-CDS-${issuer.id}-${week}-${seq++}`,

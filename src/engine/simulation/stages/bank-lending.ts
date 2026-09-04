@@ -143,7 +143,7 @@ export function migrateSmeDebtAtSeed(
   // §5-WIRES D: the sheets carry no loan-book scalar; what the seed's stated consumer book
   // still occupies of each bank's capital (until HH3 replaces it with real pools) is counted
   // through the same stated number HH3 replaces — the two migrations read one seed.
-  const usedRwaLocal = banks.reduce((a, b) => a + bankRwaLocal(b.bankBalanceSheet!, facilityBookOf(v2, b.ticker)) + seedConsumerRwaLocal(reg, b), 0);
+  const usedRwaLocal = banks.reduce((a, b) => a + bankRwaLocal(b.bankBalanceSheet!, facilityBookOf(v2, b.id)) + seedConsumerRwaLocal(reg, b), 0);
   const carriableLocal = Math.max(0, totalEquityLocal / BANK_WORKING_CAPITAL_RATIO - usedRwaLocal);
   const migratedLocal = Math.min(serviceableLocal, carriableLocal);
 
@@ -174,7 +174,7 @@ export function migrateSmeDebtAtSeed(
     // until HH3 seeds the real pools and re-derives this again.
     const sovLocal = Object.values(sheet.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
     stashSeedHouseholdLine(sheet, Math.round((
-      businessLoanBookOf(sheet, facilityBookOf(v2, bank.ticker)) + seedConsumerLoanBookLocal(reg, bank) + sovLocal + openingCashOf(sheet) - sheet.bankEquityLocal
+      businessLoanBookOf(sheet, facilityBookOf(v2, bank.id)) + seedConsumerLoanBookLocal(reg, bank) + sovLocal + openingCashOf(sheet) - sheet.bankEquityLocal
     )));
   });
 
@@ -460,7 +460,7 @@ export function migrateHouseholdDebtAtSeed(
     // §5-WIRES D: the consumer scalar this replaces is the seed's STATED book (never stored on
     // the sheet); it stands in the prior RWA exactly as the stored copy used to.
     const replacedRwaLocal = seedConsumerRwaLocal(reg, bank);
-    const facilityBookLocal = facilityBookOf(v2, bank.ticker);
+    const facilityBookLocal = facilityBookOf(v2, bank.id);
     const priorRwaLocal = bankRwaLocal(sheet, facilityBookLocal) + replacedRwaLocal;
     const priorRatio = priorRwaLocal > 0 ? sheet.bankEquityLocal / priorRwaLocal : BANK_WORKING_CAPITAL_RATIO;
     const newHouseholdRwaLocal = householdBookRwaLocal(pools);

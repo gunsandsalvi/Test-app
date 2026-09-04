@@ -56,7 +56,7 @@ import { WeeklyStepContext } from './context';
 import { buildEntityIndex } from '../../ledger/entity-index';
 
 import { institutionSpendableLocal, PartyRef } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, participantPartyOf, parHoldingRow, writeBackClearedFills } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, participantPartyOf, bankIdOfTickerFor, parHoldingRow, writeBackClearedFills } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
@@ -113,6 +113,8 @@ function floatingDebtLocal(v2: V2World, comp: Company): number {
 // loan's own remaining life, which its row already states exactly.
 
 export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+  // §3.13-BOOK (c-then-3b): the participant→party crossing, once per stage.
+  const bankIdOfTicker = bankIdOfTickerFor(ctx);
   const v2 = ensureV2(state);
   const regionIds = REGION_IDS;
   const week = ctx.nextWeek;
@@ -548,7 +550,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const issuer = companyById.get(issuerIdOf(ctx.v2, instrumentId));
       return issuer ? companyParty(issuer) : undefined;
     };
-    const partyOfParticipant = participantPartyOf({ regionId, entityIds, deskTickers });
+    const partyOfParticipant = participantPartyOf({ regionId, entityIds, deskTickers, bankIdOfTicker });
     // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
     // through the same clearing house as the paper. A loan trades clean like a bond.
     const accruedLeg = accruedOnFills(

@@ -21,6 +21,7 @@
  */
 
 import { currencyOf } from '../../../domain/geography';
+import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { defect } from '../../../domain/defect';
 import { bankCreditParty, bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
@@ -111,7 +112,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     {
       const depositsOf = (b: Company) => {
         if (!b.bankBalanceSheet) return 0;
-        const l = bankDepositLines(ctx, b.ticker);
+        const l = bankDepositLines(ctx, b);
         return Math.max(0, l.householdLocal) + Math.max(0, l.corporateLocal) + Math.max(0, l.institutionalLocal) + Math.max(0, l.smeLocal);
       };
       const regionDepositsLocal = banks.reduce((a, b) => a + depositsOf(b), 0);
@@ -168,7 +169,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         maturityWeek: ctx.nextWeek + 52,
         seniority: 'SENIOR' as const,
         isBankFacility: true,
-        facilityBankTicker: homeBank?.ticker, // still the TICKER space — its own (c-then-3b) commit
+        facilityBankId: homeBank?.id,
       };
       issueTranche(ensureV2(state), { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
       pay(ctx, {
@@ -211,12 +212,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     // What each bank owes and is owed on contracts that come due this week.
     const dueThisWeek = maturingAt(reg.repoBook ?? [], ctx.nextWeek);
-    const maturingRepo = (ticker: Ticker) => {
+    const maturingRepo = (bankId: EntityId) => {
       let borrowPrincipalLocal = 0, borrowInterestLocal = 0, lendPrincipalLocal = 0, lendInterestLocal = 0;
       dueThisWeek.forEach((c) => {
         const interestLocal = repoInterestToMaturityLocal(c);
-        if (c.borrowerTicker === ticker) { borrowPrincipalLocal += c.principalLocal; borrowInterestLocal += interestLocal; }
-        if (c.lender.kind === 'BANK' && c.lender.ticker === ticker) { lendPrincipalLocal += c.principalLocal; lendInterestLocal += interestLocal; }
+        if (c.borrowerId === bankId) { borrowPrincipalLocal += c.principalLocal; borrowInterestLocal += interestLocal; }
+        if (c.lender.kind === 'BANK' && c.lender.id === bankId) { lendPrincipalLocal += c.principalLocal; lendInterestLocal += interestLocal; }
       });
       return { borrowPrincipalLocal, borrowInterestLocal, lendPrincipalLocal, lendInterestLocal };
     };
@@ -226,8 +227,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const prevSheet = bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, share);
       const riskFactor = bank.bankRiskFactor ?? 1.0;
       // step 10: the bank's facility book is its rows on the borrowers' ladders.
-      const facilityRows = facilityRowsOf(ctx.v2, bank.ticker);
-      const facilityBookLocal = facilityBookOf(ctx.v2, bank.ticker);
+      const facilityRows = facilityRowsOf(ctx.v2, bank.id);
+      const facilityBookLocal = facilityBookOf(ctx.v2, bank.id);
 
       // Last week's itemized book earns its real interest — computed here so the margin
       // reads the same loans the book actually holds.
@@ -268,13 +269,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         return a + (pl.principalLocal * rate) / 52;
       }, 0);
 
-      const reservesLocal = bankReservesOf(ctx.v2, bank.ticker);
+      const reservesLocal = bankReservesOf(ctx.v2, bank.id);
       const householdOpenLocal = householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region));
       const { sheet, householdLineLocal: evolvedHouseholdLineLocal } = evolveBankingSector(
         prevSheet,
         { businessLoanLocal: businessLoanBookOf(prevSheet, facilityBookLocal), consumerLoanLocal: consumerLoanBookOf(prevSheet) },
         reservesLocal,
-        bankDepositLines(ctx, bank.ticker),
+        bankDepositLines(ctx, bank),
         reg.estimatedHouseholdIncomeLocal * share,
         reg.householdState.savingsRate,
         reg.policyRate,
@@ -289,10 +290,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         reg.creditConditionsSpilloverAdjustment ?? 0,
         // The CONTRACTS due this week mature inside as explicit flows — each at the rate
         // it was struck at and over the term it ran, the standing facility included.
-        maturingRepo(bank.ticker).borrowPrincipalLocal,
-        maturingRepo(bank.ticker).borrowInterestLocal,
-        maturingRepo(bank.ticker).lendPrincipalLocal,
-        maturingRepo(bank.ticker).lendInterestLocal,
+        maturingRepo(bank.id).borrowPrincipalLocal,
+        maturingRepo(bank.id).borrowInterestLocal,
+        maturingRepo(bank.id).lendPrincipalLocal,
+        maturingRepo(bank.id).lendInterestLocal,
         priorLoanInterestWeeklyLocal - priorSmeInterestWeeklyLocal,
         priorHouseholdInterestWeeklyLocal,
         // Real coupons on this bank's own sovereign book.
@@ -389,7 +390,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       adjustSectorRow(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, bank.ticker, currencyOf(regionId), householdLineLocal - householdOpenLocal);
       // A3.6a/c: the evolution used to return the reserves rounded to the dollar; the rounding is
       // the bank's account moving by the fraction (a stated artifact kept for the run's identity).
-      adjustBankReserves(ctx.v2, bank.ticker, Math.round(reservesLocal) - reservesLocal);
+      adjustBankReserves(ctx.v2, bank.id, Math.round(reservesLocal) - reservesLocal);
       return { bank, sheet: withDeposits };
     });
 
@@ -444,7 +445,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // leaves here, bank-lending owns the write; the cash leaves at settlement, extinguishing
       // the reserves it created), and its interest is a payment to the named creditor.
       const cbSheet = reg.centralBankSheet;
-      const repaidLocal = repayCentralBankLoanLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)), bankCashBufferRatioOf(bank));
+      const repaidLocal = repayCentralBankLoanLocal(sheet, bankReservesOf(ctx.v2, bank.id), householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)), bankCashBufferRatioOf(bank));
       if (repaidLocal > 0) {
         if (cbSheet) cbSheet.loansToBanksLocal = Math.max(0, (cbSheet.loansToBanksLocal ?? 0) - repaidLocal);
         pay(ctx, {
@@ -501,7 +502,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const deskView = (book: string) =>
       Array.from(regionalDeskView(newSheets.map(({ sheet }) => sheet.dealerDeskInventory), book).entries())
         .filter(([, usd]) => Math.abs(usd) > 1);
-    const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.ticker)) + sheet.sovereignBondHoldingsLocal + bankReservesOf(ctx.v2, bank.ticker);
+    const assetsOf = ({ bank, sheet }: { bank: Company; sheet: BankingSector }) => loanBooksOf(sheet, facilityBookOf(ctx.v2, bank.id)) + sheet.sovereignBondHoldingsLocal + bankReservesOf(ctx.v2, bank.id);
     const totalAssets = newSheets.reduce((s, e) => s + assetsOf(e), 0);
     const weightedAvg = (f: (s: BankingSector) => number) =>
       totalAssets > 0

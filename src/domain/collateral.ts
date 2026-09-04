@@ -31,12 +31,12 @@ export interface CollateralPosition {
 
 /** Total face pledged in one bond across every contract this borrower has open. */
 export function pledgedFaceByBond(
-  contracts: { borrowerTicker: Ticker; collateral: Pledge[] }[],
+  contracts: { borrowerId: Ticker; collateral: Pledge[] }[],
   ticker: string
 ): Map<InstrumentId, number> {
   const out = new Map<InstrumentId, number>();
   for (const c of contracts) {
-    if (c.borrowerTicker !== ticker) continue;
+    if (c.borrowerId !== ticker) continue;
     for (const p of c.collateral) out.set(p.bondId, (out.get(p.bondId) ?? 0) + p.faceLocal);
   }
   return out;

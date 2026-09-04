@@ -19,8 +19,8 @@
  *   moveFacilityLender — a resolved bank's facilities move to the assuming bank: one wire each
  *   seedLadder     — a seeded or born firm's ladder installed without wires (principle B's gap)
  */
-import { V2World, internTicker, tickerOf, tickerRefOf } from '../../engine2/world';
-import { bankPartyOfTicker, companyParty } from '../../domain/party';
+import { V2World, internEntity, entityOf, entityRefOf } from '../../engine2/world';
+import { bankPartyOf, companyParty } from '../../domain/party';
 import { mutableTranches, pushLadderRow, relinkLadder, syncLadderRows, ladderRowsOf, TR_FACILITY, trancheIdOf, trancheKindOfRow } from '../../engine2/tranches';
 import { DebtTranche } from '../../domain/company';
 import { RegionId } from '../../domain/geography';
@@ -57,15 +57,15 @@ function holderOfRow(v2: V2World, r: number, region: RegionId): PartyRef {
   const S = v2.tranches;
   if (S.flags[r] & TR_FACILITY) {
     if (S.bankRef[r] < 0) return defect(`facility ${trancheIdOf(v2, r)} names no lending bank — its paper has no holder`);
-    return bankPartyOfTicker(tickerOf(v2, S.bankRef[r]));
+    return bankPartyOf(entityOf(v2, S.bankRef[r]));
   }
   return { kind: 'CLEARING_HOUSE', region };
 }
 
 function holderOfTranche(t: DebtTranche, region: RegionId): PartyRef {
   if (t.isBankFacility) {
-    if (!t.facilityBankTicker) return defect(`facility ${t.id} names no lending bank — its paper has no holder`);
-    return bankPartyOfTicker(t.facilityBankTicker);
+    if (!t.facilityBankId) return defect(`facility ${t.id} names no lending bank — its paper has no holder`);
+    return bankPartyOf(t.facilityBankId);
   }
   return { kind: 'CLEARING_HOUSE', region };
 }
@@ -132,16 +132,16 @@ export function rebuildLadder(v2: V2World, issuer: TrancheIssuer, ladder: DebtTr
 }
 
 /** A resolved bank's facilities on this firm's ladder move to the assuming bank, one wire each. */
-export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromTicker: Ticker, toTicker: Ticker, reason: string): number {
+export function moveFacilityLender(v2: V2World, issuer: TrancheIssuer, fromBankId: EntityId, toBankId: EntityId, reason: string): number {
   const S = mutableTranches(v2);
-  const fromRef = tickerRefOf(v2, fromTicker);
+  const fromRef = entityRefOf(v2, fromBankId);
   if (fromRef < 0) return 0;
-  const toRef = internTicker(v2, toTicker);
+  const toRef = internEntity(v2, toBankId);
   let moved = 0;
   for (const r of ladderRowsOf(v2, issuer.id)) {
     if (S.bankRef[r] !== fromRef) continue;
     if (S.principalLocal[r] > 0.01) {
-      wire({ from: bankPartyOfTicker(fromTicker), to: bankPartyOfTicker(toTicker), kind: trancheKindOfRow(v2, r), asset: trancheIdOf(v2, r), quantity: S.principalLocal[r], priceLocal: 1, reason }, internReason);
+      wire({ from: bankPartyOf(fromBankId), to: bankPartyOf(toBankId), kind: trancheKindOfRow(v2, r), asset: trancheIdOf(v2, r), quantity: S.principalLocal[r], priceLocal: 1, reason }, internReason);
     }
     S.bankRef[r] = toRef;
     moved++;

@@ -28,7 +28,7 @@ function m1(state: GameState, week: number): AuditFinding[] {
     const cb = reg?.centralBankSheet;
     if (!cb) return;
     const v2 = ensureV2(state);
-    const reserves = sum(banksOf(state.companies, r), (b) => bankReservesOf(v2, b.ticker));
+    const reserves = sum(banksOf(state.companies, r), (b) => bankReservesOf(v2, b.id));
     const tga = treasuryAccountOf(v2, r);
     const wam = waysAndMeansOf(v2, r);
     const assets = centralBankAssetsLocal(cb, wam, currencyOf(r), fx);
@@ -106,8 +106,8 @@ function m4(state: GameState, week: number): AuditFinding[] {
   if (negCorp.length) out.push({ family: 'M', check: 'M4 overdrawn firms', week, usd: sum(negCorp, (c) => cashOf(v2, c)), message: `${negCorp.length} firms overdrawn, ${B(sum(negCorp, (c) => cashOf(v2, c)))} in all (worst ${negCorp.sort((a, b) => cashOf(v2, a) - cashOf(v2, b))[0].ticker} ${M(cashOf(v2, negCorp[0]))})` });
   const negInst = state.institutionalEntities.filter((e) => !e.isDefaulted && entityCashOf(v2, e) < -1e6);
   if (negInst.length) { const worst = [...negInst].sort((a, b) => entityCashOf(v2, a) - entityCashOf(v2, b))[0]; out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => entityCashOf(v2, e)), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => entityCashOf(v2, e)))} (worst ${worst.ticker ?? worst.id} ${worst.entityType} ${M(entityCashOf(v2, worst))})` }); }
-  const negBank = banksOf(state.companies).filter((b) => bankReservesOf(v2, b.ticker) < -1e6);
-  if (negBank.length) out.push({ family: 'M', check: 'M4 negative reserves', week, usd: sum(negBank, (b) => bankReservesOf(v2, b.ticker)), message: `${negBank.map((b) => b.ticker).join(' ')} hold negative reserves` });
+  const negBank = banksOf(state.companies).filter((b) => bankReservesOf(v2, b.id) < -1e6);
+  if (negBank.length) out.push({ family: 'M', check: 'M4 negative reserves', week, usd: sum(negBank, (b) => bankReservesOf(v2, b.id)), message: `${negBank.map((b) => b.ticker).join(' ')} hold negative reserves` });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     if (!reg) return;
@@ -127,8 +127,8 @@ function m5(state: GameState, week: number): AuditFinding[] {
     const bs = b.bankBalanceSheet!;
     const sov = sum(Object.values(bs.sovereignBondHoldingsByBond ?? {}), (v) => Number(v) || 0);
     const desks = sum(Object.values(bs.dealerDeskInventory ?? {}), (rows) => sum(rows, (x) => x.inventoryLocal));
-    const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.ticker)) + sov + bankReservesOf(ensureV2(state), b.ticker) + (bs.repoLentLocal ?? 0) + (bs.sovereignAccruedCouponLocal ?? 0) + desks + (bs.primeBrokerageLoansLocal ?? 0);
-    const liabilities = depositsOf(bs, stateDepositLines(state, b.ticker)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0);
+    const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.id)) + sov + bankReservesOf(ensureV2(state), b.id) + (bs.repoLentLocal ?? 0) + (bs.sovereignAccruedCouponLocal ?? 0) + desks + (bs.primeBrokerageLoansLocal ?? 0);
+    const liabilities = depositsOf(bs, stateDepositLines(state, b)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0);
     const residual = assets - liabilities - bs.bankEquityLocal;
     if (Math.abs(residual) > Math.max(1e7, assets * 2e-3)) out.push({ family: 'M', check: 'M5 bank sheet closes', week, usd: residual, message: `${b.region}:${b.ticker} assets ${B(assets)} − liabilities ${B(liabilities)} − equity ${B(bs.bankEquityLocal)} = ${B(residual)}` });
   });
@@ -146,7 +146,7 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const cb = reg?.centralBankSheet;
     if (!before || !cb || !reg) return;
     // Money is the bank lines and the treasury's account (nothing is in transit).
-    const now = sum(banksOf(state.companies, r), (b) => spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker))) + treasuryAccountOf(ensureV2(state), r);
+    const now = sum(banksOf(state.companies, r), (b) => spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b))) + treasuryAccountOf(ensureV2(state), r);
     const moneyBefore = before.bankDepositsLocal + before.treasuryAccountLocal;
     // Every creator, by name: the payment ledger's (bank credit written, reserves the central
     // bank issued, what the banks paid out of their own account, money from other regions), the
@@ -171,7 +171,7 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
       // deposits it held. Reported only when the two reads DIFFER, because then the gap is a
       // filter rather than a missing creator, and that is a different defect entirely.
       const allBanks = state.companies.filter((c) => c.isBankEntity && c.bankBalanceSheet && c.region === r);
-      const nowAll = sum(allBanks, (b) => spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker))) + treasuryAccountOf(ensureV2(state), r);
+      const nowAll = sum(allBanks, (b) => spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b))) + treasuryAccountOf(ensureV2(state), r);
       const tail = (Math.abs(marginDelta) > 1e6 ? ` — the client-margin line moved ${B(marginDelta)}, which is inside the stock but is no account row` : '')
         + (unplaced ? ` (${B(unplaced)} of bank tallies reached no region at all)` : '')
         + (Math.abs(nowAll - now) > 1e6 ? ` [over ALL ${allBanks.length} of the region's banks the stock is ${B(nowAll)}, not ${B(now)} — the active filter is dropping a bank that still holds deposits]` : '');

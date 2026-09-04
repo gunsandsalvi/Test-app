@@ -57,7 +57,7 @@ function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix
   tranches.forEach(t => {
     const tenorBucket = Math.round((t.maturityWeek - nextWeek) / 260); // nearest 5-year bucket
     const key = [t.rateType, tenorBucket, t.callProtection ?? 'none', t.seniority,
-      t.isBankFacility ? `F:${t.facilityBankTicker ?? ''}` : '', t.isCommercialPaper ? 'CP' : ''].join('-');
+      t.isBankFacility ? `F:${t.facilityBankId ?? ''}` : '', t.isCommercialPaper ? 'CP' : ''].join('-');
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key)!.push(t);
   });
@@ -85,7 +85,7 @@ function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix
       // Identical across the group by construction (they are in the key).
       callProtection: group[0].callProtection,
       isBankFacility: group[0].isBankFacility,
-      facilityBankTicker: group[0].facilityBankTicker,
+      facilityBankId: group[0].facilityBankId,
       isCommercialPaper: group[0].isCommercialPaper,
     });
   });
@@ -388,7 +388,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     const ab = acquirer.bankBalanceSheet;
     mergeBankSheets(ab, tb);
     moveSectorRowsToBank(ctx.v2, target.ticker, acquirer.ticker); // A3.3: the sector parties' rows at the target join the acquirer's
-    moveBankReserves(ctx.v2, target.ticker, acquirer.ticker); // A3.6a: and its reserves join the acquirer's row
+    moveBankReserves(ctx.v2, target.id, acquirer.id); // A3.6a: and its reserves join the acquirer's row
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (target.bankMarketShare ?? 0)).toFixed(4));
     target.bankBalanceSheet = undefined;
 
@@ -401,7 +401,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     rekeyBankLinks(state, ctx, target.region as RegionId, target, acquirer);
     // Steps 10/11: the re-key moved the target's facility rows to the acquirer as lender and its
     // customers' house-bank links with them; the statistics are read once every link has moved.
-    restateBankSheetStatistics(ab, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker), facilityBookOf(ctx.v2, acquirer.ticker));
+    restateBankSheetStatistics(ab, bankReservesOf(ctx.v2, acquirer.id), bankDepositLines(ctx, acquirer), facilityBookOf(ctx.v2, acquirer.id));
   }
 
   // The target's PAPER moves with its debt. Holdings are keyed by the issuer's company
@@ -498,7 +498,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // input lots move onto the acquirer's books by wire, and its supply contracts name the
   // acquirer on either side. A merged firm is not dead — an acquired firm's rows cannot exist.
   if (!target.bankBalanceSheet) {
-    const rekey = (p: DerivativeParty): DerivativeParty => (p.kind === 'COMPANY' && p.ticker === target.ticker ? companyParty(acquirer) : p);
+    const rekey = (p: DerivativeParty): DerivativeParty => (p.kind === 'COMPANY' && p.id === target.id ? companyParty(acquirer) : p);
     ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekey(c.a), b: rekey(c.b) }));
   }
   reassignConsignments(state, target, acquirer);
@@ -512,7 +512,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
 
   // Target is absorbed and exits active operations
   target.mergerAcquired = true;
-  target.acquiredByTicker = acquirer.ticker;
+  target.acquiredById = acquirer.id;
   target.isDefaulted = false;
   target.stockPrice = 0;
   target.employeeCount = 0;

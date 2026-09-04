@@ -39,9 +39,9 @@ const MIN_MARK = 1e-6;
  * stored local-money number and does not move with a rate.
  */
 const bankNetOf = (state: GameState, ticker: Ticker): number => {
-  const sheet = state.companies.find((c) => c.ticker === ticker)?.bankBalanceSheet;
-  if (!sheet) return 0;
-  return bankReservesOf(state.v2!, ticker) - depositsOf(sheet, stateDepositLines(state, ticker));
+  const bank = state.companies.find((c) => c.ticker === ticker);
+  if (!bank?.bankBalanceSheet) return 0;
+  return bankReservesOf(state.v2!, bank.id) - depositsOf(bank.bankBalanceSheet, stateDepositLines(state, bank));
 };
 
 /** A central bank's book, both sides, in its own money. */
@@ -51,7 +51,7 @@ const centralBankNetOf = (state: GameState, region: RegionId): number => {
   const v2 = state.v2!;
   const reserves = state.companies
     .filter((c) => c.region === region && c.isBankEntity && c.bankBalanceSheet)
-    .reduce((a, c) => a + bankReservesOf(v2, c.ticker), 0);
+    .reduce((a, c) => a + bankReservesOf(v2, c.id), 0);
   return centralBankAssetsLocal(cb, waysAndMeansOf(v2, region), currencyOf(region), v2.fx)
     - centralBankLiabilitiesLocal(cb, reserves, treasuryAccountOf(v2, region));
 };

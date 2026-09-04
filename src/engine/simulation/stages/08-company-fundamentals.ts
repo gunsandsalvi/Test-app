@@ -154,11 +154,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   carryingCostByTicker.forEach((costLocal, ticker) => {
     const owner = prevActiveFirms.find(c => c.ticker === ticker);
     if (!owner) return;
-    ctx.channelShareByRegion[owner.region]?.forEach((share, holderTicker) => {
-      if (holderTicker === ticker) return; // a distributor warehouses its own stock
+    ctx.channelShareByRegion[owner.region]?.forEach((share, holderId) => {
+      if (holderId === owner.id) return; // a distributor warehouses its own stock
       const amountLocal = costLocal * share;
       if (amountLocal > 0) {
-        ctx.channelMarginRevenue[holderTicker] = (ctx.channelMarginRevenue[holderTicker] ?? 0) + amountLocal;
+        ctx.channelMarginRevenue[holderId] = (ctx.channelMarginRevenue[holderId] ?? 0) + amountLocal;
       }
     });
   });

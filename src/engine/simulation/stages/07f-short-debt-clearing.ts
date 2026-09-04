@@ -32,9 +32,9 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
-import { buildEntityIndex } from '../../ledger/entity-index';
-import { bankCreditPartyOfTicker, bankSecuritiesParty, bankSecuritiesPartyOfTicker, companyParty, companyPartyOfTicker } from '../../../domain/party';
-import { asInstrumentId, InstrumentId, asTicker } from '../../../domain/ids';
+import { asEntityId } from '../../../domain/ids';
+import { bankCreditPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf, companyParty, companyPartyOf } from '../../../domain/party';
+import { asInstrumentId, InstrumentId } from '../../../domain/ids';
 
 import { ensureV2 } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, facilityBookOf, issuerIdOf, trancheRowOf, trancheScheduleOf, trancheIdOf } from '../../../engine2/tranches';
@@ -57,7 +57,7 @@ import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementLocal, institutionSpendableLocal, PartyRef } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, PrimaryTake, participantPartyOf, parHoldingRow, writeBackClearedFills } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, PrimaryTake, participantPartyOf, bankIdOfTickerFor, parHoldingRow, writeBackClearedFills } from './book-settlement';
 import { clearedBookDelta, transferHolding } from '../../ledger/holdings-ledger';
 import { wireCentralBankFills } from './central-bank-demand';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
@@ -67,10 +67,7 @@ import { discountBillProceedsLocal, billYieldFromPrice, isDiscountBill } from '.
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { materializeGovLadder } from '../../../engine2/tranches';
-import {
-  CP_SINGLE_ISSUER_LIMIT, CP_SHARE_OF_TERM_SLEEVE, CP_FULL_SIZE_YIELD_RANGE_BPS,
-  cpCreditPolicyShare, cpReservationYieldBps,
-} from '../../../domain/commercial-paper';
+import { CP_SINGLE_ISSUER_LIMIT, CP_SHARE_OF_TERM_SLEEVE, CP_FULL_SIZE_YIELD_RANGE_BPS, cpCreditPolicyShare, cpReservationYieldBps } from '../../../domain/commercial-paper';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { commercialPaperTrancheId } from '../../../domain/instrument-keys';
@@ -116,9 +113,8 @@ const CP_MIN_GAP_SHARE_OF_REVENUE = 0.01;
 // translator that produced it is gone with the id shape.
 
 export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepContext): void {
-  // §3.13-BOOK (c-then-3b): `homeBankId` names the house bank in the ENTITY space.
-  const entities07f = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
-  const homeBankOf = (c: { homeBankId?: EntityId }) => (c.homeBankId ? entities07f.companyById.get(c.homeBankId) : undefined);
+  // §3.13-BOOK (c-then-3b): the participant→party crossing, once per stage.
+  const bankIdOfTicker = bankIdOfTickerFor(ctx);
   const v2Mirror = ensureV2(state);
   const regionIds = REGION_IDS;
 
@@ -227,19 +223,19 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // doc for the 260-week runaway that made this necessary).
         // SETL6: reserves plus this week's already-agreed securities settlement — 07c's bids
         // are commitments that have not settled yet, and the same reserves cannot fund both.
-        const reservesLocal = bankReservesOf(ctx.v2, bank.ticker);
-        const facilityBookLocal = facilityBookOf(ctx.v2, bank.ticker);
+        const reservesLocal = bankReservesOf(ctx.v2, bank.id);
+        const facilityBookLocal = facilityBookOf(ctx.v2, bank.id);
         const settledCashLocal = reservesLocal
           + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
         // REPO2: the floor is the face of THIS BILL actually pledged, not a blended share.
-        const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.ticker);
+        const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.id);
         const fundableLocal = Math.min(
           Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityLocal(sheet, repoHaircuts, encumberedFace),
           leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal)
         );
         const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal);
-        const liquidityFloorLocal = liquidityDrivenSovereignFloorLocal(sheet, reservesLocal, bankDepositLines(ctx, bank.ticker));
+        const liquidityFloorLocal = liquidityDrivenSovereignFloorLocal(sheet, reservesLocal, bankDepositLines(ctx, bank));
         activeBills.forEach((b) => {
           const heldLocal = sheet.sovereignBondHoldingsByBond?.[b.key] ?? 0;
           holdings.set(b.key, heldLocal);
@@ -612,7 +608,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           tBefore.set(h.instrumentId, { valueLocal: (tBefore.get(h.instrumentId)?.valueLocal ?? 0) + (h.quantityOrNotionalLocal ?? 0) });
         });
         billRows.forEach((h) => tAfter.set(h.instrumentId, { valueLocal: (tAfter.get(h.instrumentId)?.valueLocal ?? 0) + (h.quantityOrNotionalLocal ?? 0) }));
-        clearedBookDelta(companyPartyOfTicker(ticker), regionId, 'GOV_BOND', tBefore, tAfter, () => undefined, 'bill clearing fill');
+        clearedBookDelta(companyPartyOf(bankIdOfTicker(ticker) ?? asEntityId(ticker)), regionId, 'GOV_BOND', tBefore, tAfter, () => undefined, 'bill clearing fill');
         if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
         ctx.companyUpdates[ticker].treasuryHoldings = [...kept, ...billRows];
       });
@@ -623,7 +619,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       settleClearedBook(
         ctx, regionId, currencyOf(regionId), BOOK,
         result.netCashDeltaByParticipantId,
-        participantPartyOf({ regionId, entityIds: billEntityIds, deskTickers }),
+        participantPartyOf({ regionId, entityIds: billEntityIds, deskTickers, bankIdOfTicker }),
         // Item 13: the CCP receives less by exactly the rebates its buyers kept, and pays the
         // treasury less by the same total — flat by construction, as a clearing house is.
         { netCashLocal: result.dealerNetCashLocal - totalCashRebatesLocal, feeLocal: result.totalDealerRevenueLocal },
@@ -834,14 +830,14 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           if (repaidLocal > 0) {
             pay(ctx, {
               payer,
-              payee: bankSecuritiesPartyOfTicker(ticker),
+              payee: bankSecuritiesPartyOf(bankIdOfTicker(ticker) ?? asEntityId(ticker)),
               amount: repaidLocal,
               currency: currencyOf(regionId),
               reason: 'commercial paper redeemed',
             });
             // Step 13 (W2): the matured paper leaves the desk by wire, to the house (the ladder's
             // retirement wire meets it there).
-            transferHolding(ctx.v2, bankSecuritiesPartyOfTicker(ticker), { kind: 'CLEARING_HOUSE', region: regionId },
+            transferHolding(ctx.v2, bankSecuritiesPartyOf(bankIdOfTicker(ticker) ?? asEntityId(ticker)), { kind: 'CLEARING_HOUSE', region: regionId },
               { instrumentType: 'COMMERCIAL_PAPER', instrumentId, issuerRegion: regionId, valueLocal: repaidLocal }, 'commercial paper redeemed: desk paper matured');
           }
         });
@@ -1198,10 +1194,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             // syndicated loan market's float on one path and on the house bank's itemized book
             // on the other — one real thing represented two ways (rule 4).
             isBankFacility: true,
-            facilityBankTicker: homeBankOf(iss.comp)?.ticker, // still the TICKER space — its own commit
+            facilityBankId: iss.comp.homeBankId,
           } as DebtTranche, 'revolver draw: commercial paper roll failed');
           pay(ctx, {
-            payer: bankCreditPartyOfTicker(homeBankOf(iss.comp)?.ticker ?? asTicker('')),
+            payer: bankCreditPartyOf(iss.comp.homeBankId ?? asEntityId('')),
             payee: companyParty(iss.comp),
             amount: revolverLocal,
             currency: currencyOf(iss.comp.region),
@@ -1235,7 +1231,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // SETL6: the whole cash side — buyers to the clearing house, the desks' fee, and the
       // clearing house to each ISSUER for the paper its own programme actually placed.
       const cpEntityIds = new Set(cpEntities.map((e) => e.id));
-      const cpPartyOfParticipant = participantPartyOf({ regionId, entityIds: cpEntityIds, deskTickers: cpDeskTickers });
+      const cpPartyOfParticipant = participantPartyOf({ regionId, entityIds: cpEntityIds, deskTickers: cpDeskTickers, bankIdOfTicker });
       // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
       // through the same clearing house as the paper. CP could not do this while the auction named
       // a COMPANY and the ledger names a tranche; row 4 made every fill name its paper.

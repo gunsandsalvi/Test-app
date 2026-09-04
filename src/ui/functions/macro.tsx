@@ -27,7 +27,7 @@ export const macro: FunctionModule = {
     const tape = (k: string) => tapeSeries(world, `region:${r.id}:${k}`).values;
     const sub = (k: string) => { const s = tape(k); return s.filter(Number.isFinite).length > WEEKS_PER_MONTH ? <ChangeSub series={s} /> : undefined; };
     const hs = r.householdState; const bs = r.bankingSector; const hm = r.housingMarket;
-    const books = regionLoanBooksLocal(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.ticker));
+    const books = regionLoanBooksLocal(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.id));
     const gdp = r.derivedNominalGdpLocal ?? r.estimatedNominalGdpLocal ?? 0;
     return (<>
       <SectionLabel>activity</SectionLabel>

@@ -30,7 +30,7 @@ import { WeeklyStepContext } from './context';
 import { buildEntityIndex, companyOfParty } from '../../ledger/entity-index';
 import { pay } from './settlement';
 import { creditRecoveryRate } from './shared-helpers';
-import type { Ticker } from '../../../domain/ids';
+import type { EntityId } from '../../../domain/ids';
 import { asEntityId } from '../../../domain/ids';
 
 /** Legs under a dollar are dust; every book skipped them and the ledger need not carry them. */
@@ -73,8 +73,8 @@ export function standingBookOf(ctx: WeeklyStepContext, state: GameState): Standi
 }
 
 /** A desk's standing PFE charge against the one budget, off the live book (registry.ts). */
-export function deskStandingPfeChargeLocal(ctx: WeeklyStepContext, state: GameState, ticker: Ticker): number {
-  return standingBookOf(ctx, state).pfeChargeLocal(bankPartyKey(ticker));
+export function deskStandingPfeChargeLocal(ctx: WeeklyStepContext, state: GameState, bankId: EntityId): number {
+  return standingBookOf(ctx, state).pfeChargeLocal(bankPartyKey(bankId));
 }
 
 type PartyState = 'ALIVE' | 'DEFAULTED' | 'GONE';

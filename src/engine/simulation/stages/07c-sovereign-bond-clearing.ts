@@ -58,7 +58,7 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { stagePurchaseBudgetLocal } from './institutional-balance-sheet';
 import { pendingSettlementLocal, institutionUnsettledLessCollateralLocal } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, participantPartyOf } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, participantPartyOf, bankIdOfTickerFor } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -156,6 +156,8 @@ function computeSovereignReservationYieldBps(
  */
 
 export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+  // §3.13-BOOK (c-then-3b): the participant→party crossing, once per stage.
+  const bankIdOfTicker = bankIdOfTickerFor(ctx);
   const regionIds = REGION_IDS;
 
   regionIds.forEach((regionId) => {
@@ -431,7 +433,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const repoHaircuts = computeSovereignRepoHaircuts(reg, (id) => bonds.find((b) => b.id === id)?.years);
     const bankParticipants: ClearingParticipant[] = regionBanks.map((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-      const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.ticker);
+      const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.id);
       const currentByBond = new Map<InstrumentId, number>();
       instrumentEntries(sheet.sovereignBondHoldingsByBond).forEach(([id, v]) => {
         if (!ownInstrumentIds.has(id)) return;
@@ -452,8 +454,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // SETL6: reserves plus what this week's already-agreed securities trades will settle —
       // the books clear before the settlement pass, so a commitment lives in the unsettled
       // position until then and a bank cannot fund two books with the same reserves.
-      const reservesLocal = bankReservesOf(ctx.v2, bank.ticker);
-      const facilityBookLocal = facilityBookOf(ctx.v2, bank.ticker);
+      const reservesLocal = bankReservesOf(ctx.v2, bank.id);
+      const facilityBookLocal = facilityBookOf(ctx.v2, bank.id);
       const settledCashLocal = reservesLocal
         + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
       const fundableLocal = Math.min(
@@ -471,7 +473,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // than as a scaling factor on a quantity target.
       const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal);
-      const liquidityFloorLocal = liquidityDrivenSovereignFloorLocal(sheet, reservesLocal, bankDepositLines(ctx, bank.ticker));
+      const liquidityFloorLocal = liquidityDrivenSovereignFloorLocal(sheet, reservesLocal, bankDepositLines(ctx, bank));
       bonds.forEach((b) => {
         const shareOfMarket = b.outstandingLocal / totalOutstandingLocal;
         const shareOfSovStock = b.outstandingLocal / wholeSovStockLocal;
@@ -666,7 +668,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // accrual ledger's key. The accrual walk names its holders the same way
     // (`sovereign-calendar.ts:accrueSovereignHolders`), so a balance moved here is a balance that
     // walk will find.
-    const partyOfParticipant = participantPartyOf({ regionId, entityIds, deskTickers, bankTickers });
+    const partyOfParticipant = participantPartyOf({ regionId, entityIds, deskTickers, bankTickers, bankIdOfTicker });
     // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,
     // through the same clearing house as the paper.
     const accruedLeg = accruedOnFills(

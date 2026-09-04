@@ -15,7 +15,7 @@
  */
 
 import { assertNever } from '../../../domain/defect';
-import { bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
+import { bankParty, bankSecuritiesParty, companyParty, companyPartyOf } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
@@ -173,9 +173,9 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   estates.forEach((e) => { if (e.closedWeek === undefined) receivablesBySellerLocal.set(e.ticker, 0); });
   if (receivablesBySellerLocal.size > 0) {
     (state.tradeInvoices ?? []).forEach((iv) => {
-      const acc = receivablesBySellerLocal.get(iv.sellerTicker);
+      const acc = receivablesBySellerLocal.get(iv.sellerId);
       if (acc === undefined) return;
-      receivablesBySellerLocal.set(iv.sellerTicker, acc + iv.amountCurrency * iv.bookedUsdPerCurrency);
+      receivablesBySellerLocal.set(iv.sellerId, acc + iv.amountCurrency * iv.bookedUsdPerCurrency);
     });
   }
 
@@ -232,7 +232,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // invoice collections, this week's asset sales (pending until the close, counted here).
     const estateComp = index.companyById.get(estate.companyId);
     const availableLocal = estateComp
-      ? Math.max(0, cashOf(ctx.v2, estateComp) + pendingSettlementLocal(ctx, companyParty(estate)))
+      ? Math.max(0, cashOf(ctx.v2, estateComp) + pendingSettlementLocal(ctx, companyPartyOf(estate.companyId)))
       : 0;
     const paidLocal = availableLocal > 1 ? distribute(ctx, index, estate, availableLocal) : 0;
     // THE ESTATE'S CASH IS ITS ACCOUNT, RE-READ EVERY WEEK like the other three assets — and
@@ -291,13 +291,15 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
  */
 function scrapConsignmentsOf(state: GameState, ticker: Ticker, companyId: string): void {
   const inFlight = state.goodsInTransit ?? [];
-  const isDead = (sh: { buyerTicker: Ticker; sellerKey?: unknown }): boolean =>
-    sh.buyerTicker === ticker || String(sh.sellerKey ?? '').replace(/^.*:/, '') === companyId
+  // §3.13-BOOK (c-then-3b): a shipment names its buyer by ENTITY id; its seller key is still the
+  // goods book's two-space key, so both names are tried on that side (`05-unit-bidding`'s `byKey`).
+  const isDead = (sh: { buyerId: EntityId; sellerKey?: unknown }): boolean =>
+    sh.buyerId === companyId || String(sh.sellerKey ?? '').replace(/^.*:/, '') === companyId
     || String(sh.sellerKey ?? '').replace(/^.*:/, '') === ticker;
   if (!inFlight.some(isDead)) return;
   state.goodsInTransit = inFlight.filter((sh) => {
     if (!isDead(sh)) return true;
-    if (sh.carrierTicker && sh.carrierRegion) scrapGoods(sh.carrierRegion, sh.subUnitId, sh.units);
+    if (sh.carrierId && sh.carrierRegion) scrapGoods(sh.carrierRegion, sh.subUnitId, sh.units);
     return false;
   });
 }
@@ -335,7 +337,7 @@ function sellAssetsToPeers(
     if (payLocal <= 1) return;
     pay(ctx, {
       payer: companyParty(peer),
-      payee: companyParty(estate),
+      payee: companyPartyOf(estate.companyId),
       amount: payLocal,
       currency: currencyOf(estate.regionId),
       reason: 'estate asset sale to peers',
@@ -396,7 +398,7 @@ function distribute(
       // the people it owed, as one instruction between two named accounts. The caller caps the
       // week's waterfall at what that account actually holds, so this never overdraws it.
       pay(ctx, {
-        payer: companyParty(estate),
+        payer: companyPartyOf(estate.companyId),
         payee: holderRef(claim),
         amount: shareLocal,
         currency: currencyOf(estate.regionId),
@@ -496,7 +498,6 @@ function reduceHolding(
     return;
   }
   if (claim.holder.kind === 'BANK') {
-    const ticker = claim.holder.ticker;
     const company = companyOfParty(index, claim.holder);
     // A bank claim is written down against a SHEET. Dead or alive is not the test — an estate
     // exists to resolve the dead — but having a book to write down is, and the narrowing here is
@@ -511,7 +512,7 @@ function reduceHolding(
     // (there is no loan row to write down); what the ladder still carries for this lender bounds
     // what this write can extinguish.
     const onLadderLocal = facilitiesOfBorrower(index.v2, companyId)
-      .filter((f) => f.bankTicker === ticker).reduce((a, f) => a + f.principalLocal, 0);
+      .filter((f) => f.bankId === claim.holder.id).reduce((a, f) => a + f.principalLocal, 0);
     const leftLocal = Math.max(0, amountLocal - onLadderLocal);
     // Equity moves by what the BOOK moved: a LOSS writes equity down by what was actually
     // extinguished — no more; a RECOVERY is an asset swap for the matched slice (cash in, facility
@@ -524,7 +525,7 @@ function reduceHolding(
       retireLadderFace(index.v2, { id: deadFirm.id, ticker: deadFirm.ticker, region: deadFirm.region }, 'BANK_FACILITY', extinguishedLocal, isLoss ? 'estate: facility written off' : 'estate: facility recovered');
     }
     company.bankBalanceSheet = bookPnL(sheet, isLoss ? -extinguishedLocal : leftLocal,
-      isLoss ? 'estate loan write-off' : 'estate recovery income', ticker);
+      isLoss ? 'estate loan write-off' : 'estate recovery income', company.ticker);
   }
 }
 
@@ -592,7 +593,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   // The banks' own facilities: secured, and they rank with the first-lien loans. Step 10: the
   // lender's claim is the facility row on this firm's ladder, one claim per lender.
   const facilityByLender = new Map<string, number>();
-  facilitiesOfBorrower(ctx.v2, comp.id).forEach((f) => facilityByLender.set(f.bankTicker, (facilityByLender.get(f.bankTicker) ?? 0) + f.principalLocal));
+  facilitiesOfBorrower(ctx.v2, comp.id).forEach((f) => facilityByLender.set(f.bankId, (facilityByLender.get(f.bankId) ?? 0) + f.principalLocal));
   ctx.updatedCompanies.forEach((bank) => {
     const usd = facilityByLender.get(bank.ticker);
     if (!bank.isBankEntity || !usd) return;

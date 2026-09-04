@@ -382,7 +382,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('10-mergers', () => runMergersStage(state, ctx));
   // §5-MGMT — the quarterly review: a management that fails its measured record is replaced.
   run('management-review', () => runManagementReviewStage(state, ctx));
-  for (const f of ['accumulatedDepreciationLocal', 'acquiredByTicker', 'annualRevenue', 'capex', 'employeeCount', 'grossPPELocal', 'growthCapex', 'maintenanceCapex', 'marketCap', 'mergerAcquired', 'sharesOutstanding', 'stockPrice', 'totalDebt'] as const) syncCompanyField(state, f);
+  for (const f of ['accumulatedDepreciationLocal', 'acquiredById', 'annualRevenue', 'capex', 'employeeCount', 'grossPPELocal', 'growthCapex', 'maintenanceCapex', 'marketCap', 'mergerAcquired', 'sharesOutstanding', 'stockPrice', 'totalDebt'] as const) syncCompanyField(state, f);
   // PUB3d: bills accrete BEFORE the fiscal stage redeems them, so a maturing bill is repaid at
   // the face its holder has accreted to rather than at last week's value.
   // A stable-NAV fund pays its yield as new shares and its fee leaves to the manager.
@@ -476,7 +476,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     lastCashOverdraftLocal: ctx.cashOverdraftLocal,
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.
-    dealers: dealersFromBanks((b) => bankReservesOf(ctx.v2, b.ticker), (b) => facilityBookOf(ctx.v2, b.ticker), nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, damperBindStreakById: rollDamperStreaks(state.damperBindStreakById, ctx.damperBoundInstrumentIds), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
+    dealers: dealersFromBanks((b) => bankReservesOf(ctx.v2, b.id), (b) => facilityBookOf(ctx.v2, b.id), nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, damperBindStreakById: rollDamperStreaks(state.damperBindStreakById, ctx.damperBoundInstrumentIds), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
     // SETL2: the week's settlement, decomposed. §6 watches the boundary line DOWN, and a number
     // you cannot attribute is a number you cannot watch — this carries what hit it and why.
     lastSettlement: ctx.lastSettlementReport && {

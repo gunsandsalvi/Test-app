@@ -16,7 +16,9 @@
  */
 
 import { bankReservesOf } from '../../../ledger/accounts';
-import { bankParty, companyParty, companyPartyOfTicker } from '../../../../domain/party';
+import type { Ticker } from '../../../../domain/ids';
+import { buildEntityIndex } from '../../../ledger/entity-index';
+import { bankParty, companyParty, companyPartyOf } from '../../../../domain/party';
 import { NUMERAIRE } from '../../../../domain/geography';
 import { hedgeFundStrategyProfile } from '../../../../domain/institution-profiles';
 import { riskAversionOf } from '../../../../domain/preferences';
@@ -54,6 +56,8 @@ function annualInterestOf(c: Company): number {
 
 function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
   const firms = ctx.prevActiveFirms.filter(isActiveCompany);
+  // §3.13-BOOK (c-then-3b): a `CONS-` seat embeds the consumer's TICKER; a party is its entity id.
+  const consumerIdOfTicker = (t: Ticker) => buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities).companyByTicker.get(t)?.id;
   const firmById = new Map(firms.map((c) => [c.id, c]));
   // The USA short rate finances a carry position; it is the one this model quotes globally.
   const financingRateAnnual = ctx.updatedRegions.USA?.zeroRates?.tenor3M ?? 0.03;
@@ -106,7 +110,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
           riskAversion: riskAversionOf(c.management),
         });
         const units = hedgeLocal / spot
-          - standing.coverUnits('COMMODITY_FUTURE', 'b', companyPartyKey(c.ticker), comm.id, termKey);
+          - standing.coverUnits('COMMODITY_FUTURE', 'b', companyPartyKey(c.id), comm.id, termKey);
         if (units > 0.0001) sellers.push({ party: companyParty(c), units });
       });
       const hedgeFloatUnits = sellers.reduce((a, s) => a + s.units, 0);
@@ -126,7 +130,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         banks.forEach((bank) => {
           const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
           const capacityLocal = deskNotionalCapacityLocal(
-            leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeLocal(bankPartyKey(bank.ticker)), 'COMMODITY_FUTURE');
+            leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id)), standing.pfeChargeLocal(bankPartyKey(bank.id)), 'COMMODITY_FUTURE');
           const units = capacityLocal / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
           if (units > 0.0001) {
             sellers.push({ party: bankParty(bank), units });
@@ -177,7 +181,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         participants.push({
           id: `CONS-${c.ticker}`,
           currentHoldingsByInstrumentId: new Map([[id,
-            standing.coverUnits('COMMODITY_FUTURE', 'a', companyPartyKey(c.ticker), comm.id, termKey)]]),
+            standing.coverUnits('COMMODITY_FUTURE', 'a', companyPartyKey(c.id), comm.id, termKey)]]),
           demandByInstrumentId,
         });
       });
@@ -244,8 +248,10 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
 
       boughtByParticipant.forEach((units, participantId) => {
         // §3.13-BOOK (c2b): see cds.ts — a participant id is its own space.
-        const longParty: DerivativeParty = participantId.startsWith('CONS-')
-          ? companyPartyOfTicker(asTicker(participantId.slice('CONS-'.length)))
+        const consumerId = participantId.startsWith('CONS-')
+          ? consumerIdOfTicker(asTicker(participantId.slice('CONS-'.length))) : undefined;
+        const longParty: DerivativeParty = consumerId !== undefined
+          ? companyPartyOf(consumerId)
           : { kind: 'INSTITUTION', id: asEntityId(participantId) };
         sellers.forEach((s) => {
           const size = units * ((s.units * fillShare) / Math.max(1e-9, totalBoughtUnits));

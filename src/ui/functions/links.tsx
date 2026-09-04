@@ -38,8 +38,8 @@ export const links: FunctionModule = {
     if (ref.type === 'company') {
       const c = companyOf(world, ref.id);
       if (!c) return null;
-      const bank = byTicker(c.homeBankId); const parent = byTicker(c.parentTicker);
-      const subs = world.state.companies.filter((x) => x.parentTicker === c.ticker && isActiveCompany(x)).map((x) => ({ ref: { type: 'company' as const, id: x.id } }));
+      const bank = byTicker(c.homeBankId); const parent = byTicker(c.parentId);
+      const subs = world.state.companies.filter((x) => x.parentId === c.id && isActiveCompany(x)).map((x) => ({ ref: { type: 'company' as const, id: x.id } }));
       const managed = (c.managesEntityIds ?? []).filter((id) => institutionOf(world, id)).map((id) => ({ ref: { type: 'institution' as const, id } }));
       const lines = bankLinesTo(world, c.id);
       const contracts = contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker });
@@ -71,7 +71,7 @@ export const links: FunctionModule = {
           <Card style={{ padding: '2px 0' }}>
             <KV k="firms banking here" v={count(clients.length)} onTap={() => nav.go('peers')} />
             <KV k="funds banking here" v={count(fundClients.length)} />
-            <KV k="facilities on the book" hint="rows on the borrowers' ladders" v={count(facilityRowsOf(ensureV2(world.state), c.ticker).length)} />
+            <KV k="facilities on the book" hint="rows on the borrowers' ladders" v={count(facilityRowsOf(ensureV2(world.state), c.id).length)} />
           </Card>
           {clients.length ? <Card style={{ padding: '2px 0' }}>{clients.slice(0, 40).map((x) => <KV key={x.id} k={<Link to={{ type: 'company', id: x.id }} nav={nav}>{x.ticker}</Link>} hint={x.sector} v={money(x.annualRevenue)} />)}</Card> : null}
         </>) : null}
@@ -102,7 +102,7 @@ export const links: FunctionModule = {
     }
     const r = regionOf(world, ref.id);
     if (!r) return null;
-    const banks = banksOf(world.state.companies, r.id).map((c) => ({ ref: { type: 'company' as const, id: c.id }, v: money(c.bankBalanceSheet ? stateDepositLines(world.state, c.ticker).householdLocal : undefined) }));
+    const banks = banksOf(world.state.companies, r.id).map((c) => ({ ref: { type: 'company' as const, id: c.id }, v: money(c.bankBalanceSheet ? stateDepositLines(world.state, c).householdLocal : undefined) }));
     const lanes = Object.keys(world.state.freightRatePerTonneLaneMoneyByLane ?? {}).filter((k) => k.startsWith(r.id + '>') || k.endsWith('>' + r.id)).map((k) => ({ ref: { type: 'lane' as const, id: k } }));
     const pairs = world.state.fxPairs.filter((p) => p.pair.includes(r.currency)).map((p) => ({ ref: { type: 'fx' as const, id: p.pair } }));
     const indexes = (world.state.marketIndexes ?? []).filter((x) => x.id.startsWith(r.id)).map((x) => ({ ref: { type: 'index' as const, id: x.id } }));

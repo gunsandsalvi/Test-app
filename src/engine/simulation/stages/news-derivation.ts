@@ -14,7 +14,8 @@
  */
 
 import { GameState, Company, RegionId } from '../../../types';
-import { companyPartyOfTicker } from '../../../domain/party';
+import type { EntityId } from '../../../domain/ids';
+import { companyParty } from '../../../domain/party';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { NewsItem } from '../../../domain/events';
 import { WeeklyStepContext } from './context';
@@ -27,7 +28,6 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
-import type { Ticker } from '../../../domain/ids';
 
 type Ref = NonNullable<NewsItem['refs']>[number];
 
@@ -44,7 +44,7 @@ const N = (x: number): string => Math.round(x).toLocaleString('en-US');
 
 function partyLabel(p: PartyRef): string {
   switch (p.kind) {
-    case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': return p.ticker;
+    case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': return p.id;
     case 'INSTITUTION': return p.id;
     case 'SEGMENT': return `the ${p.region} ${p.industry} pool`;
     case 'HOUSEHOLD': return `${p.region} households`;
@@ -53,9 +53,9 @@ function partyLabel(p: PartyRef): string {
     default: return p.kind.toLowerCase().replace(/_/g, ' ');
   }
 }
-function partyRef(p: PartyRef, byTicker: ReadonlyMap<Ticker, Company>): Ref | undefined {
+function partyRef(p: PartyRef, byId: ReadonlyMap<EntityId, Company>): Ref | undefined {
   if (p.kind === 'COMPANY' || p.kind === 'BANK' || p.kind === 'BANK_CREDIT' || p.kind === 'BANK_SECURITIES') {
-    const c = byTicker.get(p.ticker);
+    const c = byId.get(p.id);
     return c ? { type: 'company', id: c.id } : undefined;
   }
   if (p.kind === 'INSTITUTION') return { type: 'institution', id: p.id };
@@ -64,7 +64,7 @@ function partyRef(p: PartyRef, byTicker: ReadonlyMap<Ticker, Company>): Ref | un
 }
 
 /** The week's largest outflows of one payer, by reason, off the journal — the WHY a death cites. */
-function outflowsOf(ctx: WeeklyStepContext, party: PartyRef, byTicker: ReadonlyMap<Ticker, Company>, top = 3): { text: string; refs: Ref[] } {
+function outflowsOf(ctx: WeeklyStepContext, party: PartyRef, byId: ReadonlyMap<EntityId, Company>, top = 3): { text: string; refs: Ref[] } {
   const j = ctx.paymentJournal;
   const id = partyId(party);
   const byReason = new Map<string, { usd: number; payee: number }>();
@@ -79,7 +79,7 @@ function outflowsOf(ctx: WeeklyStepContext, party: PartyRef, byTicker: ReadonlyM
   const refs: Ref[] = [];
   const parts = rows.map(([reason, { usd, payee }]) => {
     const p = partyOf(payee);
-    const ref = partyRef(p, byTicker);
+    const ref = partyRef(p, byId);
     if (ref) refs.push(ref);
     return `${M(usd)} of ${reason} to ${partyLabel(p)}`;
   });
@@ -109,7 +109,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   ctx.defaultedTickers.forEach((ticker) => {
     const c = byTicker.get(ticker);
     if (!c || c.isBankEntity) return;
-    const why = outflowsOf(ctx, companyPartyOfTicker(ticker), byTicker);
+    const why = outflowsOf(ctx, companyParty(c), companyById);
     const refs: Ref[] = [company(c), region(c.region)];
     const bank = bankRef(c);
     if (bank) refs.push(bank);
@@ -190,7 +190,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   });
 
   // ---- 4. Births: a firm carved from its pool. ----
-  ctx.updatedCompanies.filter((c) => c.bornWeek === week && !c.parentTicker).forEach((c) => {
+  ctx.updatedCompanies.filter((c) => c.bornWeek === week && !c.parentId).forEach((c) => {
     push({
       id: `birth-${c.ticker}-${week}`,
       kind: 'entry',
@@ -202,17 +202,17 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       impactRegion: c.region, impactSector: c.sector, affectedTicker: c.ticker,
     });
   });
-  ctx.updatedCompanies.filter((c) => c.bornWeek === week && c.parentTicker).forEach((c) => {
-    const parent = byTicker.get(c.parentTicker!);
+  ctx.updatedCompanies.filter((c) => c.bornWeek === week && c.parentId).forEach((c) => {
+    const parent = companyById.get(c.parentId!);
     push({
       id: `fdi-${c.ticker}-${week}`,
       kind: 'investment abroad',
       category: 'MACRO',
-      title: `${parent?.name ?? c.parentTicker} builds in ${c.region}`,
-      description: `${c.parentTicker} opens ${c.ticker} in ${c.region}: ${M(c.annualRevenue)} of revenue, ${N(c.employeeCount)} people, funded from the parent's cash above its buffer.`,
+      title: `${parent?.name ?? c.parentId} builds in ${c.region}`,
+      description: `${c.parentId} opens ${c.ticker} in ${c.region}: ${M(c.annualRevenue)} of revenue, ${N(c.employeeCount)} people, funded from the parent's cash above its buffer.`,
       refs: [company(c), ...(parent ? [company(parent)] : []), region(c.region)],
       materialityLocal: c.annualRevenue,
-      impactRegion: c.region, impactSector: c.sector, affectedTicker: c.parentTicker,
+      impactRegion: c.region, impactSector: c.sector, affectedTicker: parent?.ticker,
     });
   });
 
@@ -246,7 +246,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         kind: 'central bank window',
         category: 'CENTRAL_BANK',
         title: `${b.name} borrows at the central bank`,
-        description: `${b.ticker} draws ${M(now)} at the standing facility: reserves ${M(bankReservesOf(ctx.v2, b.ticker))} against ${M(householdDepositsAt(ctx.v2, b.ticker, currencyOf(b.region)))} of household deposits, capital ratio ${P(sheet.bankCapitalRatio)}, central bank loan ${M(sheet.centralBankLoanLocal ?? 0)}.`,
+        description: `${b.ticker} draws ${M(now)} at the standing facility: reserves ${M(bankReservesOf(ctx.v2, b.id))} against ${M(householdDepositsAt(ctx.v2, b.ticker, currencyOf(b.region)))} of household deposits, capital ratio ${P(sheet.bankCapitalRatio)}, central bank loan ${M(sheet.centralBankLoanLocal ?? 0)}.`,
         refs: [company(b), region(b.region)],
         materialityLocal: now,
         impactRegion: b.region, impactSector: b.sector, affectedTicker: b.ticker,

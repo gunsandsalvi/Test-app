@@ -52,9 +52,9 @@ export function snapshotOf(state: GameState): AuditSnapshot {
       sovereignOutstandingLocal: materializeGovLadder(ensureV2(state), r).reduce((a, t) => a + t.principalLocal, 0),
       // The SAME read M6 takes at week end — every deposit class BUT the margin line, which is
       // a bank liability and not spendable money (`spendableDepositsOf`).
-      bankDepositsLocal: banks.reduce((a, b) => a + spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b.ticker)), 0),
+      bankDepositsLocal: banks.reduce((a, b) => a + spendableDepositsOf(b.bankBalanceSheet!, stateDepositLines(state, b)), 0),
       clientMarginLocal: banks.reduce((a, b) => a + (b.bankBalanceSheet!.clientMarginLocal ?? 0), 0),
-      bankLoansLocal: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!, facilityBookOf(ensureV2(state), b.ticker)), 0),
+      bankLoansLocal: banks.reduce((a, b) => a + loanBooksOf(b.bankBalanceSheet!, facilityBookOf(ensureV2(state), b.id)), 0),
     };
   });
   return out;
@@ -141,12 +141,12 @@ export function goodsUnitsByKey(state: GameState, parts?: Record<string, [number
       if (touched) for (const subIdx of touched) add(c.region, SUBUNITS[subIdx], inputUnitsHeld(v2, c.id, SUBUNITS[subIdx]), 1);
     }
   }
-  const { companyByTicker } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+  const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
   // A consignment is stock in its NAMED carrier's region; one the transport pool carries (no
   // ticker) passed through a source-and-sink and reappears at arrival from it.
   for (const sh of state.goodsInTransit ?? []) {
-    if (!sh.carrierTicker) continue;
-    const region = sh.carrierRegion ?? companyByTicker.get(sh.carrierTicker)?.region;
+    if (!sh.carrierId) continue;
+    const region = sh.carrierRegion ?? companyById.get(sh.carrierId)?.region;
     if (region) add(region, sh.subUnitId, sh.units, 2);
   }
   return out;

@@ -36,8 +36,8 @@ export function companyColumns(bank: boolean): PeerColumn<Company>[] {
       name,
       { key: 'cap', label: 'capital', render: (r) => pctLevel(r.obj.bankBalanceSheet?.bankCapitalRatio, 1), value: (r) => r.obj.bankBalanceSheet?.bankCapitalRatio ?? -1 },
       { key: 'nim', label: 'nim', render: (r) => pctLevel(r.obj.bankBalanceSheet?.netInterestMarginPct, 2), value: (r) => r.obj.bankBalanceSheet?.netInterestMarginPct ?? -1 },
-      { key: 'deposits', label: 'deposits', render: (r, w) => { if (!r.obj.bankBalanceSheet) return money(undefined); const l = stateDepositLines(w.state, r.obj.ticker); return money(l.householdLocal + l.corporateLocal + l.institutionalLocal + l.smeLocal); }, value: (r, w) => (r.obj.bankBalanceSheet ? stateDepositLines(w.state, r.obj.ticker).householdLocal : 0) },
-      { key: 'loans', label: 'loans', render: (r, w) => money(r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet, facilityBookOf(w.v2, r.obj.ticker)) : undefined), value: (r, w) => (r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet, facilityBookOf(w.v2, r.obj.ticker)) : 0) },
+      { key: 'deposits', label: 'deposits', render: (r, w) => { if (!r.obj.bankBalanceSheet) return money(undefined); const l = stateDepositLines(w.state, r.obj); return money(l.householdLocal + l.corporateLocal + l.institutionalLocal + l.smeLocal); }, value: (r, w) => (r.obj.bankBalanceSheet ? stateDepositLines(w.state, r.obj).householdLocal : 0) },
+      { key: 'loans', label: 'loans', render: (r, w) => money(r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet, facilityBookOf(w.v2, r.obj.id)) : undefined), value: (r, w) => (r.obj.bankBalanceSheet ? loanBooksOf(r.obj.bankBalanceSheet, facilityBookOf(w.v2, r.obj.id)) : 0) },
       { key: 'share', label: 'share', render: (r) => pctLevel(r.obj.bankMarketShare, 0), value: (r) => r.obj.bankMarketShare ?? 0 },
       { key: 'window', label: 'window', render: (r) => money(r.obj.bankBalanceSheet?.srfBorrowingLocal), value: (r) => r.obj.bankBalanceSheet?.srfBorrowingLocal ?? 0 },
       { key: 'mcap', label: 'mkt cap', render: (r) => money(marketCapOf(r.obj), 1), value: (r) => marketCapOf(r.obj) },
@@ -128,7 +128,7 @@ export const company = defineObject<Company>({
           name={c.name}
           sub={<>{companyKind(c)} · {c.sector} · <RegionLink id={c.region} nav={nav} /> · {c.creditRating}
             {c.homeBankId ? <> · banks at <TickerLink ticker={c.homeBankId} /></> : null}
-            {c.parentTicker ? <> · subsidiary of <TickerLink ticker={c.parentTicker} /></> : null}
+            {c.parentId ? <> · subsidiary of <TickerLink ticker={c.parentId} /></> : null}
             {mgmt ? <> · {mgmt}</> : null}</>}
           flag={flag}
         />
@@ -147,10 +147,10 @@ export const company = defineObject<Company>({
         )}
         {sheet ? (
           <Card style={{ padding: '2px 0' }}>
-            <KV k="deposits" hint="all classes" v={money((() => { const l = stateDepositLines(world.state, c.ticker); return l.householdLocal + l.corporateLocal + l.institutionalLocal + l.smeLocal; })())} />
-            <KV k="loans" hint="business · household" v={`${money(businessLoanBookOf(sheet, facilityBookOf(ensureV2(world.state), c.ticker)))} · ${money(consumerLoanBookOf(sheet))}`} />
+            <KV k="deposits" hint="all classes" v={money((() => { const l = stateDepositLines(world.state, c); return l.householdLocal + l.corporateLocal + l.institutionalLocal + l.smeLocal; })())} />
+            <KV k="loans" hint="business · household" v={`${money(businessLoanBookOf(sheet, facilityBookOf(ensureV2(world.state), c.id)))} · ${money(consumerLoanBookOf(sheet))}`} />
             <KV k="sovereign book" v={money(sheet.sovereignBondHoldingsLocal)} />
-            <KV k="reserves at the central bank" v={money(bankReservesOf(ensureV2(world.state), c.ticker))} />
+            <KV k="reserves at the central bank" v={money(bankReservesOf(ensureV2(world.state), c.id))} />
             <KV k="central bank loan" hint="lender of last resort" v={money(sheet.centralBankLoanLocal ?? 0)} />
             <KV k="at the window" v={money(sheet.srfBorrowingLocal)} />
             <KV k="market share" hint="of the region's deposits" v={pctLevel(c.bankMarketShare)} />

@@ -16,13 +16,11 @@
  */
 
 import { GameState, RegionId } from '../../../types';
-import { bankParty, bankSecuritiesPartyOfTicker, companyParty } from '../../../domain/party';
+import { bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { BankingSector, DepositLines } from '../../../domain/banking';
 import { BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
-import {
-  assumingCapitalLocal, chooseAssumingBank, isBankUnderPca, planBankResolution, restateBankSheetStatistics, PCA_CAPITAL_RATIO,
-} from '../../../domain/bank-resolution';
+import { assumingCapitalLocal, chooseAssumingBank, isBankUnderPca, planBankResolution, restateBankSheetStatistics, PCA_CAPITAL_RATIO } from '../../../domain/bank-resolution';
 import { assumeBankBooks } from '../../ledger/bank-transfer';
 import { reassignConsignments } from './goods-arrival';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
@@ -53,7 +51,7 @@ const sheetLinesLocal = (s: BankingSector, cashLocal: number, lines: DepositLine
  *
  * §3.13-BOOK (c-then-3b): it takes the two BANKS rather than two tickers, because the links are
  * no longer all in one id space — `homeBankId` and `leadBankId` name the bank by its ENTITY id
- * while `brokerTicker` and the party keys still name it by ticker. Handing it the firms rather
+ * while `brokerId` and the party keys still name it by ticker. Handing it the firms rather
  * than one of their names is what lets each link be rekeyed in the space it is actually in, and
  * it is why this function did not silently miss half of them.
  */
@@ -62,7 +60,6 @@ export function rekeyBankLinks(
   fromBank: { id: EntityId; ticker: Ticker }, toBank: { id: EntityId; ticker: Ticker },
 ): void {
   const from = fromBank.ticker, to = toBank.ticker;
-  const rekey = (t: Ticker | undefined) => (t === from ? to : t);
   const rekeyId = (i: EntityId | undefined) => (i === fromBank.id ? toBank.id : i);
   ctx.updatedCompanies.forEach((c) => { c.homeBankId = rekeyId(c.homeBankId); });
   ctx.prevActivePrivateFirms.forEach((c) => { c.homeBankId = rekeyId(c.homeBankId); });
@@ -71,24 +68,24 @@ export function rekeyBankLinks(
   // A facility moving to the assuming bank is a wire, lender to lender.
   const v2 = ctx.v2;
   ctx.updatedCompanies.concat(ctx.prevActivePrivateFirms).forEach((c) => {
-    moveFacilityLender(v2, { id: c.id, ticker: c.ticker, region: c.region }, from, to, 'bank resolution: facilities assumed');
+    moveFacilityLender(v2, { id: c.id, ticker: c.ticker, region: c.region }, fromBank.id, toBank.id, 'bank resolution: facilities assumed');
   });
   const reg = ctx.updatedRegions[regionId];
   if (reg?.repoBook) {
     reg.repoBook = reg.repoBook.map((c) => ({
       ...c,
-      borrowerTicker: rekey(c.borrowerTicker) ?? c.borrowerTicker,
-      lender: c.lender.kind === 'BANK' ? { ...c.lender, ticker: rekey(c.lender.ticker) ?? c.lender.ticker } : c.lender,
+      borrowerId: rekeyId(c.borrowerId) ?? c.borrowerId,
+      lender: c.lender.kind === 'BANK' ? { ...c.lender, id: rekeyId(c.lender.id) ?? c.lender.id } : c.lender,
     }));
   }
   if (reg?.primeBrokerageBook) {
-    reg.primeBrokerageBook = reg.primeBrokerageBook.map((l) => ({ ...l, brokerTicker: rekey(l.brokerTicker) ?? l.brokerTicker }));
+    reg.primeBrokerageBook = reg.primeBrokerageBook.map((l) => ({ ...l, brokerId: rekeyId(l.brokerId) ?? l.brokerId }));
   }
   ctx.primaryOfferingsWorking = ctx.primaryOfferingsWorking.map((o) => ({ ...o, leadBankId: rekeyId(o.leadBankId) ?? o.leadBankId }));
   // The treasury's accrued-coupon ledger is keyed by holder; the failed bank's accruals are the
   // assuming bank's receivable now (its sheet already carries them).
-  const fromKey = `|${partyKey(bankSecuritiesPartyOfTicker(from))}`;
-  const toKey = `|${partyKey(bankSecuritiesPartyOfTicker(to))}`;
+  const fromKey = `|${partyKey(bankSecuritiesParty(fromBank))}`;
+  const toKey = `|${partyKey(bankSecuritiesParty(toBank))}`;
   Array.from(ctx.sovereignAccruedInterestLocal.entries()).forEach(([k, usd]) => {
     if (!k.endsWith(fromKey)) return;
     const k2 = k.slice(0, k.length - fromKey.length) + toKey;
@@ -108,8 +105,10 @@ export function rekeyBankLinks(
     byHolder.set(toDesk, (byHolder.get(toDesk) ?? 0) + owedLocal);
     byHolder.delete(fromDesk);
   });
+  // §3.13-BOOK (c-then-3b): a contract's counterparty is `CounterpartyRef` — every arm an
+  // entity id — so the whole book rekeys on one field rather than on whichever name an arm had.
   const rekeyParty = (p: DerivativeParty): DerivativeParty =>
-    ('ticker' in p && p.ticker === from) ? { ...p, ticker: to } : p;
+    (p.id === fromBank.id ? { ...p, id: toBank.id } : p);
   ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekeyParty(c.a), b: rekeyParty(c.b) }));
   // THE DELIVERIES MOVE WITH THE BOOKS. A resolved bank buys goods like any other firm, and its
   // consignments were the one link this function did not re-key: the assuming bank took the
@@ -128,7 +127,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
   // mechanism can be exercised on a world where no bank is under PCA. Inert unless set.
   const forced = (process.env.BANK_RESOLUTION_FORCE ?? '').split(',')
     .map((s) => s.split('@')).filter(([t, w]) => t && Number(w) === week).map(([t]) => t);
-  const failing = liveBanks().filter((c) => isBankUnderPca(c.bankBalanceSheet!, facilityBookOf(ctx.v2, c.ticker)) || forced.includes(c.ticker))
+  const failing = liveBanks().filter((c) => isBankUnderPca(c.bankBalanceSheet!, facilityBookOf(ctx.v2, c.id)) || forced.includes(c.ticker))
     .sort((a, b) => a.bankBalanceSheet!.bankEquityLocal - b.bankBalanceSheet!.bankEquityLocal);
   if (failing.length === 0) return;
   const failingIds = new Set(failing.map((c) => c.id));
@@ -137,7 +136,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     const regionId = bank.region as RegionId;
     const candidates = liveBanks()
       .filter((c) => c.region === regionId && !failingIds.has(c.id))
-      .map((c) => ({ comp: c, sheet: c.bankBalanceSheet!, facilityBookLocal: facilityBookOf(ctx.v2, c.ticker) }));
+      .map((c) => ({ comp: c, sheet: c.bankBalanceSheet!, facilityBookLocal: facilityBookOf(ctx.v2, c.id) }));
     const chosen = chooseAssumingBank(candidates, BANK_MIN_CAPITAL_RATIO);
     if (!chosen) {
       // THE LAST BANK STANDING IS RECAPITALISED BY ITS TREASURY. With no peer to
@@ -149,12 +148,12 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       // are not diluted here (no share mechanics on a bank's equity yet — recorded), which
       // overstates what they keep; the injection itself is real money.
       const sheet = bank.bankBalanceSheet!;
-      const injectionLocal = Math.max(0, assumingCapitalLocal(sheet, facilityBookOf(ctx.v2, bank.ticker)) - sheet.bankEquityLocal);
+      const injectionLocal = Math.max(0, assumingCapitalLocal(sheet, facilityBookOf(ctx.v2, bank.id)) - sheet.bankEquityLocal);
       if (injectionLocal > 0) {
         pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: bankParty(bank),
           amount: injectionLocal, currency: currencyOf(regionId), reason: 'resolution: public recapitalisation' });
         runSettlementStage(ctx);
-        restateBankSheetStatistics(bank.bankBalanceSheet!, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker), facilityBookOf(ctx.v2, bank.ticker));
+        restateBankSheetStatistics(bank.bankBalanceSheet!, bankReservesOf(ctx.v2, bank.id), bankDepositLines(ctx, bank), facilityBookOf(ctx.v2, bank.id));
       }
       console.log(`  [bank-resolution] w${week} ${regionId}:${bank.ticker} under PCA with NO assuming bank — recapitalised by the treasury ${(injectionLocal / 1e9).toFixed(2)}B, ratio now ${bank.bankBalanceSheet!.bankCapitalRatio}`);
       ctx.newsItems.push({
@@ -167,14 +166,14 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     }
     const acquirer = chosen.comp;
     const ladderLocal = ladderRowsOf(ctx.v2, bank.id).reduce((a, r) => a + ctx.v2.tranches.principalLocal[r], 0);
-    const cashLocal = bankReservesOf(ctx.v2, bank.ticker);
-    const failingFacilityBookLocal = facilityBookOf(ctx.v2, bank.ticker);
-    const plan = planBankResolution(bank.bankBalanceSheet!, ladderLocal, assumingCapitalLocal(bank.bankBalanceSheet!, failingFacilityBookLocal), cashLocal, bankDepositLines(ctx, bank.ticker), failingFacilityBookLocal);
+    const cashLocal = bankReservesOf(ctx.v2, bank.id);
+    const failingFacilityBookLocal = facilityBookOf(ctx.v2, bank.id);
+    const plan = planBankResolution(bank.bankBalanceSheet!, ladderLocal, assumingCapitalLocal(bank.bankBalanceSheet!, failingFacilityBookLocal), cashLocal, bankDepositLines(ctx, bank), failingFacilityBookLocal);
     const traceOn = process.env.BANK_RESOLUTION_TRACE === '1';
     const traceSheet = (label: string, c: typeof bank) => {
       if (!traceOn || !c.bankBalanceSheet) return;
-      const f = fieldsOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.ticker), bankDepositLines(ctx, c.ticker), facilityBookOf(ctx.v2, c.ticker));
-      console.log(`  [res-trace] ${label} ${c.ticker} resid ${(residualOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.ticker), bankDepositLines(ctx, c.ticker), facilityBookOf(ctx.v2, c.ticker)) / 1e6).toFixed(3)}M :: `
+      const f = fieldsOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id));
+      console.log(`  [res-trace] ${label} ${c.ticker} resid ${(residualOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id)) / 1e6).toFixed(3)}M :: `
         + Object.entries(f).map(([k, v]) => `${k} ${(v / 1e9).toFixed(3)}B`).join(' | '));
     };
     traceSheet('before', bank); traceSheet('before', acquirer);
@@ -222,7 +221,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // Settlement rebuilds a bank's sheet as a new object; the handles above are last week's.
     const F = bank.bankBalanceSheet!;
     traceSheet('settled', bank); traceSheet('settled', acquirer);
-    const leftLocal = sheetLinesLocal(F, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker), facilityBookOf(ctx.v2, bank.ticker));
+    const leftLocal = sheetLinesLocal(F, bankReservesOf(ctx.v2, bank.id), bankDepositLines(ctx, bank), facilityBookOf(ctx.v2, bank.id));
     if (leftLocal > 1e4) {
       const lines = Object.entries(F as unknown as Record<string, unknown>)
         .filter(([, v]) => typeof v === 'number' && Math.abs(v as number) > 1e4)
@@ -247,7 +246,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
         amount: plan.estateLocal, currency: currencyOf(regionId), reason: 'resolution: net book value paid to the receivership' });
       runSettlementStage(ctx);
     }
-    restateBankSheetStatistics(acquirer.bankBalanceSheet!, bankReservesOf(ctx.v2, acquirer.ticker), bankDepositLines(ctx, acquirer.ticker), facilityBookOf(ctx.v2, acquirer.ticker));
+    restateBankSheetStatistics(acquirer.bankBalanceSheet!, bankReservesOf(ctx.v2, acquirer.id), bankDepositLines(ctx, acquirer), facilityBookOf(ctx.v2, acquirer.id));
 
     const gb = (v: number) => `${(v / 1e9).toFixed(2)}B`;
     console.log(`  [bank-resolution] w${week} ${regionId}:${bank.ticker} -> ${acquirer.ticker}`

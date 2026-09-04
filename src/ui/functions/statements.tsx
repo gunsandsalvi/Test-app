@@ -60,11 +60,11 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
   let body: React.ReactNode;
   if (active === 'bank sheet' && bank) {
     const sov = Object.values(bank.sovereignBondHoldingsByBond || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-    const lines = stateDepositLines(world.state, c.ticker);
+    const lines = stateDepositLines(world.state, c);
     const deposits = lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.smeLocal;
     const desks = Object.values(bank.dealerDeskInventory ?? {}).reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryLocal), 0), 0);
-    const reservesLocal = bankReservesOf(ensureV2(world.state), c.ticker);
-    const facilityBookLocal = facilityBookOf(ensureV2(world.state), c.ticker);
+    const reservesLocal = bankReservesOf(ensureV2(world.state), c.id);
+    const facilityBookLocal = facilityBookOf(ensureV2(world.state), c.id);
     const assets = loanBooksOf(bank, facilityBookLocal) + sov + reservesLocal + (bank.repoLentLocal ?? 0) + (bank.sovereignAccruedCouponLocal ?? 0) + desks + (bank.primeBrokerageLoansLocal ?? 0);
     const liabilities = deposits + (bank.clientMarginLocal ?? 0) + (bank.centralBankLoanLocal ?? 0) + (bank.repoBorrowedLocal ?? 0) + (bank.srfBorrowingLocal ?? 0);
     body = (<>
@@ -243,13 +243,13 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
     ]} />;
   } else if (active === 'banks') {
     const sov = bs?.sovereignBondHoldingsLocal ?? 0;
-    const books = regionLoanBooksLocal(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.ticker));
-    const regionLines = world.state.companies.reduce((a, c) => (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? addDepositLines(a, stateDepositLines(world.state, c.ticker)) : a), ZERO_DEPOSIT_LINES);
+    const books = regionLoanBooksLocal(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.id));
+    const regionLines = world.state.companies.reduce((a, c) => (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? addDepositLines(a, stateDepositLines(world.state, c)) : a), ZERO_DEPOSIT_LINES);
     body = <Statement units="USD millions · the region's banks, summed" asOf={asOf} lines={[
       { label: 'Business loans', usd: books.businessLoanLocal },
       { label: 'Household loans', usd: books.consumerLoanLocal },
       { label: 'Sovereign bonds', usd: sov },
-      { label: 'Reserves', usd: world.state.companies.reduce((a, c) => a + (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? bankReservesOf(ensureV2(world.state), c.ticker) : 0), 0) },
+      { label: 'Reserves', usd: world.state.companies.reduce((a, c) => a + (c.region === r.id && c.isBankEntity && !c.isDefaulted && c.bankBalanceSheet ? bankReservesOf(ensureV2(world.state), c.id) : 0), 0) },
       { label: 'Household deposits', usd: regionLines.householdLocal, total: true },
       { label: 'Corporate deposits', usd: regionLines.corporateLocal },
       { label: 'Institutional deposits', usd: regionLines.institutionalLocal },

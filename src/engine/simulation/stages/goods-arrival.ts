@@ -13,18 +13,19 @@
  */
 
 import { GameState } from '../../../types';
-import { companyParty, companyPartyOfTicker } from '../../../domain/party';
+import { asTicker } from '../../../domain/ids';
+import { companyParty, companyPartyOf } from '../../../domain/party';
 import { WeeklyStepContext } from './context';
 import { ensureV2 } from '../../../engine2/world';
 import { deliverGoods, receiveInputLot, scrapGoods, consumeGoods } from '../../ledger/goods-ledger';
 import { RegionId } from '../../../types';
 import { PartyRef } from '../../ledger/party';
 import { purchaseKindOf, commissioningLeadWeeksOf } from '../../../domain/industry-registry';
-import type { Ticker } from '../../../domain/ids';
+import type { Ticker, EntityId } from '../../../domain/ids';
 
 /** A consignment bought, paid for, and still on its way. */
 export interface InTransitShipment {
-  buyerTicker: Ticker;
+  buyerId: EntityId;
   sellerKey: string;
   subUnitId: string;
   units: number;
@@ -33,7 +34,7 @@ export interface InTransitShipment {
   arrivalWeek: number;
   /** Who holds the consignment while it moves — a named carrier, or the origin
    *  region's transport pool (no ticker) on a lane no named fleet serves. */
-  carrierTicker?: Ticker;
+  carrierId?: EntityId;
   carrierRegion?: RegionId;
 }
 
@@ -46,11 +47,11 @@ export interface InTransitShipment {
  */
 export function reassignConsignments(
   state: GameState,
-  from: { ticker: Ticker; id: string },
-  to: { ticker: Ticker; id: string }
+  from: { ticker: Ticker; id: EntityId },
+  to: { ticker: Ticker; id: EntityId }
 ): void {
   (state.goodsInTransit ?? []).forEach((sh) => {
-    if (sh.buyerTicker === from.ticker) sh.buyerTicker = to.ticker;
+    if (sh.buyerId === from.id) sh.buyerId = to.id;
     const seller = String(sh.sellerKey ?? '');
     const sellerId = seller.replace(/^.*:/, '');
     if (sellerId !== from.id && sellerId !== from.ticker) return;
@@ -73,30 +74,33 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
   // anti-pattern, and it made a stage that hands boxes to
   // their owners cost 99ms a week. Public firms first so a duplicate ticker resolves the same
   // way the sequential find did (tickers are unique by construction; this is belt and braces).
-  const firmByTicker = new Map<Ticker, (typeof ctx.prevActiveFirms)[number]>();
-  ctx.prevActivePrivateFirms.forEach(c => firmByTicker.set(c.ticker, c));
-  ctx.prevActiveFirms.forEach(c => firmByTicker.set(c.ticker, c));
+  const firmById = new Map<EntityId, (typeof ctx.prevActiveFirms)[number]>();
+  ctx.prevActivePrivateFirms.forEach(c => firmById.set(c.id, c));
+  ctx.prevActiveFirms.forEach(c => firmById.set(c.id, c));
   // A dead buyer with an OPEN estate still takes delivery — the receiver
   // liquidates what arrives (the workout sells input lots to peers as it sells finished stock).
   const openEstateIds = new Set((ctx.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
-  const estateByTicker = new Map<Ticker, (typeof ctx.updatedCompanies)[number]>();
-  ctx.updatedCompanies.forEach((c) => { if (c.isDefaulted && openEstateIds.has(c.id)) estateByTicker.set(c.ticker, c); });
+  const estateById = new Map<EntityId, (typeof ctx.updatedCompanies)[number]>();
+  ctx.updatedCompanies.forEach((c) => { if (c.isDefaulted && openEstateIds.has(c.id)) estateById.set(c.id, c); });
 
   inFlight.forEach(shipment => {
     if (shipment.arrivalWeek > state.currentWeek) { stillMoving.push(shipment); return; }
-    if (!companyUpdates[shipment.buyerTicker]) companyUpdates[shipment.buyerTicker] = {};
-    const update = companyUpdates[shipment.buyerTicker];
-    const buyer = firmByTicker.get(shipment.buyerTicker) ?? estateByTicker.get(shipment.buyerTicker);
-    const toEstate = buyer !== undefined && !firmByTicker.has(shipment.buyerTicker);
-    const carrier: PartyRef = shipment.carrierTicker
-      ? companyPartyOfTicker(shipment.carrierTicker)
+    const buyer = firmById.get(shipment.buyerId) ?? estateById.get(shipment.buyerId);
+    const toEstate = buyer !== undefined && !firmById.has(shipment.buyerId);
+    // `companyUpdates` is keyed by TICKER (its own field, its own commit); a shipment names its
+    // buyer by entity id, so the buyer is resolved first and its ticker used for that channel.
+    const buyerTicker = buyer?.ticker ?? asTicker(shipment.buyerId);
+    if (!companyUpdates[buyerTicker]) companyUpdates[buyerTicker] = {};
+    const update = companyUpdates[buyerTicker];
+    const carrier: PartyRef = shipment.carrierId
+      ? companyPartyOf(shipment.carrierId)
       : { kind: 'SEGMENT', region: shipment.carrierRegion ?? (buyer?.region ?? 'USA'), industry: 'AutomotiveTransport' };
     // A buyer that no longer exists cannot take delivery; the consignment is written off rather
     // than landed on nobody, which would be inventory with no owner — the carrier scraps it.
     if (!buyer) {
       // A named carrier held it (it was stock, in the carrier's region) and now writes it off; one
       // the transport pool carried passed through a sink at dispatch and was never stock.
-      if (shipment.carrierTicker && shipment.carrierRegion) scrapGoods(shipment.carrierRegion, shipment.subUnitId, shipment.units);
+      if (shipment.carrierId && shipment.carrierRegion) scrapGoods(shipment.carrierRegion, shipment.subUnitId, shipment.units);
       return;
     }
     // The consignment leaves the carrier's hands for the buyer's, by wire.

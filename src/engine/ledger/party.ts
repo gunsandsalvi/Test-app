@@ -20,7 +20,7 @@ import { asEntityId } from '../../domain/ids';
 export type { PartyRef, PartyOfKind, EntityParty, CounterpartyRef } from '../../domain/party';
 export {
   companyParty, bankParty, bankCreditParty, bankSecuritiesParty,
-  companyPartyOfTicker, bankPartyOfTicker, bankCreditPartyOfTicker, bankSecuritiesPartyOfTicker,
+  companyPartyOf, bankPartyOf, bankCreditPartyOf, bankSecuritiesPartyOf,
 } from '../../domain/party';
 import type { PartyRef } from '../../domain/party';
 
@@ -55,7 +55,7 @@ const partyRefById: PartyRef[] = [];
 /** The part of a party's identity that varies within its kind. */
 const partyName = (p: PartyRef): string =>
   p.kind === 'COMPANY' || p.kind === 'BANK' || p.kind === 'BANK_CREDIT' || p.kind === 'BANK_SECURITIES'
-    ? p.ticker
+    ? p.id
     : p.kind === 'INSTITUTION' ? p.id
       : p.kind === 'SEGMENT' ? `${p.region}\u0000${p.industry}`
         : p.region;
@@ -93,7 +93,8 @@ export function partyFromKey(key: string): PartyRef | undefined {
   const rest = key.slice(first + 1);
   switch (kind) {
     case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES':
-      return { kind, ticker: rest } as PartyRef;
+      // §3.13-BOOK (c-then-3b): the key's tail is an ENTITY id, on all five entity arms.
+      return { kind, id: asEntityId(rest) } as PartyRef;
     case 'INSTITUTION':
       // §3.13-BOOK (c2b): the key's tail IS the entity id — `partyKey` wrote it from one.
       return { kind: 'INSTITUTION', id: asEntityId(rest) };

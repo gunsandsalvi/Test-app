@@ -19,9 +19,9 @@
  */
 
 import { RegionId } from './geography';
+import type { EntityId } from './ids';
 import type { PartyOfKind } from './party';
 import type { InstrumentId } from './ids';
-import type { Ticker } from './ids';
 
 /**
  * §3.13-BOOK (c-then-3a) — the two named arms are views of the ONE union; the central bank's is
@@ -50,7 +50,7 @@ export interface RepoContract {
   regionId: RegionId;
   lender: RepoParty;
   /** Borrowers are named banks: nothing else in the model funds itself secured yet. */
-  borrowerTicker: Ticker;
+  borrowerId: EntityId;
   principalLocal: number;
   /** Annualised decimal, struck at this session's cleared level (rule 8). */
   rateAnnual: number;
@@ -61,7 +61,9 @@ export interface RepoContract {
 }
 
 export function repoPartyKey(p: RepoParty): string {
-  return p.kind === 'BANK' ? `BANK:${p.ticker}` : p.kind === 'INSTITUTION' ? `INST:${p.id}` : 'CB';
+  // §3.13-BOOK (c-then-3b): every named arm is an entity id, and `INST:` is `INSTITUTION:` —
+  // the same party under two key formats, which is what one union was supposed to end.
+  return p.kind === 'CENTRAL_BANK' ? 'CB' : `${p.kind}:${p.id}`;
 }
 
 /** One week's interest on a contract, at the rate it was struck at. */
@@ -75,8 +77,8 @@ export function repoInterestToMaturityLocal(c: RepoContract): number {
   return (c.principalLocal * c.rateAnnual * weeks) / 52;
 }
 
-export function repoBorrowedLocal(book: RepoContract[], ticker: Ticker): number {
-  return book.reduce((a, c) => a + (c.borrowerTicker === ticker ? c.principalLocal : 0), 0);
+export function repoBorrowedLocal(book: RepoContract[], bankId: EntityId): number {
+  return book.reduce((a, c) => a + (c.borrowerId === bankId ? c.principalLocal : 0), 0);
 }
 
 export function repoLentLocal(book: RepoContract[], party: RepoParty): number {
@@ -85,9 +87,9 @@ export function repoLentLocal(book: RepoContract[], party: RepoParty): number {
 }
 
 /** What the central bank's window has outstanding to one bank — the sheet's `srfBorrowingLocal`. */
-export function srfBorrowedLocal(book: RepoContract[], ticker: Ticker): number {
+export function srfBorrowedLocal(book: RepoContract[], bankId: EntityId): number {
   return book.reduce(
-    (a, c) => a + (c.borrowerTicker === ticker && c.lender.kind === 'CENTRAL_BANK' ? c.principalLocal : 0), 0
+    (a, c) => a + (c.borrowerId === bankId && c.lender.kind === 'CENTRAL_BANK' ? c.principalLocal : 0), 0
   );
 }
 
@@ -96,19 +98,19 @@ export function srfBorrowedLocal(book: RepoContract[], ticker: Ticker): number {
  * bank has pledged, bond by bond, at face: 07c and 07f read it as a floor on the bonds they
  * actually touch, so pledging thirty-year paper stops constraining the two-year book.
  */
-export function encumberedFaceByBond(book: RepoContract[], ticker: Ticker): Map<InstrumentId, number> {
+export function encumberedFaceByBond(book: RepoContract[], bankId: EntityId): Map<InstrumentId, number> {
   const byBond = new Map<InstrumentId, number>();
   book.forEach((c) => {
-    if (c.borrowerTicker !== ticker) return;
+    if (c.borrowerId !== bankId) return;
     c.collateral.forEach((p) => byBond.set(p.bondId, (byBond.get(p.bondId) ?? 0) + p.faceLocal));
   });
   return byBond;
 }
 
 /** Total face pledged by one bank across every bond. */
-export function encumberedFaceLocal(book: RepoContract[], ticker: Ticker): number {
+export function encumberedFaceLocal(book: RepoContract[], bankId: EntityId): number {
   let faceLocal = 0;
-  encumberedFaceByBond(book, ticker).forEach((v) => { faceLocal += v; });
+  encumberedFaceByBond(book, bankId).forEach((v) => { faceLocal += v; });
   return faceLocal;
 }
 

@@ -11,6 +11,7 @@
  */
 
 import { newWireJournal } from '../../ledger/wire';
+import type { EntityId } from '../../../domain/ids';
 import { newPaymentJournal, seedPendingNetFromJournal } from './settlement';
 import { ensureV2 } from '../../../engine2/world';
 import {
@@ -299,7 +300,8 @@ export interface WeeklyStepContext {
   /** IND16 — who runs the channel in each region, and each firm's share of it, by the size of its
    * own distribution line. Built once a week; the settlement legs read it per lot. */
   /** §3.13-BOOK slice (c2c): region → DISTRIBUTOR TICKER → its share of that channel. */
-  channelShareByRegion: Record<string, Map<Ticker, number>>;
+  /** §3.13-BOOK (c-then-3b): the distributors that warehouse a region's stock, by ENTITY id. */
+  channelShareByRegion: Record<string, Map<EntityId, number>>;
   carrierTonneNm: Record<string, number>;
   /** XB3a-4 — units that completed transit this week. */
   goodsArrivedUnits: number;

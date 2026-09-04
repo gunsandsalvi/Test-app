@@ -129,10 +129,10 @@ export class BankIdentityTrace {
       const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[c.ticker]?.bankBalanceSheet)
         || c.bankBalanceSheet;
       if (!sheet) return;
-      const lines = bankDepositLines(ctx, c.ticker);
-      const facilityBookLocal = facilityBookOf(ctx.v2, c.ticker);
-      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.ticker), lines, facilityBookLocal));
-      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.ticker), lines, facilityBookLocal, true));
+      const lines = bankDepositLines(ctx, c);
+      const facilityBookLocal = facilityBookOf(ctx.v2, c.id);
+      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal));
+      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, true));
     });
     return out;
   }
@@ -143,8 +143,8 @@ export class BankIdentityTrace {
     const c = ctx.updatedCompanies.find((x) => x.ticker === this.focusTicker);
     const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[this.focusTicker]?.bankBalanceSheet)
       || c?.bankBalanceSheet;
-    if (!sheet) return;
-    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, this.focusTicker), bankDepositLines(ctx, this.focusTicker), facilityBookOf(ctx.v2, this.focusTicker));
+    if (!sheet || !c) return;
+    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id));
     if (this.focusFields) {
       const parts: string[] = [];
       let residualDelta = 0;
@@ -171,6 +171,10 @@ export class BankIdentityTrace {
    *  (account-kind, reason) — the instruction-level view the field deltas must reconcile to. */
   private dumpJournal(stage: string, ctx: WeeklyStepContext): void {
     if (!this.focusTicker) return;
+    // §3.13-BOOK (c-then-3b): the trace is configured by TICKER (an env var), the journal's
+    // parties are entity ids — resolve once per dump.
+    const focusBankId = ctx.updatedCompanies.find((x) => x.ticker === this.focusTicker)?.id;
+    if (focusBankId === undefined) return;
     const j = ctx.paymentJournal;
     const byKey = new Map<string, number>();
     for (let i = 0; i < j.amount.length; i++) {
@@ -178,7 +182,7 @@ export class BankIdentityTrace {
       const payee = partyOf(j.payeeId[i]);
       const touch = (ref: typeof payer, sign: 1 | -1) => {
         if ((ref.kind === 'BANK' || ref.kind === 'BANK_SECURITIES' || ref.kind === 'BANK_CREDIT')
-          && ref.ticker === this.focusTicker) {
+          && ref.id === focusBankId) {
           const key = `${ref.kind} :: ${reasonText(j.reasonId[i])}`;
           byKey.set(key, (byKey.get(key) ?? 0) + sign * j.amount[i]);
         }

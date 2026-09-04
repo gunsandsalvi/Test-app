@@ -18,7 +18,7 @@ function lanesOf(world: World): Map<string, Lane> {
   world.state.companies.forEach((c) => region.set(c.ticker, c.region));
   (world.state.goodsInTransit ?? []).forEach((g) => {
     const from = region.get(String(g.sellerKey).replace(/^.*:/, '')) ?? String(g.sellerKey).slice(0, 3);
-    const to = region.get(g.buyerTicker) ?? '?';
+    const to = region.get(g.buyerId) ?? '?';
     const l = out.get(`${from}>${to}`);
     if (l) { l.inTransitUnits += g.units; l.shipments++; }
   });

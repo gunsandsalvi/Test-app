@@ -38,7 +38,7 @@ import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, Clea
 const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { institutionSpendableLocal } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakes, participantPartyOf } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes, participantPartyOf, bankIdOfTickerFor } from './book-settlement';
 import { householdBookId, transferHolding } from '../../ledger/holdings-ledger';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
@@ -67,6 +67,8 @@ const BOOK = 'equity';
 export const FULL_SIZE_PRICE_DISCOUNT = 0.30;
 
 export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+  // §3.13-BOOK (c-then-3b): the participant→party crossing, once per stage.
+  const bankIdOfTicker = bankIdOfTickerFor(ctx);
   const regionIds = REGION_IDS;
 
   regionIds.forEach((regionId) => {
@@ -680,7 +682,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     settleClearedBook(
       ctx, regionId, currencyOf(regionId), BOOK,
       netCashByEntityId,
-      participantPartyOf({ regionId, entityIds, deskTickers }),
+      participantPartyOf({ regionId, entityIds, deskTickers, bankIdOfTicker }),
       { netCashLocal: dealerNetLocal, feeLocal: bookFeeLocal },
       feeDesksForRegion(ctx, regionId),
       equityPrimaryTakes

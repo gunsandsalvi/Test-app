@@ -1,5 +1,6 @@
 
 import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
+import type { EntityId } from '../../domain/ids';
 import { companyParty } from '../../domain/party';
 import { stashSeedRevenueHistory, drainSeedRevenueHistories, drainSeedRings, peekSeedRing, typeRefOf } from '../../engine2/world';
 import { getSimulationDate } from '../formatters';
@@ -406,8 +407,8 @@ function openSeededMirrors(state: GameState): void {
     // The seed's wires are a real journal and the world carries it, so week 0 can be asked what
     // it wired exactly as any week is. There are no payments at the seed, so the pending money it
     // is netted against is zero.
-    const { companyByTicker } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
-    state.lastWires = summarizeWires(j, { numeraire: 0, byCurrency: {} }, (t: Ticker) => companyByTicker.get(t)?.region, reasonText, v2.fx);
+    const { companyById: companyById2 } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+    state.lastWires = summarizeWires(j, { numeraire: 0, byCurrency: {} }, (id: EntityId) => companyById2.get(id)?.region, reasonText, v2.fx);
     (state as { nextWireId?: number }).nextWireId = j.base + j.n;
   } finally {
     setActiveWireJournal(undefined);
@@ -713,7 +714,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // holder of the stock the central bank and the institutions do not take; where the
       // cohort's headroom cannot absorb that residual it is rationed pro-rata, never forced.
       const headroomByBank = new Map(regionBanksForSov.map(b =>
-        [b.ticker, leverageHeadroomLocal(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.ticker))]));
+        [b.ticker, leverageHeadroomLocal(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id))]));
       const totalHeadroomLocal = Array.from(headroomByBank.values()).reduce((a, v) => a + v, 0);
       const takenByOthersLocal = (reg.institutionalSector.sovBondHoldingsLocal || 0)
         + totalSovOutstandingLocal * CENTRAL_BANK_SOVEREIGN_SHARE;
@@ -851,7 +852,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // Now that the corporate leg is known, the funding identity is re-derived: wholesale is
         // the residual AFTER real deposits, not a plug carrying money the companies already
         // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
-        applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.ticker), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
+        applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
       });
     }
 
@@ -1147,7 +1148,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const sheet = c.bankBalanceSheet!;
       const sovLocal = Object.values(sheet.sovereignBondHoldingsByBond || {})
         .reduce((a, v) => a + (Number(v) || 0), 0);
-      const earningAssetsLocal = loanBooksOf(sheet, facilityBookOf(seedV2, c.ticker)) + sovLocal;
+      const earningAssetsLocal = loanBooksOf(sheet, facilityBookOf(seedV2, c.id)) + sovLocal;
       const nimRevenueLocal = earningAssetsLocal * reg.bankingSector.netInterestMarginPct;
       if (!(nimRevenueLocal > 0)) return;
       c.annualRevenue = Math.round(nimRevenueLocal);
@@ -1262,9 +1263,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // §3.13c: the world opens at the seed's rates, so the very first payment across a border
   // converts at a real number rather than the parity the table opens at.
   publishFxRatesNow(seedV2, fxPairs);
-  const carrierTickers = new Set<Ticker>(companies.map(c => c.ticker));
+  const carrierIds = new Set<Ticker>(companies.map(c => c.ticker));
   const carrierNames = new Set<string>(companies.map(c => c.name));
-  const carriers = generateCarriers(regions, seededUnitMassTonnes, seedFxToUsd, carrierTickers, carrierNames);
+  const carriers = generateCarriers(regions, seededUnitMassTonnes, seedFxToUsd, carrierIds, carrierNames);
   companies.push(...carriers);
   const seededFreightRates = (() => {
     const { bookings } = seedFreightDemand(regions, seededUnitMassTonnes, seedFxToUsd);
@@ -1313,7 +1314,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       for (let wk = 1; wk <= transit; wk++) {
         const buyer = pool[(wk + b.subUnitId.length) % pool.length];
         seededPipeline.push({
-          buyerTicker: buyer.ticker,
+          buyerId: buyer.id,
           // Step 8: the seller is a party this model knows — the origin's segment pool of the good's
           // industry (the seed's lots are paid for; the key names who they came from).
           sellerKey: `PRIVATE:${b.from}:${industryOfSubUnit(b.subUnitId) ?? b.subUnitId}`,
@@ -1367,7 +1368,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     regionBanks.forEach(b => {
       const instLocal = Math.round(byBank.get(b.ticker) ?? 0);
       stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + instLocal);
-      applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.ticker), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+      applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
   });
 
@@ -1382,7 +1383,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   });
 
   // G3b: the dealers the player trades with ARE the named banks' desks.
-  const dealers = dealersFromBanks((b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.ticker), companies);
+  const dealers = dealersFromBanks((b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.id), companies);
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities, undefined, seedV2, 1);
   const recentIPOs: { ticker: Ticker; name: string; category: string; week: number }[] = [];
   const recentMergers: { acquirerTicker: Ticker; acquirerName: string; targetTicker: Ticker; targetName: string; week: number; dealValueLocal: number }[] = [];
@@ -1651,7 +1652,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const corpLocal = Math.round(lateCorporateByBank.get(b.ticker) ?? 0);
       const instLocal = Math.round(lateInstitutionalByBank.get(b.ticker) ?? 0);
       stashOpeningCash(sheet, openingCashOf(sheet) + corpLocal + instLocal);
-      applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookOf(seedV2, b.ticker), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+      applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
   });
 

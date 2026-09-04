@@ -149,7 +149,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const sheet = c.bankBalanceSheet;
     if (!sheet) return;
     // DRV: the desk's remaining derivative budget is ONE number across every class it writes.
-    const capLocal = deskNotionalCapacityLocal(leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.ticker), facilityBookOf(ctx.v2, c.ticker)), deskStandingPfeChargeLocal(ctx, state, c.ticker), 'FX_FORWARD');
+    const capLocal = deskNotionalCapacityLocal(leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.id), facilityBookOf(ctx.v2, c.id)), deskStandingPfeChargeLocal(ctx, state, c.id), 'FX_FORWARD');
     if (capLocal > 0) deskCapacityByTicker.set(c.ticker, capLocal);
     arbitrageCapacityLocal += capLocal;
   });

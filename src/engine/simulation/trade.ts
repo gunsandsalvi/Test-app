@@ -94,7 +94,7 @@ export function executeTrade(
         },
       };
       // A3.6: the desk pays for inventory from the bank's account and the fee lands on it.
-      adjustBankReserves(ensureV2(state), bank.ticker, -inventoryDeltaLocal + incomeLocal);
+      adjustBankReserves(ensureV2(state), bank.id, -inventoryDeltaLocal + incomeLocal);
 
       // The region's view of that book, kept in step for the readers that want one aggregate.
       const region = updatedRegions[posData.region];

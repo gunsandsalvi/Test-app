@@ -34,7 +34,7 @@ export class CentralBankIdentityTrace {
       ctx.updatedCompanies.forEach((c) => {
         if (!c.isBankEntity || c.region !== r || c.isDefaulted || c.mergerAcquired) return;
         const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[c.ticker]?.bankBalanceSheet) || c.bankBalanceSheet;
-        if (sheet) reserves += bankReservesOf(ctx.v2, c.ticker);
+        if (sheet) reserves += bankReservesOf(ctx.v2, c.id);
       });
       const tga = treasuryAccountOf(ctx.v2, r), assets = centralBankAssetsLocal(cb, waysAndMeansOf(ctx.v2, r), currencyOf(r), ctx.fx);
       out.set(r, reserves + tga + cb.currencyInCirculationLocal - assets);

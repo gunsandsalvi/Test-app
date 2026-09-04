@@ -22,13 +22,12 @@
 
 import { RegionId } from './geography';
 import type { EntityId } from './ids';
-import type { Ticker } from './ids';
 
 export interface PrimeBrokerageLine {
   id: string;
   regionId: RegionId;
   /** The named bank whose balance sheet this line sits on. */
-  brokerTicker: Ticker;
+  brokerId: EntityId;
   /** The fund borrowing on it. */
   /** §3.13-BOOK (c2b): the hedge fund this line is extended to. */
   fundId: EntityId;
@@ -57,8 +56,8 @@ export function drawnByFund(book: PrimeBrokerageLine[], fundId: string): number 
   return book.reduce((a, l) => a + (l.fundId === fundId ? l.drawnLocal : 0), 0);
 }
 
-export function lentByBroker(book: PrimeBrokerageLine[], brokerTicker: Ticker): number {
-  return book.reduce((a, l) => a + (l.brokerTicker === brokerTicker ? l.drawnLocal : 0), 0);
+export function lentByBroker(book: PrimeBrokerageLine[], brokerId: EntityId): number {
+  return book.reduce((a, l) => a + (l.brokerId === brokerId ? l.drawnLocal : 0), 0);
 }
 
 /** One week's financing on a line, at the rate it was struck at. */

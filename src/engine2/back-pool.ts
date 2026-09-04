@@ -16,7 +16,7 @@
  * `dispatchBackA` posts the jobs, `collectBackA` blocks on the doorbells.
  */
 import { BackLanes } from './stage08-lanes.ts';
-import { bankCreditPartyOfTicker, bankPartyOfTicker, companyPartyOfTicker } from '../domain/party';
+import { bankCreditPartyOf, bankPartyOf, companyPartyOf } from '../domain/party';
 import { FrontPass } from './stage08-front.ts';
 import type { BackAShardOut } from './back-worker.ts';
 import { partyId, partyTableSize, partyRefsFrom } from '../engine/ledger/party';
@@ -108,13 +108,13 @@ const A_REASON_LABELS = [
 function preInternBackA(L: BackLanes): void {
   for (const label of A_REASON_LABELS) internReason(label);
   for (let i = 0; i < L.n; i++) {
-    partyId(companyPartyOfTicker(L.ticker[i]));
+    partyId(companyPartyOf(L.companyId[i]));
     partyId({ kind: 'HOUSEHOLD', region: L.region[i] });
     partyId({ kind: 'GOVERNMENT', region: L.region[i] });
     const bank = L.homeBankId[i];
     if (bank) {
-      partyId(bankPartyOfTicker(bank));
-      partyId(bankCreditPartyOfTicker(bank));
+      partyId(bankPartyOf(bank));
+      partyId(bankCreditPartyOf(bank));
     }
     if (L.hasVehicle[i] === 1) partyId({ kind: 'INSTITUTION', id: asEntityId(L.companyId[i]) });
   }

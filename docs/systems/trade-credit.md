@@ -98,13 +98,13 @@ supplier's place in the estate.
 | **D1 a buyer can pay late, and lateness is a state** | — | ❌ |
 | **D2 a failed buyer's receivable is a claim in the estate** | `src/engine/simulation/stages/estate-resolution.ts:openEstate` | ❌ |
 | D2.a the seller takes a real loss it did not choose | `src/engine/simulation/stages/trade-settlement.ts:tradeInvoiceWriteOffLocal` | ✅ |
-| D3 the loss can push the seller into distress | `src/engine/simulation/stages/trade-settlement.ts:activeByTicker` | ✅ |
+| D3 the loss can push the seller into distress | `src/engine/simulation/stages/trade-settlement.ts:activeById` | ✅ |
 | **D3.a the contagion path is traceable firm to firm** | — | ❌ |
 | D4 anticipation makes suppliers withdraw terms | `src/domain/trade-invoice.ts:lossGivenDefault` | ⚠️ |
 | **D4.a a solvent firm can die of a rumour** | — | ❌ |
 | E1 FORBID no sale that settles instantly by construction | `src/engine/simulation/stages/05-unit-bidding.ts:isDomestic` | ⚠️ |
 | E2 FORBID no receivable without a named payer | `src/domain/trade-invoice.ts:TradeInvoice` | ✅ |
-| E3 FORBID no receivable that survives its debtor's death | `src/engine/simulation/stages/trade-settlement.ts:activeByTicker` | ✅ |
+| E3 FORBID no receivable that survives its debtor's death | `src/engine/simulation/stages/trade-settlement.ts:activeById` | ✅ |
 
 ---
 

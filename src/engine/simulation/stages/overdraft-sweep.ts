@@ -9,6 +9,7 @@
  * balance is zero at settlement and the money that was spent has a lender.
  */
 import { WeeklyStepContext } from './context';
+import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { defect } from '../../../domain/defect';
 import { bankCreditParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
@@ -60,7 +61,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       maturityWeek: ctx.nextWeek + 52,
       seniority: 'SENIOR' as const,
       isBankFacility: true,
-      facilityBankTicker: homeBank.ticker, // still the TICKER space — its own (c-then-3b) commit
+      facilityBankId: homeBank.id,
     };
     issueTranche(v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
     pay(ctx, {
@@ -80,12 +81,12 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     // morning struck it is still funded — the money is already spent — at a penalty the next
     // morning's re-strike replaces with proper terms. ----
     const book: PrimeBrokerageLine[] = reg.primeBrokerageBook ?? [];
-    const drawnByBroker = new Map<Ticker, number>();
+    const drawnByBroker = new Map<EntityId, number>();
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
       if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankId) return fund;
       const broker = companyById.get(fund.homeBankId);
       if (!broker) return defect(`fund ${fund.id} banks at ${fund.homeBankId}, which is not an entity`);
-      const brokerTicker = broker.ticker; // `PrimeBrokerageLine.brokerTicker` is its own commit
+      const brokerBankId = broker.id;
       const balanceLocal = entityCashOf(ctx.v2, fund) + pendingLocal({ kind: 'INSTITUTION', id: fund.id });
       if (balanceLocal >= -1) return fund;
       const drawLocal = -balanceLocal;
@@ -106,7 +107,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
         book.push({
           id: `${regionId}-PB-${fund.id}`,
           regionId,
-          brokerTicker,
+          brokerId: brokerBankId,
           fundId: fund.id,
           drawnLocal: Math.round(drawLocal),
           haircutRate: 0.5,
@@ -114,7 +115,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
           struckWeek: ctx.nextWeek,
         });
       }
-      drawnByBroker.set(brokerTicker, (drawnByBroker.get(brokerTicker) ?? 0) + drawLocal);
+      drawnByBroker.set(brokerBankId, (drawnByBroker.get(brokerBankId) ?? 0) + drawLocal);
       return { ...fund, primeBrokerageAvailableLocal: Math.max(0, (fund.primeBrokerageAvailableLocal ?? 0) - withinLineLocal) };
     });
     reg.primeBrokerageBook = book;
@@ -148,7 +149,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     // that survives, ).
     ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
       if (!c.bankBalanceSheet || c.region !== regionId) return c;
-      const drawnLocal = drawnByBroker.get(c.ticker) ?? 0;
+      const drawnLocal = drawnByBroker.get(c.id) ?? 0;
       const smeRows = smeDrawByBank.get(c.ticker);
       if (!drawnLocal && !smeRows) return c;
       const loans = [...(c.bankBalanceSheet.businessLoans ?? [])];

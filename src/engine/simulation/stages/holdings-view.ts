@@ -321,7 +321,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     const sheet = c.bankBalanceSheet;
     if (!sheet || !isActiveCompany(c)) return;
     // The bank's facilities are its rows on the borrowers' ladders.
-    facilityRowsOf(v2hv, c.ticker).forEach((l) => {
+    facilityRowsOf(v2hv, c.id).forEach((l) => {
       const issuerRegion = companyRegionById.get(l.borrowerId);
       const a = issuerRegion ? acc(issuerRegion) : undefined;
       if (a) a.corpBond.bankLocal += Math.max(0, l.principalLocal);

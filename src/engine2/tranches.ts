@@ -18,15 +18,14 @@ import { DebtTranche } from '../domain/company';
 import { trancheKindOf } from '../domain/assets';
 import { GovDebtTrancheView } from '../domain/region-macro';
 import { govTrancheView } from '../domain/government';
-import { V2World, rowOf, internInstrument, internTicker, internEntity, entityOf, instrumentOf, tickerOf, tickerRefOf, instrumentRefOf } from './world';
+import { V2World, rowOf, internInstrument, internEntity, entityOf, entityRefOf, instrumentOf, instrumentRefOf } from './world';
 import { InstrumentId, asInstrumentId } from '../domain/ids';
 import { equityIssuerId } from '../domain/instrument-keys';
 import type { EntityId } from '../domain/ids';
 import { forgetClearedPrice } from './prices';
 import { defect } from '../domain/defect';
-import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type TickerRef, type EntityRef } from './refs';
+import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type EntityRef } from './refs';
 import { governmentEntityId } from '../domain/entity-keys';
-import type { Ticker } from '../domain/ids';
 
 export const TR_FLOATING = 1;
 export const TR_CP = 2;
@@ -45,7 +44,7 @@ export interface TrancheStore {
   maturityWeek: Int32Array;
   flags: Uint8Array;
   idRef: RefColumn<InstrRef>;      // the tranche this row IS
-  bankRef: RefColumn<TickerRef>;   // the facility's bank, by ticker; ABSENT_REF = none
+  bankRef: RefColumn<EntityRef>;   // §3.13-BOOK (c-then-3b): the facility's LENDER, by entity id; ABSENT_REF = none
   /** §5-FINALIZATION step 10: the issuer's company id on the row — a lender's book is one scan. */
   issuerRef: RefColumn<EntityRef>; // ABSENT_REF = a freed row
   /** §5-WIRES W3: the wire that created the row (-1 for a seeded or born ladder — B's gap). */
@@ -102,7 +101,7 @@ export function newTrancheStore(): TrancheStore {
     maturityWeek: new Int32Array(cap),
     flags: new Uint8Array(cap),
     idRef: newRefColumn<InstrRef>(cap),
-    bankRef: newRefColumn<TickerRef>(cap),
+    bankRef: newRefColumn<EntityRef>(cap),
     issuerRef: newRefColumn<EntityRef>(cap, -1),
     wireRef: new Int32Array(cap).fill(-1),
     callProt: new Array(cap),
@@ -180,7 +179,7 @@ function writeRow(S: TrancheStore, r: number, v2: V2World, t: DebtTranche): void
     | (t._refinanceInitiated ? TR_REFI_INITIATED : 0);
   S.idRef[r] = internInstrument(v2, t.id);
   S.rowByIdRef.set(S.idRef[r], r);
-  S.bankRef[r] = t.facilityBankTicker === undefined ? ABSENT_REF : internTicker(v2, t.facilityBankTicker);
+  S.bankRef[r] = t.facilityBankId === undefined ? ABSENT_REF : internEntity(v2, t.facilityBankId);
   S.callProt[r] = t.callProtection;
 }
 
@@ -224,7 +223,7 @@ function canonical(t: DebtTranche): string {
     t.originationWeek, t.maturityWeek,
     t.seniority === 'SUBORDINATED' ? 1 : 0,
     t.isCommercialPaper ? 1 : 0, t.isBankFacility ? 1 : 0,
-    t.facilityBankTicker ?? 'x', t.id,
+    t.facilityBankId ?? 'x', t.id,
     t.paymentsPerYear ?? 'x', t.paymentAnchorWeek ?? 'x',
     t._refinanceInitiated ? 1 : 0,
     t.callProtection ? JSON.stringify(t.callProtection) : 'x',
@@ -240,7 +239,7 @@ function canonicalRow(S: TrancheStore, v2: V2World, r: number): string {
     S.originationWeek[r], S.maturityWeek[r],
     f & TR_SUBORDINATED ? 1 : 0,
     f & TR_CP ? 1 : 0, f & TR_FACILITY ? 1 : 0,
-    S.bankRef[r] < 0 ? 'x' : tickerOf(v2, S.bankRef[r]), instrumentOf(v2, S.idRef[r]),
+    S.bankRef[r] < 0 ? 'x' : entityOf(v2, S.bankRef[r]), instrumentOf(v2, S.idRef[r]),
     Number.isNaN(S.paymentsPerYear[r]) ? 'x' : S.paymentsPerYear[r],
     Number.isNaN(S.paymentAnchorWeek[r]) ? 'x' : S.paymentAnchorWeek[r],
     f & TR_REFI_INITIATED ? 1 : 0,
@@ -347,7 +346,7 @@ export function materializeTranche(v2: V2World, r: number): DebtTranche {
   if (!Number.isNaN(S.floatingMarginBps[r])) t.floatingMarginBps = S.floatingMarginBps[r];
   if (f & TR_CP) t.isCommercialPaper = true;
   if (f & TR_FACILITY) t.isBankFacility = true;
-  if (S.bankRef[r] >= 0) t.facilityBankTicker = tickerOf(v2, S.bankRef[r]);
+  if (S.bankRef[r] >= 0) t.facilityBankId = entityOf(v2, S.bankRef[r]);
   if (S.callProt[r]) t.callProtection = S.callProt[r];
   if (!Number.isNaN(S.paymentsPerYear[r])) t.paymentsPerYear = S.paymentsPerYear[r];
   if (!Number.isNaN(S.paymentAnchorWeek[r])) t.paymentAnchorWeek = S.paymentAnchorWeek[r];
@@ -391,23 +390,23 @@ export const trancheWireOf = (v2: V2World, r: number): number => v2.tranches.wir
  *  syncs (O4 lived on that drift). The facility row on the ladder IS the loan, seen from the
  *  lender: one scan of the store, in row order. */
 export interface FacilityRow {
-  row: number; borrowerId: string; bankTicker: Ticker; trancheId: string; principalLocal: number;
+  row: number; borrowerId: EntityId; bankId: EntityId; trancheId: string; principalLocal: number;
   /** The tranche's floating margin; a facility with none stated rides the 350bp the mirror used. */
   marginBps: number; originationWeek: number; maturityWeek: number;
 }
 function facilityRowOf(v2: V2World, r: number): FacilityRow {
   const S = v2.tranches;
   return {
-    row: r, borrowerId: entityOf(v2, S.issuerRef[r]), bankTicker: tickerOf(v2, S.bankRef[r]),
+    row: r, borrowerId: entityOf(v2, S.issuerRef[r]), bankId: entityOf(v2, S.bankRef[r]),
     trancheId: instrumentOf(v2, S.idRef[r]), principalLocal: S.principalLocal[r],
     marginBps: Number.isNaN(S.floatingMarginBps[r]) ? 350 : S.floatingMarginBps[r],
     originationWeek: S.originationWeek[r], maturityWeek: S.maturityWeek[r],
   };
 }
 /** Every live facility a bank has lent, across every borrower's ladder. */
-export function facilityRowsOf(v2: V2World, bankTicker: Ticker): FacilityRow[] {
+export function facilityRowsOf(v2: V2World, bankId: EntityId): FacilityRow[] {
   const S = v2.tranches;
-  const ref = tickerRefOf(v2, bankTicker);
+  const ref = entityRefOf(v2, bankId);
   const out: FacilityRow[] = [];
   if (ref < 0) return out;
   for (let r = 0; r < S.used; r++) {
@@ -416,9 +415,9 @@ export function facilityRowsOf(v2: V2World, bankTicker: Ticker): FacilityRow[] {
   return out;
 }
 /** The bank's facility book: Σ face of every facility it has lent. */
-export function facilityBookOf(v2: V2World, bankTicker: Ticker): number {
+export function facilityBookOf(v2: V2World, bankId: EntityId): number {
   const S = v2.tranches;
-  const ref = tickerRefOf(v2, bankTicker);
+  const ref = entityRefOf(v2, bankId);
   if (ref < 0) return 0;
   let usd = 0;
   for (let r = 0; r < S.used; r++) if ((S.flags[r] & TR_FACILITY) && S.bankRef[r] === ref && S.issuerRef[r] >= 0) usd += S.principalLocal[r];

@@ -106,7 +106,7 @@ export interface DebtTranche {
    */
   isBankFacility?: boolean;
   /** G2: the named bank holding this facility (the issuer's house bank at origination). */
-  facilityBankTicker?: Ticker;
+  facilityBankId?: EntityId;
   /**
    * What it costs to retire this tranche early — see `domain/call-protection.ts`. Stamped at
    * issuance from what the issue IS (floating paper gets a soft call, high yield a non-call
@@ -290,7 +290,7 @@ export interface Company {
    * named parent (founderPct 0 keeps it out of the household private-business residual, OWN4).
    * Consolidation is a VIEW over this link, never a second set of books.
    */
-  parentTicker?: Ticker;
+  parentId?: EntityId;
   /** §5-PROD — Wright's-law learning state: cumulative output, the unit-labour multiplier
    *  (heads needed = baseline heads ÷ multiplier), and this week's own annualized learning
    *  rate — the number the firm's labour demand nets out in place of the deleted uniform
@@ -452,7 +452,7 @@ export interface Company {
   // §4.C II.5 — ratingHistory lives on v2.ratingRing (codes; world.ts).
   isDefaulted: boolean;
   mergerAcquired?: boolean; // Set true when company is acquired in M&A (disjoint from isDefaulted)
-  acquiredByTicker?: Ticker; // Ticker of acquiring company
+  acquiredById?: EntityId; // Ticker of acquiring company
   recoveryRate: number;
   baselineRecoveryRate: number;
 

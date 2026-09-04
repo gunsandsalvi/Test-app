@@ -13,7 +13,8 @@
  * write it. The output stock stays the company's own record, written here only.
  */
 import { V2World } from '../../engine2/world';
-import { companyPartyOfTicker } from '../../domain/party';
+import type { EntityId } from '../../domain/ids';
+import { companyParty } from '../../domain/party';
 import { pushLot, consumeFifo } from '../../engine2/lots';
 import { isStorable } from '../../domain/industry-registry';
 import { RegionId } from '../../domain/geography';
@@ -22,7 +23,6 @@ import { wire, activeWireJournal } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { defect } from '../../domain/defect';
 import type { Ticker } from '../../domain/ids';
-import { asTicker } from '../../domain/ids';
 
 export interface GoodsFlow { producedUnits: number; consumedUnits: number; scrappedUnits: number }
 
@@ -126,14 +126,14 @@ export function setOutputStock(
   update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: held, valueLocal: held * unitPriceLocal };
 }
 
-type StockHolder = { ticker: Ticker; region: RegionId; outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }> };
+type StockHolder = { id: EntityId; ticker: Ticker; region: RegionId; outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }> };
 
 /** Finished stock moves from one firm to another (an estate's sale to a peer): a wire, the rows follow. */
 export function moveOutputUnits(from: StockHolder, to: StockHolder, subUnitId: string, units: number, valueLocal: number, reason: string): number {
   if (!(units > 1e-9)) return -1;
   const src = from.outputInventoryBySubUnit?.[subUnitId];
   if (!src || src.unitsHeld + 1e-9 < units) return defect(`${from.ticker} moves ${units} ${subUnitId} it does not hold`);
-  const n = deliverGoods(companyPartyOfTicker(asTicker(from.ticker)), companyPartyOfTicker(asTicker(to.ticker)), subUnitId, units, valueLocal / units, reason);
+  const n = deliverGoods(companyParty(from), companyParty(to), subUnitId, units, valueLocal / units, reason);
   src.unitsHeld -= units; src.valueLocal -= valueLocal;
   const inv = to.outputInventoryBySubUnit ?? (to.outputInventoryBySubUnit = {});
   const dst = inv[subUnitId] ?? (inv[subUnitId] = { unitsHeld: 0, valueLocal: 0 });
@@ -144,13 +144,13 @@ export function moveOutputUnits(from: StockHolder, to: StockHolder, subUnitId: s
 /** Input lots move from one firm to another (an estate's sale to a
  *  peer): a wire; the units leave the seller's chain FIFO and land as one lot on the buyer at
  *  the cost they left at. Returns the wire number, or -1 when nothing moved. */
-export function moveInputUnits(v2: V2World, from: { id: string; ticker: string }, to: { id: string; ticker: string }, subUnitId: string, units: number, week: number, reason: string): number {
+export function moveInputUnits(v2: V2World, from: { id: EntityId; ticker: string }, to: { id: EntityId; ticker: string }, subUnitId: string, units: number, week: number, reason: string): number {
   if (!(units > 1e-9)) return -1;
   const drawn = consumeFifo(v2, from.id, subUnitId, units);
   const moved = Math.min(units, drawn.availableUnits);
   if (!(moved > 1e-9)) return -1;
   let costLocal = 0; for (const c of drawn.costsLocal) costLocal += c;
-  const n = deliverGoods(companyPartyOfTicker(asTicker(from.ticker)), companyPartyOfTicker(asTicker(to.ticker)), subUnitId, moved, costLocal / moved, reason);
+  const n = deliverGoods(companyParty(from), companyParty(to), subUnitId, moved, costLocal / moved, reason);
   pushLot(v2, to.id, subUnitId, `ESTATE:${from.ticker}`, moved, costLocal / moved, week, n);
   return n;
 }

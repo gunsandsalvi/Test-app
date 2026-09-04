@@ -95,7 +95,7 @@ checked by `scripts/check-atlas.sh`.
 | D5 VERIFY the price gap tracks the freight price on the route | — | ❌ |
 | **E1 FORBID no instantaneous, costless transport** | `src/domain/goods-physical.ts:deliveryModeOf` | ✅ |
 | **E2 FORBID no shipment without capacity** | `src/engine/simulation/stages/freight-clearing.ts:buildCarrierOffers` | ❌ |
-| **E3 FORBID no goods in transit owned by nobody** | `src/engine/simulation/stages/goods-arrival.ts:carrierTicker` | ✅ |
+| **E3 FORBID no goods in transit owned by nobody** | `src/engine/simulation/stages/goods-arrival.ts:carrierId` | ✅ |
 
 ---
 

@@ -66,10 +66,10 @@ export function closeSeedMoney(
       // (the seed opens them before this close). The seed sizes its lines TO THE DOLLAR (the stated
       // rule the field carried; a sub-dollar change here moved the week-2 print — §7.392), so the
       // funding residual is struck on the rounded lines.
-      const lines = depositLinesAt(v2, companies, institutionalEntities, b.ticker);
+      const lines = depositLinesAt(v2, companies, institutionalEntities, b);
       const otherDepositsLocal = Math.round(Math.max(0, lines.corporateLocal)) + Math.round(Math.max(0, lines.institutionalLocal))
         + Math.max(0, lines.smeLocal) + Math.max(0, s.clientMarginLocal ?? 0) + Math.max(0, s.centralBankLoanLocal ?? 0);
-      const needLocal = bankTotalAssetsLocal(s, openingCashOf(s), facilityBookOf(v2, b.ticker)) - s.bankEquityLocal - (s.repoBorrowedLocal ?? 0) - (s.srfBorrowingLocal ?? 0) - otherDepositsLocal;
+      const needLocal = bankTotalAssetsLocal(s, openingCashOf(s), facilityBookOf(v2, b.id)) - s.bankEquityLocal - (s.repoBorrowedLocal ?? 0) - (s.srfBorrowingLocal ?? 0) - otherDepositsLocal;
       let lineLocal = 0;
       if (needLocal >= 0) {
         lineLocal = Math.round(needLocal);

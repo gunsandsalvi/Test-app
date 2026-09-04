@@ -323,6 +323,35 @@ both lookups would have missed every bank, silently, sending every equity delta 
 consumers rather than by the type system, which is the point: a brand is only as good as the last
 unchecked cast on the path. Both are lookups by id now.
 
+### C1.a / C4 — `PartyRef` IS A VIEW OF THE ENTITY STORE (§3.13-BOOK c-then-3b, closed)
+
+The four firm arms — COMPANY, BANK, BANK_CREDIT, BANK_SECURITIES — key by `EntityId` now, the
+same key INSTITUTION always had. Five entity arms, one key, and `partyKey` writes it: a payment's
+payer and a position's `bookId` are in one id space, which is the join the CROSS-TABLE CHECK
+needs and never had.
+
+What had to move first, because a `PartyRef` cannot be keyed by something its makers do not
+hold: **eleven stored fields that named an entity by ticker** — `homeBankTicker`,
+`leadBankTicker`, `facilityBankTicker`, `brokerTicker`, `borrowerTicker`, `buyerTicker`,
+`sellerTicker`, `carrierTicker`, `parentTicker`, `acquiredByTicker`, and the tranche store's
+`bankRef` column — are entity ids, along with the readers keyed on them (`facilityBookOf`,
+`facilityRowsOf`, `bankReservesOf`, `reserveRowOf`, `adjustBankReserves`, `moveBankReserves`,
+`repoBorrowedLocal`, `encumberedFaceByBond`, `lentByBroker`, the deposit-line readers, the
+freight and FX-forward desk maps). `PrimaryOffering.issuerTicker` survives as a display name
+beside `issuerId`.
+
+**Where the two spaces still meet, named:** the clearing books seat participants by keys that
+embed a TICKER (`participant-keys.ts`), and `book-settlement.ts:bankIdOfTickerFor` is the one
+crossing back, built once per stage and handed to `participantPartyOf` and `dealerDeskPartyOf`.
+The goods book's `byKey` (a ticker or an id, by design) and the `companyUpdates` channel (keyed
+by ticker, its own field) are the other two, both marked at the site.
+
+**The defect this found is recorded above under B1**: `accounts.ts`'s `Depositor` re-declared
+`homeBankId` as `string`, so two comparisons compiled and went always-false — every bank's
+corporate and institutional deposit line read zero, silently, with the type system unable to
+see it because the re-declaration was unbranded. Branding holds exactly as far as the last
+unbranded re-declaration or unchecked cast on the path; this slice found three of each.
+
 ### ⚠️ E3 — "TWO INSTRUCTIONS THAT BOTH DRAW ON ONE BALANCE CANNOT BOTH SUCCEED BY LUCK"
 
 They both succeed by construction. `runSettlementStage` walks the journal in emission order and

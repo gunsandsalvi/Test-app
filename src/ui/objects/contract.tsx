@@ -11,14 +11,13 @@ import { ObjectHeader, FunctionTiles, AllRow, RegionLink, words } from './common
 
 export function partyRef(world: World, p: DerivativeParty): ObjectRef | undefined {
   if (p.kind === 'INSTITUTION') return { type: 'institution', id: p.id };
-  const c = world.state.companies.find((x) => x.ticker === p.ticker);
-  return c ? { type: 'company', id: c.id } : undefined;
+  return { type: 'company', id: p.id };
 }
-export const partyTicker = (p: DerivativeParty): string => (p.kind === 'INSTITUTION' ? p.id : p.ticker);
+export const partyTicker = (p: DerivativeParty): string => p.id;
 /** The party's handle as the world shows it: a fund's ticker, a firm's ticker. */
 export function partyName(world: World, p: DerivativeParty): string {
   if (p.kind === 'INSTITUTION') return world.state.institutionalEntities.find((e) => e.id === p.id)?.ticker ?? p.id;
-  return p.ticker;
+  return world.state.companies.find((c) => c.id === p.id)?.ticker ?? p.id;
 }
 
 const CLASS_WORDS: Record<string, string> = { IRS: 'interest-rate swap', CDS: 'credit default swap', COMMODITY_FUTURE: 'commodity future', FX_FORWARD: 'fx forward' };

@@ -18,7 +18,8 @@
  */
 
 import { riskAversionOf } from '../../../../domain/preferences';
-import { bankPartyOfTicker, bankSecuritiesPartyOfTicker, companyParty } from '../../../../domain/party';
+import type { EntityId } from '../../../../domain/ids';
+import { bankPartyOf, bankSecuritiesPartyOf, companyParty } from '../../../../domain/party';
 import { RegionId } from '../../../../types';
 import { institutionProfile } from '../../../../domain/institution-profiles';
 import { InstitutionalEntity } from '../../../../domain/institutions';
@@ -30,9 +31,7 @@ import { isActiveCompany } from '../../../../domain/company';
 import { invoiceCurrencyOf } from '../../../../domain/invoice-currency';
 import { exposureToHedgeLocal } from '../corporate-financing';
 import { TradeInvoice } from '../../../../domain/trade-invoice';
-import {
-  HEDGE_RATIO_FIXED_INCOME, equityHedgeRatioFor, FX_FORWARD_TENOR_WEEKS,
-} from '../../../../domain/derivatives/classes/fx-forward';
+import { HEDGE_RATIO_FIXED_INCOME, equityHedgeRatioFor, FX_FORWARD_TENOR_WEEKS } from '../../../../domain/derivatives/classes/fx-forward';
 import { hedgeToleranceBps } from '../../../../domain/derivatives/hedging';
 import { DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../../domain/derivatives/contract';
 import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal } from '../../../../domain/derivatives/registry';
@@ -48,7 +47,6 @@ import { facilityBookOf } from '../../../../engine2/tranches';
 
 import { fxBasisInstrumentId } from '../../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../../domain/ids';
-import type { Ticker } from '../../../../domain/ids';
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
 
 /** What this entity holds in each foreign region, split by how much of it its mandate hedges. */
@@ -95,9 +93,9 @@ function corporateExposureByRegion(
   const currencyRegion = new Map<string, RegionId>();
   REGION_IDS.forEach((r) => currencyRegion.set(invoiceCurrencyOf(r), r));
   const out = new Map<string, Map<RegionId, number>>();
-  const add = (ticker: Ticker, region: RegionId, usd: number) => {
-    let byRegion = out.get(ticker);
-    if (!byRegion) { byRegion = new Map(); out.set(ticker, byRegion); }
+  const add = (partyId: EntityId, region: RegionId, usd: number) => {
+    let byRegion = out.get(partyId);
+    if (!byRegion) { byRegion = new Map(); out.set(partyId, byRegion); }
     byRegion.set(region, (byRegion.get(region) ?? 0) + usd);
   };
   invoices.forEach((inv) => {
@@ -106,8 +104,8 @@ function corporateExposureByRegion(
     if (!foreign) return;
     const usd = Math.max(0, inv.amountCurrency * inv.bookedUsdPerCurrency);
     if (!(usd > 0)) return;
-    if (inv.sellerRegion !== foreign) add(inv.sellerTicker, foreign, usd);
-    if (inv.buyerRegion !== foreign) add(inv.buyerTicker, foreign, usd);
+    if (inv.sellerRegion !== foreign) add(inv.sellerId, foreign, usd);
+    if (inv.buyerRegion !== foreign) add(inv.buyerId, foreign, usd);
   });
   return out;
 }
@@ -129,33 +127,33 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   // Every dealer's desk, opened at what its LIVE book leaves it — contracts that matured released
   // their notional and their margin in the settle before this market, which is what frees
   // capacity.
-  const desks = new Map<Ticker, DeskState>();
+  const desks = new Map<EntityId, DeskState>();
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
     // The LIVE sheet, not a snapshot some earlier stage parked in companyUpdates: the desk's
     // capacity is what the bank's book leaves it right now (see the note at the write below).
     const sheet = c.bankBalanceSheet;
-    desks.set(c.ticker, {
+    desks.set(c.id, {
       book: emptyFxDealerBook(),
-      headroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.ticker), facilityBookOf(ctx.v2, c.ticker)),
-      chargedPfeLocal: standing.pfeChargeLocal(bankPartyKey(c.ticker)),
+      headroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.id), facilityBookOf(ctx.v2, c.id)),
+      chargedPfeLocal: standing.pfeChargeLocal(bankPartyKey(c.id)),
       marginReceivedLocal: 0,
     });
   });
   for (const c of book) {
     if (c.classId !== 'FX_FORWARD' || c.b.kind !== 'BANK') continue;
-    const desk = desks.get(c.b.ticker);
+    const desk = desks.get(c.b.id);
     if (!desk) continue;
     desk.book.grossNotionalLocal += c.notional;
     desk.book.netNotionalByRegion[c.referenceId] = (desk.book.netNotionalByRegion[c.referenceId] ?? 0) + c.notional;
     desk.book.initialMarginHeldLocal += initialMarginLocal(c);
   }
   // The dealers a holder in each region can face, in the order the roster lists them.
-  const dealerBanksByRegion = new Map<RegionId, Ticker[]>();
+  const dealerBanksByRegion = new Map<RegionId, EntityId[]>();
   ctx.updatedCompanies.forEach((c) => {
-    if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c) || !desks.has(c.ticker)) return;
+    if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c) || !desks.has(c.id)) return;
     const list = dealerBanksByRegion.get(c.region) ?? [];
-    list.push(c.ticker);
+    list.push(c.id);
     dealerBanksByRegion.set(c.region, list);
   });
 
@@ -200,8 +198,8 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   // for the fund managers, which is what a shared dealer balance sheet means.
   const corporateExposure = corporateExposureByRegion(
     [...(state.tradeInvoices ?? []), ...ctx.tradeInvoicesBooked], week);
-  const corpGapByTicker = new Map<Ticker, Map<RegionId, number>>();
-  const corpToleranceByTicker = new Map<Ticker, Map<RegionId, number>>();
+  const corpGapByTicker = new Map<EntityId, Map<RegionId, number>>();
+  const corpToleranceByTicker = new Map<EntityId, Map<RegionId, number>>();
   ctx.updatedCompanies.forEach((c) => {
     if (c.isBankEntity || !isActiveCompany(c)) return;
     const exposure = corporateExposure.get(c.ticker);
@@ -226,8 +224,8 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       tolerances.set(foreign, hedgeToleranceBps(annualSigmaFor(foreign), mustHedgeLocal / exposureLocal));
     });
     if (gaps.size > 0) {
-      corpGapByTicker.set(c.ticker, gaps);
-      corpToleranceByTicker.set(c.ticker, tolerances);
+      corpGapByTicker.set(c.id, gaps);
+      corpToleranceByTicker.set(c.id, tolerances);
     }
   });
 
@@ -237,12 +235,12 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   const bookKey = (holderRegion: RegionId, issuer: RegionId) => `${holderRegion}->${issuer}`;
   const holderRegions = new Set<RegionId>();
   ctx.updatedInstitutionalEntities.forEach((e) => holderRegions.add(e.region));
-  ctx.updatedCompanies.forEach((c) => { if (corpGapByTicker.has(c.ticker)) holderRegions.add(c.region); });
+  ctx.updatedCompanies.forEach((c) => { if (corpGapByTicker.has(c.id)) holderRegions.add(c.region); });
   holderRegions.forEach((holderRegion) => {
     let capacityLocal = 0;
     ctx.updatedCompanies.forEach((c) => {
       if (c.region !== holderRegion || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
-      const desk = desks.get(c.ticker);
+      const desk = desks.get(c.id);
       if (desk) capacityLocal += deskCapacityLocal(desk);
     });
     const issuers = new Set<RegionId>();
@@ -252,7 +250,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     });
     ctx.updatedCompanies.forEach((c) => {
       if (c.region !== holderRegion) return;
-      (corpGapByTicker.get(c.ticker) ?? new Map()).forEach((_g: number, issuer: RegionId) => issuers.add(issuer));
+      (corpGapByTicker.get(c.id) ?? new Map()).forEach((_g: number, issuer: RegionId) => issuers.add(issuer));
     });
     issuers.forEach((issuer) => {
       const key = bookKey(holderRegion, issuer);
@@ -275,9 +273,9 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       });
       ctx.updatedCompanies.forEach((c) => {
         if (c.region !== holderRegion) return;
-        const gapLocal = corpGapByTicker.get(c.ticker)?.get(issuer) ?? 0;
+        const gapLocal = corpGapByTicker.get(c.id)?.get(issuer) ?? 0;
         if (!(gapLocal > 0)) return;
-        const toleranceBps = corpToleranceByTicker.get(c.ticker)?.get(issuer) ?? 0;
+        const toleranceBps = corpToleranceByTicker.get(c.id)?.get(issuer) ?? 0;
         if (!(toleranceBps > 0)) return;
         participants.push({
           id: `CORP-${c.ticker}`,
@@ -348,7 +346,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         classId: 'FX_FORWARD',
         regionId: holderRegion,
         a: holder,
-        b: bankPartyOfTicker(dealer),
+        b: bankPartyOf(dealer),
         notional: writableLocal,
         // The traded rate, not the theoretical one: CIP moved AGAINST the client by the desk's
         // basis, because the desk is charging for its balance sheet. Signing this the other way
@@ -369,7 +367,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       // Initial margin is the CLIENT'S money sitting with the desk: reserves move, equity does
       // not, and the desk carries it on its funding line as the liability it is.
       if (marginLocal > 0) {
-        pay(ctx, { payer: holder, payee: bankSecuritiesPartyOfTicker(dealer), amount: marginLocal, currency: contract.currency, reason: 'fx forward initial margin' });
+        pay(ctx, { payer: holder, payee: bankSecuritiesPartyOf(dealer), amount: marginLocal, currency: contract.currency, reason: 'fx forward initial margin' });
       }
       desk.chargedPfeLocal += writableLocal * FX.pfeAddOnRate;
       desk.book.grossNotionalLocal += writableLocal;
@@ -391,7 +389,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   // DER5 — the corporates' side, struck against the same desks at the same cleared basis. A
   // hedged exporter genuinely feels less of a currency move than an unhedged one.
   ctx.updatedCompanies.forEach((c) => {
-    const gaps = corpGapByTicker.get(c.ticker);
+    const gaps = corpGapByTicker.get(c.id);
     if (!gaps) return;
     strikeFor(companyParty(c), c.region, `CORP-${c.ticker}`, gaps,
       Math.max(0, cashOf(ctx.v2, c) + pendingSettlementLocal(ctx, companyParty(c))));
@@ -405,7 +403,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   // arrived (the client's money held — cash AND a liability, never the desk's earnings) and the
   // desk book the week left behind.
   ctx.updatedCompanies = ctx.updatedCompanies.map((bank) => {
-    const desk = desks.get(bank.ticker);
+    const desk = desks.get(bank.id);
     if (!desk || !bank.bankBalanceSheet) return bank;
     const sheet = bank.bankBalanceSheet;
     if (desk.marginReceivedLocal === 0 && desk.book.grossNotionalLocal === 0 && !sheet.fxDealerBook) return bank;
@@ -434,8 +432,8 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
  * because a desk that is full stops quoting and the flow goes elsewhere. That is how one desk
  * filling up widens the price for everyone rather than silently absorbing infinite size.
  */
-function pickDealerBank(regionDealers: Ticker[] | undefined, desks: Map<Ticker, DeskState>): Ticker | null {
-  let best: Ticker | null = null;
+function pickDealerBank(regionDealers: EntityId[] | undefined, desks: Map<EntityId, DeskState>): EntityId | null {
+  let best: EntityId | null = null;
   let bestCapacity = 0;
   if (!regionDealers) return best;
   for (const ticker of regionDealers) {
