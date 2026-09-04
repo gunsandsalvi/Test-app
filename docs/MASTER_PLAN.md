@@ -254,6 +254,15 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
 · a GOOD is its sub-unit id, a CONTRACT its own id, and what a contract is ON is keyed the way
   that thing is keyed above.
 
+**THE MONEY-NAMING RULE** (user, 2026-09-03; step 13c, §9.13c-RENAME — every monetary identifier
+written from here):
+  · a figure in its OWNER's own money → `…Local` (the word `convertLocal` already uses);
+  · a figure whose currency is named beside it — a `currency` field or parameter in the same
+    object or signature — → NO suffix, because the unit is already stated (rule 8);
+  · a figure genuinely in the numéraire → `…USD` STAYS, and now means it;
+  · a figure in a named OTHER party's money → `…BuyerMoney` / `…SellerMoney`, the shape
+    `exWorksBuyerMoney` and `valueBuyerMoney` already use.
+
 ### PART II — THE INSTRUMENTS ARE REAL
 
 13. **EVERY ASSET TRADES ON PRICE — AND THE STRUCTURE HAS TO CHANGE, NOT THE CREDIT BOOKS**
@@ -364,135 +373,6 @@ Every step is in §9. What PART II is written against, kept here because `O8` te
     `register-split.ts` goes with them (its own header says so).
     Two hypotheses are spent: incomplete claims — DISPROVED; the issuer/tranche oscillation —
     DISPROVED AND MEASURED (it made O7 worse, 105 tranches and 0.10B against 55 and 0.01B).
-13c. **CURRENCY IS THE OTHER UNIVERSAL CHARACTERISTIC** (user, 2026-09-03: *"Every single asset
-    has a specific currency in which it's issued and in which is priced on, that's another key
-    universal characteristic… why is so much stuff called USD?"*)
-
-    **The suffix is a lie, repeated 11,243 times** (1,395 distinct `…USD` identifiers across
-    `src`; 518 in `src/domain` alone). `domain/currency.ts` states the design in its own header:
-    every monetary figure is stored in the price level of the region that OWNS it, and *"nobody
-    re-denominates their books."* So a German firm's `cashUSD` is euros, its `principalUSD` is
-    euros, its `payrollUSD` is euros. Rule 9 — the unit is part of the number — failing at the
-    largest scale in the tree. It is exactly the `countedIn` defect one axis over: a bare number
-    whose meaning lives in a comment instead of in the type.
-
-    **And the ledger is currency-blind, which makes it more than cosmetic.**
-    · `grep "currency"` across ALL of `engine/ledger/*.ts` and ALL of `engine2/*.ts` → **one
-      hit**, and it is `formatCurrency`, a display helper. An account has no currency field; its
-      currency is implied by its owner's region and never read.
-    · `pay()` (`settlement.ts:227`) takes `amountUSD` and converts NOTHING. A German firm paying
-      a US supplier subtracts N euros from one balance and adds N dollars to the other. The wire
-      ledger balances perfectly, because it is comparing two numbers that are not the same kind
-      of thing.
-    · Only **19 `convertLocal` call sites exist, in 6 files** (`currency.ts`, `initialization`,
-      `05-unit-bidding`, `sourcing-intent`, `freight-clearing`, `foreign-direct-investment`) —
-      every one a DECISION stage comparing a foreign quote. **Zero in settlement, accounts,
-      holdings, or any audit.** Conversion happens where somebody remembered, and nowhere money
-      actually moves.
-    · **No entity has per-currency books.** One balance per party.
-
-    **THE STRUCTURE IT SHOULD BE — the same abstraction, one field wider:** an asset declares
-    `countedIn` (done, §9.13 part 4) **and `quoteCurrency`**; a price is per unit IN THE ASSET'S
-    QUOTE CURRENCY; value in any numéraire is `units × price × fx(quote → numéraire)` — one
-    expression that cannot be evaluated without naming a currency. **Cash becomes an asset like
-    any other**: a position in a currency, whose price in its own currency is 1 by definition
-    (step 13's one allowed hard-coded 1). Per-currency books then FALL OUT of the position
-    abstraction instead of being bolted on — an entity holding EUR and USD holds two positions,
-    the way it already holds two bonds — and `pay()` gains a currency because a payment is a
-    transfer of units of a currency asset. This subsumes step 30c's `Money<C>` brand and the
-    journal's currency column, which were parked in PART VI for want of exactly this.
-
-    **Order, set by the user 2026-09-03** (*"The first thing is currency is a needed field in the
-    clearing and cash settlement systems. Everything that touches money or assets need to have a
-    currency. and each entity needs a bank account per currency… Implement it, let the code throw
-    errors and fix them. also rename the variables so that they actually make sense. Then do
-    sovereign and the rest. this is a move fast break things kind of job."*): **13c runs BEFORE
-    13-SOV.** The TYPE first, then SETTLEMENT and ACCOUNTS, then CLEARING, then the audits, then
-    the RENAME — mechanical once the type carries the truth, and last so the compiler has been
-    doing the work.
-
-    **PARTS 1 AND 2 ARE DONE (§9.13c).** What is LEFT of 13c:
-    · ~~**the rename**~~ (DONE, §9.13c-RENAME). 11,821 → **5**, and each survivor is true:
-      `foreignOfficialClaimsUSD` (a numéraire claim between central banks), the three seed
-      primitives that ARE the USA's price level, and `PAR_USD`, which is a `countedIn` enum value
-      meaning "counted in par" and not a figure at all.
-
-      **THE STANDING NAMING RULE** it leaves behind, for every monetary identifier written from here:
-      · a figure in its OWNER's own money → `…Local` (the word `convertLocal` already uses);
-      · a figure whose currency is named beside it — a `currency` field or parameter in the same
-        object or signature — → NO suffix, because the unit is already stated (rule 8);
-      · a figure genuinely in the numéraire → `…USD` STAYS, and now means it;
-      · a figure in a named OTHER party's money → `…BuyerMoney` / `…SellerMoney`, the shape
-        `exWorksBuyerMoney` and `valueBuyerMoney` already use.
-    · ~~**clearing**~~ (DONE, §9.13c-DENOM). The BOOK names its money once and its five cash legs
-      read it. Putting it on the INSTRUMENT was considered and is not the shape: settlement is per
-      book, every instrument in a book shares its currency, and a per-instrument field would be
-      one nothing could act on — the `quotedAs` mistake again. **The cross-listing question stays a
-      finding, not a step:** it is about an instrument the model does not have yet, and it becomes
-      real the day one is listed in two books. Same for `unitValueUSD`, which is a price per unit
-      in the book's own money and needs a currency only when a book clears in more than one;
-    · ~~**the contracts with no denomination**~~ (DONE, §9.13c-DENOM). Two of the three were reading
-      a proxy and now state their own money; the third was reading the fact, and the finding is
-      the CONDITION under which that stops being true — recorded at `pe-lifecycle.ts`, not as a
-      field with one possible value;
-    · **13c-FX-3 — THE NET IMBALANCE STILL ACCUMULATES, AND THAT IS §6.1'S FX ROW.** §9.13c-FX-2
-      stopped the runaway and did not stop the drift: the desks' book opens at −45.8B in week 1
-      (was −390.6B) and reaches −181.3B net / 227.2B gross by week 16, about −8.5B a week off a
-      small base rather than +53B a week off a huge one. What is left is a persistent ONE-WAY net
-      trade flow that the elastic side of the FX book cannot absorb — `residualByPair`, which the
-      stage already publishes as its own liquidity diagnostic. Three candidates and none of them
-      is obvious, which is why this is a step and not a fix: the elastic side is genuinely too
-      small (a capacity question — XB2b's number); the flow is genuinely one-way and something
-      real should be financing it (a capital-account question, and a persistent trade imbalance
-      financed by the banking system IS a real phenomenon); or the invoice-currency convention in
-      `05-unit-bidding` makes it one-way by construction.
-
-      **That third candidate is the whole of what was listed separately as "stage 05's household
-      leg", and the two are one question.** The firm leg converts the price to BUYER money inside
-      the auction (`exWorksBuyerMoney`) and pays in buyer money, so no short arises and no order is
-      placed; the household leg keeps the ORIGIN price and pays in origin money, so the buyer IS
-      short and must buy it. Same auction, same purchase, and the FX flow lands somewhere different
-      depending on who bought.
-
-      **The decision, stated so the measurement knows what it is deciding:** ONE convention for
-      what money a goods payment settles in, owned in one place. The mechanism-consistent answer is
-      the SELLER's — a factory-gate price is quoted in the seller's money, and 13c-FX already
-      established that a payment moves one currency and a party short of it BUYS it. That would
-      delete `exWorksBuyerMoney`'s price conversion: a conversion with no counterparty, the same
-      defect 13c-FX deleted at the ledger, still standing inside the auction. It cannot be settled
-      by reading, because flipping the firm leg makes every importing firm short the seller's money
-      and turns a price conversion into real orders — and whether the book absorbs that IS
-      candidate one. There is no interim shape either: a function returning today's two answers
-      would have to switch on the BUYER'S KIND, which rule 15 forbids. Measure first (step 38); per
-      rule 11 do not judge the levels on the way.
-    · ~~**13c-FX — CONVERTING AT THE LEDGER IS THE WRONG MECHANISM, AND IT IS MINE**~~ (DONE,
-      §9.13c-FX; kept here because the reasoning is the step) (user, 2026-09-03:
-      *"is that the cleanest and the real world way of doing that?"* — it is not).
-      §9.13c part 2 settles a cross-currency payment by debiting the payer in its own money and
-      crediting the payee in its. That conserves value and closes every identity, and it is wrong
-      three ways:
-      **(a) it makes the per-currency account dead code.** No party ever ends a week holding a
-      second currency, so the structure this whole step exists to build is never used;
-      **(b) rule 4 — the conversion is ALREADY modelled.** `fx-clearing.ts:108` reads *"an
-      importer sells its own money to pay an exporter in the exporter's"* and puts that flow in
-      the book that clears the rate. The ledger now performs the same conversion a second time,
-      at mid, with no counterparty, at last week's snapshot rate while the market prices the
-      identical flow at this week's. One real event, two representations, one of them priced by
-      nobody;
-      **(c) it has no payer.** `05-unit-bidding:2126` already charges an FX spread on exactly
-      this flow, to a named desk, from a named payer (`R_FX_SPREAD`). A firm pays the spread in
-      stage 05 and then converts free at the ledger.
-      **THE MECHANISM.** A payment moves ONE currency: both legs land in the payment's own money.
-      A party short of that money BUYS it — a real order in the FX book at the cleared rate plus
-      the desk's spread — and a party paid in a money it does not want SELLS it. Held foreign
-      balances then revalue, which is the next bullet. The measured "every US bank short 23B of
-      euros, 8B of sterling, 22B of yen after one week" is not an argument against this: it is
-      the missing purchase showing up as a negative balance, and the model already has that shape
-      for a different scarcity (`overdraft-sweep.ts` turns an overdrawn balance into a facility
-      draw). **And it pays for itself:** once the shorts are real orders,
-      `ctx.bilateralTradeWeeklyUSD` at `fx-clearing:108` — a derived aggregate standing in for
-      orders nobody places — is deleted, which is rule 3 on the flow that sets the rate;
-
 13b. **Coupon accruals are dated wires.** `pendingHolderAccrualUSD` is a side map beside the
     paper. It should be a dated wire that RE-KEYS with the paper when the paper moves, landing on
     the per-tranche register — the same treatment every other claim now gets. Step 13 keeps
@@ -1227,6 +1107,38 @@ at week zero. The rest of PART VII stays in the order below.
 
 ### PART VIII — MEASURE ONCE (rule 11)
 
+13c-FX-3. **THE FX NET IMBALANCE — MEASURE, THEN DECIDE.** *(All the rest of 13c is done, §9.13c-*.
+    This is the one bullet that cannot be closed by reading, so it sits HERE, beside the run that
+    settles it, rather than as an open bullet on a finished step.)* §9.13c-FX-2
+    stopped the runaway and did not stop the drift: the desks' book opens at −45.8B in week 1
+    (was −390.6B) and reaches −181.3B net / 227.2B gross by week 16, about −8.5B a week off a
+    small base rather than +53B a week off a huge one. What is left is a persistent ONE-WAY net
+    trade flow that the elastic side of the FX book cannot absorb — `residualByPair`, which the
+    stage already publishes as its own liquidity diagnostic. Three candidates and none of them
+    is obvious, which is why this is a step and not a fix: the elastic side is genuinely too
+    small (a capacity question — XB2b's number); the flow is genuinely one-way and something
+    real should be financing it (a capital-account question, and a persistent trade imbalance
+    financed by the banking system IS a real phenomenon); or the invoice-currency convention in
+    `05-unit-bidding` makes it one-way by construction.
+
+    **That third candidate is the whole of what was listed separately as "stage 05's household
+    leg", and the two are one question.** The firm leg converts the price to BUYER money inside
+    the auction (`exWorksBuyerMoney`) and pays in buyer money, so no short arises and no order is
+    placed; the household leg keeps the ORIGIN price and pays in origin money, so the buyer IS
+    short and must buy it. Same auction, same purchase, and the FX flow lands somewhere different
+    depending on who bought.
+
+    **The decision, stated so the measurement knows what it is deciding:** ONE convention for
+    what money a goods payment settles in, owned in one place. The mechanism-consistent answer is
+    the SELLER's — a factory-gate price is quoted in the seller's money, and 13c-FX already
+    established that a payment moves one currency and a party short of it BUYS it. That would
+    delete `exWorksBuyerMoney`'s price conversion: a conversion with no counterparty, the same
+    defect 13c-FX deleted at the ledger, still standing inside the auction. It cannot be settled
+    by reading, because flipping the firm leg makes every importing firm short the seller's money
+    and turns a price conversion into real orders — and whether the book absorbs that IS
+    candidate one. There is no interim shape either: a function returning today's two answers
+    would have to switch on the BUYER'S KIND, which rule 15 forbids. Measure first (step 38); per
+    rule 11 do not judge the levels on the way.
 38. **The long run.** Only when 1–36 and every `37-*` are done: `WEEKS=60 SHOCKS=1` (`npm run verify`), the batteries,
     the burn-in convergence gate. Then the standing measurements: the 1e-8 week-1 drift bisected one
     dump per step; the level and the unemployment ratchet; the state-growth drift on device; UK/EUR
@@ -1409,6 +1321,14 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13c — currency is a universal characteristic, and the step is closed.** Parts 1 and 2 built the
+type and put it in settlement and accounts; this run closed the rest — the obligations and the
+cleared book naming their own money (13c-DENOM), the rename's prerequisite (13c-RENAMEABLE) and the
+rename itself (13c-RENAME). The one bullet that cannot be closed by reading, `13c-FX-3`, is re-homed
+to PART VIII beside the run that settles it, with its decision stated: the household leg and the
+firm leg are one question, not two, and the answer is a measurement. The money-naming rule stays at
+the head of §3 with step 12's key policy, because PART II's steps are written against both.
 
 **13c-RENAME — 11,821 lying suffixes, and five true ones left.** Every `…USD` identifier whose
 figure is in its owner's own money is now `…Local`; a figure whose currency is named beside it lost
