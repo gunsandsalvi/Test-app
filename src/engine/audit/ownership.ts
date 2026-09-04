@@ -10,6 +10,7 @@ import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
 import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf } from '../../engine2/tranches';
 import { materializeBook } from '../../engine2/holdings';
 import { householdBookId } from '../ledger/holdings-ledger';
+import { sovereignHeldByClass, forEachSovereignPosition } from '../sovereign-register';
 import { holdingClassOf } from '../../domain/assets';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { isTrancheKind } from '../../domain/assets';
@@ -40,14 +41,15 @@ function o1(state: GameState, week: number): AuditFinding[] {
   // reports every basis point of spread as paper that does not exist. `units` is the face.
   const add = (h: { instrumentType: string; issuerRegion: string; units?: number; quantityOrNotionalLocal?: number }) => {
     const b = held[h.issuerRegion]; if (!b) return; const v = h.units ?? h.quantityOrNotionalLocal ?? 0;
-    if (h.instrumentType === 'CORP_BOND') b.corp += v; else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v; else if (h.instrumentType === 'GOV_BOND') b.sov += v; else if (h.instrumentType === 'COMMERCIAL_PAPER') b.cp += v;
+    // GOV_BOND is deliberately absent: the sovereign arm is one walk over all four stores below
+    // (§9.13-OUTSIDE), and adding the register's rows here as well would count them twice.
+    if (h.instrumentType === 'CORP_BOND') b.corp += v; else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v; else if (h.instrumentType === 'COMMERCIAL_PAPER') b.cp += v;
   };
   state.institutionalEntities.forEach((e) => { if (!e.isDefaulted) e.itemizedHoldings.forEach(add); });
   state.companies.forEach((c) => {
     if (c.mergerAcquired) return;
     ((c as unknown as { treasuryHoldings?: { instrumentType: string; issuerRegion: string; units?: number; quantityOrNotionalLocal?: number }[] }).treasuryHoldings ?? []).forEach(add);
     const bs = c.bankBalanceSheet; if (!bs || c.isDefaulted) return;
-    held[c.region].sov += sum(Object.values(bs.sovereignBondHoldingsByBond ?? {}), (v) => Number(v) || 0);
     // §9.13-CREDIT row 5 — THE DESKS, READ OFF THE BANKS THAT CARRY THEM. This used to take the
     // three REGIONAL arrays, which are a derived roll-up (`regionalDeskView`) that keeps only the
     // money — so the check read one representation for the corporate books and another for CP,
@@ -59,11 +61,16 @@ function o1(state: GameState, week: number): AuditFinding[] {
     held[c.region].cp += deskFace('commercial paper');
     held[c.region].corp += deskFace('corporate bond');
     held[c.region].loan += deskFace('leveraged loan');
-    held[c.region].sov += deskFace('sovereign bond') + deskFace('bill');
   });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r]; if (!reg) return;
-    held[r].sov += sum(Object.values(reg.centralBankSheet?.sovereignHoldingsByBond ?? {}), (v) => Number(v) || 0);
+    // §9.13-OUTSIDE: the sovereign side is ONE walk over the four stores a government holding can
+    // sit in (`engine/sovereign-register.ts`) — the register (institutions and households), the
+    // banks' own books, their desks and the central bank. This check enumerated three of them in
+    // three different places and read the register's rows for a fourth.
+    const sovByClass = sovereignHeldByClass(ensureV2(state), state, r);
+    held[r].sov = sovByClass.REGISTER + sovByClass.BANK + sovByClass.DESK
+      + sovByClass.CENTRAL_BANK + sovByClass.TREASURY;
     void regionById;
     (['corp', 'loan', 'sov', 'cp'] as const).forEach((k) => {
       const h = held[r][k], o = outstanding[r][k];
@@ -471,25 +478,12 @@ function o11(state: GameState, week: number): AuditFinding[] {
     strayLocal += usd; strayRows++;
     if (examples.length < 3) examples.push(`${where} ${id} ${B(usd)}`);
   };
-  state.companies.forEach((c) => {
-    if (!isActiveCompany(c) || !c.bankBalanceSheet) return;
-    Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond ?? {})
-      .forEach(([id, v]) => check(id, Number(v) || 0, `bank ${c.ticker}`));
-  });
+  // §9.13-OUTSIDE: ONE walk over the four stores a sovereign holding can sit in
+  // (`engine/sovereign-register.ts`). This check enumerated all four itself — which is what made
+  // it, and the four other places that do the same walk, able to fall out of date about which
+  // stores exist. The household sector's book arrived in §9.13-EQUITY and only this walk knew.
   REGION_IDS.forEach((r) => {
-    Object.entries(state.regions[r]?.centralBankSheet?.sovereignHoldingsByBond ?? {})
-      .forEach(([id, v]) => check(id, Number(v) || 0, `CB ${r}`));
-    (state.regions[r]?.bankingSector?.sovBondDealerInventory ?? [])
-      .forEach((pos) => check(pos.bondId, Math.abs(pos.inventoryLocal || 0), `desk ${r}`));
-  });
-  state.institutionalEntities.forEach((e) => {
-    if (e.isDefaulted) return;
-    // The registry says which kinds are sovereign; asking it rather than naming one also catches
-    // SOV_BOND, which is the same instrument under the model's other name for it.
-    materializeBook(v2, e.id).forEach((h) => {
-      if (holdingClassOf(h.instrumentType) !== 'SOVEREIGN') return;
-      check(h.instrumentId, h.quantityOrNotionalLocal ?? 0, `register ${e.id}`);
-    });
+    forEachSovereignPosition(v2, state, r, (p) => check(p.bondId, Math.abs(p.faceLocal), `${p.holderClass.toLowerCase()} ${p.holderKey}`));
   });
   if (strayRows > 0) {
     out.push({ family: 'O', check: 'O11 a sovereign holding names a bond', week, usd: strayLocal,

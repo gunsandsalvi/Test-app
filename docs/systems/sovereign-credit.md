@@ -189,7 +189,8 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | D4 it is the benchmark other credit is spread to | `src/domain/pricing/bond.ts:zeroRateAt` | ✅ |
 | D5 repo collateral, at the smallest haircut of any asset | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
 | D6 VERIFY the bid-offer is a consequence, not a prior | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
-| **E1 a register: who holds how much of WHICH LINE** | `src/domain/banking.ts:sovereignBondHoldingsByBond` | ✅ |
+| **E1 a register: who holds how much of WHICH LINE** | `src/engine/sovereign-register.ts:forEachSovereignPosition` | ✅ |
+| E1.a · and ONE walk answers it, over every store that keeps one | `src/engine/sovereign-register.ts:sovereignHeldByClass` | ⚠️ |
 | E2 holder classes hold for different reasons | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
 | E2.a banks — the regulatory liquidity buffer | `src/engine/macro/banking.ts:liquidityDrivenSovereignFloorLocal` | ✅ |
 | E2.b insurers and pensions — duration against liabilities | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:durationPremiumBps` | ⚠️ |
@@ -220,7 +221,8 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 
 ## 3. THE DIFF
 
-**67 nodes: 30 ✅, 12 ⚠️, 25 ❌** — COUNTED at §9.13-BILL, not adjusted. It read 25/15/27 against a
+**68 rows: 30 ✅, 13 ⚠️, 25 ❌** — COUNTED at §9.13-BILL and again at §9.13-OUTSIDE, which added
+E1.a's row, not adjusted. It read 25/15/27 against a
 table that held 28/12/27, so it had drifted by three in each of two columns while every citation in
 it still resolved: `check-atlas.sh` proves a citation RESOLVES and can say nothing about whether a
 mark is TRUE, which is §5's lesson and the third file to demonstrate it.
@@ -229,6 +231,28 @@ The mapping is still the weakest of the four credit trees, and the reason is one
 **the sovereign is not an instrument here, and it cannot fail.** What has closed since is the first
 half — D1, D2, E1 and the five parallel structures — and the whole of G and half of A remain, out
 of the second.
+
+### ⚠️ E1.a — A SOVEREIGN HOLDING LIVES IN FIVE STORES, AND NOW ONE WALK KNOWS ALL FIVE
+
+E1 asks who holds how much of WHICH LINE, and §3.13-SOV row 3 answered it: every store keys by the
+bond's own tranche id. What row 3 did not give them is one SHAPE. A government holding sits in the
+register (institutions and, since §9.13-EQUITY, households), in each bank's
+`sovereignBondHoldingsByBond`, in each bank's desk inventory, in the central bank's
+`sovereignHoldingsByBond`, and in a company's `treasuryHoldings` — because only one holder class is
+in the register at all (`the-register.md` A1.a, the tree's own statement of its boundary).
+
+**Five places open-coded the walk over those stores**: the seed's stock reconciliation,
+`holdings-view`'s ownership shares, `O1`'s sovereign arm, `O11`'s stray-id check and the UI's
+holder list. Each could fall out of date about which stores exist, and they had:
+`holdings-view` counted the banks and the central bank and **not the desks**; `O11` walked four
+stores and not the treasuries; the UI's list showed **the institutions alone**, so the view of who
+owns a government's debt omitted most of its holders and said nothing about it; and none of the
+five had heard of the household books. That is rule 4 applied to a READ rather than to a number.
+
+`engine/sovereign-register.ts` is the one walk, and those callers are projections of it. The node
+stays ⚠️ because the walk is a plaster over the shape: it exists precisely BECAUSE there are five
+stores, and §3's **13-OUTSIDE** is the step that removes them. The seed keeps its own walk, and the
+reason is the moment rather than the shape — it runs before the register exists.
 
 ### ✅ D1 / D2 / E1 — THE FIVE PARALLEL STRUCTURES, FOUR OF THEM CLOSED
 

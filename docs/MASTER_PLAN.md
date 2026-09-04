@@ -395,7 +395,15 @@ written from here):
     every holder class. What it left behind is one finding, and it is the next thing here:
 
     **13-OUTSIDE — TWO BOOKS HOLD A VALUE WHERE THEIR OWN AUCTIONS WRITE A FACE** (found closing
-    13-BILL). A bank's `sovereignBondHoldingsByBond` and the central bank's
+    13-BILL). *(**The enabling half is done** — commit "13-OUTSIDE a". Before moving a store, the
+    READ had to have one owner: a sovereign holding lives in FIVE stores, not the two this step
+    names, and **five places open-coded the walk over them** — the seed's reconciliation,
+    `holdings-view`'s shares, `O1`'s sovereign arm, `O11` and the UI's holder list. They had
+    already diverged: `holdings-view` missed the desks, `O11` missed the companies' treasuries,
+    the UI showed the institutions alone, and none had heard of the household books.
+    `engine/sovereign-register.ts` is that walk now and the five are projections of it, so moving
+    a store is a change in ONE function. §9.12's own lesson: separate the read first, change the
+    key second.)* A bank's `sovereignBondHoldingsByBond` and the central bank's
     `sovereignHoldingsByBond` are `Record<billId, dollars>`: a value per line with NO QUANTITY.
     `07c` and `07f` rewrite that field every week from the auction's fills — which are FACE — and
     then `bill-accretion` multiplies it by the week's price ratio, so the book ends each week at
@@ -1441,6 +1449,27 @@ A finished step leaves §3 and lands here as ONE LINE (rule 16): what changed, w
 numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-OUTSIDE a — ONE OWNER FOR "WHO HOLDS THIS BOND", BEFORE ANY STORE MOVES.** The step is to
+put the banks' and the central bank's sovereign books in the register, and the first thing looking
+at it found was that the step under-counted its own subject: a sovereign holding lives in FIVE
+stores — the register, each bank's `sovereignBondHoldingsByBond`, each bank's desk inventory, the
+central bank's book, and a company's `treasuryHoldings` — and **five places walked them by hand**.
+
+They had already fallen out of step with each other, which is what a duplicated READ does:
+`holdings-view` counted the banks and the central bank and not the desks; `O11` walked four stores
+and not the treasuries; `O1` read three of them in three separate places; the UI's sovereign holder
+list showed the INSTITUTIONS ALONE, so the view of who owns a government's debt omitted most of its
+holders and gave no sign of it; and none of the five knew about the household books §9.13-EQUITY
+had added a step earlier. `engine/sovereign-register.ts` is the one walk and those callers are
+projections of it.
+
+**It is deliberately not the migration.** §9.12's lesson is that the keying step worked *because*
+the store and the read were separated FIRST and the key changed second, and rule 11 means this one
+cannot be measured on the way. With the read owned, moving a store is a change in one function.
+The seed keeps its own walk, and the reason is the moment rather than the shape: it runs before the
+register exists. Atlas: sovereign-credit gains E1.a for the walk (⚠️ — it exists because there are
+five stores, and 13-OUTSIDE is what removes them), counted at 68 rows. Gates green; no run.
 
 **13-BILL — THE ACCRETION STOPS BEING COMPUTED AND STARTS BEING OBSERVED.** `bill-accretion`
 grew a held bill toward face at `calculateNelsonSiegelZeroRate(yearsRemaining, yieldCurveParams)`

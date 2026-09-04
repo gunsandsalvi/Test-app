@@ -16,6 +16,7 @@ import { REGION_IDS } from '../domain/geography';
 import { institutionTotalAssetsFromState } from '../engine/simulation/stages/institutional-balance-sheet';
 import { facilityBookOf, facilitiesOfBorrower, issuerIdOf, trancheRowOf, TR_FACILITY, TR_CP, TR_FLOATING } from '../engine2/tranches';
 import { registerBooks } from '../engine/ledger/holdings-ledger';
+import { forEachSovereignPosition } from '../engine/sovereign-register';
 
 export type { ObjectRef, ObjectType, ObjectLabel, Series } from './types';
 export { refKey, sameRef } from './types';
@@ -250,18 +251,22 @@ function instrumentTypeOfDeskRow(world: World, instrumentId: string): string {
   return (f & TR_FLOATING) ? 'LEVERAGED_LOAN' : 'CORP_BOND';
 }
 
-/** The holders of a region's sovereign paper, by holder. */
+/**
+ * The holders of a region's sovereign paper, by holder.
+ *
+ * §9.13-OUTSIDE: EVERY store that keeps one (`engine/sovereign-register.ts`), not the register
+ * alone. This walked the institutions only — so the view of who owns a government's debt left out
+ * the banks, their desks, the central bank and the companies' treasuries, which between them hold
+ * most of it, and showed no sign that it had.
+ */
 export function sovereignHoldersOf(world: World, regionId: string): { holderId: string; usd: number }[] {
-  const H = world.v2.holdings;
-  const govRef = world.v2.internedIdByString.get('GOV_BOND');
-  const regRef = world.v2.internedIdByString.get(regionId);
   const out = new Map<string, number>();
-  if (govRef === undefined || regRef === undefined) return [];
-  world.state.institutionalEntities.forEach((e) => {
-    for (let r = bookHeadOf(world.v2, e.id); r >= 0; r = H.next[r]) {
-      if (H.typeRef[r] !== govRef || H.regionRef[r] !== regRef) continue;
-      out.set(e.id, (out.get(e.id) ?? 0) + H.qtyLocal[r]);
-    }
+  forEachSovereignPosition(world.v2, world.state, regionId as RegionId, (p) => {
+    if (p.faceLocal <= 0) return;
+    const key = p.holderClass === 'CENTRAL_BANK' ? `central bank · ${regionId.toLowerCase()}`
+      : p.holderClass === 'DESK' ? `${p.holderKey} · desk`
+        : p.holderKey;
+    out.set(key, (out.get(key) ?? 0) + p.faceLocal);
   });
   return [...out.entries()].map(([holderId, usd]) => ({ holderId, usd })).sort((a, b) => b.usd - a.usd);
 }

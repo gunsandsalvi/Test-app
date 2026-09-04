@@ -30,6 +30,7 @@ import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { REGION_IDS } from '../../../domain/geography';
 import { marketCapOf } from '../../../domain/company';
 import { entityCashOf } from '../../ledger/accounts';
+import { sovereignHeldByClass } from '../../sovereign-register';
 
 export interface RegionalHoldingsView {
   /** Every real institutional entity's holdings in this region, flattened. */
@@ -310,12 +311,6 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
       a.corpBond.outstandingLocal += sum;
     }
 
-    const sheet = c.bankBalanceSheet;
-    if (!sheet || !isActiveCompany(c)) return;
-    Object.values(sheet.sovereignBondHoldingsByBond || {}).forEach((usd) => {
-      // A bank holds its OWN sovereign as its liquidity buffer (07c's domestic mandate).
-      a.sovBond.bankLocal += Math.max(0, Number(usd) || 0);
-    });
   });
   // Second pass: a facility's issuer region comes from the borrower, which may not be the
   // lender's — resolved only once every company's region is known.
@@ -342,9 +337,13 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
     a.sovBond.outstandingLocal = materializeGovLadder(v2hv, r)
       .reduce((s, t) => s + Math.max(0, t.principalLocal), 0);
-    Object.values(reg.centralBankSheet?.sovereignHoldingsByBond || {}).forEach((usd) => {
-      a.sovBond.centralBankLocal += Math.max(0, Number(usd) || 0);
-    });
+    // §9.13-OUTSIDE: ONE walk over the four stores a sovereign holding can sit in
+    // (`engine/sovereign-register.ts`). This file used to enumerate two of them itself, in two
+    // separate passes, and count the DESKS in neither.
+    const byClass = sovereignHeldByClass(v2hv, state, r);
+    a.sovBond.bankLocal = byClass.BANK + byClass.DESK;
+    a.sovBond.centralBankLocal = byClass.CENTRAL_BANK;
+    void reg;
   });
   return out;
 }

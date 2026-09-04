@@ -111,6 +111,12 @@ export function closeSeedMoney(
     // §3.13-SOV row 3: every holder's key is the bond's id, so this reconciles per bond instead
     // of per tenor bucket. Bucket-wise it could only scale a rung by its GROUP's held share,
     // which spread one bond's shortfall across every other bond of a similar tenor.
+    //
+    // §9.13-OUTSIDE: this is the ONE sovereign walk `engine/sovereign-register.ts` does not
+    // replace, and the reason is the moment rather than the shape — the seed runs BEFORE the
+    // register exists, so the institutions' holdings are still objects on the entity and there
+    // are no rows to walk. It is kept in step with that file by hand; the stores it names are the
+    // same five.
     const heldByBond = new Map<string, number>();
     const add = (id: string | undefined, usd: number) => { if (id && usd > 0) heldByBond.set(id, (heldByBond.get(id) ?? 0) + usd); };
     Object.entries(cb.sovereignHoldingsByBond).forEach(([id, v]) => add(id, Number(v) || 0));
