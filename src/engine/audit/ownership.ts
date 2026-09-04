@@ -18,6 +18,10 @@ import { isTrancheKind } from '../../domain/assets';
 import { bookHeadOf } from '../../engine2/holdings';
 import { equityIssuerId, etfShareFundId } from '../../domain/instrument-keys';
 import { asEntityId, asTicker } from '../../domain/ids';
+import { assertNever } from '../../domain/defect';
+import { dealerDeskTicker } from '../../domain/dealer-desk';
+import { partyFromKey } from '../ledger/party';
+import type { PartyRef } from '../../domain/party';
 import type { Ticker } from '../../domain/ids';
 import type { EntityId } from '../../domain/ids';
 
@@ -383,18 +387,84 @@ function o8(state: GameState, week: number): AuditFinding[] {
     out.push({ family: 'O', check: 'O8 one thing, one key: the desks', week, usd: issuerKeyedLocal, message: `${issuerKeyed} desk credit positions worth ${B(issuerKeyedLocal)} are keyed by ISSUER where the register keys the same paper by TRANCHE (${trancheKeyed} worth ${B(trancheKeyedLocal)} name a tranche) — every desk-to-register move wires two names for one asset` });
   }
 
-  // 2. A contract's parties and its reference resolve in the space each is supposed to be in.
-  let deadParty = 0, deadRef = 0;
+  // 2. EVERY PARTY-KEYED STORE names parties that exist — §3.13-BOOK (c-then-4).
+  //
+  // This arm read the derivatives book alone, and after (c-then-3b) it read it WRONG: it took
+  // `p.ticker` off arms that no longer carry one, through a structural cast the compiler could
+  // not see into, so every firm party would have counted as dead. `the-register.md` D2's finding
+  // was exactly that nothing else was being looked at. One resolver now — a `PartyRef` is a VIEW
+  // of the entity store, so "does this party exist" is one lookup per arm — walked over every
+  // store that names a party: the derivative book, the repo book, the prime-brokerage lines, the
+  // estates' claims, the trade invoices, the consignments, the two accrual ledgers, and the
+  // account store's own party table. Each is counted on its own line, because a dead party in a
+  // repo contract and a dead party in an accrual ledger are different failures with different
+  // owners.
+  const { companyById, institutionById } = partyIndexOfState(state);
+  const regions = new Set<string>(REGION_IDS);
+  const partyExists = (ref: PartyRef): boolean => {
+    switch (ref.kind) {
+      case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': return companyById.has(ref.id);
+      case 'INSTITUTION': return institutionById.has(ref.id);
+      case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': return regions.has(ref.region);
+      default: return assertNever(ref, 'o8.partyExists');
+    }
+  };
+  const entityExists = (id: EntityId): boolean => companyById.has(id) || institutionById.has(id);
+  const dead = new Map<string, number>();
+  const bump = (store: string) => dead.set(store, (dead.get(store) ?? 0) + 1);
+
+  let deadRef = 0;
   (state.derivativesBook ?? []).forEach((c) => {
-    ([c.a, c.b] as { kind: string; ticker?: Ticker | string; id?: EntityId }[]).forEach((p) => {
-      const ok = p.kind === 'INSTITUTION' ? entityIds.has(p.id!) : tickers.has(asTicker(p.ticker!));
-      if (!ok) deadParty++;
-    });
+    if (!partyExists(c.a)) bump('derivative contracts');
+    if (!partyExists(c.b)) bump('derivative contracts');
     // A CDS names the issuer it is written on by COMPANY ID; the futures and FX classes name a
     // commodity or a region, which are their own spaces and are not company keys.
-    if (c.classId === 'CDS' && !companyIds.has(asEntityId(c.referenceId))) deadRef++;
+    if (c.classId === 'CDS' && !companyById.has(asEntityId(c.referenceId))) deadRef++;
   });
-  if (deadParty > 0) out.push({ family: 'O', check: 'O8 one thing, one key: contract parties', week, usd: deadParty, message: `${deadParty} contract party references resolve to nothing — a ticker used where an id belongs, or the other way round` });
+  REGION_IDS.forEach((r) => {
+    const reg = state.regions[r];
+    (reg?.repoBook ?? []).forEach((c) => {
+      if (!entityExists(c.borrowerId)) bump('repo borrowers');
+      if (c.lender.kind !== 'CENTRAL_BANK' && !partyExists(c.lender)) bump('repo lenders');
+    });
+    (reg?.primeBrokerageBook ?? []).forEach((l) => {
+      if (!companyById.has(l.brokerId)) bump('prime-brokerage brokers');
+      if (!institutionById.has(asEntityId(l.fundId))) bump('prime-brokerage funds');
+    });
+  });
+  (state.estates ?? []).forEach((e) => e.claims.forEach((cl) => { if (!partyExists(cl.holder)) bump('estate claim holders'); }));
+  (state.tradeInvoices ?? []).forEach((inv) => {
+    if (!entityExists(inv.buyerId)) bump('invoice buyers');
+    if (!entityExists(inv.sellerId)) bump('invoice sellers');
+  });
+  (state.goodsInTransit ?? []).forEach((sh) => {
+    if (!entityExists(sh.buyerId)) bump('consignment buyers');
+    if (sh.carrierId !== undefined && !companyById.has(sh.carrierId)) bump('consignment carriers');
+  });
+  // The corporate accrual ledger's holder key is TWO spaces by design: an entity id, or a desk's
+  // participant id (`holderPayee`). A desk is alive if its bank is.
+  state.holderAccruedInterestLocal.forEach((byHolder) => byHolder.forEach((_v, holderId) => {
+    const desk = dealerDeskTicker(holderId);
+    const ok = desk !== undefined ? tickers.has(desk) : entityExists(asEntityId(holderId));
+    if (!ok) bump('accrued-interest holders');
+  }));
+  // The sovereign accrual ledger's key ends in a `partyKey`.
+  state.sovereignAccruedInterestLocal.forEach((_v, k) => {
+    const ref = partyFromKey(k.slice(k.lastIndexOf('|') + 1));
+    if (ref === undefined || !partyExists(ref)) bump('sovereign accrual holders');
+  });
+  // The account store's own party table: every key it ever interned is a party that exists.
+  // (A resolved bank keeps its rows until the merger's `moveBankReserves` empties them, so this is
+  // the arm that will fire on a re-key that missed the ledger — the failure `rekeyBankLinks`
+  // exists to prevent.)
+  v2.refs.partyKeys.strings.forEach((k) => {
+    const ref = partyFromKey(k);
+    if (ref === undefined || !partyExists(ref)) bump('account-store parties');
+  });
+
+  dead.forEach((n, store) => {
+    out.push({ family: 'O', check: `O8 one thing, one key: ${store}`, week, usd: n, message: `${n} party references in ${store} resolve to no entity, region or bank — a key that resolves in no store` });
+  });
   if (deadRef > 0) out.push({ family: 'O', check: 'O8 one thing, one key: contract references', week, usd: deadRef, message: `${deadRef} CDS name a reference entity that is no company id — the credit is written on a key that resolves in no store` });
 
   // 3. Every register row's instrument id resolves in exactly one of the spaces the policy allows.

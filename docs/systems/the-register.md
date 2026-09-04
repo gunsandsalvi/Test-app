@@ -228,8 +228,11 @@ shares resolve exactly as before. `test/seed-issuer.test.ts` pins both halves an
 fix.
 
 **How it hid.** Two copies of a rule are two places for it to rot, and these rotted together — and
-`O8`, which checks that parties are alive, reads the derivatives book rather than the register's
-issuer side, so nothing was looking.
+`O8`, which checks that parties are alive, read the derivatives book alone, so nothing was looking.
+*(§3.13-BOOK c-then-4: it walks every party-keyed store now — derivative contracts, repo book,
+prime-brokerage lines, estate claims, invoices, consignments, both accrual ledgers, and the
+account store's own party table — through one `partyExists` over the entity index, a line per
+store. This is the check that would have caught the seeded-issuer defect above on week 1.)*
 
 ### ⚠️ F1 / F1.a — ONE INSTRUMENT, TWO KEYS: THE ETF SHARE
 

@@ -475,9 +475,8 @@ written from here):
     than waiting for step 38. `O3`, `O8` and `O11` become its consumers rather than its substitutes.
 
     **THE SLICES, each its own commit, in this order.**
-    **(a) BRAND THE STORE KEYS and (b) SPLIT THE INTERN TABLE are DONE, and (c) THE ENTITY
-    REGISTRY all but its last two commits — in §9** (a; b in three steps; c1, c2a/b/c,
-    c-then-1/2/3a). `refs.instruments.strings` is the list of every instrument the world has
+    **(a) BRAND THE STORE KEYS, (b) SPLIT THE INTERN TABLE and (c) THE ENTITY REGISTRY are DONE
+    — in §9** (a; b in three steps; c1, c2a/b/c, c-then-1/2/3a/3b/4). `refs.instruments.strings` is the list of every instrument the world has
     named, which is what (d) is built on;
     `domain/party.ts:PartyRef` is the one party union, which is what (c-then-3b) needs; and every
     entity id, ticker and instrument id is a branded type with a named function at every crossing.
@@ -493,14 +492,11 @@ written from here):
       `classId` alone: an entity id from the CDS book, a commodity id, a REGION from the FX
       forward, `''` from the swap. Same shape, same resolution.
 
-    **WHAT IS LEFT OF (c), and it is two commits:**
-    c-then-3b. **THE STORED TICKER CROSS-REFERENCES BECOME ENTITY IDS, AND THE ARMS TAKE ONE —
-       DONE, in §9.** `PartyRef`'s five entity arms key by `EntityId`; the eleven fields are in
-       the entity space; the seat→party crossing is one named function per stage.
-    c-then-4. **`O8`'S PARTY ARM WIDENS** from the derivatives book to every party-keyed store,
-       which one index can now answer.
+    **(c) IS CLOSED** — c-then-3b and c-then-4 in §9. `PartyRef`'s five entity arms key by
+    `EntityId`, the eleven stored ticker references are in the entity space, the seat→party
+    crossing is one named function per stage, and `O8` walks every party-keyed store.
 
-    **THEN THE REST OF THE SLICES:**
+    **THE OPEN SLICES:**
     d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
        share and contract gets a row: kind, issuer, **currency**, issued units, and nothing else.
        Terms stay in the class store, so the index copies no quantity and cannot drift.
@@ -1581,6 +1577,29 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c-then-4) — `O8` WALKS EVERY PARTY-KEYED STORE, AND IT WAS READING THE ONE IT
+HAD WRONG.** `O8`'s party arm checked the derivatives book alone — `the-register` D2 recorded that
+as why the seeded-issuer defect went unseen — and after (c-then-3b) it checked it wrongly: it read
+`p.ticker` off arms that no longer carry one, through a structural cast `{ kind; ticker?; id? }`
+the compiler could not see into, so every firm party in the book would have counted as dead the
+next time the audit ran. Fourth instance of the slice's one lesson: a cast or an unbranded
+re-declaration is where a brand stops.
+
+One resolver now. A `PartyRef` is a view of the entity store, so `partyExists` is one lookup per
+arm — five entity arms against `companyById`/`institutionById`, five region arms against
+`REGION_IDS` — and it is walked over **every store that names a party**: derivative contracts,
+repo borrowers and lenders, prime-brokerage brokers and funds, estate claim holders, invoice buyers
+and sellers, consignment buyers and carriers, the corporate accrual ledger (whose holder key is
+two spaces by design — an entity id or a desk seat, resolved through `dealerDeskTicker` as
+`holderPayee` does), the sovereign accrual ledger (`partyFromKey` on the key's tail), and the
+account store's own interned party table. One finding line per store, because a dead party in a
+repo contract and one in an accrual ledger are different failures with different owners. The
+account-store arm is the one that fires on a re-key that missed the ledger — the failure
+`rekeyBankLinks` exists to prevent, now with a check behind it.
+
+Closes (c). 1 source file, +78 −8. Atlas: `the-register` D2's "nothing was looking" annotated with what
+looks now. Gates green (150 tests); no run.
 
 **13-BOOK slice (c-then-3b, CLOSED) — `PartyRef` IS A VIEW OF THE ENTITY STORE, AND THE ROAD
 THERE RAN THROUGH A LIVE DEFECT OF MY OWN MAKING.** The four firm arms key by `EntityId` now; the
