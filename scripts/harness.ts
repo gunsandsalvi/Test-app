@@ -2477,16 +2477,17 @@ function runHarness() {
         // §7.302 — the composition, printed when it breaks: a 66B one-week residual during the
         // first bank resolution was undiagnosable from the total alone. BANK_ID_TRACE=<ticker>
         // prints one bank's composition every week so the jumping line can be diffed.
-        const bsx = bs as unknown as Record<string, number | undefined>;
+        // §3.13c: read the SHEET, not a string-keyed cast of it. A cast like this is a field
+        // name the compiler cannot check, which is what the `…USD` rename has to be safe from.
         const gb = (v: number | undefined) => ((v ?? 0) / 1e9).toFixed(1);
         console.log(`  [bank-identity] w${w} ${c.ticker} resid ${(residualUSD / 1e9).toFixed(2)}B: hhDep ${gb(lines.householdUSD)}B`
           + ` corp ${gb(lines.corporateUSD)}B inst ${gb(lines.institutionalUSD)}B`
-          + ` sme ${gb(lines.smeUSD)}B margin ${gb(bsx.clientMarginUSD)}B`
-          + ` cbloan ${gb(bsx.centralBankLoanUSD)}B eq ${gb(bs.bankEquityUSD)}B`
-          + ` srf ${gb(bs.srfBorrowingUSD)}B repoB ${gb(bsx.repoBorrowedUSD)}B`
+          + ` sme ${gb(lines.smeUSD)}B margin ${gb(bs.clientMarginUSD)}B`
+          + ` cbloan ${gb(bs.centralBankLoanUSD)}B eq ${gb(bs.bankEquityUSD)}B`
+          + ` srf ${gb(bs.srfBorrowingUSD)}B repoB ${gb(bs.repoBorrowedUSD)}B`
           + ` || bizL ${gb(businessLoanBookOf(bs, facilityBookUSD))}B consL ${gb(consumerLoanBookOf(bs))}B`
           + ` sov ${gb(sovUSD)}B cash ${gb(reservesUSD)}B`
-          + ` repoL ${gb(bsx.repoLentUSD)}B rrp ${gb(bs.onRrpLendingUSD)}B`);
+          + ` repoL ${gb(bs.repoLentUSD)}B rrp ${gb(bs.onRrpLendingUSD)}B`);
       }
       if (Math.abs(residualUSD) > 5e6) {
         violations.push({

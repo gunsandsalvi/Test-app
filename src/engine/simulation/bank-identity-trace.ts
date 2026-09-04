@@ -35,8 +35,17 @@ export function bankIdentityTraceEnabled(): boolean {
   return process.env.BANK_IDENTITY_TRACE === '1';
 }
 
-/** Liability/equity fields carry +1 into the residual, asset fields −1. */
-const FIELD_SIGNS: Record<string, 1 | -1> = {
+/**
+ * Liability/equity fields carry +1 into the residual, asset fields −1.
+ *
+ * §3.13c — KEYED BY `fieldsOf`'S OWN KEYS, so the compiler holds the two in step. It was
+ * `Record<string, …>`, and the correspondence lived in the fact that somebody typed the same
+ * names twice: a field renamed on one side and not the other made `FIELD_SIGNS[k]` `undefined`,
+ * `residualDelta` NaN, and this instrument silently stop attributing anything. That is the shape
+ * that blocks the `…USD` rename — a field name in an UNCHECKED string is a rename this compiler
+ * cannot verify — and it is why this is typed before the rename runs.
+ */
+const FIELD_SIGNS: Record<keyof ReturnType<typeof fieldsOf>, 1 | -1> = {
   depositsUSD: 1, corporateDepositsUSD: 1, institutionalDepositsUSD: 1, clientMarginUSD: 1,
   smeDepositsUSD: 1, centralBankLoanUSD: 1, bankEquityUSD: 1, srfBorrowingUSD: 1, repoBorrowedUSD: 1,
   businessLoanBookUSD: -1, consumerLoanBookUSD: -1, sovHoldingsUSD: -1, cashReservesUSD: -1,
@@ -44,7 +53,10 @@ const FIELD_SIGNS: Record<string, 1 | -1> = {
   primeBrokerageLoansUSD: -1,
 };
 
-export function fieldsOf(bs: BankingSector, cashUSD: number, lines: DepositLines, facilityBookUSD: number): Record<string, number> {
+/** §3.13c: the return type is INFERRED, so its keys are a literal union and `FIELD_SIGNS` below
+ *  is checked against them. Annotated `Record<string, number>` it was not: `keyof string-record`
+ *  is `string`, so every key matched and nothing was verified. */
+export function fieldsOf(bs: BankingSector, cashUSD: number, lines: DepositLines, facilityBookUSD: number) {
   return {
     depositsUSD: lines.householdUSD, corporateDepositsUSD: lines.corporateUSD,
     institutionalDepositsUSD: lines.institutionalUSD,
@@ -90,7 +102,7 @@ export class BankIdentityTrace {
   private open = new Map<string, number>();
   private contributions = new Map<string, Map<string, number>>();
   private focusTicker = process.env.BANK_IDENTITY_TRACE_BANK || undefined;
-  private focusFields: Record<string, number> | undefined;
+  private focusFields: ReturnType<typeof fieldsOf> | undefined;
   /** INSTITUTION focus: journal net by reason plus the cash stock, per stage — for the
    *  overdraft family (a fund spending money it does not have). */
   private focusInstitutionId = process.env.BANK_IDENTITY_TRACE_INSTITUTION || undefined;
@@ -134,8 +146,9 @@ export class BankIdentityTrace {
     if (this.focusFields) {
       const parts: string[] = [];
       let residualDelta = 0;
-      Object.keys(now).forEach((k) => {
-        const d = now[k] - (this.focusFields as Record<string, number>)[k];
+      const was = this.focusFields;
+      (Object.keys(now) as (keyof typeof now)[]).forEach((k) => {
+        const d = now[k] - was[k];
         if (Math.abs(d) < 1e4) return;
         residualDelta += d * FIELD_SIGNS[k];
         parts.push(`${k} ${d >= 0 ? '+' : ''}${(d / 1e6).toFixed(3)}M`);

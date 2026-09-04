@@ -20,6 +20,24 @@ import { marketCapOf } from '../domain/company';
 import { cashOf } from '../engine/ledger/accounts';
 import { ladderTotalUSD } from './tranches';
 
+/**
+ * §5-WIRES D — the lanes that are READS of other state rather than fields on the object: market
+ * cap (price × shares), total debt (the ladder's live face) and cash (the account row). Named
+ * here because the constraint below has to admit them and refuse everything else.
+ */
+export const DERIVED_F64_FIELDS = ['marketCap', 'totalDebt', 'cash'] as const;
+export type DerivedF64Field = typeof DERIVED_F64_FIELDS[number];
+
+/**
+ * §3.13c — THE LANE NAMES ARE `keyof Company` OR A NAMED DERIVATION, CHECKED.
+ *
+ * They were `as const` alone, so the literal union reached every consumer and the compiler held
+ * the call sites in step — but NOTHING tied them to the domain type. Renaming `Company.grossPPEUSD`
+ * produced 35 errors across the tree and NONE here: the lane kept its stale string, compiled, and
+ * would have read `undefined` off every company for ever. That is the shape that made the `…USD`
+ * rename unsafe to attempt — a field name in a string the compiler does not check — and
+ * `satisfies` is what closes it while keeping the literal tuple type the unions are built from.
+ */
 const F64_FIELDS = [
   // capital / production
   'customerConcentration', 'supplierConcentration', 'revenueVolatility', 'technicalReservesUSD',
@@ -43,11 +61,11 @@ const F64_FIELDS = [
   'recurringRevenueBaseUSD', '_targetProductionUSD', 'bankResolvedWeek',
   'taxLossCarryforwardUSD', 'taxBasisPpeUSD', 'deferredTaxLiabilityUSD', 'lastWeekSalesUSD',
   'offeredWageIndex', 'unfilledVacancyShare', 'lastWeekPurchasesUSD', 'expectedEbitdaUSD',
-] as const;
+] as const satisfies readonly (keyof Company | DerivedF64Field)[];
 
 const BOOL_FIELDS = [
   'isBankEntity', 'isInstitutionalEntity', 'reportedThisWeek', 'isDefaulted', 'mergerAcquired',
-] as const;
+] as const satisfies readonly (keyof Company)[];
 
 /** String-valued scalars kept as raw string lanes (undefined stays undefined); interned int
  *  refs join when a consumer needs them. `lastManagementCommentary` is UI prose — not laned. */
@@ -56,7 +74,7 @@ const STR_FIELDS = [
   'primarySubUnitId', 'listingStatus', 'institutionalRole', 'institutionalEntityType',
   'hedgeFundStrategy', 'producedCommodityId', 'acquiredByTicker', 'pendingLboSponsorId',
   'pendingRecapSponsorId', 'pendingIpoSponsorId',
-] as const;
+] as const satisfies readonly (keyof Company)[];
 
 export type CompanyF64Field = (typeof F64_FIELDS)[number];
 export type CompanyBoolField = (typeof BOOL_FIELDS)[number];
@@ -80,8 +98,6 @@ export interface CompanyStore {
  * Every fill of the store — the refresh, the per-row sync, the field mesh, the checker — routes
  * these names here, so no writer can put a stored copy of a derivation into a lane.
  */
-export const DERIVED_F64_FIELDS = ['marketCap', 'totalDebt', 'cash'] as const;
-export type DerivedF64Field = typeof DERIVED_F64_FIELDS[number];
 function derivedColumn(S: CompanyStore, f: DerivedF64Field, c: Company): number {
   if (f === 'marketCap') return marketCapOf(c);
   if (f === 'cash') return S.v2 ? cashOf(S.v2, c) : NaN;
