@@ -40,6 +40,7 @@
  */
 
 import { InstrumentId } from '../../../domain/ids';
+import { companyParty } from '../../../domain/party';
 import { GameState, RegionId, Company, PrimaryOffering } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, issuerIdOf, trancheScheduleOf, trancheIdOf } from '../../../engine2/tranches';
@@ -545,7 +546,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
      *  the source of who issued a tranche. */
     const issuerPartyOf = (instrumentId: InstrumentId): PartyRef | undefined => {
       const issuer = companyById.get(issuerIdOf(ctx.v2, instrumentId));
-      return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
+      return issuer ? companyParty(issuer) : undefined;
     };
     const partyOfParticipant = participantPartyOf({ regionId, entityIds, deskTickers });
     // §3.13b: the accrued travels with the face — the ledger half here, the cash half below,

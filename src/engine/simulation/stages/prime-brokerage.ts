@@ -1,4 +1,5 @@
 import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
+import { bankPartyOfTicker, bankSecuritiesPartyOfTicker } from '../../../domain/party';
 /**
  * HF1 — the prime brokerage session: a fund's leverage becomes a named bank's loan.
  *
@@ -98,7 +99,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       if (!(interestLocal > 0)) return;
       pay(ctx, {
         payer: { kind: 'INSTITUTION', id: line.fundId },
-        payee: { kind: 'BANK', ticker: line.brokerTicker },
+        payee: bankPartyOfTicker(line.brokerTicker),
         amount: interestLocal,
         currency: currencyOf(line.regionId),
         reason: 'prime brokerage financing',
@@ -128,7 +129,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
         if (drawnLocal > 0) {
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: fund.id },
-            payee: { kind: 'BANK_SECURITIES', ticker: priorBook.find((l) => l.fundId === fund.id)!.brokerTicker },
+            payee: bankSecuritiesPartyOfTicker(priorBook.find((l) => l.fundId === fund.id)!.brokerTicker),
             amount: drawnLocal,
             currency: currencyOf(fund.region),
             reason: 'prime brokerage repayment',
@@ -185,7 +186,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       if (Math.abs(deltaLocal) > 1) {
         if (deltaLocal > 0) {
           pay(ctx, {
-            payer: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
+            payer: bankSecuritiesPartyOfTicker(brokerTicker),
             payee: { kind: 'INSTITUTION', id: fund.id },
             amount: deltaLocal,
             currency: currencyOf(fund.region),
@@ -194,7 +195,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
         } else {
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: fund.id },
-            payee: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
+            payee: bankSecuritiesPartyOfTicker(brokerTicker),
             amount: -deltaLocal,
             currency: currencyOf(fund.region),
             reason: 'prime brokerage repayment',
@@ -269,7 +270,7 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
       const drawLocal = Math.min(fund.primeBrokerageAvailableLocal ?? 0, -cashPlusPendingLocal);
       if (drawLocal <= 1) return fund;
       pay(ctx, {
-        payer: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
+        payer: bankSecuritiesPartyOfTicker(brokerTicker),
         payee: { kind: 'INSTITUTION', id: fund.id },
         amount: drawLocal,
         currency: currencyOf(fund.region),

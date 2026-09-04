@@ -8,6 +8,7 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import { bankSecuritiesParty, bankSecuritiesPartyOfTicker } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { bankCashBufferRatioOf } from '../../macro/banking';
 import { Company, RegionId } from '../../../types';
@@ -105,7 +106,7 @@ export function buildDealerDeskParticipants(args: {
     // the same real constraint the bank's investment book faces in 07c, and the reason a desk
     // with capital ratio to spare can still be unable to bid.
     const settledCashLocal = bankReservesOf(ctx.v2, bank.ticker)
-      + pendingSettlementLocal(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
+      + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
     const fundableLocal = Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * bankCashBufferRatioOf(bank));
 
     const currentHoldingsByInstrumentId = new Map<InstrumentId, number>();
@@ -265,7 +266,7 @@ export function applyDealerDeskFills(args: {
       positions.forEach((p) => {
         if (clearedIds.has(p.instrumentId)) after.set(p.instrumentId, toEntry(p.units ?? p.inventoryLocal, p.instrumentId));
       });
-      clearedBookDelta({ kind: 'BANK_SECURITIES', ticker: bank.ticker }, bank.region, kind, before, after,
+      clearedBookDelta(bankSecuritiesParty(bank), bank.region, kind, before, after,
         (id) => unitPrice(id), `${book} desk fill`);
     }
 
@@ -367,7 +368,7 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
 export function dealerDeskPartyOf(participantId: string, deskTickers: ReadonlySet<Ticker>): PartyRef | undefined {
   const ticker = dealerDeskTicker(participantId);
   if (ticker === undefined || !deskTickers.has(ticker)) return undefined;
-  return { kind: 'BANK_SECURITIES', ticker };
+  return bankSecuritiesPartyOfTicker(ticker);
 }
 
 /** The tickers whose desks were built, for the settle pass's routing. */

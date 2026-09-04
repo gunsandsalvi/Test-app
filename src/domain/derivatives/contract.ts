@@ -14,6 +14,8 @@
  */
 
 import { RegionId, CurrencyCode } from '../geography';
+import { bankPartyOfTicker, companyPartyOfTicker } from '../party';
+import type { CounterpartyRef } from '../party';
 import type { EntityId } from '../ids';
 import type { Ticker } from '../ids';
 
@@ -22,10 +24,13 @@ import type { Ticker } from '../ids';
  * structurally the ledger's own `PartyRef` arms of the same kind, so a party passes to `pay()`
  * directly — one encoding of who owes whom (§1.4).
  */
-export type DerivativeParty =
-  | { kind: 'COMPANY'; ticker: Ticker }
-  | { kind: 'BANK'; ticker: Ticker }
-  | { kind: 'INSTITUTION'; id: EntityId };
+/**
+ * §3.13-BOOK (c-then-3a) — A VIEW OF THE ONE UNION, not a copy of three of its arms. It was
+ * declared here verbatim, and `estate.ts:ClaimHolder` declared the SAME three under another name,
+ * so the model carried two identical types and a third overlapping one (`repo.ts:RepoParty`) with
+ * nothing keeping any of them in step with `PartyRef`.
+ */
+export type DerivativeParty = CounterpartyRef;
 
 export function derivativePartyKey(p: DerivativeParty): string {
   return `${p.kind}:${p.kind === 'INSTITUTION' ? p.id : p.ticker}`;
@@ -42,8 +47,8 @@ export function derivativePartyKey(p: DerivativeParty): string {
  * and the party hedges again on top of what it already has, silently and every week. A format
  * whose failure mode is a plausible number is a format that needs a constructor.
  */
-export const bankPartyKey = (ticker: Ticker): string => derivativePartyKey({ kind: 'BANK', ticker });
-export const companyPartyKey = (ticker: Ticker): string => derivativePartyKey({ kind: 'COMPANY', ticker });
+export const bankPartyKey = (ticker: Ticker): string => derivativePartyKey(bankPartyOfTicker(ticker));
+export const companyPartyKey = (ticker: Ticker): string => derivativePartyKey(companyPartyOfTicker(ticker));
 export const institutionPartyKey = (id: EntityId): string => derivativePartyKey({ kind: 'INSTITUTION', id });
 
 /** The classes the registry knows. A new derivative adds a member here and a profile module. */

@@ -16,6 +16,7 @@
  *                     P retires it when value becomes price × quantity by construction)
  */
 import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
+import { companyPartyOfTicker } from '../../domain/party';
 import {
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, syncBookRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
@@ -106,7 +107,7 @@ export function issuerOfHoldingRow(
   // §3.13-BOOK (c2b): no ticker resolved, so the row names something the company table does not
   // carry — a fund share, keyed on the register by the fund ENTITY itself. That crossing is why
   // an instrument id can stand here, and slice (d)'s registry is what removes the need.
-  return ticker ? { kind: 'COMPANY', ticker } : { kind: 'INSTITUTION', id: asEntityId(h.instrumentId) };
+  return ticker ? companyPartyOfTicker(ticker) : { kind: 'INSTITUTION', id: asEntityId(h.instrumentId) };
 }
 
 /**

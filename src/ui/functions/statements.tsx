@@ -1,4 +1,5 @@
 import { RegionId } from '../../domain/geography';
+import { companyParty } from '../../domain/party';
 /**
  * AU · statements — a firm's P&L, balance sheet and cash flow (the latest filed quarter beside
  * the one before), a bank's sheet, an institution's assets and liabilities, a region's national
@@ -173,7 +174,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
   } else {
     body = (
       <Card style={{ padding: '2px 0' }}>
-        <KV k="tax accrued, unpaid" hint="the dated wires to the treasury" v={money(world.state.pendingPaymentJournal ? undueOwedByPayer(world.state.pendingPaymentJournal, partyId({ kind: 'COMPANY', ticker: c.ticker }), internReason(CORPORATE_TAX_REASON), world.state.currentWeek, currencyOf(c.region), ensureV2(world.state).fx) : 0)} />
+        <KV k="tax accrued, unpaid" hint="the dated wires to the treasury" v={money(world.state.pendingPaymentJournal ? undueOwedByPayer(world.state.pendingPaymentJournal, partyId(companyParty(c)), internReason(CORPORATE_TAX_REASON), world.state.currentWeek, currencyOf(c.region), ensureV2(world.state).fx) : 0)} />
         <KV k="loss carryforward" v={money(c.taxLossCarryforwardLocal)} />
         <KV k="tax basis of plant" hint="double-declining" v={money(c.taxBasisPpeLocal)} />
         <KV k="deferred tax liability" v={money(c.deferredTaxLiabilityLocal)} />

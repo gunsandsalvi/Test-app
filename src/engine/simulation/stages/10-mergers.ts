@@ -8,6 +8,7 @@
  */
 
 import { restateBankSheetStatistics } from '../../../domain/bank-resolution';
+import { companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { mergeBankSheets } from '../../ledger/bank-transfer';
 import { rekeyBankLinks } from './bank-resolution';
@@ -181,7 +182,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
       }
       if (!(heldShares > 0)) return;
       const fraction = Math.min(1, heldShares / parent.sharesOutstanding);
-      issueHolding(ctx.v2, { kind: 'COMPANY', ticker: spin.ticker }, { kind: 'INSTITUTION', id: e.id },
+      issueHolding(ctx.v2, companyParty(spin), { kind: 'INSTITUTION', id: e.id },
         { instrumentType: 'EQUITY', instrumentId: equityInstrumentId(spin.id), issuerRegion: spin.region, valueLocal: fraction * spinMcapLocal, shares: fraction * spinShares }, 'spin-off: shares distributed');
     });
     bumpRegister(ctx);
@@ -206,8 +207,8 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     const openingCashLocal = Math.max(0, cashOf(ctx.v2, parent)) * share;
     if (openingCashLocal > 0) {
       pay(ctx, {
-        payer: { kind: 'COMPANY', ticker: parent.ticker },
-        payee: { kind: 'COMPANY', ticker: spin.ticker },
+        payer: companyParty(parent),
+        payee: companyParty(spin),
         amount: openingCashLocal,
         currency: currencyOf(parent.region),
         reason: 'divestiture: opening balance carved from parent',
@@ -251,8 +252,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // corporate-action drains, so the tender pays holders of record directly by instruction
   // (the timing trap is why it must not go through `payHoldersCash`'s pending map here).
   pay(ctx, {
-    payer: { kind: 'COMPANY', ticker: acquirer.ticker },
-    payee: { kind: 'COMPANY', ticker: target.ticker },
+    payer: companyParty(acquirer),
+    payee: companyParty(target),
     amount: cashPaid,
     currency: currencyOf(target.region),
     reason: 'merger consideration (cash leg)',
@@ -260,8 +261,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // The target's own cash comes WITH the business (S5 leak #4) — as a payment, so the two home
   // banks see the deposit move.
   pay(ctx, {
-    payer: { kind: 'COMPANY', ticker: target.ticker },
-    payee: { kind: 'COMPANY', ticker: acquirer.ticker },
+    payer: companyParty(target),
+    payee: companyParty(acquirer),
     amount: Math.max(0, cashOf(ctx.v2, target)),
     currency: currencyOf(target.region),
     reason: 'merger: acquired cash absorbed',
@@ -285,7 +286,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     const tenderLocal = cashPaid * Math.min(1, heldLocal / targetMarketCapLocal);
     institutionalTenderLocal += tenderLocal;
     pay(ctx, {
-      payer: { kind: 'COMPANY', ticker: target.ticker },
+      payer: companyParty(target),
       payee: { kind: 'INSTITUTION', id: e.id },
       amount: tenderLocal,
       currency: currencyOf(target.region),
@@ -293,7 +294,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     });
   });
   pay(ctx, {
-    payer: { kind: 'COMPANY', ticker: target.ticker },
+    payer: companyParty(target),
     payee: { kind: 'HOUSEHOLD', region: target.region },
     amount: Math.max(0, cashPaid - institutionalTenderLocal),
     currency: currencyOf(target.region),
@@ -455,7 +456,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
           transferHolding(ctx.v2, holder, { kind: 'CLEARING_HOUSE', region: target.region }, oldSpec, 'merger: target paper exchanged');
           // The equity issuers' sides — the target's shares are cancelled (house →
           // target), the acquirer's created (acquirer → house); the credit kinds' are the ladders'.
-          if (isEquity) transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: target.region }, { kind: 'COMPANY', ticker: target.ticker }, oldSpec, 'merger: target shares cancelled');
+          if (isEquity) transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: target.region }, companyParty(target), oldSpec, 'merger: target shares cancelled');
           const newValueLocal = isEquity ? sw.valueLocal * stockRatio : sw.valueLocal;
           if (newValueLocal > 1) {
             const newShares = isEquity && acquirer.stockPrice > 0 ? newValueLocal / acquirer.stockPrice : sw.shares;
@@ -463,7 +464,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
             // ratio and its units ARE its shares; the credit kinds keep their face, because a
             // merger re-keys the paper onto the acquirer rather than repricing it.
             const newSpec = { instrumentType: sw.type, instrumentId: newInstrumentId, issuerRegion: acquirer.region, valueLocal: newValueLocal, units: newShares ?? sw.units, shares: newShares };
-            if (isEquity) transferHolding(ctx.v2, { kind: 'COMPANY', ticker: acquirer.ticker }, { kind: 'CLEARING_HOUSE', region: acquirer.region }, newSpec, 'merger: acquirer shares issued');
+            if (isEquity) transferHolding(ctx.v2, companyParty(acquirer), { kind: 'CLEARING_HOUSE', region: acquirer.region }, newSpec, 'merger: acquirer shares issued');
             transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: acquirer.region }, holder, newSpec, 'merger: acquirer paper delivered');
           }
         });
@@ -497,7 +498,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // input lots move onto the acquirer's books by wire, and its supply contracts name the
   // acquirer on either side. A merged firm is not dead — an acquired firm's rows cannot exist.
   if (!target.bankBalanceSheet) {
-    const rekey = (p: DerivativeParty): DerivativeParty => (p.kind === 'COMPANY' && p.ticker === target.ticker ? { kind: 'COMPANY', ticker: acquirer.ticker } : p);
+    const rekey = (p: DerivativeParty): DerivativeParty => (p.kind === 'COMPANY' && p.ticker === target.ticker ? companyParty(acquirer) : p);
     ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekey(c.a), b: rekey(c.b) }));
   }
   reassignConsignments(state, target, acquirer);

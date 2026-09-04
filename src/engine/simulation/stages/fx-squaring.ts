@@ -23,6 +23,7 @@
  */
 
 import { CurrencyCode, RegionId, REGION_IDS, currencyOf } from '../../../domain/geography';
+import { bankParty, bankSecuritiesParty } from '../../../domain/party';
 import { convert } from '../../../domain/currency';
 import { Company } from '../../../domain/company';
 import { heldCurrenciesOf } from '../../ledger/accounts';
@@ -52,7 +53,7 @@ export function squareInterbankFxPositions(ctx: WeeklyStepContext): void {
   const positionsOf = new Map<string, { currency: CurrencyCode; balance: number }[]>();
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted) return;
-    positionsOf.set(c.ticker, heldCurrenciesOf(ctx.v2, { kind: 'BANK', ticker: c.ticker }));
+    positionsOf.set(c.ticker, heldCurrenciesOf(ctx.v2, bankParty(c)));
   });
 
   // Ordered pairs, each visited once: `here` holds `there`'s money and needs its own back.
@@ -88,8 +89,8 @@ export function squareInterbankFxPositions(ctx: WeeklyStepContext): void {
           const legThere = swapThere * hShare * tShare;
           const legHere = swapHere * hShare * tShare;
           if (!(legThere > MIN_TRADE) || !(legHere > MIN_TRADE)) return;
-          const hereDesk: PartyRef = { kind: 'BANK_SECURITIES', ticker: hb.ticker };
-          const thereDesk: PartyRef = { kind: 'BANK_SECURITIES', ticker: tb.ticker };
+          const hereDesk: PartyRef = bankSecuritiesParty(hb);
+          const thereDesk: PartyRef = bankSecuritiesParty(tb);
           // Both legs, both directions, at the rate in force: `here` gets the money it is short
           // and pays its own, and `there` the mirror. Neither books a gain on the swap.
           pay(ctx, { payer: thereDesk, payee: hereDesk, amount: legThere, currency: thereMoney, reason: 'fx interbank: currency delivered' });

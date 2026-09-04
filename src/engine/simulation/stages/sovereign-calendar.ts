@@ -38,6 +38,7 @@
  */
 
 import { RegionId } from '../../../types';
+import { bankSecuritiesParty } from '../../../domain/party';
 import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { PartyRef, pay, partyKey, partyFromKey } from './settlement';
@@ -103,7 +104,7 @@ export function accrueSovereignHolders(
     if (!c.isBankEntity || !c.bankBalanceSheet || c.region !== regionId || !isActiveCompany(c)) return;
     let earnedLocal = 0;
     Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByBond || {}).forEach(([bondId, usd]) => {
-      earnedLocal += accrue(bondId, { kind: 'BANK_SECURITIES', ticker: c.ticker }, Number(usd) || 0);
+      earnedLocal += accrue(bondId, bankSecuritiesParty(c), Number(usd) || 0);
     });
     if (earnedLocal > 0) bankEarnedLocal.set(c.ticker, earnedLocal);
   });
@@ -204,7 +205,7 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
     const earnedLocal = bankEarnedLocal.get(c.ticker) ?? 0;
-    const key = `|${partyKey({ kind: 'BANK_SECURITIES', ticker: c.ticker })}`;
+    const key = `|${partyKey(bankSecuritiesParty(c))}`;
     let heldLocal = 0;
     accrued.forEach((usd, k) => { if (k.endsWith(key)) heldLocal += usd; });
     if (earnedLocal === 0 && heldLocal === (c.bankBalanceSheet.sovereignAccruedCouponLocal ?? 0)) return;

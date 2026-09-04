@@ -18,6 +18,7 @@
  */
 
 import { RegionId } from '../../../../types';
+import { bankParty, companyParty } from '../../../../domain/party';
 import { currencyOf } from '../../../../domain/geography';
 import { loanBooksOf } from '../../../../domain/banking';
 import { ensureV2 } from '../../../../engine2/world';
@@ -115,7 +116,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
         const alreadyPayingLocal = standing.coverLocal('IRS', 'a', bankPartyKey(bank.ticker), undefined, k);
         const hedgeLocal = Math.max(0, wantedLocal - alreadyPayingLocal);
         if (!(hedgeLocal > 0)) return;
-        payDemandByTenor.get(k)!.push({ party: { kind: 'BANK', ticker: bank.ticker }, usd: hedgeLocal });
+        payDemandByTenor.get(k)!.push({ party: bankParty(bank), usd: hedgeLocal });
       });
     });
 
@@ -145,7 +146,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       const alreadyPayingLocal = standing.coverLocal('IRS', 'a', companyPartyKey(comp.ticker), undefined, 's5');
       const hedgeLocal = Math.max(0, wantedLocal - alreadyPayingLocal);
       if (!(hedgeLocal > 0)) return;
-      payDemandByTenor.get('s5')!.push({ party: { kind: 'COMPANY', ticker: comp.ticker }, usd: hedgeLocal });
+      payDemandByTenor.get('s5')!.push({ party: companyParty(comp), usd: hedgeLocal });
     });
 
     // ---- The RECEIVE-FIXED side: liability-matched books, whose reservation is the government

@@ -13,6 +13,7 @@
  * write it. The output stock stays the company's own record, written here only.
  */
 import { V2World } from '../../engine2/world';
+import { companyPartyOfTicker } from '../../domain/party';
 import { pushLot, consumeFifo } from '../../engine2/lots';
 import { isStorable } from '../../domain/industry-registry';
 import { RegionId } from '../../domain/geography';
@@ -132,7 +133,7 @@ export function moveOutputUnits(from: StockHolder, to: StockHolder, subUnitId: s
   if (!(units > 1e-9)) return -1;
   const src = from.outputInventoryBySubUnit?.[subUnitId];
   if (!src || src.unitsHeld + 1e-9 < units) return defect(`${from.ticker} moves ${units} ${subUnitId} it does not hold`);
-  const n = deliverGoods({ kind: 'COMPANY', ticker: asTicker(from.ticker) }, { kind: 'COMPANY', ticker: asTicker(to.ticker) }, subUnitId, units, valueLocal / units, reason);
+  const n = deliverGoods(companyPartyOfTicker(asTicker(from.ticker)), companyPartyOfTicker(asTicker(to.ticker)), subUnitId, units, valueLocal / units, reason);
   src.unitsHeld -= units; src.valueLocal -= valueLocal;
   const inv = to.outputInventoryBySubUnit ?? (to.outputInventoryBySubUnit = {});
   const dst = inv[subUnitId] ?? (inv[subUnitId] = { unitsHeld: 0, valueLocal: 0 });
@@ -149,7 +150,7 @@ export function moveInputUnits(v2: V2World, from: { id: string; ticker: string }
   const moved = Math.min(units, drawn.availableUnits);
   if (!(moved > 1e-9)) return -1;
   let costLocal = 0; for (const c of drawn.costsLocal) costLocal += c;
-  const n = deliverGoods({ kind: 'COMPANY', ticker: asTicker(from.ticker) }, { kind: 'COMPANY', ticker: asTicker(to.ticker) }, subUnitId, moved, costLocal / moved, reason);
+  const n = deliverGoods(companyPartyOfTicker(asTicker(from.ticker)), companyPartyOfTicker(asTicker(to.ticker)), subUnitId, moved, costLocal / moved, reason);
   pushLot(v2, to.id, subUnitId, `ESTATE:${from.ticker}`, moved, costLocal / moved, week, n);
   return n;
 }

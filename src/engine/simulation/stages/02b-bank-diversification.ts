@@ -21,6 +21,7 @@
  */
 
 import { currencyOf } from '../../../domain/geography';
+import { bankCreditParty, bankCreditPartyOfTicker, bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
 
 import { ensureV2 } from '../../../engine2/world';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
@@ -165,8 +166,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       };
       issueTranche(ensureV2(state), { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
       pay(ctx, {
-        payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
-        payee: { kind: 'COMPANY', ticker: c.ticker },
+        payer: bankCreditPartyOfTicker(c.homeBankTicker),
+        payee: companyParty(c),
         amount: drawLocal,
         currency: currencyOf(c.region),
         reason: 'overdraft converted to facility draw',
@@ -245,7 +246,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           priorSmeInterestWeeklyLocal += interestLocal;
           pay(ctx, {
             payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
-            payee: { kind: 'BANK', ticker: bank.ticker },
+            payee: bankParty(bank),
             amount: interestLocal,
             currency: currencyOf(regionId),
             reason: 'SME pool interest to the lending bank',
@@ -320,7 +321,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       if ((sheet.reservesInterestWeeklyLocal ?? 0) > 0) {
         pay(ctx, {
           payer: { kind: 'CENTRAL_BANK', region: regionId },
-          payee: { kind: 'BANK', ticker: bank.ticker },
+          payee: bankParty(bank),
           amount: sheet.reservesInterestWeeklyLocal!,
           currency: currencyOf(regionId),
           reason: 'interest on reserves',
@@ -341,7 +342,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // line at settlement, in the same week the loan appeared on the book above.
       lending.smeOriginationBySegment.forEach((grantedLocal, industry) => {
         pay(ctx, {
-          payer: { kind: 'BANK_CREDIT', ticker: bank.ticker },
+          payer: bankCreditParty(bank),
           payee: { kind: 'SEGMENT', region: regionId, industry },
           amount: grantedLocal,
           currency: currencyOf(regionId),
@@ -441,7 +442,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       if (repaidLocal > 0) {
         if (cbSheet) cbSheet.loansToBanksLocal = Math.max(0, (cbSheet.loansToBanksLocal ?? 0) - repaidLocal);
         pay(ctx, {
-          payer: { kind: 'BANK_SECURITIES', ticker: bank.ticker },
+          payer: bankSecuritiesParty(bank),
           payee: { kind: 'CENTRAL_BANK', region: regionId },
           amount: repaidLocal,
           currency: currencyOf(regionId),
@@ -461,8 +462,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         if (positiveLocal > 0) {
           depositors.forEach((c) => {
             pay(ctx, {
-              payer: { kind: 'BANK', ticker: bank.ticker },
-              payee: { kind: 'COMPANY', ticker: c.ticker },
+              payer: bankParty(bank),
+              payee: companyParty(c),
               amount: corpInterestLocal * (cashOf(ctx.v2, c) / positiveLocal),
               currency: currencyOf(c.region),
               reason: 'interest on corporate deposits',
@@ -473,7 +474,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const cbLoanInterestLocal = ((sheet.centralBankLoanLocal ?? 0) * (reg.policyRate + (SRF_SPREAD_BPS + CENTRAL_BANK_LOAN_PENALTY_BPS) / 10000)) / 52;
       if (cbLoanInterestLocal > 0) {
         pay(ctx, {
-          payer: { kind: 'BANK', ticker: bank.ticker },
+          payer: bankParty(bank),
           payee: { kind: 'CENTRAL_BANK', region: regionId },
           amount: cbLoanInterestLocal,
           currency: currencyOf(regionId),

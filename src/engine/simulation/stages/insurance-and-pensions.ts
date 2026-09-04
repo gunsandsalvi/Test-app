@@ -31,6 +31,7 @@
  */
 
 import { GameState, Company } from '../../../types';
+import { companyParty } from '../../../domain/party';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
@@ -126,7 +127,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       const claimLocal = premiumLocal * claimRecoveryRate;
       insurerShares.forEach(({ id, share: insurerShare }) => {
         pay(ctx, {
-          payer: { kind: 'COMPANY', ticker: comp.ticker },
+          payer: companyParty(comp),
           payee: { kind: 'INSTITUTION', id },
           amount: premiumLocal * insurerShare,
           currency: currencyOf(comp.region),
@@ -134,7 +135,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
         });
         pay(ctx, {
           payer: { kind: 'INSTITUTION', id },
-          payee: { kind: 'COMPANY', ticker: comp.ticker },
+          payee: companyParty(comp),
           amount: claimLocal * insurerShare,
           currency: currencyOf(comp.region),
           reason: 'insurance claim',

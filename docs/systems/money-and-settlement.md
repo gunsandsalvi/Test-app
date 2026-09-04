@@ -116,7 +116,7 @@ checked by `scripts/check-atlas.sh`.
 | B3.b a bank overdrawn at the CB borrows, priced by the corridor | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ⚠️ |
 | **B3.c FORBID an overdraft is never a silent negative** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ✅ |
 | C1 a payment is an instruction | `src/engine/simulation/stages/settlement.ts:PaymentInstruction` | ✅ |
-| C1.a it names both sides | `src/engine/ledger/wire.ts:wirePush`, `src/engine/ledger/entity-index.ts:companyOfParty` | ✅ |
+| C1.a it names both sides | `src/engine/ledger/wire.ts:wirePush`, `src/engine/ledger/entity-index.ts:companyOfParty`, `src/domain/party.ts:companyParty` | ✅ |
 | C1.b it carries the reason | `src/engine/ledger/payment-category.ts:categoryOfReason` | ✅ |
 | C1.c it may be dated | `src/engine/simulation/stages/settlement.ts:rowDue` | ✅ |
 | C2 settlement applies each instruction by one rule | `src/engine/ledger/accounts.ts:applySettledRow` | ✅ |
@@ -124,7 +124,7 @@ checked by `scripts/check-atlas.sh`.
 | C2.b same-bank payment moves no reserves | `src/engine/ledger/accounts.ts:leg` | ✅ |
 | C2.d VERIFY Σ(all legs) = 0, per currency | `src/engine/audit/wires.ts:auditWires` | ✅ |
 | C3 a cross-currency payment is two amounts and a rate | `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ✅ |
-| C4 the money creators are enumerable and few | `src/engine/ledger/party.ts:PARTY_KINDS` | ✅ |
+| C4 the money creators are enumerable and few | `src/engine/ledger/party.ts:PARTY_KINDS`, `src/domain/party.ts:PartyRef` | ✅ |
 | C4.a a bank writing a loan creates a deposit | `src/engine/ledger/accounts.ts:creditCreatedByBank` | ✅ |
 | C4.b the central bank creates reserves | `src/engine/ledger/accounts.ts:centralBankIssuanceLocal` | ✅ |
 | C4.c VERIFY Δ money stock = C4.a + C4.b and nothing else | `src/engine/audit/money.ts:m6` | ⚠️ |
@@ -246,6 +246,39 @@ The rest of the thirty builds, in twenty files, now go through the one builder. 
   the walk as `if (!byTicker.has(asTicker(c.id)))` — a test against the tickers seen SO FAR, so a
   colliding firm later in the walk was missed and the id won instead. Two passes now, and the
   `asTicker(c.id)` cast (an entity id branded a ticker to compare across spaces) is gone.
+
+### C4 — THERE WERE **FOUR** PARTY UNIONS, AND THREE KEY FORMATS (§3.13-BOOK c-then-3a)
+
+C4 says the money creators are enumerable, and `PARTY_KINDS` enumerates them — but `PartyRef` was
+not the only union naming a party. Three more existed, each re-declaring arms of it verbatim:
+
+| union | arms | where |
+|---|---|---|
+| `PartyRef` | 10 | `engine/ledger/party.ts` |
+| `DerivativeParty` | COMPANY, BANK, INSTITUTION | `domain/derivatives/contract.ts` |
+| `ClaimHolder` | COMPANY, BANK, INSTITUTION — **the same three, under a second name** | `domain/estate.ts` |
+| `RepoParty` | BANK, INSTITUTION, CENTRAL_BANK | `domain/repo.ts` |
+
+with **three key functions in three formats** for the same party: `partyKey` and
+`derivativePartyKey` write `INSTITUTION:<id>`, `repoPartyKey` writes `INST:<id>`. Nothing kept any
+of them in step — a new arm, or a change to how an arm is keyed, had to be made four times or it
+silently was not, which is the exact failure mode `PARTY_KINDS`' compile-loud completeness check
+exists to prevent *within* `PartyRef`.
+
+**Why it happened is structural and is fixed:** the union lived in `engine/ledger/`, beside the
+interning table, so the domain modules that also had to name a party could not import it. The type
+is `domain/party.ts` now — the dense-integer table stays in the ledger, which re-exports it so no
+importer moved — and the other three are `Extract` views. `DerivativeParty` and `ClaimHolder` are
+both `CounterpartyRef`; `RepoParty`'s central-bank arm is the one genuine variant, carrying no
+region because `reg.repoBook` is per region and `'CB'` is therefore unambiguous inside it (checked
+at `repo-clearing.ts:379,814`, not assumed).
+
+**And the 204 hand-built literals now go through eight constructors.** `{ kind: 'COMPANY', ticker:
+… }` and its three siblings were written out by hand 204 times. They split, and the split IS the
+measurement for (c-then-3b): **123 sites hold the entity** and pass it (`companyParty(c)`), and
+those survive a change of key untouched; **81 hold only a bare ticker** (`companyPartyOfTicker(t)`)
+and are exactly the sites that will need an entity found for them. `grep -c PartyOfTicker` is the
+size of what is left.
 
 ### ⚠️ E3 — "TWO INSTRUCTIONS THAT BOTH DRAW ON ONE BALANCE CANNOT BOTH SUCCEED BY LUCK"
 

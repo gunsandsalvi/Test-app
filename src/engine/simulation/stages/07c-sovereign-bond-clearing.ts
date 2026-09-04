@@ -43,6 +43,7 @@
  */
 
 import { bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
+import { bankSecuritiesParty } from '../../../domain/party';
 
 import { GameState, RegionId, ItemizedHolding } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
@@ -454,7 +455,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const reservesLocal = bankReservesOf(ctx.v2, bank.ticker);
       const facilityBookLocal = facilityBookOf(ctx.v2, bank.ticker);
       const settledCashLocal = reservesLocal
-        + pendingSettlementLocal(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
+        + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
       const fundableLocal = Math.min(
         Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
           + unencumberedBorrowingCapacityLocal(sheet, repoHaircuts, encumberedFace),
@@ -605,7 +606,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         newBook[instrumentId] = usd;
         bondsAfter.set(instrumentId, { valueLocal: usd });
       });
-      clearedBookDelta({ kind: 'BANK_SECURITIES', ticker: bank.ticker }, regionId, 'GOV_BOND', bondsBefore, bondsAfter, () => undefined, 'sovereign bond clearing fill');
+      clearedBookDelta(bankSecuritiesParty(bank), regionId, 'GOV_BOND', bondsBefore, bondsAfter, () => undefined, 'sovereign bond clearing fill');
       const prevClearedLocal = bonds.reduce((acc, b) => acc + (existingSheet?.sovereignBondHoldingsByBond?.[b.id] ?? 0), 0);
       const newClearedLocal = bonds.reduce((acc, b) => acc + (newBook[b.id] ?? 0), 0);
       const newTotalLocal = Object.values(newBook).reduce((acc, v) => acc + v, 0);

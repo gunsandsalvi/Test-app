@@ -15,6 +15,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { companyPartyOfTicker } from '../../../domain/party';
 import { CURRENCY_BY_REGION, CurrencyCode } from '../../../domain/geography';
 import { isActiveCompany } from '../../../domain/company';
 import { TradeInvoice } from '../../../domain/trade-invoice';
@@ -68,8 +69,8 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
     // other in the aggregate — a payment whose counterparty is known has no business at a
     // boundary. It settles at TODAY's rate, which is where the transaction FX exposure lands.
     pay(ctx, {
-      payer: { kind: 'COMPANY', ticker: invoice.buyerTicker },
-      payee: { kind: 'COMPANY', ticker: invoice.sellerTicker },
+      payer: companyPartyOfTicker(invoice.buyerTicker),
+      payee: companyPartyOfTicker(invoice.sellerTicker),
       amount: settledLocal,
       currency: invoice.currency as CurrencyCode,
       reason: 'trade invoice settled',

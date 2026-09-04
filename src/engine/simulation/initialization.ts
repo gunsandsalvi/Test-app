@@ -1,5 +1,6 @@
 
 import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
+import { companyParty } from '../../domain/party';
 import { stashSeedRevenueHistory, drainSeedRevenueHistories, drainSeedRings, peekSeedRing, typeRefOf } from '../../engine2/world';
 import { getSimulationDate } from '../formatters';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
@@ -1658,7 +1659,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // its opening cash — before the close, which reads the banks' corporate and institutional lines
   // off them.
   // A3.1b: a bank has no company account — its money is its reserves (close-seed opens that row).
-  companies.forEach((c) => { if (!(c.isBankEntity && c.bankBalanceSheet)) openAccount(seedV2, { kind: 'COMPANY', ticker: c.ticker }, currencyOf(c.region), openingCashOf(c)); });
+  companies.forEach((c) => { if (!(c.isBankEntity && c.bankBalanceSheet)) openAccount(seedV2, companyParty(c), currencyOf(c.region), openingCashOf(c)); });
   institutionalEntities.forEach((e) => openAccount(seedV2, { kind: 'INSTITUTION', id: e.id }, currencyOf(e.region), openingCashOf(e)));
   // A3.5: the treasury's account opens at the operating balance the seed sized (macro/initialization.ts).
   (Object.keys(regions) as RegionId[]).forEach((r) => { const cb = regions[r]?.centralBankSheet; if (cb) openAccount(seedV2, { kind: 'GOVERNMENT', region: r }, currencyOf(r), openingCashOf(cb)); });

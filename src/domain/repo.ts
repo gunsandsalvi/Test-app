@@ -19,13 +19,21 @@
  */
 
 import { RegionId } from './geography';
+import type { PartyOfKind } from './party';
 import type { InstrumentId } from './ids';
-import type { EntityId } from './ids';
 import type { Ticker } from './ids';
 
+/**
+ * §3.13-BOOK (c-then-3a) — the two named arms are views of the ONE union; the central bank's is
+ * the one genuine variant in the model and stays declared here. `PartyRef`'s
+ * `{ kind: 'CENTRAL_BANK'; region }` carries a region because a payment can cross a border; a
+ * repo cannot. `reg.repoBook` is per region, so the region is already stated by the book the
+ * contract sits in and `repoPartyKey`'s `'CB'` is unambiguous within it — checked, not assumed
+ * (`repo-clearing.ts:379,814` both read one region's book).
+ */
 export type RepoParty =
-  | { kind: 'BANK'; ticker: Ticker }
-  | { kind: 'INSTITUTION'; id: EntityId }
+  | PartyOfKind<'BANK'>
+  | PartyOfKind<'INSTITUTION'>
   /** The standing facility. A posted-rate seat in the auction, and a real counterparty here. */
   | { kind: 'CENTRAL_BANK' };
 

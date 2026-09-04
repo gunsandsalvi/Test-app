@@ -538,11 +538,18 @@ written from here):
        builds**, which is three (c2)-sized jobs in one line:
          · **c-then-1** the index EXISTS and the LEDGER'S identity reads it — **DONE, in §9.**
          · **c-then-2** THE STAGE-LOCAL INDEXES — **DONE, in §9.**
-         · **c-then-3** `PartyRef`'S FOUR TICKER ARMS KEY BY `EntityId`, which is what makes it a
-           VIEW rather than a union. `partyKey`'s string changes with it, so
-           `holderAccruedInterestLocal` and `sovereignAccruedInterestLocal` move too. **And
-           `DerivativeParty` (`contract.ts:25`) is a SECOND party union** — `PartyRef`'s COMPANY /
-           BANK / INSTITUTION arms re-declared — which ends here or it drifts alone.
+         · **c-then-3a** ONE UNION, AND THE CONSTRUCTORS — **DONE, in §9.** There were FOUR party
+           unions, not two: `DerivativeParty` and `estate.ts:ClaimHolder` are the SAME three arms
+           under two names, and `repo.ts:RepoParty` a third overlapping set, with three key
+           formats between them. All are views of `domain/party.ts:PartyRef` now, and the 204
+           hand-built literals go through eight constructors.
+         · **c-then-3b** `PartyRef`'S FOUR TICKER ARMS KEY BY `EntityId`, which is what makes it a
+           VIEW rather than a union. **The job is 81 sites and it is countable**:
+           `grep -c PartyOfTicker` — the constructors that take a bare ticker rather than the
+           entity, so a ticker-only site must be given a way to name the firm. The other 123
+           already pass the entity and survive the change untouched. `partyKey`'s string changes
+           with it, so `holderAccruedInterestLocal` and `sovereignAccruedInterestLocal` move too,
+           and `repoPartyKey`'s `INST:` reconciles with `partyKey`'s `INSTITUTION:` here.
          · **c-then-4** `O8`'S PARTY ARM WIDENS from the derivatives book to every party-keyed
            store, which one index can now answer.
     d. **THE INSTRUMENT INDEX, AND CURRENCY LANDS ON IT** — every tranche, listed equity, fund
@@ -1639,6 +1646,40 @@ Atlas: `the-register` F1 gains `refs.ts:RefColumn` beside `ids.ts:InstrumentId`,
 false written up in that tree — the one table still holds ~15 type tags and 5 region codes among
 thousands of instrument ids, so *"enumerate every instrument"* has no answer until step two. Gates
 green; no run.
+
+**13-BOOK slice (c-then-3a) — THERE WERE FOUR PARTY UNIONS, AND THE PLAN KNEW ABOUT TWO.** The
+step's own text named `DerivativeParty` as the second. Reading found two more, and the pair of them
+is the sharper finding: **`estate.ts:ClaimHolder` declares the SAME THREE ARMS as
+`DerivativeParty`** — COMPANY, BANK, INSTITUTION, identically — so the model carried one type under
+two names, and `repo.ts:RepoParty` a third overlapping set beside them. Between the four unions,
+**three key functions in three formats**: `partyKey` and `derivativePartyKey` write
+`INSTITUTION:<id>`, `repoPartyKey` writes `INST:<id>`. Nothing kept any of them in step — a new arm
+had to be added four times or it silently was not, which is precisely what `PARTY_KINDS`'
+compile-loud completeness check exists to prevent INSIDE `PartyRef` and could not see outside it.
+
+**The cause is structural, and that is why it is fixable rather than a list of edits.** The union
+lived in `engine/ledger/party.ts`, beside the dense-integer interning table — engine machinery — so
+every domain module that had to name a party could not import it and wrote its own. `PartyRef` is
+`domain/party.ts` now; the interning table stays in the ledger and re-exports it, so not one
+importer moved. The other three are `Extract` views: `DerivativeParty` and `ClaimHolder` are both
+`CounterpartyRef` (the three arms a party can be FACED as), and `RepoParty`'s central-bank arm is
+the one genuine variant — it carries no region because `reg.repoBook` is per region, so
+`repoPartyKey`'s `'CB'` is unambiguous within the book a contract sits in. Checked at
+`repo-clearing.ts:379,814` rather than assumed; had the book been global, `'CB'` would have summed
+four central banks into one.
+
+**AND THE MEASUREMENT (c-then-3b), WHICH IS THE POINT OF THIS COMMIT.** `{ kind: 'COMPANY', ticker:
+… }` and its three siblings were written by hand **204 times**. They now go through eight
+constructors, and the split of which constructor is the size of the remaining job: **123 sites hold
+the entity** and pass it, and a change of key leaves them untouched; **81 hold only a bare ticker**
+and are exactly the sites that must be given a way to name the firm. `grep -c PartyOfTicker` is
+that number, in 28 files — the same idiom `equityInstrumentId` uses to count its own crossing.
+This is 13-READ's lesson applied a third time: give every writer a constructor first, and the
+branding after it fits.
+
+The whole pass cost 4 compiler errors across 204 rewritten sites, two of them real: a local
+`bankParty` in `accounts.ts` shadowed the new import, and a test compared against an unbranded
+ticker literal. 50 files, +286 −242. Gates green (150 tests); no run.
 
 **13-BOOK slice (c-then-2) — THE OTHER TWENTY-FOUR, AND THE MIRROR THAT HAD TO BE HAND-REGISTERED
 AT EVERY FIRM BIRTH.** The rest of the thirty builds, across twenty files, now go through the one

@@ -34,6 +34,7 @@
  */
 
 import { CurrencyCode, CURRENCY_CODES, RegionId, currencyOf } from '../../../domain/geography';
+import { bankSecuritiesPartyOfTicker } from '../../../domain/party';
 import { convert } from '../../../domain/currency';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { Company, banksOf } from '../../../domain/company';
@@ -113,7 +114,7 @@ export function fundForeignCurrencyShortfalls(
     const costHome = convert(amount, cur, home, ctx.fx) * (1 + FX_SPREAD_BPS / 10000);
     desks.forEach(({ ticker, share }) => {
       if (share <= 0) return;
-      const desk: PartyRef = { kind: 'BANK_SECURITIES', ticker };
+      const desk: PartyRef = bankSecuritiesPartyOfTicker(ticker);
       pay(ctx, { payer: client, payee: desk, amount: costHome * share, currency: home, reason: 'fx conversion: currency bought' });
       pay(ctx, { payer: desk, payee: client, amount: amount * share, currency: cur, reason: 'fx conversion: currency delivered' });
     });
@@ -151,7 +152,7 @@ export function fundForeignCurrencyShortfalls(
       const proceeds = convert(surplus, cur, home, ctx.fx) * (1 - FX_SPREAD_BPS / 10000);
       desks.forEach(({ ticker, share }) => {
         if (share <= 0) return;
-        const desk: PartyRef = { kind: 'BANK_SECURITIES', ticker };
+        const desk: PartyRef = bankSecuritiesPartyOfTicker(ticker);
         pay(ctx, { payer: ref, payee: desk, amount: surplus * share, currency: cur, reason: 'fx conversion: currency sold' });
         pay(ctx, { payer: desk, payee: ref, amount: proceeds * share, currency: home, reason: 'fx conversion: proceeds delivered' });
       });

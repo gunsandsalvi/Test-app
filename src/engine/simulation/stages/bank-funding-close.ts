@@ -15,6 +15,7 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import { bankSecuritiesParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { GameState } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
@@ -44,7 +45,7 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
       if (cb) cb.loansToBanksLocal = (cb.loansToBanksLocal ?? 0) + raisedLocal;
       pay(ctx, {
         payer: { kind: 'CENTRAL_BANK', region: bank.region },
-        payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker },
+        payee: bankSecuritiesParty(bank),
         amount: raisedLocal,
         currency: currencyOf(bank.region),
         reason: 'central bank loan drawn',

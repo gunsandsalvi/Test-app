@@ -8,6 +8,7 @@
  */
 
 import { treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
+import { bankSecuritiesParty, bankSecuritiesPartyOfTicker, companyParty } from '../../../domain/party';
 import { retireTranche, issueTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { materializeGovLadder, ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
 import { govBillTrancheId, govBondTrancheId } from '../../../domain/sovereign-id';
@@ -249,8 +250,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           collateralCalledByBorrower.set(ct.borrowerTicker,
             (collateralCalledByBorrower.get(ct.borrowerTicker) ?? 0) + callLocal);
           pay(ctx, {
-            payer: { kind: 'BANK_SECURITIES', ticker: ct.borrowerTicker },
-            payee: ct.lender.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: ct.lender.ticker }
+            payer: bankSecuritiesPartyOfTicker(ct.borrowerTicker),
+            payee: ct.lender.kind === 'BANK' ? bankSecuritiesParty(ct.lender)
               : ct.lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: ct.lender.id }
                 : { kind: 'CENTRAL_BANK', region: regionId },
             amount: callLocal,
@@ -279,7 +280,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           redemptionPaidLocal += redeemedLocal;
           pay(ctx, {
             payer: { kind: 'GOVERNMENT', region: regionId },
-            payee: { kind: 'BANK_SECURITIES', ticker: c.ticker },
+            payee: bankSecuritiesParty(c),
             amount: redeemedLocal,
             currency: currencyOf(regionId),
             reason: 'sovereign redemption',
@@ -329,7 +330,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         redemptionPaidLocal += redeemedLocal;
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
-          payee: { kind: 'BANK_SECURITIES', ticker: c.ticker },
+          payee: bankSecuritiesParty(c),
           amount: redeemedLocal,
           currency: currencyOf(regionId),
           reason: 'sovereign redemption',
@@ -356,7 +357,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         redemptionPaidLocal += redeemedLocal;
         pay(ctx, {
           payer: { kind: 'GOVERNMENT', region: regionId },
-          payee: { kind: 'COMPANY', ticker: c.ticker },
+          payee: companyParty(c),
           amount: redeemedLocal,
           currency: currencyOf(regionId),
           reason: 'sovereign redemption',

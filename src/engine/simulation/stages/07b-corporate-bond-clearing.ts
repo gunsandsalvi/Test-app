@@ -69,6 +69,7 @@
  */
 
 import { InstrumentId } from '../../../domain/ids';
+import { companyParty } from '../../../domain/party';
 import { GameState, RegionId, Company, PrimaryOffering } from '../../../types';
 import { ensureV2, V2World } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, TR_CP, TR_FACILITY, issuerIdOf, trancheScheduleOf, trancheIdOf } from '../../../engine2/tranches';
@@ -622,7 +623,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
      *  the source of who issued a tranche. */
     const issuerPartyOf = (instrumentId: InstrumentId): PartyRef | undefined => {
       const issuer = companyById.get(issuerIdOf(ctx.v2, instrumentId));
-      return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
+      return issuer ? companyParty(issuer) : undefined;
     };
     // ONE reading of who a participant is, for both halves of its settlement: the money and the
     // accrual ledger's key. The weekly accrual walk names its holders the same way

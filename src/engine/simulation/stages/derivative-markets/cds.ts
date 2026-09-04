@@ -19,6 +19,7 @@
  */
 
 import { bankReservesOf } from '../../../ledger/accounts';
+import { bankParty, bankPartyOfTicker } from '../../../../domain/party';
 import { RegionId, Company } from '../../../../types';
 import { ensureV2 } from '../../../../engine2/world';
 import { institutionProfile } from '../../../../domain/institution-profiles';
@@ -78,7 +79,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       facilityRowsOf(ctx.v2, bank.ticker).forEach((l) => {
         exposureByIssuer.set(l.borrowerId, (exposureByIssuer.get(l.borrowerId) ?? 0) + Math.max(0, l.principalLocal));
       });
-      const party: DerivativeParty = { kind: 'BANK', ticker: bank.ticker };
+      const party: DerivativeParty = bankParty(bank);
       exposureByIssuer.forEach((exposureLocal, issuerId) => {
         const issuer = companyById.get(issuerId);
         if (!issuer || issuer.region !== regionId || !isActiveCompany(issuer)) return;
@@ -242,7 +243,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
           // §3.13-BOOK (c2b): a participant id is its own space. A `CDSDESK-` seat is a bank's
           // desk; anything else in this book is an institution bidding under its entity id.
           const seller: DerivativeParty = participantId.startsWith('CDSDESK-')
-            ? { kind: 'BANK', ticker: asTicker(participantId.slice('CDSDESK-'.length)) }
+            ? bankPartyOfTicker(asTicker(participantId.slice('CDSDESK-'.length)))
             : { kind: 'INSTITUTION', id: asEntityId(participantId) };
           struck.push({
             id: `${regionId}-CDS-${issuer.id}-${week}-${seq++}`,

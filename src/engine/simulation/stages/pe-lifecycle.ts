@@ -1,4 +1,5 @@
 import { V2World } from '../../../engine2/world';
+import { bankCreditPartyOfTicker, companyParty } from '../../../domain/party';
 /**
  * HC Wave 2 — the corporate lifecycle: LBOs, dividend recaps, exits, real IPOs, births, and
  * sponsor equity wiped on default.
@@ -717,7 +718,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       // The recap dividend is a PAYMENT — the company (whose bond issue primary
       // settlement already paid it for) pays its sponsor — not a direct cash write on each side.
       pay(ctx, {
-        payer: { kind: 'COMPANY', ticker: comp.ticker },
+        payer: companyParty(comp),
         payee: { kind: 'INSTITUTION', id: deal.sponsorId },
         amount: settlement.proceedsLocal,
         currency: currencyOf(comp.region),
@@ -753,7 +754,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
     const retainedShares = Math.max(0, shares - offeredShares);
     if (retainedShares > 0) {
       issueHolding(ctx.v2,
-        { kind: 'COMPANY', ticker: comp.ticker },
+        companyParty(comp),
         { kind: 'INSTITUTION', id: deal.sponsorId },
         {
           instrumentType: 'EQUITY', instrumentId: equityInstrumentId(comp.id), issuerRegion: comp.region as RegionId,
@@ -806,8 +807,8 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
   };
   issueTranche(ctx.v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'firm birth: facility lent by the home bank');
   pay(ctx, {
-    payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
-    payee: { kind: 'COMPANY', ticker: c.ticker },
+    payer: bankCreditPartyOfTicker(c.homeBankTicker),
+    payee: companyParty(c),
     amount: tranche.principalLocal,
     currency: currencyOf(c.region),
     reason: 'firm birth: facility proceeds',
@@ -903,7 +904,7 @@ export function runFirmBirthsForRegion(
       if (openingCashLocal > 0) {
         pay(ctx, {
           payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
-          payee: { kind: 'COMPANY', ticker: c.ticker },
+          payee: companyParty(c),
           amount: openingCashLocal,
           currency: currencyOf(regionId),
           reason: 'firm birth: opening balance carved from pool',

@@ -11,6 +11,7 @@
  */
 
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
+import { bankCreditPartyOfTicker, bankPartyOfTicker, companyPartyOfTicker } from '../domain/party';
 import { currencyOf, RegionId } from '../domain/geography';
 import { GameState, Company, DebtTranche, NewsItem, SegmentFinancial } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
@@ -384,7 +385,7 @@ function makeCashPoster(ticker: Ticker, region: Company['region'], cashLocal: nu
     // as later slices name each flow, not a plug (rule 2).
     // SCALE §7.303 — the walk's own party ids, interned once per company: every settled leg
     // used to re-probe two string maps (partyId x2) per post, ~40k+ legs a week.
-    const selfPartyId = partyId({ kind: 'COMPANY', ticker });
+    const selfPartyId = partyId(companyPartyOfTicker(ticker));
     // §3.13c: a firm's cash walk is in the firm's own money — every leg it posts is
     // denominated there, and a counterparty in another money converts on receipt.
     const money = currencyOf(region as RegionId);
@@ -639,7 +640,7 @@ function runCashWalk(args: {
           const amountLocal = carryingCostLocal * share;
           if (!(amountLocal > 0)) return;
           paidLocal += amountLocal;
-          post('inventory carrying cost', -amountLocal, { kind: 'COMPANY', ticker: holderTicker });
+          post('inventory carrying cost', -amountLocal, companyPartyOfTicker(holderTicker));
         });
         // §5-CLOSE: stock nobody else warehouses is warehoused by the firm itself, at its own
         // cost already inside its operating expense — no payment leaves, and nothing is paid to
@@ -651,8 +652,8 @@ function runCashWalk(args: {
       post('interest paid', -weeklyInterest, undefined, false);
       if (facilityInterestWeeklyLocal > 0 && homeBankTicker) {
         pay(ctx, {
-          payer: { kind: 'COMPANY', ticker },
-          payee: { kind: 'BANK', ticker: homeBankTicker },
+          payer: companyPartyOfTicker(ticker),
+          payee: bankPartyOfTicker(homeBankTicker),
           amount: facilityInterestWeeklyLocal,
           currency: currencyOf(region as RegionId),
           reason: 'facility interest to the lending bank',
@@ -810,7 +811,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // the borrower's balance appears against it, in the same statement (settlement.ts). Naming
     // the house bank's CREDIT is what tells settlement no reserve should move.
     const bankCredit: PartyRef | undefined = L8.homeBankTicker[row]
-      ? { kind: 'BANK_CREDIT', ticker: L8.homeBankTicker[row] }
+      ? bankCreditPartyOfTicker(L8.homeBankTicker[row])
       : undefined;
 
     // SCALE §7.303 — ONE PASS OVER THE LADDER, now made in the front pass (same walk, same
@@ -1187,7 +1188,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         drawnRevolverRow = issueTranche(v2, issuer, revolver, 'revolver drawn: liquidity shortfall');
         newTotalDebt += drawLocal;
         post('revolver drawn: liquidity shortfall', drawLocal,
-          L8.homeBankTicker[row] ? { kind: 'BANK_CREDIT', ticker: L8.homeBankTicker[row] } : undefined);
+          L8.homeBankTicker[row] ? bankCreditPartyOfTicker(L8.homeBankTicker[row]) : undefined);
       }
     }
 
@@ -1778,7 +1779,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           const prepaidLocal = Math.min(ladderTotalLocal, ladderTotalLocal - postPrepaySumLocal);
           facilityRepaidByBank.forEach((repaidLocal, bankTicker) => {
             post('facility prepaid: the loan and the deposit die together', -repaidLocal,
-              { kind: 'BANK_CREDIT', ticker: bankTicker });
+              bankCreditPartyOfTicker(bankTicker));
           });
           post('surplus-cash debt prepayment', -(prepaidLocal - facilityRepaidLocal), undefined, false);
           debtRepaymentThisWeek += prepaidLocal;
@@ -2232,7 +2233,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const excessLocal = Math.max(0, cash.usd - bufferLocal);
       if (excessLocal > 1e6) {
         post('subsidiary excess cash repatriated to the parent', -excessLocal,
-          { kind: 'COMPANY', ticker: comp.parentTicker });
+          companyPartyOfTicker(comp.parentTicker));
       }
     }
     if (!comp.isBankEntity && !comp.isInstitutionalEntity && !isDefaulted && comp.listingStatus !== 'PRIVATE') {

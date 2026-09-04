@@ -18,6 +18,7 @@
  */
 
 import { riskAversionOf } from '../../../../domain/preferences';
+import { bankPartyOfTicker, bankSecuritiesPartyOfTicker, companyParty } from '../../../../domain/party';
 import { RegionId } from '../../../../types';
 import { institutionProfile } from '../../../../domain/institution-profiles';
 import { InstitutionalEntity } from '../../../../domain/institutions';
@@ -219,7 +220,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         riskAversion: riskAversionOf(c.management),
       });
       if (!(mustHedgeLocal > 0)) return;
-      const gapLocal = mustHedgeLocal - coveredLocal({ kind: 'COMPANY', ticker: c.ticker }, foreign);
+      const gapLocal = mustHedgeLocal - coveredLocal(companyParty(c), foreign);
       if (gapLocal <= 1e6) return;
       gaps.set(foreign, gapLocal);
       tolerances.set(foreign, hedgeToleranceBps(annualSigmaFor(foreign), mustHedgeLocal / exposureLocal));
@@ -347,7 +348,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         classId: 'FX_FORWARD',
         regionId: holderRegion,
         a: holder,
-        b: { kind: 'BANK', ticker: dealer },
+        b: bankPartyOfTicker(dealer),
         notional: writableLocal,
         // The traded rate, not the theoretical one: CIP moved AGAINST the client by the desk's
         // basis, because the desk is charging for its balance sheet. Signing this the other way
@@ -368,7 +369,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       // Initial margin is the CLIENT'S money sitting with the desk: reserves move, equity does
       // not, and the desk carries it on its funding line as the liability it is.
       if (marginLocal > 0) {
-        pay(ctx, { payer: holder, payee: { kind: 'BANK_SECURITIES', ticker: dealer }, amount: marginLocal, currency: contract.currency, reason: 'fx forward initial margin' });
+        pay(ctx, { payer: holder, payee: bankSecuritiesPartyOfTicker(dealer), amount: marginLocal, currency: contract.currency, reason: 'fx forward initial margin' });
       }
       desk.chargedPfeLocal += writableLocal * FX.pfeAddOnRate;
       desk.book.grossNotionalLocal += writableLocal;
@@ -392,8 +393,8 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   ctx.updatedCompanies.forEach((c) => {
     const gaps = corpGapByTicker.get(c.ticker);
     if (!gaps) return;
-    strikeFor({ kind: 'COMPANY', ticker: c.ticker }, c.region, `CORP-${c.ticker}`, gaps,
-      Math.max(0, cashOf(ctx.v2, c) + pendingSettlementLocal(ctx, { kind: 'COMPANY', ticker: c.ticker })));
+    strikeFor(companyParty(c), c.region, `CORP-${c.ticker}`, gaps,
+      Math.max(0, cashOf(ctx.v2, c) + pendingSettlementLocal(ctx, companyParty(c))));
   });
   strikeDerivatives(ctx, state, struck);
 

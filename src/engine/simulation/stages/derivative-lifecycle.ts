@@ -19,6 +19,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { bankSecuritiesParty } from '../../../domain/party';
 
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../domain/derivatives/contract';
@@ -206,7 +207,7 @@ function releaseInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract, vie
   // has ceased to exist has nowhere to receive it, the same rule the close-out legs follow.
   if (!(marginLocal > MIN_LEG_LOCAL) || c.b.kind !== 'BANK' || view.partyState(c.a) === 'GONE') return;
   pay(ctx, {
-    payer: { kind: 'BANK_SECURITIES', ticker: c.b.ticker },
+    payer: bankSecuritiesParty(c.b),
     payee: c.a,
     amount: marginLocal,
     currency: c.currency,

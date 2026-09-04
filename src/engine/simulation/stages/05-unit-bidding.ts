@@ -20,6 +20,7 @@
  */
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
+import { bankParty, companyParty, companyPartyOfTicker } from '../../../domain/party';
 import { partyId } from '../../ledger/party';
 import { defect } from '../../../domain/defect';
 import { categoryPriceTier, householdBudgetReachMultiple, budgetDemandLadder, DEMAND_LADDER_RUNGS } from '../../../domain/industry';
@@ -174,7 +175,7 @@ function fxFeeBanksOf(firms: Company[], region: RegionId): { banks: Company[]; t
  */
 function partyOfKey(key: string, regionId: RegionId, lookup: GlobalFirmLookup): PartyRef {
   const comp = lookup.byKey.get(key);
-  if (comp) return { kind: 'COMPANY', ticker: comp.ticker };
+  if (comp) return companyParty(comp);
   if (key.startsWith('HOUSEHOLD')) return { kind: 'HOUSEHOLD', region: regionId };
   if (key.startsWith('GOVERNMENT') || key.startsWith('GOV')) return { kind: 'GOVERNMENT', region: regionId };
   // A segment key is a real party now — its sales proceeds land on the pool's own book
@@ -820,7 +821,7 @@ function settleContracts(
     if (isCapitalGoodCategory) custUp.capexPurchasesLocal = (custUp.capexPurchasesLocal ?? 0) + paymentL[i];
     payByIds(ctx, custPid, supPid, paymentL[i] - appliedL[i], currencyOf(customer.region), R_DELIVERY);
     // W4: the goods move supplier → customer by wire; the lot lands with it.
-    const deliveryWire = deliverGoods({ kind: 'COMPANY', ticker: supplier.ticker }, { kind: 'COMPANY', ticker: customer.ticker }, subUnitId, actualT[i], actualT[i] > 0 ? paymentL[i] / actualT[i] : 0, 'contract delivery');
+    const deliveryWire = deliverGoods(companyParty(supplier), companyParty(customer), subUnitId, actualT[i], actualT[i] > 0 ? paymentL[i] / actualT[i] : 0, 'contract delivery');
     addInputInventory(v2, custUp, customer, subUnitId, supplier.ticker, actualT[i], paymentL[i], nextWeek, deliveryWire);
 
     if (fillL[i] < 0.95 && needLocal[i] > 0) {
@@ -2019,7 +2020,7 @@ function runSubUnitMarkets(
           const unservedLocal = freightLocal - paidLocal;
           if (unservedLocal > 0.01) {
             pay(ctx, {
-              payer: { kind: 'COMPANY', ticker: comp.ticker },
+              payer: companyParty(comp),
               payee: { kind: 'SEGMENT', region: origin, industry: 'AutomotiveTransport' },
               amount: unservedLocal,
               currency: currencyOf(origin),
@@ -2032,7 +2033,7 @@ function runSubUnitMarkets(
         const sellerParty = partyOfKey(l.sellerKey, origin, lookup);
         if (arrivalWeek <= nextWeek) {
           // W4: a same-week delivery moves seller → buyer by one wire.
-          const w = deliverGoods(sellerParty, { kind: 'COMPANY', ticker: comp.ticker }, subUnitId, l.units, perUnit, 'goods sold: delivered');
+          const w = deliverGoods(sellerParty, companyParty(comp), subUnitId, l.units, perUnit, 'goods sold: delivered');
           addInputInventory(v2, buyerUpdate, comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek, w);
         } else {
           // W4: a consignment is HELD BY ITS CARRIER while it moves — the lane's named
@@ -2043,7 +2044,7 @@ function runSubUnitMarkets(
             const units = l.units * share;
             if (!(units > 1e-9)) return;
             consignedUnits += units;
-            deliverGoods(sellerParty, { kind: 'COMPANY', ticker: carrierTicker }, subUnitId, units, perUnit, 'goods sold: consigned to the carrier');
+            deliverGoods(sellerParty, companyPartyOfTicker(carrierTicker), subUnitId, units, perUnit, 'goods sold: consigned to the carrier');
             ctx.shipmentsDispatched.push({
               buyerTicker: comp.ticker, sellerKey: asTicker(l.sellerKey), subUnitId,
               units, landedCostPerUnit: perUnit, arrivalWeek, carrierTicker, carrierRegion: carrierRegion ?? origin,
@@ -2158,8 +2159,8 @@ function runSubUnitMarkets(
                 ? ((b.bankMarketShare ?? 0) || 1) / totalShare : 0;
               if (share <= 0) return;
               pay(ctx, {
-                payer: { kind: 'COMPANY', ticker: comp.ticker },
-                payee: { kind: 'BANK', ticker: b.ticker },
+                payer: companyParty(comp),
+                payee: bankParty(b),
                 amount: fxFeeLocal * share,
                 currency: currencyOf(comp.region),
                 reason: 'fx conversion spread',
@@ -2248,7 +2249,7 @@ function runSubUnitMarkets(
       fxBanks.forEach((b) => {
         const share = totalShare > 0 ? ((b.bankMarketShare ?? 0) || 1) / totalShare : 0;
         if (share <= 0) return;
-        const bankPid = partyId({ kind: 'BANK', ticker: b.ticker });
+        const bankPid = partyId(bankParty(b));
         if (hhFeeLocal > 0.01) payByIds(ctx, hhPid.get(buyerRegion)!, bankPid, hhFeeLocal * share, currencyOf(buyerRegion), R_FX_SPREAD);
         if (govFeeLocal > 0.01) payByIds(ctx, govPid.get(buyerRegion)!, bankPid, govFeeLocal * share, currencyOf(buyerRegion), R_FX_SPREAD);
       });
@@ -2543,7 +2544,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     },
     pidOf: (comp) => {
       let pid = pidByComp.get(comp);
-      if (pid === undefined) { pid = partyId({ kind: 'COMPANY', ticker: comp.ticker }); pidByComp.set(comp, pid); }
+      if (pid === undefined) { pid = partyId(companyParty(comp)); pidByComp.set(comp, pid); }
       return pid;
     },
     updateOf: (comp) => {
@@ -2563,7 +2564,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     },
     pidOfCarrier: (ticker) => {
       let v = carrierPidByTicker.get(ticker);
-      if (v === undefined) { v = partyId({ kind: 'COMPANY', ticker }); carrierPidByTicker.set(ticker, v); }
+      if (v === undefined) { v = partyId(companyPartyOfTicker(ticker)); carrierPidByTicker.set(ticker, v); }
       return v;
     },
     hhPid,

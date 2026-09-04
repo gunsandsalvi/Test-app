@@ -40,6 +40,7 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import { bankParty, bankPartyOfTicker, bankSecuritiesParty, bankSecuritiesPartyOfTicker } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { RegionId, Region } from '../../../types';
 import { overPledgedByBond } from '../../../domain/collateral';
@@ -239,7 +240,7 @@ export const CASH_SLEEVE_OVERNIGHT_SHARE = 0.5;
 /** Who a contract's lender is, as a settlement party: a bank's reserves, an institution's
  *  balance, or the central bank's window. */
 const repoLenderParty = (lender: RepoParty, regionId: RegionId): PartyRef =>
-  lender.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: lender.ticker }
+  lender.kind === 'BANK' ? bankSecuritiesParty(lender)
     : lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: lender.id }
       : { kind: 'CENTRAL_BANK', region: regionId };
 
@@ -312,7 +313,7 @@ export function runRegionalRepoSession(
       reg.centralBankSheet.lastStandingFacilityInterestLocal = (reg.centralBankSheet.lastStandingFacilityInterestLocal ?? 0) + repoInterestToMaturityLocal(c);
     }
     pay(ctx, {
-      payer: { kind: 'BANK_SECURITIES', ticker: c.borrowerTicker },
+      payer: bankSecuritiesPartyOfTicker(c.borrowerTicker),
       payee: repoLenderParty(c.lender, regionId),
       amount: dueLocal,
       currency: currencyOf(regionId),
@@ -343,7 +344,7 @@ export function runRegionalRepoSession(
     // just been billed for is real money leaving, and a bank that cannot see it cannot know it is
     // short. The same read 07c makes before it bids.
     const settledCashLocal = bankReservesOf(ctx.v2, bank.ticker)
-      + pendingSettlementLocal(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
+      + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
     const shortfallLocal = householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO - settledCashLocal;
     if (shortfallLocal <= 0) return;
     const capacityLocal = unencumberedBorrowingCapacityLocal(sheet, haircuts, encumberedByTicker.get(bank.ticker));
@@ -386,7 +387,7 @@ export function runRegionalRepoSession(
         ...sheet,
         repoBorrowedLocal: Math.round((repoBorrowedLocal(book, bank.ticker) - srfBorrowedLocal(book, bank.ticker))),
         srfBorrowingLocal: Math.round(srfBorrowedLocal(book, bank.ticker)),
-        repoLentLocal: Math.round(repoLentLocal(book, { kind: 'BANK', ticker: bank.ticker })),
+        repoLentLocal: Math.round(repoLentLocal(book, bankParty(bank))),
         repoEncumberedCollateralLocal: Number(
           Array.from(encumberedFaceByBond(book, bank.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
         ),
@@ -424,7 +425,7 @@ export function runRegionalRepoSession(
     const sheet = sheetByTicker.get(bank.ticker);
     if (!sheet) return;
     const surplusLocal = bankReservesOf(ctx.v2, bank.ticker)
-      + pendingSettlementLocal(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker })
+      + pendingSettlementLocal(ctx, bankSecuritiesParty(bank))
       - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO;
     if (surplusLocal > 0) bankSurplusLocal.set(bank.ticker, surplusLocal);
   });
@@ -584,7 +585,7 @@ export function runRegionalRepoSession(
         const lender: RepoParty = pid === CB_SRF_SEAT_ID
           ? { kind: 'CENTRAL_BANK' }
           : lenderBank !== undefined
-            ? { kind: 'BANK', ticker: lenderBank }
+            ? bankPartyOfTicker(lenderBank)
             // §3.13-BOOK (c2b): the seat's tail IS the entity id — `repoInstitutionSeatId`
             // wrote it from one; a seat that parses as neither is the CB's, handled above.
             : { kind: 'INSTITUTION', id: asEntityId(repoInstitutionIdOfSeat(pid) ?? pid) };
@@ -633,7 +634,7 @@ export function runRegionalRepoSession(
     }
     pay(ctx, {
       payer: repoLenderParty(c.lender, regionId),
-      payee: { kind: 'BANK_SECURITIES', ticker: c.borrowerTicker },
+      payee: bankSecuritiesPartyOfTicker(c.borrowerTicker),
       amount: c.principalLocal,
       currency: currencyOf(regionId),
       reason: 'repo drawdown',
@@ -789,11 +790,11 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
         const callLocal = Math.min(c.principalLocal, c.principalLocal * (releasedFaceLocal / pledgedFaceLocal));
         c.principalLocal -= callLocal;
         repaidLocal += callLocal;
-        const payee: PartyRef = c.lender.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: c.lender.ticker }
+        const payee: PartyRef = c.lender.kind === 'BANK' ? bankSecuritiesParty(c.lender)
           : c.lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: c.lender.id }
             : { kind: 'CENTRAL_BANK', region: regionId };
         pay(ctx, {
-          payer: { kind: 'BANK_SECURITIES', ticker },
+          payer: bankSecuritiesPartyOfTicker(ticker),
           payee,
           amount: callLocal,
           currency: currencyOf(regionId),

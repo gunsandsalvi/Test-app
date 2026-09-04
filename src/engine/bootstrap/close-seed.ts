@@ -1,4 +1,5 @@
 import { sectorRowAt, openingCashOf, stashOpeningCash, openAccount, depositLinesAt, treasuryAccountOf, waysAndMeansOf, stashSeedGovLadder, seedGovLadderOf, mutableAccounts } from '../ledger/accounts';
+import { bankParty } from '../../domain/party';
 import { accruedPerFace, weeksAccrued, banksOf } from '../../domain/company';
 import { currencyOf } from '../../domain/geography';
 import { V2World } from '../../engine2/world';
@@ -81,7 +82,7 @@ export function closeSeedMoney(
       // only place the line exists (the seed's provisional sizing was a stash, retired here).
       mutableAccounts(v2).balance[sectorRowAt(v2, { kind: 'HOUSEHOLD', region: regionId }, b.ticker, currencyOf(regionId))] = lineLocal;
       // A3.6a: the bank's own account opens at the reserves the close strikes.
-      openAccount(v2, { kind: 'BANK', ticker: b.ticker }, currencyOf(regionId), openingCashOf(s));
+      openAccount(v2, bankParty(b), currencyOf(regionId), openingCashOf(s));
     });
     const hs = reg.householdState;
     // The seed's provisional sizing of the sector's deposits (macro/initialization.ts) is what

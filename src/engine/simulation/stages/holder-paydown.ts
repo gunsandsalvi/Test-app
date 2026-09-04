@@ -21,6 +21,7 @@
  */
 
 import { Company, RegionId } from '../../../types';
+import { bankSecuritiesParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { DealerDeskInventory } from '../../../domain/dealer-desk';
@@ -99,7 +100,7 @@ export function reconcileHolderPrincipal(args: {
     // slack rarely (twice in eight weeks across all banks).
     if (issuer.isBankEntity) return;
     const desiredBurnLocal = heldLocal - outstandingLocal;
-    const availableLocal = Math.max(0, cashOf(ctx.v2, issuer) + pendingSettlementLocal(ctx, { kind: 'COMPANY', ticker: issuer.ticker }));
+    const availableLocal = Math.max(0, cashOf(ctx.v2, issuer) + pendingSettlementLocal(ctx, companyParty(issuer)));
     const burnLocal = Math.min(desiredBurnLocal, availableLocal);
     if (burnLocal > 1) factorByInstrument.set(instrumentId, (heldLocal - burnLocal) / heldLocal);
   });
@@ -109,7 +110,7 @@ export function reconcileHolderPrincipal(args: {
    *  wholesale roll's). */
   const payerOf = (instrumentId: string): PartyRef | undefined => {
     const issuer = issuerOfInstrument.get(instrumentId);
-    return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
+    return issuer ? companyParty(issuer) : undefined;
   };
 
   // Pass 2 — scale and PAY, instrument by instrument: the borrower's repayment reaching its
@@ -141,10 +142,10 @@ export function reconcileHolderPrincipal(args: {
         if (payer) {
           // The desk's principal comes back as reserves against the position it loses — an
           // asset swap on the securities account, exactly like a sale (rule 5).
-          pay(ctx, { payer, payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker }, amount: paidLocal, currency: currencyOf(args.regionId), reason });
+          pay(ctx, { payer, payee: bankSecuritiesParty(bank), amount: paidLocal, currency: currencyOf(args.regionId), reason });
           // Step 13 (W2): the paper paid down leaves the desk by wire, to the house (the ladder's
           // own retirement wire met it there; the register's share is wired at its write-back).
-          transferHolding(ctx.v2, { kind: 'BANK_SECURITIES', ticker: bank.ticker }, { kind: 'CLEARING_HOUSE', region: args.regionId },
+          transferHolding(ctx.v2, bankSecuritiesParty(bank), { kind: 'CLEARING_HOUSE', region: args.regionId },
             { instrumentType, instrumentId: p.instrumentId, issuerRegion: args.regionId, valueLocal: paidLocal }, `${reason}: desk paper paid down`);
         }
       }

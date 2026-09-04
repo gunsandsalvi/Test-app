@@ -16,6 +16,7 @@
  */
 
 import { bankReservesOf } from '../../../ledger/accounts';
+import { bankParty, companyParty, companyPartyOfTicker } from '../../../../domain/party';
 import { NUMERAIRE } from '../../../../domain/geography';
 import { hedgeFundStrategyProfile } from '../../../../domain/institution-profiles';
 import { riskAversionOf } from '../../../../domain/preferences';
@@ -106,7 +107,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
         });
         const units = hedgeLocal / spot
           - standing.coverUnits('COMMODITY_FUTURE', 'b', companyPartyKey(c.ticker), comm.id, termKey);
-        if (units > 0.0001) sellers.push({ party: { kind: 'COMPANY', ticker: c.ticker }, units });
+        if (units > 0.0001) sellers.push({ party: companyParty(c), units });
       });
       const hedgeFloatUnits = sellers.reduce((a, s) => a + s.units, 0);
 
@@ -128,7 +129,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
             leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.ticker), facilityBookOf(ctx.v2, bank.ticker)), standing.pfeChargeLocal(bankPartyKey(bank.ticker)), 'COMMODITY_FUTURE');
           const units = capacityLocal / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
           if (units > 0.0001) {
-            sellers.push({ party: { kind: 'BANK', ticker: bank.ticker }, units });
+            sellers.push({ party: bankParty(bank), units });
             arbUnits += units;
           }
         });
@@ -244,7 +245,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
       boughtByParticipant.forEach((units, participantId) => {
         // §3.13-BOOK (c2b): see cds.ts — a participant id is its own space.
         const longParty: DerivativeParty = participantId.startsWith('CONS-')
-          ? { kind: 'COMPANY', ticker: asTicker(participantId.slice('CONS-'.length)) }
+          ? companyPartyOfTicker(asTicker(participantId.slice('CONS-'.length)))
           : { kind: 'INSTITUTION', id: asEntityId(participantId) };
         sellers.forEach((s) => {
           const size = units * ((s.units * fillShare) / Math.max(1e-9, totalBoughtUnits));

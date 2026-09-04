@@ -21,6 +21,7 @@
  */
 
 import { RegionId } from './geography';
+import type { CounterpartyRef } from './party';
 import { EstateClaimType } from './assets';
 import type { EntityId } from './ids';
 import type { Ticker } from './ids';
@@ -32,10 +33,12 @@ export const CLAIM_SENIORITY = {
   EQUITY: 3,
 } as const;
 
-export type ClaimHolder =
-  | { kind: 'INSTITUTION'; id: EntityId }
-  | { kind: 'BANK'; ticker: Ticker }
-  | { kind: 'COMPANY'; ticker: Ticker };
+/**
+ * §3.13-BOOK (c-then-3a) — the same three arms `derivatives/contract.ts:DerivativeParty` declared,
+ * under a second name. Both are `CounterpartyRef` now: who a claim is HELD BY and who a contract
+ * is FACED BY are the same question, and the arms live once.
+ */
+export type ClaimHolder = CounterpartyRef;
 
 export interface EstateClaim {
   holder: ClaimHolder;

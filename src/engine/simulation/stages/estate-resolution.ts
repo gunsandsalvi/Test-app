@@ -15,6 +15,7 @@
  */
 
 import { assertNever } from '../../../domain/defect';
+import { bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
@@ -55,8 +56,8 @@ const holderRef = (c: EstateClaim): PartyRef =>
     // BANK credited reserves AND equity, which balanced only while the
     // loan write-off was going to the dead channel; with that write revived, the equity leg
     // broke the per-bank identity by exactly the recovery.
-    : c.holder.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: c.holder.ticker }
-      : { kind: 'COMPANY', ticker: c.holder.ticker };
+    : c.holder.kind === 'BANK' ? bankSecuritiesParty(c.holder)
+      : companyParty(c.holder);
 
 /**
  * The indices this stage's inner loops used to rebuild from scratch.
@@ -151,8 +152,8 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // The death closes out every derivative the firm stands on, this
     // week, through the estate's account — the survivor's replacement value is a claim on it
     // or a payment into it, like any other.
-    closeOutDerivativesOfParty(ctx, state, { kind: 'COMPANY', ticker: comp.ticker });
-    if (comp.isBankEntity) closeOutDerivativesOfParty(ctx, state, { kind: 'BANK', ticker: comp.ticker });
+    closeOutDerivativesOfParty(ctx, state, companyParty(comp));
+    if (comp.isBankEntity) closeOutDerivativesOfParty(ctx, state, bankParty(comp));
     // THE FILING SEIZES NOTHING ANY MORE. It used to pay the debtor's cash into the
     // UNMODELED boundary at filing and drew the distributions back out of it — two legs of one
     // workout meeting at a party that is nobody. The debtor's account IS the estate's account:
@@ -231,7 +232,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // invoice collections, this week's asset sales (pending until the close, counted here).
     const estateComp = index.companyById.get(estate.companyId);
     const availableLocal = estateComp
-      ? Math.max(0, cashOf(ctx.v2, estateComp) + pendingSettlementLocal(ctx, { kind: 'COMPANY', ticker: estate.ticker }))
+      ? Math.max(0, cashOf(ctx.v2, estateComp) + pendingSettlementLocal(ctx, companyParty(estate)))
       : 0;
     const paidLocal = availableLocal > 1 ? distribute(ctx, index, estate, availableLocal) : 0;
     // THE ESTATE'S CASH IS ITS ACCOUNT, RE-READ EVERY WEEK like the other three assets — and
@@ -333,8 +334,8 @@ function sellAssetsToPeers(
     const payLocal = Math.min(weekPriceLocal * share, peerCashLocal);
     if (payLocal <= 1) return;
     pay(ctx, {
-      payer: { kind: 'COMPANY', ticker: peer.ticker },
-      payee: { kind: 'COMPANY', ticker: estate.ticker },
+      payer: companyParty(peer),
+      payee: companyParty(estate),
       amount: payLocal,
       currency: currencyOf(estate.regionId),
       reason: 'estate asset sale to peers',
@@ -395,7 +396,7 @@ function distribute(
       // the people it owed, as one instruction between two named accounts. The caller caps the
       // week's waterfall at what that account actually holds, so this never overdraws it.
       pay(ctx, {
-        payer: { kind: 'COMPANY', ticker: estate.ticker },
+        payer: companyParty(estate),
         payee: holderRef(claim),
         amount: shareLocal,
         currency: currencyOf(estate.regionId),
@@ -595,7 +596,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   ctx.updatedCompanies.forEach((bank) => {
     const usd = facilityByLender.get(bank.ticker);
     if (!bank.isBankEntity || !usd) return;
-    addClaim({ holder: { kind: 'BANK', ticker: bank.ticker }, instrumentType: 'BANK_FACILITY', seniority: CLAIM_SENIORITY.SECURED, principalLocal: usd, recoveredLocal: 0 });
+    addClaim({ holder: bankParty(bank), instrumentType: 'BANK_FACILITY', seniority: CLAIM_SENIORITY.SECURED, principalLocal: usd, recoveredLocal: 0 });
   });
   if (claims.length === 0) return undefined;
   // ONE INVARIANT, ONE REPORTER. This used to `defect()` — killing the run — when an estate's

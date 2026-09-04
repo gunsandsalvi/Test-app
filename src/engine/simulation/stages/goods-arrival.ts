@@ -13,6 +13,7 @@
  */
 
 import { GameState } from '../../../types';
+import { companyParty, companyPartyOfTicker } from '../../../domain/party';
 import { WeeklyStepContext } from './context';
 import { ensureV2 } from '../../../engine2/world';
 import { deliverGoods, receiveInputLot, scrapGoods, consumeGoods } from '../../ledger/goods-ledger';
@@ -88,7 +89,7 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     const buyer = firmByTicker.get(shipment.buyerTicker) ?? estateByTicker.get(shipment.buyerTicker);
     const toEstate = buyer !== undefined && !firmByTicker.has(shipment.buyerTicker);
     const carrier: PartyRef = shipment.carrierTicker
-      ? { kind: 'COMPANY', ticker: shipment.carrierTicker }
+      ? companyPartyOfTicker(shipment.carrierTicker)
       : { kind: 'SEGMENT', region: shipment.carrierRegion ?? (buyer?.region ?? 'USA'), industry: 'AutomotiveTransport' };
     // A buyer that no longer exists cannot take delivery; the consignment is written off rather
     // than landed on nobody, which would be inventory with no owner — the carrier scraps it.
@@ -99,7 +100,7 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
       return;
     }
     // The consignment leaves the carrier's hands for the buyer's, by wire.
-    const wireNo = deliverGoods(carrier, { kind: 'COMPANY', ticker: buyer.ticker }, shipment.subUnitId, shipment.units, shipment.landedCostPerUnit, 'consignment delivered');
+    const wireNo = deliverGoods(carrier, companyParty(buyer), shipment.subUnitId, shipment.units, shipment.landedCostPerUnit, 'consignment delivered');
     // Copy once on first touch, append in place after — same list, none of the per-shipment
     // whole-array rebuilds (the GC was 10% of the weekly step before this pass).
     // What arrives is routed by what it IS — a machine crossing an ocean becomes PP&E the

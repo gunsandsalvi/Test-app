@@ -33,6 +33,7 @@
  */
 
 import { RegionId } from '../../../types';
+import { bankParty, bankSecuritiesPartyOfTicker, companyPartyOfTicker } from '../../../domain/party';
 import { CurrencyCode } from '../../../domain/geography';
 import { WeeklyStepContext } from './context';
 import { pay, PartyRef } from './settlement';
@@ -223,11 +224,11 @@ export function participantPartyOf(args: {
     if (id === CENTRAL_BANK_PARTICIPANT_ID) return { kind: 'CENTRAL_BANK', region: regionId };
     if (householdRegionOfParticipant(id) !== undefined) return { kind: 'HOUSEHOLD', region: regionId };
     const bank = bankTickerOfParticipant(id);
-    if (bank !== undefined) return { kind: 'BANK_SECURITIES', ticker: bank };
+    if (bank !== undefined) return bankSecuritiesPartyOfTicker(bank);
     const treasury = treasuryTickerOfParticipant(id);
-    if (treasury !== undefined) return { kind: 'COMPANY', ticker: treasury };
+    if (treasury !== undefined) return companyPartyOfTicker(treasury);
     // 07c seats a bank under its bare ticker; membership of that set is the proof.
-    if (bankTickers?.has(asTicker(id))) return { kind: 'BANK_SECURITIES', ticker: asTicker(id) };
+    if (bankTickers?.has(asTicker(id))) return bankSecuritiesPartyOfTicker(asTicker(id));
     return dealerDeskPartyOf(id, deskTickers);
   };
 }
@@ -323,8 +324,8 @@ export function settleClearedBook(
   if (deskTotalLocal !== 0 && totalShare > 0) {
     feeDesks.forEach((desk) => {
       const amountLocal = deskTotalLocal * (desk.share / totalShare);
-      if (amountLocal > 0) pay(ctx, { payer: ccp, payee: { kind: 'BANK', ticker: desk.ticker }, amount: amountLocal, currency: quoteCurrency, reason: `${book} dealer fee` });
-      else if (amountLocal < 0) pay(ctx, { payer: { kind: 'BANK', ticker: desk.ticker }, payee: ccp, amount: -amountLocal, currency: quoteCurrency, reason: `${book} dealer fee` });
+      if (amountLocal > 0) pay(ctx, { payer: ccp, payee: bankParty(desk), amount: amountLocal, currency: quoteCurrency, reason: `${book} dealer fee` });
+      else if (amountLocal < 0) pay(ctx, { payer: bankParty(desk), payee: ccp, amount: -amountLocal, currency: quoteCurrency, reason: `${book} dealer fee` });
     });
   }
 }

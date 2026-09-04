@@ -5,6 +5,7 @@
  */
 
 import { journalPayment, partyId, PendingNetCtx } from './settlement';
+import { bankSecuritiesParty, bankSecuritiesPartyOfTicker, companyPartyOfTicker } from '../../../domain/party';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { currencyOf } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
@@ -413,7 +414,7 @@ function deskHoldingsByInstrument(
 function holderPayee(holderId: string): import('./settlement').PartyRef {
   const ticker = dealerDeskTicker(holderId);
   return ticker !== undefined
-    ? { kind: 'BANK_SECURITIES', ticker }
+    ? bankSecuritiesPartyOfTicker(ticker)
     : { kind: 'INSTITUTION', id: asEntityId(holderId) };
 }
 
@@ -538,13 +539,13 @@ export function applyPendingCorporateActionSettlements(
           if (!issuerTicker || !issuerRegion) return p;
           const deltaLocal = p.inventoryLocal * (ratio - 1);
           const house = { kind: 'CLEARING_HOUSE' as const, region: issuerRegion };
-          const desk = { kind: 'BANK_SECURITIES' as const, ticker: bank.ticker };
+          const desk = bankSecuritiesParty(bank);
           const spec = { instrumentType: type as ItemizedHolding['instrumentType'], instrumentId: p.instrumentId, issuerRegion, valueLocal: Math.abs(deltaLocal) };
           if (deltaLocal < 0) {
-            journalPayment(ctx, { payer: { kind: 'COMPANY', ticker: issuerTicker }, payee: desk, amount: -deltaLocal, currency: currencyOf(issuerRegion), reason: 'principal redeemed to holder of record' });
+            journalPayment(ctx, { payer: companyPartyOfTicker(issuerTicker), payee: desk, amount: -deltaLocal, currency: currencyOf(issuerRegion), reason: 'principal redeemed to holder of record' });
             transferHolding(ctx.v2, desk, house, spec, 'corporate action: desk paper retired pro rata');
           } else {
-            journalPayment(ctx, { payer: desk, payee: { kind: 'COMPANY', ticker: issuerTicker }, amount: deltaLocal, currency: currencyOf(issuerRegion), reason: 'placement paid by holder of record' });
+            journalPayment(ctx, { payer: desk, payee: companyPartyOfTicker(issuerTicker), amount: deltaLocal, currency: currencyOf(issuerRegion), reason: 'placement paid by holder of record' });
             transferHolding(ctx.v2, house, desk, spec, 'corporate action: desk paper placed pro rata');
           }
           touched = true;
@@ -644,7 +645,7 @@ export function applyPendingCorporateActionSettlements(
         if (!(denomLocal > 0)) return;
         denomByPair.set(k, denomLocal);
         if (!issuerTicker || !ctx.paymentJournal) return;
-        const payer = { kind: 'COMPANY' as const, ticker: issuerTicker };
+        const payer = companyPartyOfTicker(issuerTicker);
         // §9.13-EQUITY — THE REASON SAYS WHICH PAYMENT THIS IS. Every holder of record used to be
         // paid under one reason while the household sector was paid its share under a second
         // ("dividend to the public float"), and the household income line read THAT string. With
@@ -710,7 +711,7 @@ export function applyPendingCorporateActionSettlements(
             defect(`security payment of ${(shareLocal / 1e6).toFixed(3)}M to ${entity.id} from an issuer with no ticker (${instrumentIdAt(v2, r)})`);
           }
           journalPayment(ctx, {
-            payer: { kind: 'COMPANY', ticker: issuerTicker },
+            payer: companyPartyOfTicker(issuerTicker),
             payee: entity.payee,
             amount: shareLocal,
             currency: currencyOf(regionOf(v2, H.regionRef[r]) as RegionId),
@@ -757,7 +758,7 @@ export function applyPendingCorporateActionSettlements(
       if (ctx.paymentJournal && principalIssuerTicker && Math.abs(principalCashLocal) > 0) {
         journalPayment(ctx, principalCashLocal > 0
           ? {
-            payer: { kind: 'COMPANY', ticker: principalIssuerTicker },
+            payer: companyPartyOfTicker(principalIssuerTicker),
             payee: entity.payee,
             amount: principalCashLocal,
             currency: currencyOf(regionOf(v2, H.regionRef[r]) as RegionId),
@@ -765,7 +766,7 @@ export function applyPendingCorporateActionSettlements(
           }
           : {
             payer: entity.payee,
-            payee: { kind: 'COMPANY', ticker: principalIssuerTicker },
+            payee: companyPartyOfTicker(principalIssuerTicker),
             amount: -principalCashLocal,
             currency: currencyOf(regionOf(v2, H.regionRef[r]) as RegionId),
             reason: 'placement paid by holder of record',
@@ -818,11 +819,11 @@ export function applyPendingCorporateActionSettlements(
       if (a.retiredLocal > 0) {
         const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueLocal: a.retiredLocal, shares: a.anyShares ? a.retiredSh : undefined };
         transferHolding(v2, holder, house, spec, 'corporate action: paper retired pro rata');
-        if (equityIssuerTicker) transferHolding(v2, house, { kind: 'COMPANY', ticker: equityIssuerTicker }, spec, 'corporate action: shares retired by the issuer');
+        if (equityIssuerTicker) transferHolding(v2, house, companyPartyOfTicker(equityIssuerTicker), spec, 'corporate action: shares retired by the issuer');
       }
       if (a.placedLocal > 0) {
         const spec = { instrumentType: a.type, instrumentId: a.id, issuerRegion: a.region, valueLocal: a.placedLocal, shares: a.anyShares ? a.placedSh : undefined };
-        if (equityIssuerTicker) transferHolding(v2, { kind: 'COMPANY', ticker: equityIssuerTicker }, house, spec, 'corporate action: shares placed by the issuer');
+        if (equityIssuerTicker) transferHolding(v2, companyPartyOfTicker(equityIssuerTicker), house, spec, 'corporate action: shares placed by the issuer');
         transferHolding(v2, house, holder, spec, 'corporate action: paper placed pro rata');
       }
     });
@@ -1107,7 +1108,7 @@ export function applyHolderInterestAccruals(
       const owedLocal = Array.from(byHolder.values()).reduce((a, v) => a + Math.max(0, v), 0);
       return defect(`coupon of ${(owedLocal / 1e6).toFixed(3)}M due on ${instrumentKey} from an issuer with no ticker`);
     }
-    const payer = { kind: 'COMPANY', ticker } as import('./settlement').PartyRef;
+    const payer = companyPartyOfTicker(ticker) as import('./settlement').PartyRef;
     // A coupon is paid in the paper's own money, which is the issuer's.
     const couponCurrency = obligationCurrencyOf(ctx.v2, payer);
     byHolder.forEach((accruedLocal, holderId) => {

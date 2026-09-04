@@ -9,38 +9,20 @@
 
 import { RegionId, Industry } from '../../types';
 import { defect } from '../../domain/defect';
-import type { EntityId, Ticker } from '../../domain/ids';
 import { asEntityId } from '../../domain/ids';
 
-export type PartyRef =
-  | { kind: 'COMPANY'; ticker: Ticker }
-  | { kind: 'BANK'; ticker: Ticker }
-  /** SETL2b — the bank's own CREDIT, not its reserves. A loan does not move money from anywhere:
-   *  the bank writes a loan on one side and a deposit on the other, and both appear at once. So
-   *  a drawdown paid by BANK_CREDIT creates the borrower's balance WITHOUT any reserve leaving
-   *  the lender — endogenous money, and the reason a banking system can fund itself. Reserves
-   *  move only when the borrower then SPENDS it to a customer of another bank, which happens as
-   *  an ordinary payment. (The loan asset stays owned by bank-lending.ts — one writer.) */
-  | { kind: 'BANK_CREDIT'; ticker: Ticker }
-  /** SETL6 — a bank settling its OWN securities trade. Reserves move and equity does NOT: the
-   *  security is the other leg and the clearing stage books it in the same pass (rule 5).
-   *  `BANK` above is the income case, where nothing else arrives and equity is the other side. */
-  | { kind: 'BANK_SECURITIES'; ticker: Ticker }
-  /** SETL6 — the central counterparty a cleared book settles through. Every participant, the
-   *  dealer and the fee-earning desks settle against it, so it is flat by construction: a
-   *  non-zero net is a leg some book forgot to name, reported rather than absorbed. */
-  | { kind: 'CLEARING_HOUSE'; region: RegionId }
-  /** §3.13-BOOK slice (c2b): the ONE arm keyed by an entity id rather than a ticker — an
-   *  institution has no ticker the ledger uses, and this is the inconsistency `c-then` ends by
-   *  making `PartyRef` a VIEW of the entity store rather than a parallel union. */
-  | { kind: 'INSTITUTION'; id: EntityId }
-  /** SEG1 — a private-sector segment pool: the mass of small firms below naming resolution.
-   *  Its balance is `cashLocal` on the region's `SmePool`, held across the region's
-   *  banks pro-rata by market share (small firms bank everywhere; there is no house bank). */
-  | { kind: 'SEGMENT'; region: RegionId; industry: string }
-  | { kind: 'HOUSEHOLD'; region: RegionId }
-  | { kind: 'GOVERNMENT'; region: RegionId }
-  | { kind: 'CENTRAL_BANK'; region: RegionId };
+/**
+ * §3.13-BOOK (c-then-3a) — THE UNION MOVED TO `domain/party.ts`, where the three OTHER party
+ * unions could finally be views of it rather than copies. Re-exported here so no importer moved;
+ * what stays in this file is the dense-integer interning table below, which is engine machinery
+ * and has no business in the domain.
+ */
+export type { PartyRef, PartyOfKind, EntityParty, CounterpartyRef } from '../../domain/party';
+export {
+  companyParty, bankParty, bankCreditParty, bankSecuritiesParty,
+  companyPartyOfTicker, bankPartyOfTicker, bankCreditPartyOfTicker, bankSecuritiesPartyOfTicker,
+} from '../../domain/party';
+import type { PartyRef } from '../../domain/party';
 
 /**
  * SCALE — A PARTY IS AN `int32`.

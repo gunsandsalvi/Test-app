@@ -18,6 +18,7 @@
  */
 
 import { Company, RegionId } from '../../../types';
+import { bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { PrimaryOffering, UNDERWRITING_FEE_BPS } from '../../../domain/primary-market';
 import { DealerDeskInventory } from '../../../domain/dealer-desk';
@@ -118,8 +119,8 @@ export function settlePricedOfferings(
     if (lead && issuerCompany) {
       if (residualLocal > 0) {
         pay(ctx, {
-          payer: { kind: 'BANK_SECURITIES', ticker: lead.ticker },
-          payee: { kind: 'COMPANY', ticker: issuerCompany.ticker },
+          payer: bankSecuritiesParty(lead),
+          payee: companyParty(issuerCompany),
           amount: residualLocal,
           currency: currencyOf(issuerCompany.region),
           reason: 'underwriting residual taken by the lead',
@@ -127,8 +128,8 @@ export function settlePricedOfferings(
       }
       if (feeLocal > 0) {
         pay(ctx, {
-          payer: { kind: 'COMPANY', ticker: issuerCompany.ticker },
-          payee: { kind: 'BANK', ticker: lead.ticker },
+          payer: companyParty(issuerCompany),
+          payee: bankParty(lead),
           amount: feeLocal,
           currency: currencyOf(issuerCompany.region),
           reason: 'underwriting fee',
@@ -169,11 +170,11 @@ export function settlePricedOfferings(
       // only the take. Wiring it a second time off the house — which this did, unconditionally
       // and with the same spec — debited the house twice for one delivery, and on the equity
       // side attributed one movement to two different senders.
-      const leadDesk: PartyRef = { kind: 'BANK_SECURITIES', ticker: lead.ticker };
+      const leadDesk: PartyRef = bankSecuritiesParty(lead);
       const spec: HoldingSpec = heldInShares(instrumentType)
         ? { instrumentType, instrumentId, issuerRegion: regionId, valueLocal: residualLocal, shares: residualUnits }
         : { instrumentType, instrumentId, issuerRegion: regionId, valueLocal: residualLocal };
-      if (heldInShares(instrumentType)) issueHolding(ctx.v2, { kind: 'COMPANY', ticker: issuerCompany!.ticker }, leadDesk, spec, 'underwriting residual taken by the lead');
+      if (heldInShares(instrumentType)) issueHolding(ctx.v2, companyParty(issuerCompany!), leadDesk, spec, 'underwriting residual taken by the lead');
       else transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: regionId }, leadDesk, spec, 'underwriting residual taken by the lead');
     }
 

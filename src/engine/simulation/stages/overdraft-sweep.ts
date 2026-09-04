@@ -9,6 +9,7 @@
  * balance is zero at settlement and the money that was spent has a lender.
  */
 import { WeeklyStepContext } from './context';
+import { bankCreditParty, bankCreditPartyOfTicker, bankSecuritiesPartyOfTicker, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { RegionId } from '../../../types';
 import { pay, PartyRef, pendingSettlementLocal } from './settlement';
@@ -37,7 +38,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
   // ---- 1. Firms: a revolver draw at the house bank (the 02b conversion, at the close). ----
   ctx.updatedCompanies.forEach((c) => {
     if (c.isDefaulted || c.isBankEntity || c.mergerAcquired || !c.homeBankTicker) return;
-    const balanceLocal = cashOf(ctx.v2, c) + pendingLocal({ kind: 'COMPANY', ticker: c.ticker });
+    const balanceLocal = cashOf(ctx.v2, c) + pendingLocal(companyParty(c));
     if (!(balanceLocal < -1)) return;
     const drawLocal = -balanceLocal;
     const reg = ctx.updatedRegions[c.region];
@@ -55,8 +56,8 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     };
     issueTranche(v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
     pay(ctx, {
-      payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
-      payee: { kind: 'COMPANY', ticker: c.ticker },
+      payer: bankCreditPartyOfTicker(c.homeBankTicker),
+      payee: companyParty(c),
       amount: drawLocal,
       currency: currencyOf(c.region),
       reason: 'overdraft converted to facility draw at the close',
@@ -80,7 +81,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       const drawLocal = -balanceLocal;
       const withinLineLocal = Math.min(fund.primeBrokerageAvailableLocal ?? 0, drawLocal);
       pay(ctx, {
-        payer: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
+        payer: bankSecuritiesPartyOfTicker(brokerTicker),
         payee: { kind: 'INSTITUTION', id: fund.id },
         amount: drawLocal,
         currency: currencyOf(fund.region),
@@ -124,7 +125,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
         rows.push({ industry: seg.industry, poolId: smePoolId(regionId, seg.industry), usd: shareLocal });
         smeDrawByBank.set(b.ticker, rows);
         pay(ctx, {
-          payer: { kind: 'BANK_CREDIT', ticker: b.ticker },
+          payer: bankCreditParty(b),
           payee: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
           amount: shareLocal,
           currency: currencyOf(regionId),

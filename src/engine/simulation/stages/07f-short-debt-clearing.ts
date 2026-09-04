@@ -32,6 +32,7 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
+import { bankCreditPartyOfTicker, bankSecuritiesParty, bankSecuritiesPartyOfTicker, companyParty, companyPartyOfTicker } from '../../../domain/party';
 import { asInstrumentId, InstrumentId, asTicker } from '../../../domain/ids';
 
 import { ensureV2 } from '../../../engine2/world';
@@ -225,7 +226,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const reservesLocal = bankReservesOf(ctx.v2, bank.ticker);
         const facilityBookLocal = facilityBookOf(ctx.v2, bank.ticker);
         const settledCashLocal = reservesLocal
-          + pendingSettlementLocal(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
+          + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
         // REPO2: the floor is the face of THIS BILL actually pledged, not a blended share.
         const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.ticker);
         const fundableLocal = Math.min(
@@ -312,7 +313,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const heldLocal = Array.from(heldByBond.values()).reduce((a, v) => a + v, 0);
         if (!(targetLocal > 1) && !(heldLocal > 1)) return;
         const budgetLocal = Math.max(0, cashLocal
-          + pendingSettlementLocal(ctx, { kind: 'COMPANY', ticker: comp.ticker }));
+          + pendingSettlementLocal(ctx, companyParty(comp)));
         const holdings = new Map<InstrumentId, number>();
         const demand = new Map<InstrumentId, ParticipantDemand>();
         activeBills.forEach((b) => {
@@ -552,7 +553,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           billsAfter.set(b.key, { valueLocal: newLocal > 1 ? newLocal : 0 });
           if (newLocal > 1) byTenor[b.key] = newLocal; else delete byTenor[b.key];
         });
-        clearedBookDelta({ kind: 'BANK_SECURITIES', ticker: bank.ticker }, regionId, 'GOV_BOND', billsBefore, billsAfter, () => undefined, 'bill clearing fill');
+        clearedBookDelta(bankSecuritiesParty(bank), regionId, 'GOV_BOND', billsBefore, billsAfter, () => undefined, 'bill clearing fill');
         // The engine's cash leg (face plus the dealer fee); the fee part is P&L — an expense the
         // identity invariant would otherwise report as a missing leg. SETL6: the reserves leg
         // settles through the clearing house below, so the buyer and the seller move against
@@ -607,7 +608,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           tBefore.set(h.instrumentId, { valueLocal: (tBefore.get(h.instrumentId)?.valueLocal ?? 0) + (h.quantityOrNotionalLocal ?? 0) });
         });
         billRows.forEach((h) => tAfter.set(h.instrumentId, { valueLocal: (tAfter.get(h.instrumentId)?.valueLocal ?? 0) + (h.quantityOrNotionalLocal ?? 0) }));
-        clearedBookDelta({ kind: 'COMPANY', ticker }, regionId, 'GOV_BOND', tBefore, tAfter, () => undefined, 'bill clearing fill');
+        clearedBookDelta(companyPartyOfTicker(ticker), regionId, 'GOV_BOND', tBefore, tAfter, () => undefined, 'bill clearing fill');
         if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
         ctx.companyUpdates[ticker].treasuryHoldings = [...kept, ...billRows];
       });
@@ -808,7 +809,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       const issuerPartyOfInstrument = (instrumentId: InstrumentId): PartyRef | undefined => {
         const iss = issuerById.get(issuerIdOf(v2Mirror, instrumentId));
-        return iss ? { kind: 'COMPANY', ticker: iss.comp.ticker } : undefined;
+        return iss ? companyParty(iss.comp) : undefined;
       };
 
       maturedFaceById.forEach((_face, instrumentId) => {
@@ -829,14 +830,14 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           if (repaidLocal > 0) {
             pay(ctx, {
               payer,
-              payee: { kind: 'BANK_SECURITIES', ticker },
+              payee: bankSecuritiesPartyOfTicker(ticker),
               amount: repaidLocal,
               currency: currencyOf(regionId),
               reason: 'commercial paper redeemed',
             });
             // Step 13 (W2): the matured paper leaves the desk by wire, to the house (the ladder's
             // retirement wire meets it there).
-            transferHolding(ctx.v2, { kind: 'BANK_SECURITIES', ticker }, { kind: 'CLEARING_HOUSE', region: regionId },
+            transferHolding(ctx.v2, bankSecuritiesPartyOfTicker(ticker), { kind: 'CLEARING_HOUSE', region: regionId },
               { instrumentType: 'COMMERCIAL_PAPER', instrumentId, issuerRegion: regionId, valueLocal: repaidLocal }, 'commercial paper redeemed: desk paper matured');
           }
         });
@@ -1196,8 +1197,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             facilityBankTicker: iss.comp.homeBankTicker,
           } as DebtTranche, 'revolver draw: commercial paper roll failed');
           pay(ctx, {
-            payer: { kind: 'BANK_CREDIT', ticker: iss.comp.homeBankTicker ?? asTicker('') },
-            payee: { kind: 'COMPANY', ticker: iss.comp.ticker },
+            payer: bankCreditPartyOfTicker(iss.comp.homeBankTicker ?? asTicker('')),
+            payee: companyParty(iss.comp),
             amount: revolverLocal,
             currency: currencyOf(iss.comp.region),
             reason: 'revolver drawn: commercial paper roll failed',

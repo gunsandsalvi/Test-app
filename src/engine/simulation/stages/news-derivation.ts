@@ -14,6 +14,7 @@
  */
 
 import { GameState, Company, RegionId } from '../../../types';
+import { companyPartyOfTicker } from '../../../domain/party';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { NewsItem } from '../../../domain/events';
 import { WeeklyStepContext } from './context';
@@ -108,7 +109,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   ctx.defaultedTickers.forEach((ticker) => {
     const c = byTicker.get(ticker);
     if (!c || c.isBankEntity) return;
-    const why = outflowsOf(ctx, { kind: 'COMPANY', ticker }, byTicker);
+    const why = outflowsOf(ctx, companyPartyOfTicker(ticker), byTicker);
     const refs: Ref[] = [company(c), region(c.region)];
     const bank = bankRef(c);
     if (bank) refs.push(bank);

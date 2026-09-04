@@ -25,6 +25,7 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
+import { companyParty } from '../../../domain/party';
 import { Company, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
@@ -153,8 +154,8 @@ export function runForeignDirectInvestment(
       // (OWN4) excludes it by the same founderPct subtraction that defines it.
       sub.ownership = { ...(sub.ownership ?? {}), founderPct: 0 };
       pay(ctx, {
-        payer: { kind: 'COMPANY', ticker: comp.ticker },
-        payee: { kind: 'COMPANY', ticker: sub.ticker },
+        payer: companyParty(comp),
+        payee: companyParty(sub),
         amount: openingCashLocal,
         currency: currencyOf(sub.region as RegionId),
         reason: 'FDI: subsidiary capitalized from the parent',

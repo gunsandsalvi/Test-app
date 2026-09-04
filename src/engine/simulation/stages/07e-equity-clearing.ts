@@ -28,6 +28,7 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
+import { companyParty } from '../../../domain/party';
 import { isActiveCompany, isPubliclyListed, banksOf } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { entityRequiredReturn, maxOverweightMultipleOf } from './asset-allocation';
@@ -662,7 +663,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       result,
       (issuerId) => {
         const issuer = companyById.get(issuerId);
-        return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
+        return issuer ? companyParty(issuer) : undefined;
       },
       (takeShares, clearedStat) => takeShares * clearedStat,
       // Step 13 (W2): the paper leg at the PRINT every holder's row carries (the rounded

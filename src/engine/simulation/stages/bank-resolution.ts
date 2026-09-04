@@ -16,6 +16,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { bankParty, bankSecuritiesPartyOfTicker, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { BankingSector, DepositLines } from '../../../domain/banking';
 import { BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
@@ -73,8 +74,8 @@ export function rekeyBankLinks(state: GameState, ctx: WeeklyStepContext, regionI
   ctx.primaryOfferingsWorking = ctx.primaryOfferingsWorking.map((o) => ({ ...o, leadBankTicker: rekey(o.leadBankTicker) ?? o.leadBankTicker }));
   // The treasury's accrued-coupon ledger is keyed by holder; the failed bank's accruals are the
   // assuming bank's receivable now (its sheet already carries them).
-  const fromKey = `|${partyKey({ kind: 'BANK_SECURITIES', ticker: from })}`;
-  const toKey = `|${partyKey({ kind: 'BANK_SECURITIES', ticker: to })}`;
+  const fromKey = `|${partyKey(bankSecuritiesPartyOfTicker(from))}`;
+  const toKey = `|${partyKey(bankSecuritiesPartyOfTicker(to))}`;
   Array.from(ctx.sovereignAccruedInterestLocal.entries()).forEach(([k, usd]) => {
     if (!k.endsWith(fromKey)) return;
     const k2 = k.slice(0, k.length - fromKey.length) + toKey;
@@ -137,7 +138,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       const sheet = bank.bankBalanceSheet!;
       const injectionLocal = Math.max(0, assumingCapitalLocal(sheet, facilityBookOf(ctx.v2, bank.ticker)) - sheet.bankEquityLocal);
       if (injectionLocal > 0) {
-        pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'BANK', ticker: bank.ticker },
+        pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: bankParty(bank),
           amount: injectionLocal, currency: currencyOf(regionId), reason: 'resolution: public recapitalisation' });
         runSettlementStage(ctx);
         restateBankSheetStatistics(bank.bankBalanceSheet!, bankReservesOf(ctx.v2, bank.ticker), bankDepositLines(ctx, bank.ticker), facilityBookOf(ctx.v2, bank.ticker));
@@ -178,19 +179,19 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // pass's rates, which is what `assumeBankBooks` above struck the shell's equity on, so the
     // shell nets to zero; sweeping AFTER the week's other legs instead breaks that equality and
     // leaves the difference as equity (measured: 134.8M on DOIE).
-    heldCurrenciesOf(ctx.v2, { kind: 'BANK', ticker: bank.ticker }).forEach(({ currency, balance }) => {
+    heldCurrenciesOf(ctx.v2, bankParty(bank)).forEach(({ currency, balance }) => {
       if (balance > 1e-6) {
-        pay(ctx, { payer: { kind: 'BANK', ticker: bank.ticker }, payee: { kind: 'BANK', ticker: acquirer.ticker },
+        pay(ctx, { payer: bankParty(bank), payee: bankParty(acquirer),
           amount: balance, currency, reason: 'resolution: reserves to the assuming bank' });
       } else if (balance < -1e-6) {
         // An overdrawn failed bank: the assuming bank makes the reserve account whole — part of
         // the net it took over, already in the equity line above.
-        pay(ctx, { payer: { kind: 'BANK', ticker: acquirer.ticker }, payee: { kind: 'BANK', ticker: bank.ticker },
+        pay(ctx, { payer: bankParty(acquirer), payee: bankParty(bank),
           amount: -balance, currency, reason: 'resolution: overdrawn reserves made whole' });
       }
     });
     if (plan.guaranteeLocal > 0) {
-      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'BANK', ticker: acquirer.ticker },
+      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: bankParty(acquirer),
         amount: plan.guaranteeLocal, currency: currencyOf(regionId), reason: 'resolution: deposit guarantee on the hole' });
     }
     rekeyBankLinks(state, ctx, regionId, bank.ticker, acquirer.ticker);
@@ -229,7 +230,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     bank.stockPrice = 0;
     ctx.defaultedTickers.push(bank.ticker);
     if (plan.estateLocal > 0) {
-      pay(ctx, { payer: { kind: 'BANK', ticker: acquirer.ticker }, payee: { kind: 'COMPANY', ticker: bank.ticker },
+      pay(ctx, { payer: bankParty(acquirer), payee: companyParty(bank),
         amount: plan.estateLocal, currency: currencyOf(regionId), reason: 'resolution: net book value paid to the receivership' });
       runSettlementStage(ctx);
     }

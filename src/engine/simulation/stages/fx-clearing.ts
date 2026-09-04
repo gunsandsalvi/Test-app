@@ -1,4 +1,5 @@
 import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
+import { bankParty } from '../../../domain/party';
 /**
  * WS9/XB2d/XB6 — the week's FX market: every participant's demand, one cleared rate per PAIR.
  *
@@ -126,7 +127,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted) return;
     const home = currencyOf(c.region as RegionId);
-    heldCurrenciesOf(ctx.v2, { kind: 'BANK', ticker: c.ticker }).forEach(({ currency, balance }) => {
+    heldCurrenciesOf(ctx.v2, bankParty(c)).forEach(({ currency, balance }) => {
       if (currency === home || !(Math.abs(balance) > 1e5)) return;
       // Short of `currency` ⇒ demand for it, paid in the desk's own money; long ⇒ supply.
       addPairFlow(flows, REGION_BY_CURRENCY[currency], c.region as RegionId,

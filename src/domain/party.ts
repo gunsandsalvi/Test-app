@@ -1,0 +1,102 @@
+/**
+ * §5-STRUCT step 1 — WHO CAN BE PAID, AND THE ONE UNION THAT SAYS SO.
+ *
+ * A `PartyRef` is the ledger's only notion of identity: an id, never an object reference.
+ *
+ * §3.13-BOOK (c-then-3a) — IT LIVES IN `domain/` NOW, BECAUSE THERE WERE FOUR OF IT. The type
+ * sat in `engine/ledger/party.ts` beside the interning table, which is engine machinery — so the
+ * domain modules that also needed to name a party could not import it, and each wrote its own:
+ *
+ *   · `derivatives/contract.ts:DerivativeParty` — COMPANY, BANK, INSTITUTION
+ *   · `estate.ts:ClaimHolder`                   — COMPANY, BANK, INSTITUTION (the SAME three,
+ *                                                 declared twice under two names)
+ *   · `repo.ts:RepoParty`                       — BANK, INSTITUTION, CENTRAL_BANK
+ *
+ * Four unions for one question, each re-declaring `{ kind: 'BANK'; ticker: Ticker }` and
+ * `{ kind: 'INSTITUTION'; id: EntityId }`, and three key functions with **three incompatible
+ * formats** for the same party (`partyKey` writes `INSTITUTION:`, `repoPartyKey` writes `INST:`,
+ * `derivativePartyKey` writes `INSTITUTION:`). Nothing kept them in step: a new arm, or a change
+ * to how an arm is keyed, had to be made four times or it silently was not.
+ *
+ * They are `Extract` views of this union now, so the arms exist ONCE — which is the whole reason
+ * (c-then-3b) can change how a firm is keyed in one place instead of four.
+ *
+ * The interning table, `partyId` and `partyKey` stay in `engine/ledger/party.ts`, which re-exports
+ * this so no importer has to move. The type is domain; the dense-integer table is not.
+ */
+
+import type { RegionId } from './geography';
+import type { EntityId, Ticker } from './ids';
+
+export type PartyRef =
+  | { kind: 'COMPANY'; ticker: Ticker }
+  | { kind: 'BANK'; ticker: Ticker }
+  /** SETL2b — the bank's own CREDIT, not its reserves. A loan does not move money from anywhere:
+   *  the bank writes a loan on one side and a deposit on the other, and both appear at once. So
+   *  a drawdown paid by BANK_CREDIT creates the borrower's balance WITHOUT any reserve leaving
+   *  the lender — endogenous money, and the reason a banking system can fund itself. Reserves
+   *  move only when the borrower then SPENDS it to a customer of another bank, which happens as
+   *  an ordinary payment. (The loan asset stays owned by bank-lending.ts — one writer.) */
+  | { kind: 'BANK_CREDIT'; ticker: Ticker }
+  /** SETL6 — a bank settling its OWN securities trade. Reserves move and equity does NOT: the
+   *  security is the other leg and the clearing stage books it in the same pass (rule 5).
+   *  `BANK` above is the income case, where nothing else arrives and equity is the other side. */
+  | { kind: 'BANK_SECURITIES'; ticker: Ticker }
+  /** SETL6 — the central counterparty a cleared book settles through. Every participant, the
+   *  dealer and the fee-earning desks settle against it, so it is flat by construction: a
+   *  non-zero net is a leg some book forgot to name, reported rather than absorbed. */
+  | { kind: 'CLEARING_HOUSE'; region: RegionId }
+  /** §3.13-BOOK slice (c2b): the ONE arm keyed by an entity id rather than a ticker — an
+   *  institution has no ticker the ledger uses, and this is the inconsistency `c-then` ends by
+   *  making `PartyRef` a VIEW of the entity store rather than a parallel union. */
+  | { kind: 'INSTITUTION'; id: EntityId }
+  /** SEG1 — a private-sector segment pool: the mass of small firms below naming resolution.
+   *  Its balance is `cashLocal` on the region's `SmePool`, held across the region's
+   *  banks pro-rata by market share (small firms bank everywhere; there is no house bank). */
+  | { kind: 'SEGMENT'; region: RegionId; industry: string }
+  | { kind: 'HOUSEHOLD'; region: RegionId }
+  | { kind: 'GOVERNMENT'; region: RegionId }
+  | { kind: 'CENTRAL_BANK'; region: RegionId };
+
+/** One arm, by kind — so a narrow position (a contract's counterparty, a claim's holder) can name
+ *  exactly the arms it admits instead of re-declaring them. */
+export type PartyOfKind<K extends PartyRef['kind']> = Extract<PartyRef, { kind: K }>;
+
+/**
+ * The arms that name an ENTITY in the entity store, as opposed to a region or a segment. Five,
+ * because a bank appears three times: `BANK` is its own account, `BANK_CREDIT` the deposit it
+ * writes, `BANK_SECURITIES` its trading book — three flavours of one firm, and the reason
+ * `entity-index.ts:companyOfParty` resolves all four ticker arms the same way.
+ */
+export type EntityParty = PartyOfKind<'COMPANY' | 'BANK' | 'BANK_CREDIT' | 'BANK_SECURITIES' | 'INSTITUTION'>;
+
+/**
+ * The three a COUNTERPARTY can be: a firm, a bank, or an institution. The two extra bank arms are
+ * account flavours rather than parties one can face, so a contract or a claim never names them.
+ * `DerivativeParty` and `ClaimHolder` are both exactly this.
+ */
+export type CounterpartyRef = PartyOfKind<'COMPANY' | 'BANK' | 'INSTITUTION'>;
+
+// ---- THE CONSTRUCTORS (§3.13-BOOK c-then-3a) ----
+//
+// 197 object literals built these four arms by hand. They go through these now, for the reason
+// 13-READ gave every entity-id writer a constructor first: (c-then-3b) changes how a firm is
+// keyed, and a change made in a constructor is made once. The split is the measurement —
+// `…Party` takes the ENTITY and survives that change untouched; `…PartyOfTicker` takes a bare
+// ticker and is exactly the set of sites that will need an entity found for them, so
+// `grep -c PartyOfTicker` is the size of what is left.
+
+/** A firm, from the firm. */
+export const companyParty = (c: { ticker: Ticker }): PartyOfKind<'COMPANY'> => ({ kind: 'COMPANY', ticker: c.ticker });
+/** A bank's own account, from the bank. */
+export const bankParty = (c: { ticker: Ticker }): PartyOfKind<'BANK'> => ({ kind: 'BANK', ticker: c.ticker });
+/** The deposit a bank writes when it lends (SETL2b), from the bank. */
+export const bankCreditParty = (c: { ticker: Ticker }): PartyOfKind<'BANK_CREDIT'> => ({ kind: 'BANK_CREDIT', ticker: c.ticker });
+/** A bank's trading book (SETL6), from the bank. */
+export const bankSecuritiesParty = (c: { ticker: Ticker }): PartyOfKind<'BANK_SECURITIES'> => ({ kind: 'BANK_SECURITIES', ticker: c.ticker });
+
+/** The same four from a bare ticker — the sites (c-then-3b) has to find an entity for. */
+export const companyPartyOfTicker = (ticker: Ticker): PartyOfKind<'COMPANY'> => ({ kind: 'COMPANY', ticker });
+export const bankPartyOfTicker = (ticker: Ticker): PartyOfKind<'BANK'> => ({ kind: 'BANK', ticker });
+export const bankCreditPartyOfTicker = (ticker: Ticker): PartyOfKind<'BANK_CREDIT'> => ({ kind: 'BANK_CREDIT', ticker });
+export const bankSecuritiesPartyOfTicker = (ticker: Ticker): PartyOfKind<'BANK_SECURITIES'> => ({ kind: 'BANK_SECURITIES', ticker });
