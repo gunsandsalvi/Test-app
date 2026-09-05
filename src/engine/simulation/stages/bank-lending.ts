@@ -267,7 +267,8 @@ export function planSmeShopping(
       if (!byPool) { byPool = new Map(); grantedByBankTicker.set(q.lender.bank.ticker, byPool); }
       byPool.set(seg.industry, (byPool.get(seg.industry) ?? 0) + grantLocal);
     });
-    const wantedLocal = weekDemandLocal * (quotes[0]?.appetite ?? 0);
+    // What the pool wanted at the keenest quote it was given; a pool nobody quoted wanted it all.
+    const wantedLocal = quotes.length > 0 ? weekDemandLocal * quotes[0].appetite : weekDemandLocal;
     declinedLocal += Math.max(0, wantedLocal - takenLocal);
   });
   return { grantedByBankTicker, declinedLocal };
