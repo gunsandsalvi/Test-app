@@ -560,10 +560,6 @@ written from here):
     ETF premium (the authorised participants, `etf-flows.ts`), the cross-currency basis (the
     desks, 17b-iv-b, and the swap lines, 17b-v), and a good's price across regions (sourcing,
     05). What is left, in order:
-17f-iii. **The swap spread** (`Region.swapSpreadBpsByTenor`, `irs.ts:300`). A swap paying more
-    than the sovereign at the same tenor is received against the bond sold short — needs the
-    sovereign borrow (17e-iii-b, done) and the swap book reading a leg; the mirror pays fixed
-    against the bond bought on the line. The comparable's tenor is the swap's.
 17f-v. **Seniority across one issuer's capital structure** (`P1`, failing 16 of 16 at HEAD). A
     junior tranche paying less than the senior of the same issuer is sold against the senior
     bought — which needs a CORPORATE bond borrow: the lending pass generalised from the sovereign
@@ -1579,7 +1575,19 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17f-ii — THE INDEX AGAINST ITS NAMES.** `indexArbRead`: the series' last print against the
+**17f-iii — THE SWAP SPREAD.** Per swap tenor, the par rate against the sovereign rung nearest
+  it: `swapSpreadRead` — received (long the line) against the rung shorted, carrying the rung's
+  borrow fee and the swap's margin; paid against the rung bought, carrying the financing above
+  repo and the margin; `swapSpreadLegs` — the swap received down to the yield + carry or paid
+  up to the yield − carry (an `IRS_FIXED` leg in bps), the rung shorted as a target or bought up
+  to the price the par − carry implies (`priceFromYield` on the rung's own terms). The swap book
+  seats an `IRS_FIXED` leg (`indexHolderQuote`: a receiver above its level, a payer opening
+  short and selling below it), opens a tenor for a seat with no hedger, and reads each seat's
+  fill against its opening — above it received, below it paid (a payer joins the tenor's
+  demands). `mergeLegs` folds two comparables' legs on one instrument (the ten-year rung under
+  the bond basis and the swap spread) into one. Atlas: interest-rate-swaps B4 ✅. Gates green;
+  no run.
+- **17f-ii — THE INDEX AGAINST ITS NAMES.** `indexArbRead`: the series' last print against the
   equal-weighted mean of its constituents' benchmark prints, both directions, the carry the
   required return on the margin of BOTH legs (nothing is funded); `indexArbLegs`: a signed face
   on the line (written down to the mean + carry, bought up to the mean − carry) and the opposite

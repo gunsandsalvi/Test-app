@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, edgeBps, arbSizeShare, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
+import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, swapSpreadRead, swapSpreadLegs, mergeLegs, edgeBps, arbSizeShare, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
 import { bondFuturesCarryPrice } from '../src/domain/derivatives/classes/bond-future';
 import { asInstrumentId } from '../src/domain/ids';
 
@@ -98,4 +98,27 @@ test('index arb: the read is the print against the names\' mean with the margin 
   const cheap = indexArbLegs({ regionId: 'USA', indexInstrumentId: asInstrumentId('USA-CDX-1'), names, faceLocal: -1000, indexPrintBps: 60, namesMeanBps: 100, carryBps: 20, weeklyMoveBps: 8 });
   assert.equal(cheap.index.reservationPrice, 80, 'a cheap index is bought up to the names less the carry');
   assert.deepEqual(cheap.names.map((l) => [l.faceLocal, l.reservationPrice]), [[500, 70], [500, 90]], 'each name written down to its print less the spare');
+});
+
+// §3.17f-iii — the swap spread: received against the rung shorted, paid against the rung bought.
+test('swap spread: the read carries the borrow when received and the financing when paid; the legs are the swap and the rung with opposite faces', () => {
+  const r = swapSpreadRead({ swapSpreadBps: 25, borrowFeeBps: 10, financingRateAnnual: 0.06, repoRateAnnual: 0.05, marginRate: 0.02, requiredReturnAnnual: 0.10 });
+  assert.equal(r.long.deviationBps, 25);
+  assert.ok(Math.abs(r.long.carryBps - 30) < 1e-9);
+  assert.equal(r.mirror.deviationBps, -25);
+  assert.ok(Math.abs(r.mirror.carryBps - 120) < 1e-9);
+  const priceAtYieldBps = (y: number) => 1 - (y - 400) / 10000;
+  const recv = swapSpreadLegs({ regionId: 'USA', swapInstrumentId: asInstrumentId('USA-IRS-s10'), bondId: asInstrumentId('G10'), faceLocal: 1000, govYieldBps: 400, parBps: 425, carryBps: 30, weeklyMoveBps: 12, priceAtYieldBps, cashPrice: 1, budgetLocal: 0 });
+  assert.equal(recv.swap.market, 'IRS_FIXED');
+  assert.equal(recv.swap.faceLocal, 1000, 'received');
+  assert.equal(recv.swap.reservationPrice, 430, 'down to the yield plus the carry');
+  assert.equal(recv.bond.market, 'SOVEREIGN_CASH');
+  assert.equal(recv.bond.faceLocal, -1000, 'the rung shorted');
+  const pay = swapSpreadLegs({ regionId: 'USA', swapInstrumentId: asInstrumentId('USA-IRS-s10'), bondId: asInstrumentId('G10'), faceLocal: -1000, govYieldBps: 400, parBps: 370, carryBps: 30, weeklyMoveBps: 12, priceAtYieldBps, cashPrice: 1, budgetLocal: 900 });
+  assert.equal(pay.swap.reservationPrice, 370, 'paid up to the yield less the carry');
+  assert.equal(pay.bond.faceLocal, 1000, 'the rung bought');
+  assert.ok(Math.abs(pay.bond.reservationPrice - priceAtYieldBps(340)) < 1e-12, 'up to the price the par less the carry implies');
+  // Two legs of one book on one rung are one leg.
+  const merged = mergeLegs([{ ...recv.bond, entityId: 'F' }, { ...pay.bond, entityId: 'F', faceLocal: 400 }, { ...recv.swap, entityId: 'F' }]);
+  assert.deepEqual(merged.map((l) => [l.market, l.faceLocal]), [['SOVEREIGN_CASH', -600], ['IRS_FIXED', 1000]]);
 });

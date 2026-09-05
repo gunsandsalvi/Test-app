@@ -24,7 +24,7 @@ import type { EntityId, InstrumentId } from './ids';
 import { bondFuturesCarryPrice } from './derivatives/classes/bond-future';
 
 /** The markets a leg can clear in. A comparable joins by naming the two its legs need. */
-export type ComparableMarket = 'SOVEREIGN_CASH' | 'BOND_FUTURE' | 'CORP_BOND_CASH' | 'CDS_PROTECTION' | 'CDS_INDEX_PROTECTION';
+export type ComparableMarket = 'SOVEREIGN_CASH' | 'BOND_FUTURE' | 'CORP_BOND_CASH' | 'CDS_PROTECTION' | 'CDS_INDEX_PROTECTION' | 'IRS_FIXED';
 
 /** One leg of a pair, as the market that clears it reads it: a size (+ long / − short, in face),
  *  the price it is worth doing at (a long buys below it, a short sells above it), how far past
@@ -225,4 +225,55 @@ export function indexArbLegs(args: {
       reservationPrice: args.faceLocal >= 0 ? nm.printBps + spare : nm.printBps - spare, fullSizePriceRange: range, budgetLocal: 0,
     })),
   };
+}
+
+/**
+ * §3.17f-iii — THE SWAP SPREAD, READ. The par rate on secured overnight money against the
+ * government's own yield at the same tenor. A swap paying more than the bond is RECEIVED against
+ * the bond sold short — the floating leg pays the repo the sale's collateral earns — carrying the
+ * paper's borrow fee and the swap's margin; the mirror pays fixed against the bond bought on the
+ * line, carrying the financing above repo and the margin.
+ */
+export function swapSpreadRead(args: {
+  swapSpreadBps: number; borrowFeeBps: number; financingRateAnnual: number; repoRateAnnual: number; marginRate: number; requiredReturnAnnual: number;
+}): { long: ComparableRead; mirror: ComparableRead } {
+  const marginBps = Math.max(0, args.marginRate) * Math.max(0, args.requiredReturnAnnual) * 10000;
+  return {
+    long: { deviationBps: args.swapSpreadBps, carryBps: Math.max(0, args.borrowFeeBps) + marginBps },
+    mirror: { deviationBps: -args.swapSpreadBps, carryBps: Math.max(0, args.financingRateAnnual - args.repoRateAnnual) * 10000 + marginBps },
+  };
+}
+
+/**
+ * §3.17f-iii — THE SWAP SPREAD, AS TWO LEGS. + is receive fixed (long the swap line) against the
+ * bond short; − is pay fixed against the bond long. The swap is received down to the bond's yield
+ * plus the carry and paid up to it less the carry, in bps; the bond long buys up to the price the
+ * par rate less the carry implies, the bond short is a target at what the auction clears.
+ */
+export function swapSpreadLegs(args: {
+  regionId: RegionId; swapInstrumentId: InstrumentId; bondId: InstrumentId; faceLocal: number;
+  govYieldBps: number; parBps: number; carryBps: number; weeklyMoveBps: number;
+  priceAtYieldBps: (yieldBps: number) => number; cashPrice: number; budgetLocal: number;
+}): { swap: RelativeValueLeg; bond: RelativeValueLeg } {
+  const range = Math.max(1e-6, args.weeklyMoveBps);
+  const receive = args.faceLocal >= 0;
+  const bondReservation = receive ? args.cashPrice : args.priceAtYieldBps(args.parBps - args.carryBps);
+  return {
+    swap: { market: 'IRS_FIXED', regionId: args.regionId, instrumentId: args.swapInstrumentId, faceLocal: args.faceLocal, reservationPrice: receive ? args.govYieldBps + args.carryBps : args.govYieldBps - args.carryBps, fullSizePriceRange: range, budgetLocal: 0 },
+    bond: { market: 'SOVEREIGN_CASH', regionId: args.regionId, instrumentId: args.bondId, faceLocal: -args.faceLocal, reservationPrice: bondReservation, fullSizePriceRange: Math.max(1e-6, Math.abs(bondReservation - args.priceAtYieldBps(args.parBps - args.carryBps + range))), budgetLocal: args.budgetLocal },
+  };
+}
+
+/** Two legs of one book on one instrument in one market are one leg: the faces add, the money
+ *  adds, the level is the larger leg's, and a cut anywhere is a cut. */
+export function mergeLegs<L extends RelativeValueLeg & { entityId: string }>(legs: readonly L[]): L[] {
+  const byKey = new Map<string, L>();
+  legs.forEach((l) => {
+    const k = `${l.entityId}|${l.market}|${l.instrumentId}`;
+    const have = byKey.get(k);
+    if (!have) { byKey.set(k, { ...l }); return; }
+    const bigger = Math.abs(l.faceLocal) > Math.abs(have.faceLocal) ? l : have;
+    byKey.set(k, { ...have, faceLocal: have.faceLocal + l.faceLocal, budgetLocal: have.budgetLocal + l.budgetLocal, reservationPrice: bigger.reservationPrice, fullSizePriceRange: bigger.fullSizePriceRange, forced: have.forced || l.forced });
+  });
+  return Array.from(byKey.values()).filter((l) => Math.abs(l.faceLocal) > 1);
 }

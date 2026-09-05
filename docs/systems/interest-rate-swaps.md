@@ -95,7 +95,7 @@ checked by `scripts/check-atlas.sh`.
 | B2 an asset manager with a duration mismatch | `src/domain/institution-profiles.ts:liabilityDriven` | ✅ |
 | B2.a a structural, one-way demand | `src/engine/simulation/stages/institutional-balance-sheet.ts:institutionTotalAssetsLocal` | ✅ |
 | B3 a bank managing its own repricing gap | `src/domain/derivatives/classes/irs.ts:repricingLossLocal` | ✅ |
-| B4 a speculator with a view on rates | — | ❌ |
+| B4 a speculator with a view on rates | `src/domain/relative-value.ts:swapSpreadRead` · `src/engine/simulation/stages/relative-value.ts:runRelativeValueStage` | ✅ |
 | B5 a dealer running a book, hedging its net position | — | ❌ |
 | C1 swaps at many tenors; the set of cleared fixed rates IS a curve | `src/domain/derivatives/classes/irs.ts:SWAP_TENORS` | ✅ |
 | **C1.a the curve is a READ of cleared prices, never a fitted object that prices the swaps** | `src/engine/nelsonSiegel.ts:fitNelsonSiegelParams` | ⚠️ |
@@ -175,7 +175,14 @@ deleting the formula prices. Neither names `calculateParSwapRate` explicitly; st
 siblings (`priceCorporateBond`, `priceLeveragedLoan`) and says step 26 deletes the caller
 outright, which takes this with it.
 
-### ❌ B4 / B5 — THE MARKET HAS TWO PARTICIPANTS AND BOTH ARE HEDGERS
+### ✅ B4 / ❌ B5 — THE MARKET HAS A THIRD PARTICIPANT, AND IT IS NOT A HEDGER
+
+*2026-09-05 (§9.17f-iii). The relative-value book takes a view on the swap against the sovereign
+at the same tenor (`relative-value.ts:swapSpreadRead`): a swap paying more than the rung is
+received against the rung shorted through the lending book, a swap paying less is paid against
+the rung bought on the line, each a seat in the swap book at the yield plus or less the carry
+(`irs.ts:runSwapMarket` reads the leg as an opening and reads its fill against it). B5, the
+dealer's book, is still absent.*
 
 `runSwapMarket` builds exactly two populations: pay-fixed demand from banks whose sovereign book's
 two-sigma repricing loss exceeds absorbable capital and from corporates whose covenant headroom

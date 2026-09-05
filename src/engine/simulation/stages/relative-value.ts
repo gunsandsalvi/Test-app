@@ -30,13 +30,17 @@ import { institutionPartyKey } from '../../../domain/derivatives/contract';
 import { initialMarginRateOf } from '../../../domain/derivatives/registry';
 import { BOND_FUTURE_TERM_KEY, nextDeliveryWeek, bondDurationYears, bondFutureWeeklyMoveOf } from '../../../domain/derivatives/classes/bond-future';
 import { bondFutureInstrumentId } from '../../../domain/instrument-keys';
-import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, edgeBps, arbTargetShare, arbSizeShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
+import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, swapSpreadRead, swapSpreadLegs, mergeLegs, edgeBps, arbTargetShare, arbSizeShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
 import { asInstrumentId } from '../../../domain/ids';
 import { trancheClearedPricePerFace, trancheTerms, rowSpreadBps, priceAtSpreadOnTranche, IS_BOND_ROW } from '../../credit-price';
 import { ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
 import { bookRowsOf, instrumentIdAt, rowUnits, rowBasisLocal as rowBasisOf } from '../../../engine2/holdings';
 import { CDS_BENCHMARK_TENOR, CDS_TENOR_YEARS, cdsTenorWeeksOf } from '../../../domain/derivatives/classes/cds';
-import { cdsInstrumentId, creditIndexInstrumentId } from '../../../domain/instrument-keys';
+import { cdsInstrumentId, creditIndexInstrumentId, swapInstrumentId } from '../../../domain/instrument-keys';
+import { SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD } from '../../../domain/derivatives/classes/irs';
+import { materializeGovLadder } from '../../../engine2/tranches';
+import { priceFromYield } from '../../../domain/pricing/bond';
+import { trancheRowOf } from '../../../engine2/tranches';
 import { CDS_INDEX_TENOR_WEEKS } from '../../../domain/derivatives/classes/cds-index';
 import { isActiveCompany } from '../../../domain/company';
 import { sovereignRowsOf } from '../../sovereign-register';
@@ -60,6 +64,82 @@ export function runRelativeValueStage(state: GameState, ctx: WeeklyStepContext):
   readBondBasis(ctx, funds, view, standing, book, week);
   readCdsBasis(ctx, funds, view, standing, book, week);
   readIndexBasis(ctx, funds, view, standing, book, week);
+  readSwapSpread(ctx, funds, view, standing, book, week);
+  // Two comparables on one instrument — the ten-year rung under the bond basis and the ten-year
+  // swap spread — state one leg between them.
+  ctx.relativeValueLegs = mergeLegs(ctx.relativeValueLegs);
+}
+
+/** §3.17f-iii — THE SWAP SPREAD at each tenor: the par rate against the sovereign rung nearest
+ *  it; received against the rung shorted, or paid against the rung bought. */
+function readSwapSpread(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view: DerivativeLifecycleView, standing: StandingBook, book: DerivativeContract[], week: number): void {
+  REGION_IDS.forEach((regionId: RegionId) => {
+    const reg = ctx.updatedRegions[regionId];
+    if (!reg || !reg.swapParRateByTenor || !reg.zeroRates) return;
+    const regionFunds = funds.filter((f) => f.region === regionId);
+    if (regionFunds.length === 0) return;
+    const pbBook = primeBrokerageBookOf(ctx.v2, regionId);
+    const repoRateAnnual = view.overnightRateAnnual(regionId);
+    const ladder = materializeGovLadder(ctx.v2, regionId);
+    SWAP_TENORS.forEach((k) => {
+      const par = reg.swapParRateByTenor?.[k];
+      const govYield = reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]];
+      if (!(par !== undefined && par > 0) || !(govYield > 0)) return;
+      const years = SWAP_TENOR_YEARS[k];
+      // The rung nearest the swap's tenor, with a print.
+      let rung: typeof ladder[number] | undefined; let gap = Number.POSITIVE_INFINITY;
+      ladder.forEach((t) => { const g = Math.abs((t.maturityWeek - week) / 52 - years); if (t.maturityWeek > week + 1 && g < gap) { gap = g; rung = t; } });
+      if (!rung) return;
+      const bondId = rung.id;
+      const cashPrice = trancheClearedPricePerFace(ctx.v2, bondId);
+      const row = trancheRowOf(ctx.v2, bondId);
+      if (!(cashPrice !== undefined && cashPrice > 0) || row === undefined) return;
+      const terms = trancheTerms(ctx.v2, row, week, reg.policyRate);
+      const priceAtYieldBps = (bps: number) => priceFromYield(terms, bps / 10000);
+      const swapId = swapInstrumentId(regionId, k);
+      const marginRate = initialMarginRateOf({ classId: 'IRS', regionId, reference: { kind: 'RATE' }, termKey: k, maturityWeek: week + Math.round(years * 52) }, view);
+      const weeklyMoveBps = Math.max(1, view.rateWeeklyMoveBps(regionId, k) ?? 1);
+      const loanBook = securityLoanBookOf(ctx.v2, regionId).filter((l) => l.instrumentId === bondId);
+      const swapSpreadBps = (par - govYield) * 10000;
+      regionFunds.forEach((fund) => {
+        const line = pbBook.find((l) => l.fundId === fund.id);
+        const read = swapSpreadRead({ swapSpreadBps, borrowFeeBps: reg.borrowFeeBpsByCompanyId?.[bondId] ?? 0, financingRateAnnual: line?.rateAnnual ?? repoRateAnnual, repoRateAnnual, marginRate, requiredReturnAnnual: entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund)) });
+        const share = arbTargetShare(edgeBps(read.long), edgeBps(read.mirror), weeklyMoveBps);
+        const key = institutionPartyKey(fund.id);
+        // The position: received less paid at this tenor; the rung's face less what is borrowed.
+        const swapNet = standing.coverLocal('IRS', 'b', key, '', k) - standing.coverLocal('IRS', 'a', key, '', k);
+        const rows = sovereignRowsOf(ctx.v2, fund.id).filter((r) => r.bondId === bondId);
+        const heldFace = rows.reduce((a, r) => a + r.faceLocal, 0);
+        const borrowedFace = sharesOnLoan(loanBook, 'borrower', fund.id, bondId);
+        const bondNet = heldFace - borrowedFace;
+        if (share === 0 && Math.abs(swapNet) <= 1 && Math.abs(bondNet) <= 1 && heldFace <= 1) return;
+        const capacityLocal = arbCapacityLocal(entityCashOf(ctx.v2, fund), fund.primeBrokerageAvailableLocal);
+        const lines = book.filter((c) => c.classId === 'IRS' && c.termKey === k && c.regionId === regionId
+          && ((c.a.kind === 'INSTITUTION' && c.a.id === fund.id) || (c.b.kind === 'INSTITUTION' && c.b.id === fund.id)));
+        const pnlLocal = pairPnLLocal({
+          cashValueLocal: rows.reduce((a, r) => a + r.valueLocal, 0) + stockLoanNetLocal(loanBook, fund.id, () => cashPrice),
+          cashBasisLocal: rows.reduce((a, r) => a + rowBasisLocal(ctx.v2, r.row), 0),
+          futuresSettledToFundLocal: lines.reduce((a, c) => a + (c.a.kind === 'INSTITUTION' && c.a.id === fund.id ? 1 : -1) * (c.settledMarkLocal ?? 0), 0),
+        });
+        const stopped = stoppedOut(pnlLocal, lines.reduce((a, c) => a + c.initialMarginLocal, 0));
+        const carriedFace = capacityLocal / cashPrice;
+        const exposureFace = Math.max(Math.abs(swapNet), Math.abs(bondNet));
+        const targetFace = stopped ? 0 : exposureFace > carriedFace ? Math.sign(share || swapNet) * carriedFace : share * carriedFace;
+        const forced = stopped || exposureFace > carriedFace;
+        const swapDelta = targetFace - swapNet;
+        const bondDelta = -targetFace - bondNet;
+        const legs = swapSpreadLegs({ regionId, swapInstrumentId: swapId, bondId, faceLocal: targetFace, govYieldBps: govYield * 10000, parBps: par * 10000, carryBps: (targetFace >= 0 ? read.long : read.mirror).carryBps, weeklyMoveBps, priceAtYieldBps, cashPrice, budgetLocal: Math.min(Math.max(0, bondDelta) * cashPrice, capacityLocal) });
+        if (Math.abs(swapDelta) > 1) ctx.relativeValueLegs.push({ ...legs.swap, entityId: fund.id, faceLocal: swapDelta, forced });
+        if (bondDelta > 1) ctx.relativeValueLegs.push({ ...legs.bond, entityId: fund.id, faceLocal: bondDelta, forced });
+        else if (bondDelta < -1) {
+          const sellFace = Math.min(-bondDelta, heldFace);
+          if (sellFace > 1) ctx.relativeValueLegs.push({ ...legs.bond, entityId: fund.id, faceLocal: -sellFace, forced });
+          const borrowFace = -bondDelta - sellFace;
+          if (borrowFace > 1) ctx.borrowNeeds.push({ entityId: fund.id, regionId, instrumentId: bondId, units: borrowFace });
+        }
+      });
+    });
+  });
 }
 
 /** §3.17f-ii — THE INDEX AGAINST ITS NAMES: the series on the run against its constituents'

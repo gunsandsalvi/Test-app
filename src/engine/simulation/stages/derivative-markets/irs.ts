@@ -38,6 +38,7 @@ import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
 import { postInitialMargin, withInitialMargin, admitToHouse, openMemberCapacity, memberNotionalCapacityLocal, reserveMemberCapacity } from '../derivative-lifecycle';
 import { initialMarginRateOf } from '../../../../domain/derivatives/registry';
+import { indexHolderQuote } from '../../../../domain/derivatives/classes/cds-index';
 import { institutionTotalAssetsLocal, institutionBookLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
@@ -166,12 +167,36 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
 
     // ---- The RECEIVE-FIXED side: liability-matched books, whose reservation is the government
     // bond of the same tenor because that is the alternative they already have. ----
+    // §3.17f-iii: the relative-value books' legs at each tenor — fixed RECEIVED against the rung
+    // shorted (a long of the line, above the bond's yield plus the carry) or PAID against the
+    // rung bought (an opening short of the line, sold below the yield less the carry). Their
+    // openings are float; what a seat holds against its opening after the print is what it did.
+    const rvSeats: ClearingParticipant[] = [];
+    const openingBySeat = new Map<string, Map<InstrumentId, number>>();
+    const openingByTenor = new Map<SwapTenorKey, number>();
+    SWAP_TENORS.forEach((k) => openingByTenor.set(k, 0));
+    ctx.relativeValueLegs.filter((l) => l.market === 'IRS_FIXED' && l.regionId === regionId).forEach((leg) => {
+      const k = SWAP_TENORS.find((t) => swapInstrumentId(regionId, t) === leg.instrumentId);
+      if (!k) return;
+      const party: DerivativeParty = { kind: 'INSTITUTION', id: leg.entityId };
+      const houseLocal = memberNotionalCapacityLocal(ctx, capacity, party, money, marginRateOf(k));
+      const q = indexHolderQuote({ reservationBps: leg.reservationPrice, rangeBps: leg.fullSizePriceRange, gapLocal: Math.max(-houseLocal, Math.min(houseLocal, leg.faceLocal)) });
+      if (!(q.maxHoldingLocal > 0)) return;
+      let p = rvSeats.find((x) => x.id === leg.entityId);
+      if (!p) { p = { id: leg.entityId, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: new Map() }; rvSeats.push(p); openingBySeat.set(leg.entityId, new Map()); }
+      p.currentHoldingsByInstrumentId.set(leg.instrumentId, q.currentHoldingLocal);
+      p.demandByInstrumentId.set(leg.instrumentId, { reservationStat: q.reservationStat, maxHoldingLocal: q.maxHoldingLocal, fullSizeStatRange: q.fullSizeStatRange });
+      openingBySeat.get(leg.entityId)!.set(leg.instrumentId, q.currentHoldingLocal);
+      openingByTenor.set(k, (openingByTenor.get(k) ?? 0) + q.currentHoldingLocal);
+    });
+
     const instruments: ClearingInstrument[] = [];
     const floatByTenor = new Map<SwapTenorKey, number>();
     SWAP_TENORS.forEach((k) => {
-      const totalLocal = payDemandByTenor.get(k)!.reduce((a, d) => a + d.usd, 0);
+      const totalLocal = payDemandByTenor.get(k)!.reduce((a, d) => a + d.usd, 0) + (openingByTenor.get(k) ?? 0);
       floatByTenor.set(k, totalLocal);
-      if (!(totalLocal > 0)) return;
+      const seated = rvSeats.some((p) => p.demandByInstrumentId.has(swapInstrumentId(regionId, k)));
+      if (!(totalLocal > 0) && !seated) return;
       const zeroRate = reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]] ?? reg.policyRate;
       // §3.13-BOOK dII: the tenor's book is declared on the instrument index where it is built.
       registerBook(ctx.v2, swapInstrumentId(regionId, k), 'IRS', currencyOf(regionId));
@@ -186,8 +211,8 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
     });
     if (instruments.length === 0) return;
 
-    const irsEntityIds = new Set(regionEntities.map((e) => e.id));
-    const participants: ClearingParticipant[] = regionEntities.map((entity) => {
+    const irsEntityIds = new Set<EntityId>([...regionEntities.map((e) => e.id), ...rvSeats.map((p) => p.id as EntityId)]);
+    const participants: ClearingParticipant[] = regionEntities.filter((e) => !rvSeats.some((p) => p.id === e.id)).map((entity) => {
       const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       // How much duration it is short: a liability-matched book's assets are shorter than its
       // claims, and the gap is what it will take synthetically when the cash market cannot
@@ -216,6 +241,7 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
       return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
     });
 
+    participants.push(...rvSeats);
     const result = clearFinancialAsset(instruments, participants, {
       // Bilateral, cleared through the same house as every other book; the desks' spread on it
       // is DER's next slice, with the CDS and option books that share the machinery.
@@ -235,18 +261,18 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
       parByTenor[k] = Number((clearedBps / 10000).toFixed(6));
       const takenByEntity = new Map<EntityId, number>();
       let totalTakenLocal = 0;
+      const demands = [...payDemandByTenor.get(k)!];
       // §3.13-BOOK (c2b): the engine keys fills by PARTICIPANT id, a different space; the
-      // book's own admitted set is what proves this one names an institution.
+      // book's own admitted set is what proves this one names an institution. §3.17f-iii: a
+      // seat's fill is read against its opening — above it received, below it paid.
       result.newParticipantHoldings.forEach((byInstrument, participantId) => {
         if (!isKnownEntity(irsEntityIds, participantId)) return;
         const entityId = participantId;
-        const usd = byInstrument.get(instrumentId) ?? 0;
-        if (usd <= 1) return;
-        takenByEntity.set(entityId, usd);
-        totalTakenLocal += usd;
+        const usd = (byInstrument.get(instrumentId) ?? 0) - (openingBySeat.get(participantId)?.get(instrumentId) ?? 0);
+        if (usd > 1) { takenByEntity.set(entityId, usd); totalTakenLocal += usd; }
+        else if (usd < -1) demands.push({ party: { kind: 'INSTITUTION', id: entityId }, usd: -usd });
       });
       if (totalTakenLocal <= 0) return;
-      const demands = payDemandByTenor.get(k)!;
       const totalDemandLocal = demands.reduce((a, d) => a + d.usd, 0);
       const fundedShare = Math.min(1, totalTakenLocal / Math.max(1, totalDemandLocal));
       demands.forEach((d) => {
