@@ -100,9 +100,9 @@ checked by `scripts/check-atlas.sh`.
 | **A3 FORBID no holding without a holder** | `src/engine2/holdings.ts:bookHeadOf` | ✅ |
 | **A4 FORBID no holding without an issuer** | `src/engine/ledger/wire.ts:wire` · `src/engine/ledger/wire-world.ts:wireWorldOf` · `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | B1 an instrument has an issued amount | `src/engine2/instruments.ts:InstrumentIndex` · `src/engine/ledger/tranche-ledger.ts:issueTranche` | ✅ |
-| B2 VERIFY Σ holdings = issued amount, per instrument | `src/engine2/instruments.ts:issuedSharesOf` · `src/engine/audit/ownership.ts:auditOwnership` | ⚠️ |
+| B2 VERIFY Σ holdings = issued amount, per instrument | `src/engine2/instruments.ts:issuedSharesOf` · `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | B2.a shortfall = a claim vanished; surplus = one invented | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
-| **B2.b the tolerance is float dust, never a fraction of the issue** | `src/domain/stated.ts:AUDIT_BOOKS_TOLERANCE` | ❌ |
+| **B2.b the tolerance is float dust, never a fraction of the issue** | `src/engine/audit/types.ts:floatDustLocal` | ✅ |
 | B3 the issuer's liability is a read of the other side | `src/domain/company.ts:totalDebtOf` | ✅ |
 | B4 an instrument ceases and every holding resolves | `src/engine/ledger/holdings-ledger.ts:retireHolding` | ✅ |
 | C1 ownership changes only by a transfer with two named sides | `src/engine/ledger/holdings-ledger.ts:transferHolding` | ✅ |
@@ -257,7 +257,7 @@ company's shares, a fund's — with `setIssuedUnits` the one writer (a listing, 
 stock-paid merger, a spin-off, a take-private, a fund's creations and redemptions) and
 `issuedSharesOf` / `etfSharesOutstandingOf` the read; `Company.sharesOutstanding` and
 `EtfFund.sharesOutstanding` are gone, and `O2` compares the register against the index's count —
-B2's issued side is real, and only B2.b's band keeps B2 at ⚠️.
+B2's issued side is real, and §9.27-i took B2.b's band off it: B2 ✅.
 
 ### ✅ F1 / F1.a — CLOSED: THE ETF SHARE HAS ONE KEY (§9.13-BOOK dIII)
 
@@ -285,20 +285,15 @@ taxed (`the-treasury.md` C1), and a fund's P&L can separate what it earned from 
 handed it (`corporate-credit.md` E4.a). Not in it: a DESK's row (`adjustDeskRow`) keeps its lots
 but books its result on the bank's income statement, not here.
 
-### ❌ B2.b — THE HELD-EQUALS-ISSUED CHECK FORGIVES 2% OF THE ISSUE
+### ✅ B2.b — CLOSED: THE HELD-EQUALS-ISSUED CHECK FORGIVES ONLY THE ARITHMETIC'S DUST (§9.27-i)
 
-`audit/ownership.ts:59` fires O1 only when `|held − outstanding| > max(5e7, outstanding × 0.02)`,
-with `AUDIT_BOOKS_TOLERANCE = 0.02` declared as a RESOLUTION in `domain/stated.ts:114-119`. O6 is
-the same shape at `max(1e7, issued × 0.02)`. B2.b names this exactly: *"the tolerance is float
-dust, never a fraction of the issue (rule 7)"*. On a corporate book of hundreds of billions, 2%
-is tens of billions of paper that may be held by nobody or claimed twice, per region per kind, and
-the check will not say so.
-
-The registry entry's own reason — *"the test is invariance to the tolerance, not its value"* —
-concedes the point: nothing measures that invariance.
-
-**Already §3 step 27** (the audit's percentage bands). Second witness, and the sharpest one: this
-is the band on the register's own defining identity.
+`audit/ownership.ts` O1 fires when `|held − outstanding|` exceeds `floatDustLocal(|held| +
+|outstanding|, terms)` — `audit/types.ts:floatDustLocal`, `n × eps × Σ|terms|` and never below the
+cent — with `terms` the count `ownershipCoverage` itself added into that region's bucket; O6 is the
+same on its key's count, O2 on the rows each issuer's holders occupy. The 2% band that could hide
+tens of billions of paper held by nobody or claimed twice, per region per kind, is gone, and
+`AUDIT_BOOKS_TOLERANCE` is read by nobody (§3.27-ii deletes the declaration). B2 is ✅ with it: the
+register's defining identity holds to the dust or fires.
 
 ### ✅ C2.a / D3 / A1.c — CLOSED: THE REGISTER STORES THE QUANTITY AND THE VALUE IS A READ
 
@@ -394,5 +389,4 @@ boundary this node used to record is gone.
 
 ### Also marked, briefly
 
-- **B2 ⚠️** — `O1` holds the identity at a 2% band — B2.b.
 - **C3 ⚠️** — the paper leg and the cash leg are two stages apart — C3.a/C3.b, 37-DVP.

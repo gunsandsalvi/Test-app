@@ -6,7 +6,7 @@
 import { GameState } from '../../types';
 import { instrumentIssuerOf } from '../../engine2/instruments';
 import { asInstrumentId } from '../../domain/ids';
-import { AuditFinding, B } from './types';
+import { AuditFinding, B, floatDust, floatDustLocal } from './types';
 import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey, registerQtyByKind, plantCostByCompany, queueCostByCompany, dwellingUnitsByRegion } from './snapshot';
 import type { PlantFlow } from '../../domain/plant';
 import { isTrancheKind } from '../../domain/assets';
@@ -44,7 +44,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
         - (w.moneyPendingByCurrency?.[cur] ?? 0) + (prev?.moneyPendingByCurrency?.[cur] ?? 0);
       const settled = s.grossByCurrency?.[cur] ?? 0;
       // Float dust on a sum of ~200k legs, not a fraction of it (rule 7).
-      if (Math.abs(wired - settled) <= 1e3) return;
+      if (Math.abs(wired - settled) <= floatDustLocal(Math.abs(wired) + Math.abs(settled), (w.byKind.MONEY ?? 0) + 1)) return;
       out.push({ family: 'W', check: 'W1 money wires = settlement gross', week, usd: wired - settled, message: `${cur} money wires ${B(wired)} against settlement's gross ${B(settled)} — a payment row with no wire, or a wire no pass settled` });
     });
   }
@@ -53,7 +53,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
   // holder whose fills no wire names (a leg still written on its own book).
   const nets = Object.entries(w.houseNetUSDByKey ?? {}).filter(([key, net]) => {
     const kind = key.split('|')[1];
-    return Math.abs(net) > Math.max(1e4, (w.valueUSDByKind[kind] ?? 0) * 1e-6);
+    return Math.abs(net) > floatDustLocal(Math.abs(w.valueUSDByKind[kind] ?? 0), (w.byKind[kind] ?? 0) + 1);
   });
   if (nets.length > 0 && process.env.W2_TRACE === '1') {
     console.log(`  [w2-trace] w${week}: ` + nets.map(([k, n]) => `${k.replace('|', ' ')} ${B(n)}`).join(' | '));
@@ -92,7 +92,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       if (!isTrancheKind(key.split('|')[1])) return;
       const delta = (now[key] ?? 0) - (prev.ladderUSDByKey![key] ?? 0);
       const wired = w.issuerNetUSDByKey?.[key] ?? 0;
-      if (Math.abs(delta - wired) > Math.max(1e4, Math.abs(delta) * 1e-6)) gaps.push([key, delta - wired]);
+      if (Math.abs(delta - wired) > floatDustLocal(Math.abs(now[key] ?? 0) + Math.abs(prev.ladderUSDByKey![key] ?? 0) + Math.abs(wired), (w.byKind[key.split('|')[1]] ?? 0) + 2)) gaps.push([key, delta - wired]);
     });
     if (gaps.length > 0 && process.env.LADDER_TRACE === '1' && prev.ladderUSDByTicker) {
       // The per-issuer decomposition: which firms' ladders moved by other than their wires, and
@@ -130,7 +130,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       // The tolerance is floating-point dust on the GROSS flow (a lot's 0.0001u residue, the sum
       // of thousands of products), never a share of the stock.
       const gross = (f ? f.producedUnits + f.consumedUnits + f.scrappedUnits : 0) + Math.abs(nets[key] ?? 0) + Math.abs(delta);
-      if (Math.abs(delta - explained) > Math.max(0.5, gross * 1e-6)) gaps.push([key, delta - explained]);
+      if (Math.abs(delta - explained) > floatDust(gross, (w.byKind.GOOD ?? 0) + 4)) gaps.push([key, delta - explained]);
     });
     if (gaps.length > 0 && process.env.GOODS_TRACE === '1') {
       // The decomposition of the worst gaps: stock by part (output, lots, transit, pool) before and
@@ -199,7 +199,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       const wired = net[kind] ?? 0;
       // Dust on the GROSS moved, never a share of the position.
       const gross = Math.abs(delta) + Math.abs(wired) + (now[kind] ?? 0);
-      if (Math.abs(delta - wired) > Math.max(1e-3, gross * 1e-9)) gaps.push([kind, delta - wired]);
+      if (Math.abs(delta - wired) > floatDust(gross, (w.byKind[kind] ?? 0) + 2)) gaps.push([kind, delta - wired]);
     });
     if (gaps.length > 0 && process.env.W5_TRACE === '1' && prev.registerQtyByHolder) {
       // WHICH BOOK. One number per asset kind cannot name a cause; the per-holder decomposition
@@ -237,7 +237,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
 /**
  * W6's arithmetic, pure so it can be asked without a world: per firm, the plant register's change
  * against its explanation, and the construction queue's against its own. The tolerance is float
- * dust on the GROSS flow — the sum of every term moved — never a share of the stock (W4's rule).
+ * dust on the GROSS flow — the sum of every term moved, at rule 7's `n × eps × Σ|terms|`.
  */
 export function plantIdentityGaps(
   prevPlant: Record<string, number>, prevQueue: Record<string, number>,
@@ -254,17 +254,17 @@ export function plantIdentityGaps(
     const deltaP = (nowPlant[id] ?? 0) - (prevPlant[id] ?? 0);
     const explainedP = commissioned - retired - scrapped - abandoned + born + (netPlant[id] ?? 0);
     const grossP = commissioned + retired + scrapped + abandoned + born + Math.abs(netPlant[id] ?? 0) + Math.abs(deltaP);
-    if (Math.abs(deltaP - explainedP) > Math.max(1, grossP * 1e-6)) gaps.push({ companyId: id, side: 'plant', gapLocal: deltaP - explainedP });
+    if (Math.abs(deltaP - explainedP) > floatDustLocal(grossP, 8)) gaps.push({ companyId: id, side: 'plant', gapLocal: deltaP - explainedP });
     const deltaQ = (nowQueue[id] ?? 0) - (prevQueue[id] ?? 0);
     const explainedQ = arrived - commissioned + (netQueue[id] ?? 0);
     const grossQ = arrived + commissioned + Math.abs(netQueue[id] ?? 0) + Math.abs(deltaQ);
-    if (Math.abs(deltaQ - explainedQ) > Math.max(1, grossQ * 1e-6)) gaps.push({ companyId: id, side: 'queue', gapLocal: deltaQ - explainedQ });
+    if (Math.abs(deltaQ - explainedQ) > floatDustLocal(grossQ, 5)) gaps.push({ companyId: id, side: 'queue', gapLocal: deltaQ - explainedQ });
   });
   gaps.sort((a, b) => Math.abs(b.gapLocal) - Math.abs(a.gapLocal));
   return gaps;
 }
 
-/** W7's arithmetic, pure: per region, the dwelling register's change against its wires, at W4's dust rule. */
+/** W7's arithmetic, pure: per region, the dwelling register's change against its wires, at rule 7's dust. */
 export function dwellingIdentityGaps(
   prevUnits: Record<string, number>, nowUnits: Record<string, number>, netUnits: Record<string, number>
 ): { region: string; gapUnits: number }[] {
@@ -273,7 +273,7 @@ export function dwellingIdentityGaps(
     const delta = (nowUnits[region] ?? 0) - (prevUnits[region] ?? 0);
     const wired = netUnits[region] ?? 0;
     const gross = Math.abs(delta) + Math.abs(wired);
-    if (Math.abs(delta - wired) > Math.max(0.5, gross * 1e-6)) gaps.push({ region, gapUnits: delta - wired });
+    if (Math.abs(delta - wired) > floatDust(gross, 3)) gaps.push({ region, gapUnits: delta - wired });
   });
   gaps.sort((a, b) => Math.abs(b.gapUnits) - Math.abs(a.gapUnits));
   return gaps;

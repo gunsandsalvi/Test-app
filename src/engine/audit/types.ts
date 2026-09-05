@@ -4,7 +4,7 @@
  * and names (N). Every check states the identity it asserts in its message, so a reader of the
  * table knows what is broken without opening the file.
  */
-
+import { LADDER_FACE_DUST_LOCAL } from '../../domain/stated';
 
 export interface AuditFinding {
   family: 'M' | 'O' | 'P' | 'X' | 'F' | 'N' | 'W';
@@ -13,6 +13,26 @@ export interface AuditFinding {
   message: string;
   /** The size of the breach in USD where one exists (a count otherwise). */
   usd?: number;
+}
+
+/**
+ * RULE 7 — A TOLERANCE IS FLOAT DUST, NEVER A PERCENTAGE (§3.27-i). An identity holds or it does
+ * not; a check may forgive only the error the floating-point arithmetic itself introduced — about
+ * `n × eps × Σ|terms|`, from the size and the COUNT of what was added, orders of magnitude below
+ * anything the model trades. A percentage band is a business judgement in a numerical costume: it
+ * says a thousand dollars may go missing if the book is large enough. A fixed number of dollars is
+ * either a real threshold or useless (§9.3). Every check's bound is this function of the sum it
+ * actually performed, and whatever then fires is a defect with a size, not a tolerance to widen.
+ */
+export function floatDust(sumOfAbsTerms: number, terms: number): number {
+  return Math.max(1, terms) * Number.EPSILON * Math.abs(sumOfAbsTerms);
+}
+
+/** The same, for MONEY: never less than the smallest unit there is — a cent
+ *  (`LADDER_FACE_DUST_LOCAL`, the one absolute resolution rule 7 asks for): below it there is no
+ *  rung to wire, whatever the book sits next to. */
+export function floatDustLocal(sumOfAbsTermsLocal: number, terms: number): number {
+  return Math.max(LADDER_FACE_DUST_LOCAL, floatDust(sumOfAbsTermsLocal, terms));
 }
 
 export const B = (usd: number): string => `${(usd / 1e9).toFixed(2)}B`;

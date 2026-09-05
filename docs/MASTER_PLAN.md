@@ -553,23 +553,24 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-27. **The audit measures what it claims — and its tolerances are float dust (rule 7).** The
-    percentage bands are an inventory of their own and every one of them can hide a real number:
-    `estate-resolution.ts:591` forgives `1e-6 × face` on a register-versus-ladder identity (0.6M on
-    a 528M tranche is 1000× that and it is a real over-issuance — §9.11f); `money.ts` M1 forgives
-    `assets × 1e-4`, M5 `assets × 2e-3`, M6 `moneyBefore × 0.005`; `ownership.ts` O6 forgives
-    `max(1e7, issued × AUDIT_BOOKS_TOLERANCE)`; `accounts.ts:194` allows 5% on an exact two-legged
-    identity. Each becomes an ABSOLUTE dust bound derived from the sum actually performed, and
-    whatever then fires is a step. The rest of this step: `audit/index.ts:45` omits `'W'` from the scoreboard, so
-    the wires family — W1 money-wires = gross, W3 ladders, W4 "no unit sold that did not exist" —
-    has no summary line (its findings do reach the violation count: 12 of last run's 82).
-    `ownership.ts:70` compares `stockPrice × sharesOutstanding` against `marketCapOf`, defined as
-    exactly that — a tautology that cannot fire. `prices.ts:39,49,126` only fire above 5%/10%/25%
-    breach quotas, so a minority may invert seniority with a clean board; `:55` hard-codes a 40%
-    recovery and a ±20pp band; `:128` tests futures against a fixed 0.8/1.25 box with no rate,
-    storage cost or tenor; `:33` compares spreads over the policy rate against a spread over the
-    curve. `accounts.ts:194` allows a 5% gap on an exact two-legged identity. Every audit tolerance
-    is declared in `stated.ts` or derived.
+27-ii. **The scoreboard shows the wires, the tautology dies, and the band's declaration with it.**
+    `audit/index.ts:auditSummary` iterates `['M','O','P','X','F','N']`, so the W family — W1
+    money-wires = gross, W3 ladders, W4 goods, W5 the register, W6 plant, W7 dwellings — has no
+    summary line (its findings reach the violation count). `ownership.ts` O2 compares `stockPrice ×
+    issued` against `marketCapAt`, defined as exactly that — a read of one thing against itself,
+    which cannot fire. And `stated.ts:AUDIT_BOOKS_TOLERANCE`, read by nobody after 27-i, leaves the
+    registry (§5-DIST-P: the count falls). the-audit B7/D1 ⚠️→✅, A1.a re-marked.
+27-iii. **The prices family measures what it claims.** `prices.ts` P1 and P2 fire only above
+    5%/10% breach quotas and X2 above 25%, so a minority may invert seniority with a clean board —
+    every breach is a finding and the count is its size; P1's `loan > bond × 1.05 + 25bp` bands are
+    the same shape; P2 hard-codes a 40% recovery and a ±20pp band where the CDS pricer's own assumed
+    recovery is the priced side and the sample's own standard error the only honest band; X2 tests
+    the same good across regions against a fixed 2.5× and futures against a 0.8/1.25 box with no
+    rate, storage cost or tenor, where the wedge is freight plus conversion and the carry is the
+    repo rate over the tenor plus the good's own storage (`annualCarryingCostRateOf`); P1 compares
+    a CP spread over the POLICY rate against a bond spread over the CURVE; X1's repo corridor and
+    deposit-rate bands are stated widths. Each becomes a read of the mechanism that sets it.
+    the-audit B3/B4 re-marked.
 28. **The harness's own defects.** *(The first — the NaN per-bank identity — is DONE, with the
     over-pledge and SME-cash reads that were dead the same way; §9's lint entry.)*
     `:2600` reads book-weighted regional averages for the capital and NIM bands, so a minority of
@@ -1351,6 +1352,22 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**27-i — EVERY AUDIT TOLERANCE IS FLOAT DUST, DERIVED FROM THE SUM PERFORMED.** Two percentage
+  bands and a drawer of round numbers stood where rule 7 asks for one thing: `money.ts` M1 forgave
+  `assets × 1e-4`, M5 `assets × 2e-3`, M6 `moneyBefore × 0.005`; `ownership.ts` O1/O2/O6 forgave
+  2% of the issue and O5 `1.001 × principal + 1`; `accounts.ts` F1 `assets × 1e-3`, its cash line
+  1%, F3 5% of exports on a two-legged identity; and the fixed thresholds `1e3`…`5e8` (M2/M3/M4/M8,
+  W1–W3, P5/P8) forgave the same dollars whatever the sum. One owner now: `audit/types.ts:floatDust
+  (Σ|terms|, n) = n × eps × Σ|terms|`, and `floatDustLocal` the same never below the cent
+  (`LADDER_FACE_DUST_LOCAL`). Every check's bound is that function of the sum it performed, the
+  COUNT read off what it added — O1's `ownershipCoverage` and O6's `add` count their terms per
+  bucket and key, O2 its rows per issuer, M5 its loan rows and five deposit classes, F2 its reason
+  keys, W1–W7 the journal's `byKind` — and M4's "overdrawn" is below zero by more than the dust, not
+  by more than a million. P6's curve-against-tenor and X1's forward sign are dust too. the-audit
+  A4/A4.a ❌→✅ (`types.ts:floatDustLocal`); the-register B2.b ❌→✅ and B2 ⚠️→✅ — the band on the
+  register's defining identity is gone; `AUDIT_BOOKS_TOLERANCE` is read by nobody and 27-ii deletes
+  it. Whatever now fires is a defect with a size, the run's to find. Gates green; no run (rule 11).
 
 **26b-ii — THE HOUSE PRICE IS A BOOK.** The affordability walk priced the marginal buyer honestly
   and nobody transacted: no seller had a reservation and no offer could go unsold.

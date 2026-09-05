@@ -8,7 +8,7 @@ import { GameState } from '../../types';
 import { marketCapAt } from '../../engine2/instruments';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany, banksOf } from '../../domain/company';
-import { AuditFinding, B, pct, spearman, sum } from './types';
+import { AuditFinding, B, pct, spearman, sum, floatDust, floatDustLocal } from './types';
 import { calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { ensureV2, typeOf } from '../../engine2/world';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../engine2/holdings';
@@ -144,7 +144,7 @@ function x1(state: GameState, week: number): AuditFinding[] {
     for (let i = 1; i < pts.length; i++) {
       const [t0, r0] = pts[i - 1], [t1, r1] = pts[i];
       const fwd = (r1 * t1 - r0 * t0) / (t1 - t0);
-      if (fwd < -1e-4) out.push({ family: 'X', check: 'X1 forward rates non-negative', week, usd: fwd, message: `${r}: the ${t0}y→${t1}y forward is ${pct(fwd)}` });
+      if (fwd < -floatDust(Math.abs(r1 * t1) + Math.abs(r0 * t0), 4) / (t1 - t0)) out.push({ family: 'X', check: 'X1 forward rates non-negative', week, usd: fwd, message: `${r}: the ${t0}y→${t1}y forward is ${pct(fwd)}` });
     }
     const repo = reg.repoRateAnnual ?? reg.policyRate;
     if (repo > reg.policyRate + 0.015 || repo < reg.policyRate - 0.015) out.push({ family: 'X', check: 'X1 repo inside the corridor', week, usd: repo - reg.policyRate, message: `${r}: repo ${pct(repo)} against policy ${pct(reg.policyRate)}` });
@@ -233,7 +233,7 @@ function p5(state: GameState, week: number): AuditFinding[] {
     }
   });
   const gapLocal = markedLocal - impliedLocal;
-  if (rows > 0 && Math.abs(gapLocal) > 1e6) {
+  if (rows > 0 && Math.abs(gapLocal) > floatDustLocal(Math.abs(markedLocal) + Math.abs(impliedLocal), rows + 1)) {
     out.push({ family: 'P', check: 'P5 the register marks credit at its cleared spread', week, usd: gapLocal, message: `${rows} credit rows on ${B(faceLocal)} of face are marked at ${B(markedLocal)} against ${B(impliedLocal)} implied by their own cleared spreads — a ${B(gapLocal)} gap (widest ${widest.id} by ${B(widest.gapLocal)}${unpriced ? `; ${unpriced} rows could not be priced` : ''})` });
   }
   return out;
@@ -272,7 +272,8 @@ function p6(state: GameState, week: number): AuditFinding[] {
       const struck = reg.zeroRates[t.key];
       const gapBps = (fitted - struck) * 10000;
       if (Math.abs(gapBps) > Math.abs(worstBps)) worstBps = gapBps;
-      if (Math.abs(gapBps) > 1) gaps.push(`${r} ${t.key} ${gapBps.toFixed(1)}bp`);
+      // One curve by construction (`sovereign-curve.ts` publishes the tenors as reads of the fit): the two may differ by the arithmetic's dust and nothing else.
+      if (Math.abs(gapBps) > floatDust(Math.abs(fitted) + Math.abs(struck), 8) * 10000) gaps.push(`${r} ${t.key} ${gapBps.toFixed(1)}bp`);
     });
   });
   if (gaps.length > 0) {
@@ -337,7 +338,7 @@ function p8(state: GameState, week: number): AuditFinding[] {
     }
   });
   const gapLocal = faceLocal - impliedLocal;
-  if (rungs > 0 && Math.abs(gapLocal) > 1e6) {
+  if (rungs > 0 && Math.abs(gapLocal) > floatDustLocal(Math.abs(faceLocal) + Math.abs(impliedLocal), rungs + 1)) {
     out.push({ family: 'P', check: 'P8 the sovereign book is carried at par', week, usd: gapLocal,
       message: `${rungs} of ${livePaper} live sovereign rungs have printed a price; on their ${B(faceLocal)} of face the register carries face against ${B(impliedLocal)} the auction itself printed — a ${B(gapLocal)} gap (${byRegion.join(' | ')}); the auction prices it now, and the register still carries it at par` });
   }

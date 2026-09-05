@@ -84,8 +84,8 @@ checked by `scripts/check-atlas.sh`.
 | A2 it names WHO | `src/engine/audit/types.ts:AuditFinding` | ✅ |
 | A2.a a violation with no owner cannot be fixed | `src/engine/audit/money.ts:auditMoney` | ✅ |
 | A3 and HOW MUCH, in a unit | `src/engine/audit/types.ts:AuditFinding` | ⚠️ |
-| **A4 the tolerance is float dust** | `src/engine/audit/ownership.ts:AUDIT_BOOKS_TOLERANCE` | ❌ |
-| A4.a a percentage hides a defect that scales | `src/engine/audit/money.ts:auditMoney` | ❌ |
+| **A4 the tolerance is float dust** | `src/engine/audit/types.ts:floatDustLocal` | ✅ |
+| A4.a a percentage hides a defect that scales | `src/engine/audit/types.ts:floatDust` | ✅ |
 | B1 money is conserved | `src/engine/audit/money.ts:auditMoney` | ✅ |
 | B2 ownership is conserved | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | B3 prices exist and are cleared | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
@@ -119,13 +119,17 @@ particular is honoured absolutely — no family mutates state.
 Everything below is already a §3 step. This tree's contribution is that it says WHICH NODE each
 step is, so a future reader can tell a known gap from a new one.
 
-### ❌ A4 / A4.a — PERCENTAGE TOLERANCES, AND THE ATLAS AGREES WITH RULE 7
+### ✅ A4 / A4.a — CLOSED: EVERY TOLERANCE IS FLOAT DUST, DERIVED FROM THE SUM PERFORMED (§9.27-i)
 
-`ownership.ts:59` forgives `max(5e7, o * AUDIT_BOOKS_TOLERANCE)`; `money.ts:135` forgives
-`max(1e7, assets * 2e-3)`. Node A4 is rule 7 restated from the domain side and reaches the same
-verdict independently: a tolerance is the accumulated representation error of the arithmetic that
-produced the number, so it is absolute, and a percentage forgives exactly the defects that scale.
-**Already §3 step 27**, which owns the full inventory. No new step.
+`types.ts:floatDust(Σ|terms|, n)` is `n × eps × Σ|terms|` — the representation error the
+arithmetic that produced the number could have accumulated, from its size and the COUNT of what it
+added — and `floatDustLocal` is the same never below the cent (`LADDER_FACE_DUST_LOCAL`). Every
+check's bound is that function of the sum it actually performed, the count read off what it added:
+O1 per region and bucket, O6 per key, O2 per issuer's rows, M5 its loan rows and five deposit
+classes, F2 its reason keys, W1–W7 the journal's `byKind`. Node A4 was rule 7 restated from the
+domain side, and A4.a is why it mattered: `max(5e7, o × 0.02)` and `max(1e7, assets × 2e-3)`
+forgave exactly the defects that scale. `AUDIT_BOOKS_TOLERANCE` is read by nobody and leaves the
+registry in §3.27-ii. Whatever fires now is a defect with a size, and the run's to find (rule 11).
 
 ### ⚠️ B7 / D1 — THE W FAMILY HAS NO SCOREBOARD LINE
 
