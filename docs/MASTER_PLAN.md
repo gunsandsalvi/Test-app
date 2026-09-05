@@ -559,10 +559,10 @@ written from here):
     or a type that LIES, where the guard is the only thing catching a runtime `undefined` the
     declaration denies, and the fix is the declaration (an optional field, a `Partial<Record>` for
     a sparse store), never the guard. One directory at a time (rule 10), the budget falling with
-    each: **a** domain, engine2 and test (26) is DONE; **b** `src/engine` outside the simulation
-    (69: `audit/prices.ts` 12, `macro/evolution.ts` 14, `companyGenerator.ts` 8, the seed 8);
-    **c** `src/engine/simulation` (151: `shared-helpers.ts` 15, `02b` 12, `bank-lending.ts` 12,
-    `labor-market.ts` 12, `05` 9); **d** `src/ui` and `scripts/harness.ts` (96).
+    each: **a** domain, engine2 and test (26) and **b** `src/engine` outside the simulation (69)
+    are DONE; **c** `src/engine/simulation` (151: `shared-helpers.ts` 15, `02b` 12,
+    `bank-lending.ts` 12, `labor-market.ts` 12, `05` 9); **d** `src/ui` and `scripts/harness.ts`
+    (96).
 29-iv. **The defensive reads.** The 1,223 `??` and `?.` on values the types say are never nullish
     are the same choice per site: a fallback that cannot run (delete it — a `?? 0` that never
     fires is a stated number with no owner, rule 2) or a type that lies (fix it). `scripts/harness.ts`
@@ -1208,7 +1208,7 @@ none of them steps a week of the simulation. Green before every commit.
 | Command | Note |
 |---|---|
 | `npx tsc --noEmit` | |
-| `npx eslint src scripts test --no-warn-ignored --max-warnings 1531` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
+| `npx eslint src scripts test --no-warn-ignored --max-warnings 1425` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
 | `npm test` | the unit suite: contracts and arithmetic, never a run |
 | `bash scripts/check-hygiene.sh` | carries `check-atlas.sh` and the stated-literal ratchets |
 | `npm run build` | |
@@ -1335,6 +1335,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**29-iii-b — THE DEAD CONDITIONS IN THE ENGINE OUTSIDE THE SIMULATION.** Sixty-nine. The largest
+  family was `if (!reg) return` on `state.regions[r]` and its `reg?.zeroRates` cousins — twenty
+  guards on a store that is total over the four regions with non-optional curves, in the audit,
+  the seed's close, the ledger, the indices and the cohorts: deleted, with the `?.` they carried.
+  `x || []` and `x || {}` on non-optional arrays and maps (bank transfers, the banking sector's
+  books, the region's histories and lag buffers, the SME pools) and `region.householdState || {…}`
+  with a thirty-line default that could never run: deleted. An `else if` that named the last
+  member of an exhausted union (`sector === 'Consumer'`, `tier === 'SUBPRIME'`, the security
+  loan's lender): the condition deleted, the branch kept. Types that lied, fixed at the
+  declaration: the wire journal's `goodsFlows`/`plantFlows` and the summary's two views of them
+  are `Partial<Record>` (a key flows the first time it is touched), as are the holdings table's
+  two memos, P5's tranche memo and the seed's category groups; `array[i]` reads use `.at(i)`; the
+  industry-or-sub-unit lookup asks `Object.hasOwn` instead of casting. 1,531 → 1,425. Gates
+  green; no run (rule 11).
 
 **29-iii-a — THE DEAD CONDITIONS IN DOMAIN, ENGINE2 AND TEST.** Twenty-six, and they sorted
   cleanly into the two kinds. Guards the type already excludes, deleted: `if (!inv)` on a

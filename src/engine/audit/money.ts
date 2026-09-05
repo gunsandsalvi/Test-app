@@ -126,7 +126,6 @@ function m4(state: GameState, week: number): AuditFinding[] {
   if (negBank.length) out.push({ family: 'M', check: 'M4 negative reserves', week, usd: sum(negBank, (b) => bankReservesOf(v2, b.id)), message: `${negBank.map((b) => b.ticker).join(' ')} hold negative reserves` });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    if (!reg) return;
     const negPools = (reg.smePools ?? []).filter((p) => overdrawn(poolCashOf(v2, r, p.industry)));
     if (negPools.length) out.push({ family: 'M', check: 'M4 overdrawn pools', week, usd: sum(negPools, (p) => poolCashOf(v2, r, p.industry)), message: `${r}: ${negPools.length} pools overdrawn ${B(sum(negPools, (p) => poolCashOf(v2, r, p.industry)))}` });
     const hh = householdDepositsOf(v2, r);
@@ -162,7 +161,7 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     const before = prev[r];
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
-    if (!before || !cb || !reg) return;
+    if (!before || !cb) return;
     // Money is the bank lines and the treasury's account (nothing is in transit).
     const now = sum(banksOf(state.companies, r), (b) => depositsOf(b.bankBalanceSheet!, stateDepositLines(state, b))) + treasuryAccountOf(ensureV2(state), r);
     const moneyBefore = before.bankDepositsLocal + before.treasuryAccountLocal;
@@ -238,7 +237,6 @@ function m8(state: GameState, week: number): AuditFinding[] {
   let expectedLocal = 0;
   posByCurrency.forEach((pos, cur) => {
     const before = rv.fxBefore[cur], after = rv.fxAfter[cur];
-    if (before === undefined || after === undefined) return;
     expectedLocal += pos * (after - before);
   });
   const gap = rv.bookedLocal - expectedLocal;

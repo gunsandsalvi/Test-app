@@ -242,7 +242,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
 export function plantIdentityGaps(
   prevPlant: Record<string, number>, prevQueue: Record<string, number>,
   nowPlant: Record<string, number>, nowQueue: Record<string, number>,
-  flows: Record<string, PlantFlow>, netPlant: Record<string, number>, netQueue: Record<string, number>
+  flows: Partial<Record<string, PlantFlow>>, netPlant: Record<string, number>, netQueue: Record<string, number>
 ): { companyId: string; side: 'plant' | 'queue'; gapLocal: number }[] {
   const gaps: { companyId: string; side: 'plant' | 'queue'; gapLocal: number }[] = [];
   const ids = new Set([...Object.keys(prevPlant), ...Object.keys(nowPlant), ...Object.keys(prevQueue), ...Object.keys(nowQueue),

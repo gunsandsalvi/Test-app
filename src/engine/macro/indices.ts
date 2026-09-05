@@ -150,7 +150,6 @@ const getCapWeightedAvgPrice = (capOf: (c: Company) => number, firms: Company[])
     firms.forEach((c) => {
       if (!ratings.includes(c.creditRating) || !isActiveCompany(c)) return;
       const rates = regions[c.region];
-      if (!rates?.zeroRates) return;
       points.push(...issuerCreditPointsOnCurve(v2, rates, c.id, week));
     });
     const weighted = faceWeightedSpreadBps(points);

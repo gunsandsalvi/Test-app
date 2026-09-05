@@ -38,7 +38,7 @@ export function snapshotOf(state: GameState): AuditSnapshot {
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
-    if (!reg || !cb) return;
+    if (!cb) return;
     const banks = banksOf(state.companies, r);
     out[r] = {
       treasuryAccountLocal: treasuryAccountOf(ensureV2(state), r),

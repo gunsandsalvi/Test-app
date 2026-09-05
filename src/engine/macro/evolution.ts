@@ -4,7 +4,7 @@ import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams } from '../nelsonSiegel';
 import { RegionId, Region, Commodity, HouseholdState, OccupationType, OccupationPool, Company, WealthTier, HousingMarket } from '../../types';
-import { getBaseAnnualWageLocal, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
+import { getBaseAnnualWageLocal } from '../bootstrap/labor-and-wages';
 import {
   computeHouseholdDisposableIncomeLocal,
   UNEMPLOYMENT_REPLACEMENT_RATE,
@@ -89,7 +89,6 @@ function sovereignDeficitPctGdp(region: Region): number {
 }
 
 function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
-  if (!pools) return 0.03;
   return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
 }
 
@@ -142,8 +141,8 @@ export function evolveRegionMacro(
   isMeeting: boolean;
   diagnosticString: string;
 } {
-  const { updatedBuffer: newPolicyRateLagBuffer } = pushAndReadLagged(region.policyRateLagBuffer || [], region.policyRate, 6);
-  const { updatedBuffer: newDemandShockLagBuffer } = pushAndReadLagged(region.demandShockLagBuffer || [], globalShock.gdpShock, 4);
+  const { updatedBuffer: newPolicyRateLagBuffer } = pushAndReadLagged(region.policyRateLagBuffer, region.policyRate, 6);
+  const { updatedBuffer: newDemandShockLagBuffer } = pushAndReadLagged(region.demandShockLagBuffer, globalShock.gdpShock, 4);
   
   const updatedWeather = evolveRegionalWeather(region.id, region.weather, week, allCompanies);
 
@@ -159,35 +158,7 @@ export function evolveRegionMacro(
   const potentialGdp = region.potentialGdpGrowth;
   const newGdpGrowth = region.gdpGrowth;
 
-  const prevHS: HouseholdState = region.householdState || {
-    wageGrowth: region.wageGrowth,
-    savingsRate: 0.06,
-    realConsumptionGrowth: 0.02,
-    householdDebtToIncomeRatio: 1.05,
-    stapleSpendShare: 0.35,
-    standardSpendShare: 0.50,
-    luxurySpendShare: 0.15,
-    equityHoldingsLocal: region.estimatedHouseholdIncomeLocal * 1.5,
-    directEquityLocal: 0,
-    housingStockLocal: 0,
-    priorNetWorthLocal: 0,
-    homeEquityLocal: 0,
-    institutionalClaims: [],
-    institutionalClaimsLocal: 0,
-    etfShares: [],
-    etfHoldingsLocal: 0,
-    privateBusinessEquityLocal: 0,
-    mortgageDebtLocal: region.estimatedHouseholdIncomeLocal * 0.8,
-    creditCardDebtLocal: region.estimatedHouseholdIncomeLocal * 0.05,
-    otherConsumerLoanDebtLocal: region.estimatedHouseholdIncomeLocal * 0.1,
-    netWorthLocal: region.estimatedHouseholdIncomeLocal * 1.0,
-    creditTierBooks: [
-      { tier: 'SUPER_PRIME', shareOfHouseholds: 0.25, debtBalanceLocal: 0, avgInterestRate: 0.06, delinquencyRatePct: 0.002 },
-      { tier: 'PRIME', shareOfHouseholds: 0.35, debtBalanceLocal: 0, avgInterestRate: 0.12, delinquencyRatePct: 0.015 },
-      { tier: 'NEAR_PRIME', shareOfHouseholds: 0.25, debtBalanceLocal: 0, avgInterestRate: 0.19, delinquencyRatePct: 0.045 },
-      { tier: 'SUBPRIME', shareOfHouseholds: 0.15, debtBalanceLocal: 0, avgInterestRate: 0.28, delinquencyRatePct: 0.11 },
-    ],
-  };
+  const prevHS: HouseholdState = region.householdState;
 
   // §7.280 (MAC) — THE STANCE READS THE GOVERNMENT'S OWN BUDGET. The old step function moved on
   // a regime LABEL alone (+0.15 in a labelled recession, -0.10 in a hot expansion), and none of
@@ -293,15 +264,8 @@ export function evolveRegionMacro(
   const newUnemployment = region.unemploymentRate;
 
   // Occupation Pools & Retraining Dynamics (Stage 2: X3 & X4)
-  const defaultOccupationShares: Record<OccupationType, number> = BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
-  const currentLaborForceShares = region.occupationLaborForceShare || defaultOccupationShares;
-  const currentOccupationPools = region.occupationPools || {
-    GENERAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-    SKILLED_TRADES: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-    TECHNICAL_ENGINEERING: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-    SPECIALIZED_PROFESSIONAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-    MANAGERIAL_FINANCIAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-  };
+  const currentLaborForceShares = region.occupationLaborForceShare;
+  const currentOccupationPools = region.occupationPools;
 
 
   // Consumer & Household Sector Simulation
@@ -433,7 +397,7 @@ export function evolveRegionMacro(
   // (SEG-B credits it there), its employment is set by the labor market off that revenue like
   // any named firm's, its margin moves with its own measured costs, and its debt is the derived
   // sum of the banks' pool loans. This stage carries the state forward and owns nothing of it.
-  const newSmePools: SmePool[] = (region.smePools || []).map(seg => ({ ...seg }));
+  const newSmePools: SmePool[] = region.smePools.map(seg => ({ ...seg }));
 
 
 
@@ -462,8 +426,8 @@ export function evolveRegionMacro(
   // is what the literature finds and the single constant could not express. Falls back to the
   // aggregate constant only while the tier marks have not run yet.
   const tierWealthEffectLocal = WEALTH_TIERS.reduce((a, t) => {
-    const tier = region.wealthDistribution?.[t];
-    if (!tier || tier.priorNetWorthLocal === undefined) return a;
+    const tier = region.wealthDistribution[t];
+    if (tier.priorNetWorthLocal === undefined) return a;
     // DIST/COH: the propensity is DERIVED from this tier's own savings rate and how much of its
     // wealth is actually liquid — not a stated per-tier constant (§7.142).
     return a + tierWealthMpc(tier) * (tier.shareOfNetWorthLocal - tier.priorNetWorthLocal);
@@ -529,7 +493,7 @@ export function evolveRegionMacro(
   });
   const unemploymentBenefitsLocal = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
-    const availableSupplyForOcc = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
+    const availableSupplyForOcc = totalLaborForce * currentLaborForceShares[occ];
     const unemployedInPool = Math.max(0, availableSupplyForOcc - pool.employed);
     return sum + baseAnnualWageLocal[occ] * pool.wageIndex * unemployedInPool * UNEMPLOYMENT_REPLACEMENT_RATE;
   }, 0);
@@ -605,7 +569,7 @@ export function evolveRegionMacro(
   // cross-section and the spend-mix shares are all derived from these cells now.
   const laborForceByOccupation = {} as Record<OccupationType, number>;
   (Object.keys(newOccupationPools) as OccupationType[]).forEach((occ) => {
-    laborForceByOccupation[occ] = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ] ?? 0);
+    laborForceByOccupation[occ] = totalLaborForce * currentLaborForceShares[occ];
   });
   const cohortResult = buildHouseholdCohorts({
     regionId: region.id,
@@ -716,11 +680,10 @@ export function evolveRegionMacro(
   const joinByTier = new Map(creditOrder.map((t, i) => [t, joined[i]]));
 
   const updatedTiers = region.householdState.creditTierBooks.map(tier => {
-    let newShare = tier.shareOfHouseholds;
-    if (tier.tier === 'SUPER_PRIME') newShare = newSuperPrime;
-    else if (tier.tier === 'PRIME') newShare = newPrime;
-    else if (tier.tier === 'NEAR_PRIME') newShare = newNearPrime;
-    else if (tier.tier === 'SUBPRIME') newShare = newSubprime;
+    const newShare = tier.tier === 'SUPER_PRIME' ? newSuperPrime
+      : tier.tier === 'PRIME' ? newPrime
+      : tier.tier === 'NEAR_PRIME' ? newNearPrime
+      : newSubprime;
 
     const tierStress = householdStressSignal + (tier.tier === 'SUBPRIME' || tier.tier === 'NEAR_PRIME' ? generalStress * 0.01 : specializedStress * 0.01);
 
@@ -937,10 +900,10 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
 
   const histPolicy = [...region.historicalPolicyRates.slice(-51), newPolicyRate];
   const histInf = [...region.historicalInflation.slice(-51), newInflation];
-  const histCore = [...(region.historicalCoreInflation || region.historicalInflation).slice(-51), newCoreInflation];
+  const histCore = [...region.historicalCoreInflation.slice(-51), newCoreInflation];
   const histGdp = [...region.historicalGdpGrowth.slice(-51), newGdpGrowth];
-  const histWage = [...(region.historicalWageGrowth || region.historicalInflation).slice(-51), Number((newWageGrowth).toFixed(4))];
-  const histDebt = [...(region.historicalDebtToGdp || [1.0]).slice(-51), newDebtToGdpPct];
+  const histWage = [...region.historicalWageGrowth.slice(-51), Number((newWageGrowth).toFixed(4))];
+  const histDebt = [...region.historicalDebtToGdp.slice(-51), newDebtToGdpPct];
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
   // Housing market evolution as a real asset class
@@ -1009,7 +972,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const newPriceIndex = (prevHousing.baselineHomePriceLocal || 400000) > 0
     ? newMedianHomePriceLocal / (prevHousing.baselineHomePriceLocal || 400000)
     : 1;
-  const histPrices = [...(prevHousing.historicalPrices || []).slice(-51), newMedianHomePriceLocal];
+  const histPrices = [...prevHousing.historicalPrices.slice(-51), newMedianHomePriceLocal];
 
   const updatedHousingMarket: HousingMarket = {
     ...prevHousing,
@@ -1301,7 +1264,7 @@ function computePrivateSegmentCommoditySupplyLocal(commodityId: string, regions:
   // §6.1 money-locality: each pool's revenue is REGION-LOCAL; a world commodity market sums in
   // one numeraire (USD), or the total is a currency salad.
   return REGION_IDS.reduce((s, r) => {
-    return s + localToUsd((regions[r].smePools || []).reduce((s2, pool) => {
+    return s + localToUsd(regions[r].smePools.reduce((s2, pool) => {
       const linkage = smePoolLinkedCommodities(pool.industry).find(l => l.commodityId === commodityId);
       if (!linkage) return s2;
       return s2 + (pool.annualRevenueLocal * linkage.intensityShare) / 52;

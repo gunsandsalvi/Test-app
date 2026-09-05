@@ -58,7 +58,6 @@ function p1(state: GameState, week: number): AuditFinding[] {
   state.companies.forEach((c) => {
     if (!isActiveCompany(c) || c.isBankEntity) return;
     const reg = state.regions[c.region];
-    if (!reg?.zeroRates) return;
     const curve = reg.zeroRates;
     const bondAt = (tenorYears: number, rank = 0) => issuerSpreadAtOnCurve(v2, reg, c.id, week, tenorYears,
       (flags) => ((flags & TR_SUBORDINATED) !== 0) === (rank === 1));
@@ -122,7 +121,7 @@ function p2(state: GameState, week: number): AuditFinding[] {
   let survived = 0, n = 0; const examples: string[] = [];
   state.companies.forEach((c) => {
     const reg = state.regions[c.region];
-    if (!isActiveCompany(c) || !reg?.zeroRates) return;
+    if (!isActiveCompany(c)) return;
     const carries = reg.cdsBasisCarryBpsByIssuer?.[c.id];
     if (!carries) return;
     CDS_TENORS.forEach((tenor) => {
@@ -147,8 +146,8 @@ function p2(state: GameState, week: number): AuditFinding[] {
   if (survived) out.push({ family: 'P', check: 'P2 the CDS basis is inside the arbitrage\'s carry', week, usd: survived, message: `${survived} of ${n} name-tenors' basis is wider than the cheapest carry any fund faced to take it (${examples.join(' | ')})` });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    const realised = reg?.realisedRecoveryRates ?? [];
-    if (!reg || realised.length < 2) return;
+    const realised = reg.realisedRecoveryRates ?? [];
+    if (realised.length < 2) return;
     const k = realised.length;
     const mean = sum(realised, (x) => x) / k;
     const se = Math.sqrt(sum(realised, (x) => (x - mean) ** 2) / (k - 1) / k);
@@ -163,7 +162,6 @@ function p3(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    if (!reg) return;
     // §3.13: each name's representative level is the five-year point on its OWN credit curve —
     // the same maturity for every name, so the ranking is a ranking of credit and not of tenor.
     const cs = state.companies
@@ -197,7 +195,7 @@ function p3(state: GameState, week: number): AuditFinding[] {
 function x1(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   REGION_IDS.forEach((r) => {
-    const reg = state.regions[r]; if (!reg?.zeroRates) return;
+    const reg = state.regions[r];
     const z = reg.zeroRates;
     const pts: [number, number][] = [[0.25, z.tenor3M], [2, z.tenor2Y], [5, z.tenor5Y], [10, z.tenor10Y], [30, z.tenor30Y]];
     for (let i = 1; i < pts.length; i++) {
@@ -229,7 +227,7 @@ function x2(state: GameState, week: number): AuditFinding[] {
   // lane between them.
   let overpaid = 0, routed = 0; const routeExamples: string[] = [];
   REGION_IDS.forEach((r) => {
-    const reg = state.regions[r]; if (!reg) return;
+    const reg = state.regions[r];
     Object.entries(reg.categoryDemand).forEach(([su, d]) => {
       const alt = d.cheapestAlternativeLandedLocal;
       if (!alt || alt.week !== state.currentWeek || !(d.unitPriceLocal !== undefined && d.unitPriceLocal > 0)) return;
@@ -244,9 +242,9 @@ function x2(state: GameState, week: number): AuditFinding[] {
   // the physical (the convenience yield is inferred from the curve), so a print under carry is a
   // backwardation the curve is entitled to. A print above it is free money nobody took; the
   // 0.8/1.25 box that stood here had no rate, no storage cost and no tenor in it.
-  const financingRateAnnual = state.regions.USA?.zeroRates?.tenor3M;
+  const financingRateAnnual = state.regions.USA.zeroRates.tenor3M;
   let aboveCarry = 0, contracts = 0; const carryExamples: string[] = [];
-  if (financingRateAnnual !== undefined) state.commodities.forEach((c) => {
+  state.commodities.forEach((c) => {
     if (!(c.spotPrice > 0)) return;
     const storageCostAnnual = PHYSICAL_STORAGE_COST_ANNUAL[c.category];
     FUTURES_TENOR_MONTHS.forEach((tenorMonths) => {
@@ -268,7 +266,7 @@ function x2(state: GameState, week: number): AuditFinding[] {
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     const carry = reg?.bondBasisCarryBps;
-    if (!reg || reg.bondFuturesBasis === undefined || reg.bondFuturesDeliverableId === undefined || !carry || carry.week !== state.currentWeek) return;
+    if (reg.bondFuturesBasis === undefined || reg.bondFuturesDeliverableId === undefined || !carry || carry.week !== state.currentWeek) return;
     const cash = trancheClearedPricePerFace(v2, asInstrumentId(reg.bondFuturesDeliverableId));
     if (!(cash !== undefined && cash > 0)) return;
     const deviationBps = bondBasisDeviationBps(reg.bondFuturesBasis, cash, (nextDeliveryWeek(state.currentWeek) - state.currentWeek) / 52);
@@ -297,7 +295,7 @@ function p5(state: GameState, week: number): AuditFinding[] {
   let faceLocal = 0, markedLocal = 0, impliedLocal = 0, rows = 0, unpriced = 0;
   let widest = { id: '', gapLocal: 0 };
   const H = v2.holdings;
-  const trancheByRef: boolean[] = [];
+  const trancheByRef: (boolean | undefined)[] = []; // a memo: sparse until a type is met
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     // §3.13-BOOK d1: the register's rows, read at the source (the type test resolved once per
@@ -354,7 +352,6 @@ function p6(state: GameState, week: number): AuditFinding[] {
   let worstBps = 0;
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    if (!reg?.zeroRates || !reg.yieldCurveParams) return;
     TENORS.forEach((t) => {
       const fitted = calculateNelsonSiegelZeroRate(t.years, reg.yieldCurveParams);
       const struck = reg.zeroRates[t.key];
@@ -407,8 +404,6 @@ function p8(state: GameState, week: number): AuditFinding[] {
   let faceLocal = 0, impliedLocal = 0, rungs = 0, livePaper = 0;
   const byRegion: string[] = [];
   REGION_IDS.forEach((r) => {
-    const reg = state.regions[r];
-    if (!reg) return;
     let face = 0, marked = 0;
     materializeGovLadder(v2, r).forEach((t) => {
       const weeks = t.maturityWeek - state.currentWeek;

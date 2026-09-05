@@ -28,7 +28,8 @@ import { bookHeadOf, rowUnits } from '../../engine2/holdings';
 /** v2-intern-id → INSTRUMENT_IDS id. Both pools assign ids in first-sight order and never reuse
  *  them, so a translation, once made, holds for the life of the world — the memo never
  *  invalidates. Keyed weakly per world because batteries clone whole states. */
-const INSTR_ID_MEMO = new WeakMap<V2World, number[]>();
+/** A memo per world, filled as instruments are met — SPARSE (§3.29-iii: the type says so). */
+const INSTR_ID_MEMO = new WeakMap<V2World, (number | undefined)[]>();
 
 /** The instrument types, in the order the by-type grouping uses. */
 const HOLDING_TYPES: ItemizedHolding['instrumentType'][] = [
@@ -78,7 +79,7 @@ export class HoldingsTable {
    */
   buildFromRows(v2: V2World, entities: InstitutionalEntity[]): void {
     const H = v2.holdings;
-    const typeCode: number[] = [];
+    const typeCode: (number | undefined)[] = []; // sparse: only the held types have a code
     HOLDING_TYPES.forEach((t, i) => { typeCode[internType(v2, t)] = i; });
     let instrMemo = INSTR_ID_MEMO.get(v2);
     if (!instrMemo) { instrMemo = []; INSTR_ID_MEMO.set(v2, instrMemo); }

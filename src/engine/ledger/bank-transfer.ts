@@ -35,10 +35,10 @@ export function absorbBankSheet(v2: V2World, acquirerId: EntityId, targetId: Ent
   acquirer.interbankBorrowedLocal = (acquirer.interbankBorrowedLocal ?? 0) + (target.interbankBorrowedLocal ?? 0); target.interbankBorrowedLocal = 0;
   acquirer.onRrpLendingLocal = (acquirer.onRrpLendingLocal ?? 0) + (target.onRrpLendingLocal ?? 0); target.onRrpLendingLocal = 0;
   // The credit books.
-  acquirer.businessLoans = [...(acquirer.businessLoans || []), ...(target.businessLoans || [])];
+  acquirer.businessLoans = [...acquirer.businessLoans, ...target.businessLoans];
   target.businessLoans = [];
-  const pools = [...(acquirer.householdLoans || [])];
-  (target.householdLoans || []).forEach((pl) => {
+  const pools = [...acquirer.householdLoans];
+  target.householdLoans.forEach((pl) => {
     const i = pools.findIndex((x) => x.kind === pl.kind);
     if (i < 0) pools.push({ ...pl, vintages: pl.vintages ? [...pl.vintages] : undefined });
     else pools[i] = mergeHouseholdPool(pools[i], pl);
@@ -79,7 +79,7 @@ export function absorbBankSheet(v2: V2World, acquirerId: EntityId, targetId: Ent
   if (target.fxDealerBook) {
     const mine = acquirer.fxDealerBook ?? { netNotionalByRegion: {}, grossNotionalLocal: 0 };
     const net = { ...mine.netNotionalByRegion };
-    Object.entries(target.fxDealerBook.netNotionalByRegion || {}).forEach(([k, v]) => { net[k] = (net[k] ?? 0) + v; });
+    Object.entries(target.fxDealerBook.netNotionalByRegion).forEach(([k, v]) => { net[k] = (net[k] ?? 0) + v; });
     acquirer.fxDealerBook = {
       ...mine, netNotionalByRegion: net,
       grossNotionalLocal: mine.grossNotionalLocal + target.fxDealerBook.grossNotionalLocal,

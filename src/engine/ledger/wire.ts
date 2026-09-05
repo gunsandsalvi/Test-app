@@ -63,11 +63,13 @@ export interface WireJournal {
   settleWeek: Int32Array;
   /** §5-WIRES W4: the week's transformations of goods (produced, consumed, scrapped) per
    *  `region|subUnit` — not moves, so not wires, but the other half of the stock identity. */
-  goodsFlows: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>;
+  /** Per `region|subUnit` key, opened the first time the key flows — SPARSE (§3.29-iii). */
+  goodsFlows: Partial<Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>>;
   /** GOODS_TRACE=1: units the sellers' settlements counted as delivered, per `region|subUnit`. */
   goodsDelivered?: Record<string, number>;
   /** §3.26-f-iii W6: the week's plant transformations per firm (`ledger/plant-ledger.ts`). */
-  plantFlows: Record<string, PlantFlow>;
+  /** Per company, opened the first time its plant moves — SPARSE (§3.29-iii). */
+  plantFlows: Partial<Record<string, PlantFlow>>;
 }
 
 export function newWireJournal(base: number, week: number, cap = 1 << 14): WireJournal {
@@ -250,12 +252,12 @@ interface WireSummary {
   /** W5_TRACE=1 only: the same net per `holderId|kind` — which BOOK moved off its wires. */
   registerNetQtyByHolder?: Record<string, number>;
   /** §5-WIRES W4: the week's transformations per `region|subUnit`. */
-  goodsFlowByKey: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>;
+  goodsFlowByKey: Partial<Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>>;
   /** §3.26-f-iii W6: plant wires in minus out per holder firm, in units of cost — vintages in
    *  service (`PLANT`) and the construction queue (`PLANT_QUEUE`) — and the week's transformations. */
   plantNetCostByCompany: Record<string, number>;
   queueNetCostByCompany: Record<string, number>;
-  plantFlowByCompany: Record<string, PlantFlow>;
+  plantFlowByCompany: Partial<Record<string, PlantFlow>>;
   /** §3.26b-i W7: dwellings the household sector took in net of what it gave up, per region, in units. */
   dwellingNetUnitsByRegion: Record<string, number>;
   goodsOutUnitsByKey?: Record<string, number>;

@@ -360,7 +360,6 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   const cells: Cell[] = [];
   OCCUPATIONS.forEach((occ) => {
     const pool = occupationPools[occ];
-    if (!pool) return;
     const weights = tierWeightInOcc(occ);
     const unemployedInPool = Math.max(0, (laborForceByOccupation[occ] ?? 0) - pool.employed);
     const occWage = baseAnnualWageLocal[occ] * pool.wageIndex;

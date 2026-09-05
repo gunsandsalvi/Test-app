@@ -84,7 +84,7 @@ export function ownershipCoverage(
   const v2o1 = ensureV2(state);
   state.companies.forEach((c) => {
     if (c.mergerAcquired) return;
-    const o = outstanding[c.region]; if (!o) return;
+    const o = outstanding[c.region];
     // §3.13-READ C5: THE LADDER STORE, and the kind rule read from `trancheKindOfRow` rather
     // than open-coded a twelfth time. `debtTranches` is only refreshed at `core.ts:450`, so the
     // object read was correct here (the audit runs at the close) but was a rule-4 duplicate of
@@ -106,7 +106,7 @@ export function ownershipCoverage(
   // which was the same number only while nothing marked credit; comparing a mark to a ladder
   // reports every basis point of spread as paper that does not exist. `units` is the face.
   const add = (h: { instrumentType: string; issuerRegion: string; units?: number; quantityOrNotionalLocal?: number }) => {
-    const b = held[h.issuerRegion]; if (!b) return; const v = h.units ?? h.quantityOrNotionalLocal ?? 0;
+    const b = held[h.issuerRegion]; const v = h.units ?? h.quantityOrNotionalLocal ?? 0;
     // GOV_BOND is deliberately absent: the sovereign arm is one walk over all four stores below
     // (§9.13-OUTSIDE), and adding the register's rows here as well would count them twice.
     const n = terms[h.issuerRegion];
@@ -131,7 +131,6 @@ export function ownershipCoverage(
     held[c.region].loan += deskFace('LEVERAGED_LOAN');
   });
   REGION_IDS.forEach((r) => {
-    const reg = state.regions[r]; if (!reg) return;
     // §9.13-OUTSIDE: the sovereign side is ONE walk over the four stores a government holding can
     // sit in (`engine/sovereign-register.ts`) — the register (institutions and households), the
     // banks' own books, their desks and the central bank. This check enumerated three of them in
@@ -595,7 +594,7 @@ function o13(state: GameState, week: number): AuditFinding[] {
     expected.set(k, (expected.get(k) ?? 0) + usd);
   };
   REGION_IDS.forEach((r) => securityLoanBookOf(v2, r).forEach((l) => {
-    if (l.lender.kind === 'INSTITUTION') claim(l.lender, l.currency, Math.max(0, l.collateralLocal));
+    claim(l.lender, l.currency, Math.max(0, l.collateralLocal));
   }));
   let off = 0, offLocal = 0;
   const seen = new Set<string>();
@@ -709,7 +708,7 @@ function o10(state: GameState, week: number): AuditFinding[] {
   let receivableLocal = 0, payableLocal = 0, filed = 0;
   state.companies.forEach((c) => {
     if (!isActiveCompany(c)) return;
-    const bs = c.historicalFundamentals?.[c.historicalFundamentals.length - 1]?.balanceSheet;
+    const bs = c.historicalFundamentals.at(-1)?.balanceSheet;
     if (!bs) return;
     filed++;
     receivableLocal += bs.accountsReceivable ?? 0;

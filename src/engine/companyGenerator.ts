@@ -94,7 +94,7 @@ export function deriveInitialRevenueLocal(
   const totalRankWeight = Array.from({ length: totalCompaniesInCategory }, (_, i) => Math.pow(decayBase, i)).reduce((a, b) => a + b, 0);
   // `category` is an INDUSTRY key here and a sub-unit id at other call sites; accept either
   // rather than making the caller know which (it is the same question: whose industry is this).
-  const industry = INDUSTRY_REGISTRY[category as Industry]
+  const industry = Object.hasOwn(INDUSTRY_REGISTRY, category)
     ? (category as unknown as Industry)
     : industryOfSubUnit(category as string);
   if (!industry) defect(`deriveInitialRevenueLocal: ${String(category)} is neither an industry nor a sub-unit`);
@@ -412,17 +412,15 @@ export function generateInitialCompanies(
 
 
     // Group templates by primary category to rank them properly
-    const categoryGroups: Record<string, FirmSeedTemplate[]> = {};
+    const categoryGroups: Partial<Record<string, FirmSeedTemplate[]>> = {};
     templates.forEach((tmpl) => {
       let primaryCat = 'ConsumerStaples';
       if (tmpl.sector === 'Tech') primaryCat = 'SoftwareDigitalServices';
       else if (tmpl.sector === 'Energy') primaryCat = 'Energy';
       else if (tmpl.sector === 'Industrials') primaryCat = 'IndustrialsMachinery';
       else if (tmpl.sector === 'Financials' || tmpl.sector === 'Banks') primaryCat = 'SoftwareDigitalServices';
-      else if (tmpl.sector === 'Consumer') primaryCat = 'ConsumerStaples';
-
-      if (!categoryGroups[primaryCat]) categoryGroups[primaryCat] = [];
-      categoryGroups[primaryCat].push(tmpl);
+      // 'Consumer' is the default above.
+      (categoryGroups[primaryCat] ??= []).push(tmpl);
     });
 
     templates.forEach((rawTmpl) => {
@@ -431,9 +429,9 @@ export function generateInitialCompanies(
       else if (rawTmpl.sector === 'Energy') primaryCat = 'Energy';
       else if (rawTmpl.sector === 'Industrials') primaryCat = 'IndustrialsMachinery';
       else if (rawTmpl.sector === 'Financials' || rawTmpl.sector === 'Banks') primaryCat = 'SoftwareDigitalServices';
-      else if (rawTmpl.sector === 'Consumer') primaryCat = 'ConsumerStaples';
+      // 'Consumer' is the default above.
 
-      const group = categoryGroups[primaryCat];
+      const group = categoryGroups[primaryCat] ?? defect(`no seed group for ${primaryCat}: every template was grouped above`);
       const rankInCategory = group.findIndex(t => t.ticker === rawTmpl.ticker);
       const totalInCategory = group.length;
 
@@ -445,7 +443,7 @@ export function generateInitialCompanies(
         // survives only until 02b measures the deposits each bank actually holds.
         const bankShare = rawTmpl.bankMarketShare ?? 0.25;
         const initReg = initialRegions[region];
-        if (initReg?.bankingSector) {
+        {
           const bs = initReg.bankingSector;
           // D: the seed's stated loan books size the opening revenue; nothing stores them.
           // §3.13-BOOK d3b: the seed's provisional sovereign scalar rides a stash, not the sheet.
@@ -663,10 +661,8 @@ export function generateInitialCompanies(
         // region's initial aggregate, not a value it will ever re-derive from that aggregate
         // again (02b-bank-diversification.ts evolves it independently from here on).
         bankBalanceSheet: tmpl.sector === 'Banks' ? (() => {
-          const seedReg = initialRegions[region];
-          const bs = seedReg?.bankingSector;
+          const bs = initialRegions[region].bankingSector;
           const share = tmpl.bankMarketShare ?? 0.25;
-          if (!bs) return undefined;
           const sheet = {
             bankEquityLocal: bs.bankEquityLocal * share,
             bankCapitalRatio: bs.bankCapitalRatio,
@@ -824,7 +820,7 @@ export function generateInitialCompanies(
         const kept: Company[] = [];
         const keptIds = new Set<string>();
         for (let i = 0; i < keepCount; i++) {
-          const c = roster[Math.floor(i * stride)];
+          const c = roster.at(Math.floor(i * stride));
           if (c && !keptIds.has(c.id)) { kept.push(c); keptIds.add(c.id); }
         }
         const droppedIds = new Set(roster.filter((c) => !keptIds.has(c.id)).map((c) => c.id));
@@ -893,7 +889,7 @@ export function normalizeProducingSectorRevenue(
 ): void {
   const producingSectors = Object.keys(subUnitsByProducingSector()) as ProducingSector[];
   const namedTierDemandLocal = (sector: string): number => {
-    const list = (subUnitsByProducingSector() as Record<string, { su: { unitId: string } }[]>)[sector];
+    const list = (subUnitsByProducingSector() as Partial<Record<string, { su: { unitId: string } }[]>>)[sector];
     if (!list) return 0;
     // What the NAMED tier is left to supply: this sector's demand less what its SME pools
     // actually carry. The registry's `smeShareOfActivity` is what the pools were SIZED from, not

@@ -406,7 +406,6 @@ export function securityLoanBookOf(v2: V2World, regionId: RegionId): SecurityLoa
 /** §3.13-BOOK d5b — the collateral each lender holds, by currency, as a book states it. */
 function collateralByLender(book: readonly SecurityLoan[], into = new Map<string, Map<CurrencyCode, number>>()): Map<string, Map<CurrencyCode, number>> {
   book.forEach((l) => {
-    if (l.lender.kind !== 'INSTITUTION') return;
     const byCurrency = into.get(l.lender.id) ?? new Map<CurrencyCode, number>();
     byCurrency.set(l.currency, (byCurrency.get(l.currency) ?? 0) + Math.max(0, l.collateralLocal));
     into.set(l.lender.id, byCurrency);

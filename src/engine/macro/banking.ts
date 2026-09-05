@@ -462,7 +462,7 @@ export function evolveBankingSector(
   // equity with nothing on the other side (a rule-2 rescale; now a real special dividend paid
   // at the pace real cash allows). ----
   const weeklyNetIncomeLocal = weeklyInterestIncomeLocal - weeklyDepositInterestLocal - wholesaleInterestLocal - corporateDepositInterestLocal;
-  const consumerRwaLocal = (prevBanking.householdLoans && prevBanking.householdLoans.length > 0)
+  const consumerRwaLocal = (prevBanking.householdLoans.length > 0)
     ? householdBookRwaLocal(prevBanking.householdLoans)
     : consumerLoanLocal * CONSUMER_CREDIT_RISK_WEIGHT;
   const riskWeightedAssetsLocal = businessLoanLocal * 1.0 + consumerRwaLocal + sovereignLocal * 0.0;
@@ -533,7 +533,7 @@ export function evolveBankingSector(
     loanLossProvisionRateAnnualPct: prevBanking.loanLossProvisionRateAnnualPct,
     creditConditionsIndex: Number(newCreditConditionsIndex.toFixed(3)),
     moneySupplyM2Local: Math.round(newMoneySupplyM2Local),
-    itemizedHoldings: prevBanking.itemizedHoldings || [],
+    itemizedHoldings: prevBanking.itemizedHoldings,
     // REPO1: this week's secured positions are struck AFTER this function, once the week's cash
     // position is final — all of them in the repo session, the standing facility included, since
     // a window draw is a contract with the central bank as the named lender. These four are then
@@ -552,9 +552,9 @@ export function evolveBankingSector(
     primeBrokerageLoansLocal: prevBanking.primeBrokerageLoansLocal ?? 0,
     // G2: the itemized book and the corporate-deposit view are owned by the G2 stages
     // (bank-lending.ts / 02b); carried through evolution untouched.
-    businessLoans: prevBanking.businessLoans || [],
+    businessLoans: prevBanking.businessLoans,
     // HH3: the household pools are owned by the household lending pass; carried untouched.
-    householdLoans: prevBanking.householdLoans || [],
+    householdLoans: prevBanking.householdLoans,
     // §5-CLOSE: no funding residual is written here. The banks are funded by depositors, the
     // repo book and the central bank's loan — every one a named creditor. A3.6c-ii: the
     // corporate and institutional lines are reads of the depositors' accounts, not fields.

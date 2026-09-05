@@ -154,7 +154,7 @@ export function generateWeeklyNews(
 
   // 4. Regional Weather Alerts
   Object.values(regions).forEach((r) => {
-    if (r.weather && r.weather.severity !== 'Normal') {
+    if (r.weather.severity !== 'Normal') {
       const w = r.weather;
       // The shortcut quotes the REAL affected commodity at its REAL current spot — the old
       // version hardcoded two prices (2.85/78.50) that were fabrications the moment week 1

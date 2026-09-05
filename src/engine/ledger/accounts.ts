@@ -724,7 +724,6 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
   });
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region];
-    if (!reg) return;
     const money = currencyOf(region);
     const regionBanks = banks.filter((b) => b.region === region && !b.isDefaulted);
     const shareSum = regionBanks.reduce((acc, b) => acc + (b.bankMarketShare ?? 0), 0);
@@ -958,7 +957,7 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
     });
   };
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
-    const reg = ctx.updatedRegions[region]; if (!reg) return;
+    const reg = ctx.updatedRegions[region];
     landSectorRows({ kind: 'HOUSEHOLD', region });
     (reg.smePools ?? []).forEach((seg) => landSectorRows({ kind: 'SEGMENT', region, industry: seg.industry }));
     landSectorRows(ccpParty(region));

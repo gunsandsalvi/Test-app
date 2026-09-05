@@ -211,9 +211,7 @@ export function seedOpeningCreditPrices(
   const TS = v2.tranches;
   companies.forEach((c) => {
     const reg = regions[c.region];
-    if (!reg?.zeroRates) return;
-    const spreadBps = RATING_OAS_SPREADS[c.creditRating]?.baseBps;
-    if (spreadBps === undefined) return;
+    const spreadBps = RATING_OAS_SPREADS[c.creditRating].baseBps;
     for (const tr of ladderRowsOf(v2, c.id)) {
       // The traded books' paper only: a facility sits on its lender's own book and trades
       // nowhere, and the seed opens no commercial paper at all — every piece of CP in the model

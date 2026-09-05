@@ -32,8 +32,8 @@ test('the summary nets plant wires per firm in cost and carries the flows; W6 cl
   assert.equal(w.byKind.PLANT, 2);
   assert.deepEqual(w.plantNetCostByCompany, { [a]: -400, [b]: 400 });
   assert.deepEqual(w.queueNetCostByCompany, { [b]: -50, [a]: 50 });
-  assert.equal(w.plantFlowByCompany[a].commissionedLocal, 120);
-  assert.equal(w.plantFlowByCompany[b].bornLocal, 9);
+  assert.equal(w.plantFlowByCompany[a]?.commissionedLocal, 120);
+  assert.equal(w.plantFlowByCompany[b]?.bornLocal, 9);
   // A: plant 1000 → 1000 − 400 + 120 − 20 − 5 = 695; queue 200 → 200 + 130 − 120 + 50 = 260. B: plant 0 → 409; queue 80 → 30.
   const clean = plantIdentityGaps({ [a]: 1000 }, { [a]: 200, [b]: 80 }, { [a]: 695, [b]: 409 }, { [a]: 260, [b]: 30 },
     w.plantFlowByCompany, w.plantNetCostByCompany, w.queueNetCostByCompany);

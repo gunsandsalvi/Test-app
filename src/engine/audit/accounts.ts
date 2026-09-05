@@ -15,9 +15,8 @@ function f1(state: GameState, week: number): AuditFinding[] {
   let open = 0, openLocal = 0, cashGap = 0, cashN = 0;
   state.companies.forEach((c) => {
     if (!isActiveCompany(c) || c.isBankEntity) return;
-    const h = c.historicalFundamentals ?? [];
-    const latest = h[h.length - 1];
-    if (!latest?.balanceSheet) return;
+    const latest = c.historicalFundamentals.at(-1);
+    if (!latest) return;
     const bs = latest.balanceSheet;
     const residual = bs.totalAssets - bs.totalLiabilities - bs.shareholdersEquity;
     if (Math.abs(residual) > floatDustLocal(Math.abs(bs.totalAssets) + Math.abs(bs.totalLiabilities) + Math.abs(bs.shareholdersEquity), 12)) { open++; openLocal += residual; }

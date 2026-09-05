@@ -117,8 +117,8 @@ export function companyBookEquityLocal(comp: Company, cashLocal: number, totalDe
   // that and would value a bank on its premises. The flow ledger keeps `bankEquityLocal` honest
   // (§7.36), so it is the real number and the one to read.
   if (comp.bankBalanceSheet) return comp.bankBalanceSheet.bankEquityLocal;
-  const latest = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
-  const filed = latest?.balanceSheet?.shareholdersEquity;
+  const latest = comp.historicalFundamentals.at(-1);
+  const filed = latest?.balanceSheet.shareholdersEquity;
   if (filed !== undefined && isFinite(filed)) return filed;
   return plantNetLocal(comp.plant, week) + cashLocal - totalDebtLocal; // §3.26-f-ii: the register's net
 }
