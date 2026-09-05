@@ -549,12 +549,6 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-18-ii. **Delete the bounds in `stage08-back.ts`** (rule 6; 18-i took `evolution.ts`'s — §9): the
-    payout-ratio clamp that makes a whole patience cohort pay out exactly 100%, the ten-employee
-    floor (`:1016`), the `Math.max(0.5, remainingYears)` half-year floors on three pricing sites
-    (`:1348,1364,1423` — a bond with a week left has a week, and its own `PaperTerms` say so), the
-    ten-dollar cash-buffer floor (`:2066`), the invented book value with its 0.5 floor (`:2072`),
-    and a reservation floored at the print. Each deleted or replaced by the real decision.
 18-iii. **Delete the small floors and caps, and make the one guard loud:**
     `institution-profiles.ts:67,77` (hurdle [0.02, 0.30]); `prime-brokerage.ts:51` (haircut floored
     at 0.01 → 99× leverage; the broker's own balance sheet is the real cap); `estate-resolution.ts`
@@ -1553,7 +1547,15 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**18-i — `evolution.ts`'S BOUNDS ARE GONE.** Rule 6, site by site: the tax rate's [0.10, 0.50]
+**18-ii — `stage08-back.ts`'S BOUNDS ARE GONE.** Rule 6: the payout ratio's `min(1, …)`; the
+  ten-employee floor; the three `max(0.5, remainingYears)` pricing floors → the rung's own life
+  with the clock's one week as its least; the two `max(50, …)` revolver-spread walk-aways; the
+  5%-of-ladder prepayment pace; the CFO's walk-away floored at the current five-year print; the
+  ten-dollar cash-buffer floor; the invented `cash + 0.8 × revenue − debt` book value with its
+  0.5 floor → `companyBookEquityLocal`; the ±15% occupation-mix drift caps. The arithmetic
+  guards stay (a divide by `max(1, x)`, a recovery at least 0, depreciation at most the asset).
+  Atlas: firm-fundamentals E6 noted. Gates green; no run.
+- **18-i — `evolution.ts`'S BOUNDS ARE GONE.** Rule 6, site by site: the tax rate's [0.10, 0.50]
   band and 0.25 fallback (a non-number is a defect at the site); the 1.5% cap on NAIRU
   hysteresis; the whole consumer-confidence index (an invented equilibrium off four
   coefficients, an equity return clamped ±0.5, the index clamped [30, 170]) with its field on

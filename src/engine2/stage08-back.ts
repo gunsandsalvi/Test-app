@@ -49,7 +49,7 @@ import { creditMetrics, revolverDrawLocal, isInDefault } from '../domain/company
 import { callEconomics, callableAmountLocal } from '../domain/company-week/debt-ladder';
 import { profileIncome } from '../domain/company-week/income-statement';
 import { dividendDecision } from '../domain/company-week/distributions';
-import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../engine/equity-valuation';
+import { companyFairValuePerShare, companyBookEquityLocal, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../engine/equity-valuation';
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
 import { ladderRowsOf, materializeTranche, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY, TR_SUBORDINATED, trancheIdOf } from './tranches';
@@ -328,8 +328,9 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   let newOccupationMixDrift = priorOccupationMixDrift || {};
   if (isAutomating) {
     newOccupationMixDrift = { ...newOccupationMixDrift };
-    newOccupationMixDrift.TECHNICAL_ENGINEERING = Math.min(0.15, (newOccupationMixDrift.TECHNICAL_ENGINEERING ?? 0) + 0.001);
-    newOccupationMixDrift.GENERAL = Math.max(-0.15, (newOccupationMixDrift.GENERAL ?? 0) - 0.001);
+    // §3.18-ii: the ±15% caps on the drift are gone (rule 6); the mix is the labour market's.
+    newOccupationMixDrift.TECHNICAL_ENGINEERING = (newOccupationMixDrift.TECHNICAL_ENGINEERING ?? 0) + 0.001;
+    newOccupationMixDrift.GENERAL = (newOccupationMixDrift.GENERAL ?? 0) - 0.001;
   }
 
   const newCapex = L.isBanksSector[row] === 1 ? 0 : (newMaintenanceCapex + newGrowthCapex);
@@ -983,7 +984,9 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       marketCapLocal: d.backLanes.marketCapLocal[row],
       // §5-BRAINS — an impatient board pays out more of what it earns; the median pays the
       // industry's discipline exactly.
-      maxPayoutRatio: Math.min(1, L8.maxPayoutRatio[row] * (PATIENCE_MEDIAN_WEEKS / L8.mgmtPatienceWeeks[row])),
+      // §3.18-ii: no cap at 100% (rule 6) — an impatient board can pay out of cash, and the cash
+      // rule is what stops it, not a ceiling that made a whole cohort pay exactly all it earned.
+      maxPayoutRatio: L8.maxPayoutRatio[row] * (PATIENCE_MEDIAN_WEEKS / L8.mgmtPatienceWeeks[row]),
       hasVehicle: L8.hasVehicle[row] === 1,
       boundaryTraceKey: L8.boundaryTraceKey[row],
       wuSalesLocal: L8.wuSalesLocal[row],
@@ -1013,9 +1016,10 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // pools ran 3.9% above the employers' own books by week 43 and drifted further every week.
     // A firm's headcount now changes in exactly one place, and the real cash-distress layoffs
     // that formula was reaching for live there too.
-    const newEmployeeCount = Math.max(10, Math.round(
+    // §3.18-ii: no ten-employee floor (rule 6) — the headcount is the labour market's.
+    const newEmployeeCount = Math.round(
       Number.isNaN(L8.employeeCountUpdate[row]) ? L8.employeeCount[row] : L8.employeeCountUpdate[row]
-    ));
+    );
 
     // (S5: the prepayment rule moved below, where the real tranche ladder exists to retire —
     // the old version here debited cash and decremented a scalar the ladder recomputation then
@@ -1345,7 +1349,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
      */
     const callPremiumRowLocal = (r: number, amountLocal: number): number => {
       if (!(amountLocal > 0)) return 0;
-      const remainingYears = Math.max(0.5, (TS.maturityWeek[r] - state.currentWeek) / 52);
+      // §3.18-ii: the rung's own remaining life — a live rung has at least the clock's one week.
+      const remainingYears = Math.max(1 / 52, (TS.maturityWeek[r] - state.currentWeek) / 52);
       const riskFree = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams);
       return amountLocal * (callPricePerDollar(viewOf(r), state.currentWeek, riskFree) - 1);
     };
@@ -1361,7 +1366,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
      * measured 15% premium and handed bondholders 854M in sixty weeks for nothing.
      */
     const retirementEconomics = (r: number) => {
-      const remainingYears = Math.max(0.5, (TS.maturityWeek[r] - state.currentWeek) / 52);
+      // §3.18-ii: the rung's own remaining life — a live rung has at least the clock's one week.
+      const remainingYears = Math.max(1 / 52, (TS.maturityWeek[r] - state.currentWeek) / 52);
       const riskFree = zeroRateAt(reg.zeroRates, remainingYears);
       const isFixed = !(TS.flags[r] & TR_FLOATING);
       const annualRate = isFixed
@@ -1420,7 +1426,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     const replacedTrancheIds: { oldId: InstrumentId; newId: InstrumentId }[] = [];
     rowList.forEach(rTr => {
       if ((TS.flags[rTr] & (TR_FLOATING | TR_CP))) return;
-      const remainingYears = Math.max(0.5, (TS.maturityWeek[rTr] - state.currentWeek) / 52);
+      const remainingYears = Math.max(1 / 52, (TS.maturityWeek[rTr] - state.currentWeek) / 52);
       const riskFreeHere = zeroRateAt(reg.zeroRates, remainingYears);
       // §3.13: this rung's own cleared spread, not one number for the whole stack.
       const currentFairRate = riskFreeHere
@@ -1521,7 +1527,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         sizeLocal: TS.principalLocal[rTr],
         // Need-driven: the issuer walks only where the market is worse than its revolver.
         walkAwayStat: refinanceAsFixed
-          ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
+          ? Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000)
           : L8.facilityMarginBps[row],
         rateType: refinanceAsFixed ? 'FIXED' : 'FLOATING',
         // §3.16-ii: a tap of the bond nearest the tenor, when there is one; a fresh tranche otherwise.
@@ -1699,7 +1705,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           sizeLocal: bridgeLocal,
           // Terming out only makes sense below the bridge's own cost.
           walkAwayStat: asFixed
-            ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
+            ? Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000)
             : L8.facilityMarginBps[row],
           rateType: asFixed ? 'FIXED' : 'FLOATING',
           tapOfTrancheId: asFixed ? tapTargetFor() : undefined,
@@ -1734,7 +1740,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       let ladderTotalLocal = 0;
       for (const r of rowList) ladderTotalLocal += TS.principalLocal[r];
       if (ladderTotalLocal > 50) {
-        let toPrepayLocal = Math.min(ladderTotalLocal * 0.05, (cash.usd - 2.5 * L8.currentLiabilitiesLocal[row]) * 0.25);
+        // §3.18-ii: no 5%-of-the-ladder-a-week pace cap (rule 6); the cash rule is the rule.
+        let toPrepayLocal = (cash.usd - 2.5 * L8.currentLiabilitiesLocal[row]) * 0.25;
         if (toPrepayLocal > 1000) {
           // §4.0 Tier 1 item 12 — a FACILITY on the prepay list must reach its LENDER: the loan
           // leaves the bank's book through the credit event and the money through a real
@@ -1820,10 +1827,9 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // The walk-away is the CFO's own indifference cost; a deal launched into a market that
       // then gaps past it is pulled, which is what a real busted bookbuild is.
       const dealSizeLocal = financing.netDebtChangeLocal * 13;
-      const walkAwayOasBps = Math.max(
-        fiveYearSpreadBps,
-        Math.round((financing.walkAwayCostAnnual - fiveYearSovRate) * 10000)
-      );
+      // §3.18-ii: the walk-away is the CFO's own indifference cost and nothing else — it was
+      // floored at the current print, which made a deal that could never be pulled below it.
+      const walkAwayOasBps = Math.round((financing.walkAwayCostAnnual - fiveYearSovRate) * 10000);
       enqueueOffering({
         id: `PO-${L8.companyId[row]}-${nextWeek}-OPP`,
         issuerId: asEntityId(L8.companyId[row]),
@@ -2063,13 +2069,15 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     // Buyback Execution (Part AH)
     let updatedSharesOutstanding = L8.sharesOutstanding[row];
-    const targetCashBuffer = Math.max(10, L8.currentLiabilitiesLocal[row] * 1.5);
+    const targetCashBuffer = L8.currentLiabilitiesLocal[row] * 1.5;
     const excessCash = Math.max(0, cash.usd - targetCashBuffer);
     const debtToEquity = newTotalDebt / Math.max(1, (newStockPrice * L8.sharesOutstanding[row]));
     // IND-R6: public-only — retiring shares into the market needs a market to retire them into.
     // A private firm's distributions to its owners are HC's sponsor machinery, not a buyback.
     if (L8.publiclyListed[row] === 1 && excessCash > 5 && debtToEquity < 0.6 && L8.sharesOutstanding[row] > 10 && !isDefaulted && newStockPrice > 0) {
-      const estimatedBookValuePerShare = Math.max(0.5, (cash.usd + newRevenue * 0.8 - newTotalDebt) / L8.sharesOutstanding[row]);
+      // §3.18-ii: the firm's REAL book equity per share (`equity-valuation.ts:companyBookEquityLocal`)
+      // — not an invented `cash + 0.8 × revenue − debt` with a 0.5 floor.
+      const estimatedBookValuePerShare = companyBookEquityLocal(comp, cash.usd, newTotalDebt) / L8.sharesOutstanding[row];
       // "Cheap" against the same arithmetic the market itself prices this company with (07e /
       // equity-valuation.ts), at the board's own cost of capital — not against a sector P/E
       // table. A board that buys back stock is taking the other side of that auction, so it has

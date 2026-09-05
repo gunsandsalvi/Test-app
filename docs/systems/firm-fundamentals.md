@@ -228,3 +228,14 @@ A1–A3, B1–B3, B6, C3, C4, D1–D3, D5, E1, E2, E4–E6, F1 and F3 all resolv
 the node requires, and several of them (the FIFO input lots, the payroll deviation, the revolver
 standing between a bad week and a default, the single cash write path) are the strongest parts of
 this model. A firm here is a real firm.
+
+### ✅ E6 — EVERY DECISION FROM ITS OWN STATE, AND NO BOUND ON IT
+
+*2026-09-05 (§9.18-ii). The bounds on the firm's own decisions in `stage08-back.ts` are gone
+(rule 6): the payout ratio's ceiling at 100% (which made a whole patience cohort pay out exactly
+what it earned), the ten-employee floor on a headcount the labour market decides, the half-year
+floors on a rung's remaining life at three pricing sites (a live rung has the clock's one week),
+the 50bp floor on a refinancing walk-away, the 5%-of-the-ladder-a-week pace on a prepayment, the
+CFO's walk-away floored at the current print, the ten-dollar cash-buffer floor, an invented book
+value with a 0.5 floor (the real book equity, `companyBookEquityLocal`, reads instead), and the
+±15% caps on the occupation-mix drift.*
