@@ -119,11 +119,22 @@ export function settleOutputInventory(
  *  within the week; every unit that left did so by a wire at the delivery. */
 export function setOutputStock(
   update: { outputInventoryBySubUnit?: Partial<Record<string, { unitsHeld: number; valueLocal: number }>> },
-  subUnitId: string, unitsHeld: number, unitPriceLocal: number
+  /**
+   * §3.13-INV-ii — THE ROW THE FIRM CAME INTO THE WEEK WITH. A running balance CARRIES the value
+   * per unit it already had; it does not value anything. This took a PRICE and re-marked the row
+   * at it, which made the mid-week balance a SECOND valuation of the same stock in the same week —
+   * struck at last week's published LANDED price, against the ex-works price this week's auction
+   * clears the row at in step 8 of the same pass. Which of the two survived depended on whether
+   * the supplier had a supply plan at all: one that sells only on contract kept the stale landed
+   * mark all the way to stage 08 and filed it.
+   */
+  prior: { unitsHeld: number; valueLocal: number } | undefined,
+  subUnitId: string, unitsHeld: number
 ): void {
   const held = isStorable(subUnitId) ? unitsHeld : 0;
+  const perUnitLocal = prior && prior.unitsHeld > 0 ? prior.valueLocal / prior.unitsHeld : 0;
   if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
-  update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: held, valueLocal: held * unitPriceLocal };
+  update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: held, valueLocal: held * perUnitLocal };
 }
 
 type StockHolder = { id: EntityId; ticker: Ticker; region: RegionId; outputInventoryBySubUnit?: Partial<Record<string, { unitsHeld: number; valueLocal: number }>> };

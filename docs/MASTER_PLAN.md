@@ -405,15 +405,18 @@ written from here):
     earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
     all). Seven slices, in this order, because each one is load-bearing for the next:
 
-    ii. **ONE MARK A WEEK, AND THE FILED NUMBER IS THE STOCK.** Three defects of one shape.
-       `setOutputStock` marks the row mid-week at LAST week's landed anchor while
-       `settleOutputInventory` re-marks it at THIS week's ex-works cleared price — two prices on
-       one row in one week, and a contract-only supplier (the `?? getOutputInventoryUnits`
-       fallback) keeps the anchor mark all the way to stage 08. The FILED balance sheet reads
-       `newOutputInventoryBySubUnit`, the pre-merge base, while the firm keeps the merge, so the
-       filed finished-goods number and the firm's own stock **are already two different numbers**.
-       And the front pass's carrying-cost write-down is discarded by that merge for every sub-unit
-       stage 05 settled, so the one write-down in the model is dead.
+    ii-b. **THE WAREHOUSE FEE AND THE SPOILAGE ARE TWO THINGS, AND ONE RATE DOES BOTH.**
+       `annualCarryingCostRateOf` is *warehouse cost per tonne ÷ value density* **plus**
+       *52 / shelfLifeWeeks* — a STORAGE FEE and a SPOILAGE RATE summed into one number — and the
+       week then applies that number twice over: `front-core` writes the stock's VALUE down by it
+       and `stage08-back` PAYS the same amount in cash to the distribution sector (IND16). A fee is
+       an expense with a payee and must not shrink the asset; spoilage destroys UNITS
+       (`goods.md` E4, which has no writer at all) and must not pay anybody. So a firm pays cash
+       AND its stock shrinks by the same number — except that §3.13-INV-ii found the write-down is
+       discarded by the merge for every sub-unit stage 05 settled, which means traded goods are
+       charged once and untraded goods twice. Split the rate at its source, charge the fee, perish
+       the units, and E4 gets its writer. The lane is mirrored in `native/kernels.c` and the
+       positional order is shared with it — change both or neither.
     iii. **THE GOODS PRICE IS STORED** — step 13's item 3, *the cheapest half of the whole step*.
        The auction's cleared price per `region|subUnit` goes in `v2.prices` (whose own header
        already names `setOutputStock` as the same defect one asset class over); the region's
@@ -1240,6 +1243,26 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-ii — ONE MARK A WEEK, AND THE FILED NUMBER IS THE STOCK.** Two of the three defects the
+  slice named; the third turned out to be a mechanism and was split out as `13-INV-ii-b` (§3)
+  rather than half-fixed here.
+  **A running balance is not a valuation.** `setOutputStock` — the mid-week write that keeps the
+  units right as contracts settle — took a PRICE and re-marked the whole row at it, so one stock
+  was valued TWICE in one week at two different prices: last week's published LANDED price
+  mid-week, and this week's ex-works CLEARED price when step 8 of the same pass settled it. Which
+  survived depended on whether the supplier had a supply plan at all — a firm that sells only on
+  contract kept the stale landed mark all the way to stage 08 **and filed it**. It now carries the
+  value per unit the row already had, whatever the quantity becomes, which is the shape a cost
+  basis wants in 13-INV-v: the units move, the basis does not. The price argument is gone and the
+  lane that fed it (`supRegPx`) with it.
+  **One record.** The quarterly filing read `newOutputInventoryBySubUnit`, the PRE-merge seam
+  baseline, while the firm kept the merge — so for every sub-unit stage 05 settled, the finished
+  goods a firm FILED and the stock it HELD were two different numbers. Nothing could catch it:
+  W4 is a units identity and the snapshot walk reads only `unitsHeld`, so there is no value
+  identity on goods anywhere. The merge is struck once now and both read it.
+  Pinned in `test/inventory.test.ts` (the basis survives a sale, a sell-out, a row the firm never
+  held, and a zero-unit prior that cannot imply a price). Gates green; no run (rule 11).
 
 **13-INV-i — THE WRITE FENCE ACTUALLY FENCES, AND WHAT IT FOUND WHEN IT DID.** `check-hygiene.sh`
   names the goods boundary — *a firm's finished stock is written by the ledger only* — and matched

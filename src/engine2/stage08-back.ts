@@ -1954,6 +1954,15 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     commissionPlant(comp.id, capexCommissionedThisWeekLocal);
     const TS = v2.tranches;
     const update = weekUpdate;
+    // §3.13-INV-ii — ONE RECORD, so the firm's stock and the number it FILES are the same object.
+    // The merge below used to be struck at the write to the company while the quarterly filing
+    // read the PRE-merge base, so for every sub-unit stage 05 settled this week the filed
+    // finished-goods line and the firm's own stock were two different numbers — invisible, because
+    // there is no value identity on goods anywhere (W4 is a units identity, and the snapshot walk
+    // reads only `unitsHeld`). Start from the seam's baseline for every sub-unit the firm held,
+    // then overlay what stage 05 settled fresh for the ones it actually processed: 05 runs first
+    // and has the complete, real production and sales picture for those lines.
+    const mergedOutputInventoryBySubUnit = { ...newOutputInventoryBySubUnit, ...(update?.outputInventoryBySubUnit || {}) };
     let buybacksThisWeek = buybacksFromCore;
     const __k3 = S08K_PROF ? performance.now() : 0;
     const isReportingThisWeek = !isDefaulted && isPubliclyListed(comp)
@@ -2180,7 +2189,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         cash.usd,
         newTotalDebt,
         currentTreasuryHoldingsLocal,
-        Object.values(newOutputInventoryBySubUnit).reduce((s, inv) => s + (inv?.valueLocal ?? 0), 0),
+        Object.values(mergedOutputInventoryBySubUnit).reduce((s, inv) => s + (inv?.valueLocal ?? 0), 0),
         newMaintenanceCapex,
         newGrowthCapex,
         filedFiveYearSpreadBps,
@@ -2338,11 +2347,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.lastWeekPurchasesLocal = update?.purchasesLocal ?? 0;
 
-      // Start from this company's carrying-cost-decayed baseline (every sub-unit it held
-      // inventory for), then overlay whatever stage 05 settled fresh this week for the
-      // sub-units it actually processed (it runs first and has the complete, real
-      // production/sales picture for those lines).
-    comp.outputInventoryBySubUnit = { ...newOutputInventoryBySubUnit, ...(update?.outputInventoryBySubUnit || {}) };
+    comp.outputInventoryBySubUnit = mergedOutputInventoryBySubUnit;
 
       // IND10 — the production pipeline stage 05 advanced. Named here because a rebuild from a
       // fixed field list silently drops whatever it does not name (§7.41), and a dropped

@@ -68,3 +68,27 @@ test('a production pass addresses the same lots by slot, and closing it writes t
   assert.equal(v2.holdings.qtyLocal[r], 6);
 });
 
+
+// §3.13-INV-ii — A RUNNING BALANCE CARRIES ITS BASIS; IT DOES NOT VALUE ANYTHING.
+import { setOutputStock } from '../src/engine/ledger/goods-ledger';
+
+test('the mid-week balance carries the value per unit the row already had, at any quantity', () => {
+  const sub = SUBUNITS[0];
+  const prior = { unitsHeld: 100, valueLocal: 250 }; // 2.50 a unit, whatever the market is doing
+  const sold: { outputInventoryBySubUnit?: Partial<Record<string, { unitsHeld: number; valueLocal: number }>> } = {};
+  setOutputStock(sold, prior, sub, 60);
+  assert.deepEqual(sold.outputInventoryBySubUnit![sub], { unitsHeld: 60, valueLocal: 150 },
+    'forty units left and the basis per unit is untouched');
+  // Sold out: no units, no value, and no division by zero on the way.
+  const empty: typeof sold = {};
+  setOutputStock(empty, prior, sub, 0);
+  assert.deepEqual(empty.outputInventoryBySubUnit![sub], { unitsHeld: 0, valueLocal: 0 });
+  // A row the firm did not hold before opens at nothing rather than at an invented price.
+  const fresh: typeof sold = {};
+  setOutputStock(fresh, undefined, sub, 40);
+  assert.deepEqual(fresh.outputInventoryBySubUnit![sub], { unitsHeld: 40, valueLocal: 0 });
+  // A prior row of zero units cannot imply a price either.
+  const degenerate: typeof sold = {};
+  setOutputStock(degenerate, { unitsHeld: 0, valueLocal: 99 }, sub, 10);
+  assert.deepEqual(degenerate.outputInventoryBySubUnit![sub], { unitsHeld: 10, valueLocal: 0 });
+});

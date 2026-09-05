@@ -745,7 +745,6 @@ function settleContracts(
   const supSlot = new Int32Array(m);
   const needLocal = new Float64Array(m);
   const marketPrice = new Float64Array(m);
-  const supRegPx = new Float64Array(m);
   const slotBySupplier = new Map<Company, number>();
   const slotSuppliers: Company[] = [];
   // Stage IV — customers slotted like suppliers: the recipe need is a per-(customer,
@@ -784,7 +783,6 @@ function settleContracts(
     custSlot[i] = cs;
     needLocal[i] = needBySlot[cs];
     marketPrice[i] = regionReferencePrice[customer.region as RegionId];
-    supRegPx[i] = regionReferencePrice[supplier.region as RegionId];
     let slot = slotBySupplier.get(supplier);
     if (slot === undefined) {
       slot = slotSuppliers.length;
@@ -857,7 +855,7 @@ function settleContracts(
     }
 
     const supUp = supUpC[ss] ?? (supUpC[ss] = wk.updateOf(supplier));
-    setOutputStock(supUp, subUnitId, Math.max(0, availAfter[i]), supRegPx[i]);
+    setOutputStock(supUp, supplier.outputInventoryBySubUnit[subUnitId], subUnitId, Math.max(0, availAfter[i]));
     supUp.salesUnits = (supUp.salesUnits ?? 0) + actualT[i];
     (supUp.salesUnitsBySubUnit ??= {})[subUnitId] = (supUp.salesUnitsBySubUnit[subUnitId] ?? 0) + actualT[i];
     supUp.salesLocal = (supUp.salesLocal ?? 0) + paymentL[i];
