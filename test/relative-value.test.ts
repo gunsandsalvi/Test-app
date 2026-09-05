@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bondBasisRead, bondBasisLegs, edgeBps, arbSizeShare, arbCapacityLocal } from '../src/domain/relative-value';
+import { bondBasisRead, bondBasisLegs, edgeBps, arbSizeShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
 import { bondFuturesCarryPrice } from '../src/domain/derivatives/classes/bond-future';
 import { asInstrumentId } from '../src/domain/ids';
 
@@ -41,4 +41,16 @@ test('bond basis legs: the cash leg buys up to where the future still pays the c
   assert.ok(Math.abs(impliedFuture - (carry + 0.004)) < 1e-9);
   assert.ok(legs.cash.reservationPrice > 0.98, 'the future is rich, so it will pay above the cash print');
   assert.equal(legs.cash.fullSizePriceRange, 0.006);
+});
+
+// §3.17e-ii-b — the pair can lose, and it is cut when it has lost what it was margined for.
+test('the pair\'s P&L is the cash mark over basis plus what the short has settled, and the stop is the margin posted', () => {
+  assert.equal(pairPnLLocal({ cashValueLocal: 1010, cashBasisLocal: 1000, futuresSettledToFundLocal: -4 }), 6);
+  assert.equal(stoppedOut(-50, 40), true, 'lost more than the margin: cut');
+  assert.equal(stoppedOut(-30, 40), false);
+  assert.equal(stoppedOut(-50, 0), false, 'nothing margined, nothing to measure the loss against');
+  // A reduction states a negative cash face and a positive future face.
+  const legs = bondBasisLegs({ regionId: 'USA', bondId: asInstrumentId('B'), futureId: asInstrumentId('F'), faceLocal: -400, cashPrice: 0.98, futurePrice: 0.99, couponRate: 0.04, repoRateAnnual: 0.05, yearsToDelivery: 0.25, carryBps: 100, weeklyPriceMove: 0.006, budgetLocal: 0 });
+  assert.equal(legs.cash.faceLocal, -400);
+  assert.equal(legs.future.faceLocal, 400);
 });

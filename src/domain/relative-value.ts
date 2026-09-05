@@ -37,7 +37,27 @@ export interface RelativeValueLeg {
   reservationPrice: number;
   fullSizePriceRange: number;
   budgetLocal: number;
+  /** §3.17e-ii-b — a CUT: the leg comes off at whatever the book clears, not at a price of the
+   *  fund's choosing (the line no longer carries it, or the pair has lost what it was margined for). */
+  forced?: boolean;
 }
+
+/**
+ * §3.17e-ii-b — WHAT THE PAIR HAS MADE OR LOST: the cash leg's mark over its lots' basis, plus
+ * what the future leg has already settled to the fund as variation margin (a short is paid the
+ * fall and pays the rise, so its settled mark is signed to it here).
+ */
+export const pairPnLLocal = (args: { cashValueLocal: number; cashBasisLocal: number; futuresSettledToFundLocal: number }): number =>
+  (args.cashValueLocal - args.cashBasisLocal) + args.futuresSettledToFundLocal;
+
+/**
+ * §3.17e-ii-b — THE STOP. The pair is cut whole when it has lost more than the initial margin
+ * its future leg posted: the house's own measure of the move the position can make before it can
+ * be closed (§3.17-ii), so a loss past it is the pair moving further than it was carried for.
+ * No tolerance of the fund's own — the limit to arbitrage is the margin identity.
+ */
+export const stoppedOut = (pnlLocal: number, marginPostedLocal: number): boolean =>
+  marginPostedLocal > 0 && pnlLocal < -marginPostedLocal;
 
 /** What a comparable reads this week: the disagreement, annualised in bps of the pair's face, and
  *  what carrying the pair costs per year in the same unit. */

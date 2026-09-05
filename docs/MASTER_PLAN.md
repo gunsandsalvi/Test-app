@@ -547,16 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17e-ii-b. **The basis trader is CUT** (atlas sovereign-credit I3.a FORBID: *no basis trader that
-    cannot lose*). 17e-ii-a opens the trade and sizes it to the fund's capital (§9); nothing yet
-    REDUCES it. When the edge closes or reverses the target face falls below what the fund holds
-    and the legs must come off — the deliverable OFFERED in 07c (a negative cash leg:
-    `minHoldingLocal` 0, sold above its reservation) and the line bought back (a positive future
-    leg) — and a drawdown past what its capital tolerates (the margin identity on its line: the
-    broker's haircut widening, the mark going against it, `riskAversionOf(management)` the
-    threshold) cuts it whole. That is the limit to arbitrage, and it is why a basis can persist:
-    a fund forced out at the wides is the mechanism rules 3 and 6 want, and a fund that always
-    closes the gap is a clamp wearing a fund's clothes.
 17e-iii. **The negative basis needs a bond borrow.** The book trades one direction — future rich:
     long cash on the line, short the future. A cheap future is the mirror: long the future and
     SHORT the cash bond, which needs the sovereign BORROWED through the securities-lending book
@@ -1602,7 +1592,19 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17e-ii-a — THE RELATIVE-VALUE BOOK, AND ITS FIRST TRADE: THE BOND BASIS.** The registry
+**17e-ii-b — THE BASIS TRADER IS CUT.** The book comes off as it went on: each leg is the
+  delta to target, signed, so a target below the position is a REDUCTION — the deliverable sold
+  in 07c to target at what the auction clears (`minHoldingLocal` = `maxHoldingLocal` = what it
+  keeps), the line bought back below the edge price (`bondFutureHolderQuote` with a positive
+  gap). Two cuts are FORCED (`RelativeValueLeg.forced`, the line's reservation put out of reach):
+  the pair has lost more than the initial margin its shorts posted (`pairPnLLocal` = the
+  deliverable's mark over its lots' basis + what the shorts have settled to it;
+  `stoppedOut` against Σ `initialMarginLocal` of its BOND_FUTURE shorts on the bond — the
+  house's own measure of the move it was carried for, no tolerance of the fund's own), or the
+  position exceeds what its cash and its line carry (`arbCapacityLocal` fell: the broker's
+  haircut widened or its cash went — the margin identity). Atlas: sovereign-credit I3/I3.a ✅.
+  Gates green; no run.
+- **17e-ii-a — THE RELATIVE-VALUE BOOK, AND ITS FIRST TRADE: THE BOND BASIS.** The registry
   of comparables is `domain/relative-value.ts`: a comparable is a READ (`ComparableRead`:
   deviation and carry, annualised bps of the pair's face; `edgeBps` their difference) and two
   LEGS (`RelativeValueLeg`: market, instrument, signed face, the price the leg is worth doing at,

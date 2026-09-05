@@ -237,14 +237,14 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | I1 a deliverable future on the benchmark bond, settled to its cash price | `src/domain/derivatives/classes/bond-future.ts:BOND_FUTURE_PROFILE` · `src/domain/derivatives/classes/bond-future.ts:deliverableOf` | ✅ |
 | I1.a the carry, and the net basis measured | `src/domain/derivatives/classes/bond-future.ts:bondFuturesCarryPrice` · `src/domain/derivatives/classes/bond-future.ts:bondFuturesNetBasis` | ✅ |
 | I2 duration mandates long below carry, holders over target short above it, dealers two-way | `src/engine/simulation/stages/derivative-markets/bond-future.ts:runBondFuturesMarket` · `src/domain/derivatives/classes/bond-future.ts:bondFutureHolderQuote` | ✅ |
-| I3 the basis trade — long cash in repo, short the future | `src/domain/relative-value.ts:bondBasisRead` · `src/domain/relative-value.ts:bondBasisLegs` · `src/engine/simulation/stages/relative-value.ts:runRelativeValueStage` | ⚠️ |
-| I3.a FORBID no basis trader that cannot lose | — | ❌ |
+| I3 the basis trade — long cash in repo, short the future | `src/domain/relative-value.ts:bondBasisRead` · `src/domain/relative-value.ts:bondBasisLegs` · `src/engine/simulation/stages/relative-value.ts:runRelativeValueStage` | ✅ |
+| I3.a FORBID no basis trader that cannot lose | `src/domain/relative-value.ts:pairPnLLocal` · `src/domain/relative-value.ts:stoppedOut` | ✅ |
 
 ---
 
 ## 3. THE DIFF
 
-**74 rows: 36 ✅, 12 ⚠️, 26 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
+**74 rows: 38 ✅, 11 ⚠️, 25 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
 drifted three times by hand (25/15/27 against 28/12/27, then 30/13/25 against 31/12/25 in the very
 paragraph that lectured about drift): `check-atlas.sh` proves a citation RESOLVES and can say
 nothing about whether a mark is TRUE, which is §5's lesson, and the test is the answer to it.
@@ -483,7 +483,16 @@ is a literal `sovereignLocal * 0.0` in the RWA sum, which is exactly why E2.a's 
 - **F4 ⚠️** — the refinancing issue's coupon is read off the fitted curve — `the-treasury.md` E3, step 25.
 - **G2 / G3 / G4 ❌** — no foreign-money debt, no negotiated default, no exchange offer — the A4/G entry above, 37-OVERDRAFT.
 
-### ✅ I1 / I1.a / I2 / ⚠️ I3 / ❌ I3.a — THE FUTURE PRINTS A BASIS, AND A BOOK TRADES IT
+### ✅ I1 / I1.a / I2 / I3 / I3.a — THE FUTURE PRINTS A BASIS, A BOOK TRADES IT, AND THE BOOK CAN LOSE
+
+*2026-09-05 (§9.17e-ii-b).* The book comes off as it went on. When the edge has gone the target
+falls below what it holds and each leg is a reduction — the deliverable sold in 07c to the target
+at what the auction clears, the line bought back below the edge price. Two cuts are forced, at
+any price: the pair has lost more than the initial margin its future leg posted (`pairPnLLocal`,
+`stoppedOut` — the house's own measure of the move it was carried for, no tolerance of the fund's
+own), or the line no longer carries the position (the broker's haircut widened, the fund's cash
+fell: `arbCapacityLocal` below what it holds). A fund forced out at the wides is why a basis can
+persist, which is what the FORBID asks for.
 
 *2026-09-05 (§9.17e-ii-a).* The basis trade exists: a `RELATIVE_VALUE` hedge fund (the fifth
 strategy, one per region from the seed) reads the registry of comparables
@@ -493,9 +502,7 @@ needs on the future's margin (`bondBasisRead`) — sizes the pair by that edge o
 weekly move against what its cash and its broker will carry, and states both legs
 (`bondBasisLegs`) before any book opens (`stages/relative-value.ts`): 07c takes the cash leg as
 its bid for the deliverable, the futures line takes the short. Its position is its register rows
-and its standing cover, never a store of its own. ⚠️ and not ✅ because it only ever ADDS: the cut
-— the reduction when the edge closes, the forced sale on a drawdown — is I3.a and §3 step
-17e-ii-b; the mirror trade needs a bond borrow (17e-iii).
+and its standing cover, never a store of its own. The mirror trade needs a bond borrow (17e-iii).
 
 *2026-09-05 (§9.17e-i).* One line per region, the front quarterly contract on the rung nearest ten
 years from delivery (`deliverableOf`), price-like per unit of face, settling to the deliverable's

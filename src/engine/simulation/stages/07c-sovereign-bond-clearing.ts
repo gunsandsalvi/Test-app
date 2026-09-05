@@ -434,10 +434,17 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // short in the futures line — is its own demand for that one bond: up to the price at which
     // the future still pays the carry, in the size the pair calls for, on the money its cash and
     // its broker's line carry. Its other bids in this book stand as its sovereign sleeve.
-    ctx.relativeValueLegs.filter((l) => l.market === 'SOVEREIGN_CASH' && l.regionId === regionId && l.faceLocal > 0).forEach((leg) => {
+    // §3.17e-ii-b: a REDUCTION is a target, sold at what this book clears — the decision was made
+    // on the edge, and a pair the line no longer carries or that has lost its margin is cut whole.
+    ctx.relativeValueLegs.filter((l) => l.market === 'SOVEREIGN_CASH' && l.regionId === regionId).forEach((leg) => {
       const p = entityParticipants.find((x) => x.id === leg.entityId);
       if (!p || !ownInstrumentIds.has(leg.instrumentId)) return;
       const current = p.currentHoldingsByInstrumentId.get(leg.instrumentId) ?? 0;
+      if (leg.faceLocal < 0) {
+        const keepLocal = Math.max(0, current + leg.faceLocal * leg.reservationPrice);
+        p.demandByInstrumentId.set(leg.instrumentId, { reservationStat: leg.reservationPrice, maxHoldingLocal: keepLocal, fullSizeStatRange: leg.fullSizePriceRange, minHoldingLocal: keepLocal });
+        return;
+      }
       p.demandByInstrumentId.set(leg.instrumentId, {
         reservationStat: leg.reservationPrice,
         maxHoldingLocal: current + leg.faceLocal * leg.reservationPrice,

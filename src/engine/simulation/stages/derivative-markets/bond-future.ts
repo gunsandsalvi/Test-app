@@ -108,7 +108,10 @@ function runBondFuturesMarket({ ctx, week, view, standing }: DerivativeMarketRun
     rvLegs.forEach((leg) => {
       const party: DerivativeParty = { kind: 'INSTITUTION', id: leg.entityId };
       const houseLocal = memberNotionalCapacityLocal(ctx, capacity, party, money, marginRate);
-      seat(leg.entityId, party, bondFutureHolderQuote({ carryPrice: leg.reservationPrice, rangePrice: leg.fullSizePriceRange, gapLocal: Math.max(-houseLocal, Math.min(houseLocal, leg.faceLocal)) }));
+      // §3.17e-ii-b: a buy-back (a positive leg against its short) is a long at the leg's price; a
+      // CUT is a long at any price the line clears — the reservation is put out of reach.
+      const price = leg.forced && leg.faceLocal > 0 ? leg.reservationPrice * 2 : leg.reservationPrice;
+      seat(leg.entityId, party, bondFutureHolderQuote({ carryPrice: price, rangePrice: leg.fullSizePriceRange, gapLocal: Math.max(-houseLocal, Math.min(houseLocal, leg.faceLocal)) }));
     });
 
     // The duration mandates, and the holders over their sovereign target.
