@@ -328,13 +328,14 @@ export const GOV_HIRING_RESPONSE_TO_STANCE = 0.0004;
  * boundary line swinging on coupon weeks. One change to that function and both readers of it,
  * in the same pass, and this is ready for them.
  */
+/** A sovereign pays its coupon twice a year — the one convention its schedule has (`bond.md` N6). */
+export const SOVEREIGN_PAYMENTS_PER_YEAR = 2;
 export function sovereignCouponDueShare(tranche: { originationWeek: number }, week: number): number {
-  const PAYMENTS_PER_YEAR = 2;
-  const periodWeeks = Math.round(52 / PAYMENTS_PER_YEAR);
+  const periodWeeks = Math.round(52 / SOVEREIGN_PAYMENTS_PER_YEAR);
   // A bond's coupon dates are counted from the day it was ISSUED — the real schedule, and the
   // reason the ladder's rungs pay on different weeks rather than all at once. This used to hash
   // the tenor-bucket label, which had no issue date to count from.
-  return (week - tranche.originationWeek) % periodWeeks === 0 ? 1 / PAYMENTS_PER_YEAR : 0;
+  return (week - tranche.originationWeek) % periodWeeks === 0 ? 1 / SOVEREIGN_PAYMENTS_PER_YEAR : 0;
 }
 
 

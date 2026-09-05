@@ -37,6 +37,9 @@ export interface Position {
   trancheId?: string;
   rateType?: 'FIXED' | 'FLOATING';
   entryOasSpreadBps?: number;
+  /** §3.26-a — the spread the last mark implied over the curve of its week, so this week's move
+   *  can be split by measurement into what the spread did and what the curve did. */
+  markedSpreadBps?: number;
   entryPolicyRate?: number;
   entryBenchmarkYield?: number;
   isClosed?: boolean;

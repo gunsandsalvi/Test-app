@@ -14,14 +14,15 @@ import { ensureV2 } from '../../../engine2/world';
 import { trancheIdOf, ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { assertNever } from '../../../domain/defect';
 import { calculateExpectedCarry } from '../../carryCalculator';
-import { priceSovereignBond } from '../../nelsonSiegel';
-import { priceCorporateBond } from '../../pricing';
 import { getUnifiedInitialMarginRate } from '../../dealers';
 import { calculateCompositeIndices } from '../../macro/indices';
 import { WeeklyStepContext } from './context';
-import { rowSpreadBps } from '../../credit-price';
+import { rowSpreadBps, trancheTerms } from '../../credit-price';
 import { clearedPriceOf } from '../../../engine2/prices';
-import { zeroRateAt } from '../../../domain/pricing';
+import { dv01PerUnitFace, priceFromSpreadBps, type PaperTerms } from '../../../domain/pricing';
+import { SOVEREIGN_PAYMENTS_PER_YEAR } from '../../../domain/government';
+import { asInstrumentId } from '../../../domain/ids';
+import { defect } from '../../../domain/defect';
 
 
 export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -89,7 +90,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
       case 'LEVERAGED_LOAN':
       case 'CORP_BOND': {
         const comp = updatedCompanies.find((c) => c.ticker === pos.symbol);
-        const sovParams = updatedRegions[pos.region].yieldCurveParams;
         if (comp) {
           // The ladder find on rows (the id is interned; a short walk per position).
           let trRow = -1;
@@ -127,91 +127,88 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             break;
           }
 
-          const remainingTenorYears = Math.max(0.01, (TS.maturityWeek[trRow] - nextWeek) / 52);
-          // S6: the position marks off the CLEARED stat, full stop. The deleted block here
-          // re-adjusted the already-cleared OAS by an ownership-derived premium — a second
-          // price-setter duplicating (and disagreeing with) the real auction in 07b.
-          // §3.13: and the stat is THIS TRANCHE's, off the price its own book printed. Paper the
-          // book has not printed carries no view, and its own coupon is the fair rate.
-          const couponRate = Number.isNaN(TS.couponRate[trRow]) ? 0.05 : TS.couponRate[trRow];
-          const adjustedOasSpreadBps = rowSpreadBps(v2, updatedRegions[pos.region], trRow, nextWeek)
-            ?? (couponRate - zeroRateAt(updatedRegions[pos.region].zeroRates, remainingTenorYears)) * 10000;
-
+          // §3.26-a: THE MARK IS THE PRINT. The tranche's own book printed a price this week or
+          // carried its last one (§3.21); the position is worth that. Paper the book has never
+          // printed keeps the mark it had — a round trip through a fitted curve cannot return a
+          // price nobody struck, and `priceCorporateBond` is gone with that reading.
+          const reg = updatedRegions[pos.region];
+          const terms = trancheTerms(v2, trRow, nextWeek, reg.policyRate);
+          const printed = clearedPriceOf(v2, trancheIdOf(v2, trRow));
+          currentPrice = printed !== undefined && printed > 0 ? printed * 100 : pos.currentPrice;
+          const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
+          const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
+          unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
+          const dir = pos.direction === 'LONG' ? 1 : -1;
+          const pnlMove = unrealizedPnL - prevPnL;
+          // The spread this mark implies over this week's curve (undefined for a floater, which
+          // prices off its margin, and for paper with no print).
+          const spreadNow = rowSpreadBps(v2, reg, trRow, nextWeek);
           if (!(TS.flags[trRow] & TR_FLOATING)) {
-            // §3.13-READ A8 — THE POSITION MARKS AT THE PRINT, and the analytic is kept for the
-            // SENSITIVITY only. This used to round-trip: `rowSpreadBps` is `spreadBpsFromPrice` of
-            // the tranche's own cleared price, and feeding that straight back into
-            // `priceCorporateBond` asks two functions that are not each other's inverse to agree.
-            // They did not have to, so the same tranche was worth one number on the register (the
-            // print) and another in the player's book. The floating branch below already read the
-            // print; this is the fixed side of the same rule. `dv01` is a derivative of the price
-            // curve rather than a point on it, so it still comes from the analytic — struck at the
-            // print's OWN spread, which is what makes it the sensitivity of the printed mark.
-            const bondPriced = priceCorporateBond(
-              remainingTenorYears, couponRate, sovParams,
-              adjustedOasSpreadBps, comp.isDefaulted, comp.recoveryRate
-            );
-            // Paper the book has not printed carries no view, and its own coupon is the fair rate
-            // — which is exactly what the analytic at the coupon-implied spread says.
-            const printed = clearedPriceOf(v2, trancheIdOf(v2, trRow));
-            currentPrice = printed !== undefined && printed > 0 ? printed * 100 : bondPriced.price;
-            const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
-            const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
-            unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
-            dv01 = (pos.quantity / 100) * bondPriced.dv01 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
-
+            // The sensitivity is the paper's own schedule at the print's own yield — a derivative
+            // of the mark, not a point on a curve.
+            dv01 = pos.quantity * dv01PerUnitFace(terms, currentPrice / 100) * fxRateToUsd * dir;
             const carryEst = calculateExpectedCarry('CORP_BOND', pos.direction, posValueLocal, {
-              policyRate: updatedRegions[pos.region].policyRate,
-              couponRate,
+              policyRate: reg.policyRate,
+              couponRate: terms.annualCouponRate,
               cdsSpreadBps: comp.cdsSpreadBps
             });
             weeklyFinancing = carryEst.components.financingCostLocal;
             ctx.attributionCarry += carryEst.weeklyCarryLocal;
-            const pnlMove = unrealizedPnL - prevPnL;
-            ctx.attributionCreditSpread += pnlMove * 0.7;
-            ctx.attributionMacroRates += pnlMove * 0.3;
+            // §3.26-a: the move is split by MEASUREMENT, not by a 70/30 that was written down. What
+            // the tranche's own spread change explains at this week's curve is credit; the rest is
+            // the curve's. With no prior spread to measure against the move is the paper's own,
+            // which for a credit is its spread.
+            const creditMove = spreadNow !== undefined && pos.markedSpreadBps !== undefined
+              ? pos.quantity * (priceFromSpreadBps(terms, reg.zeroRates, spreadNow) - priceFromSpreadBps(terms, reg.zeroRates, pos.markedSpreadBps)) * fxRateToUsd * dir
+              : pnlMove;
+            ctx.attributionCreditSpread += creditMove;
+            ctx.attributionMacroRates += pnlMove - creditMove;
             marginReq = pos.notional * fxRateToUsd * marginRate;
             maintMargin = marginReq * 0.65;
           } else {
-            // §3.13 row 3: marked at the price THIS LOAN cleared at (07d), not at a price
-            // linearised out of a cleared margin — `bond.md` N7.b's forbidden direction, which is
-            // what `priceLeveragedLoan` was and why it is deleted with this read. Paper the book
-            // has not printed keeps par, which is what a loan struck at its own margin is worth.
-            currentPrice = (clearedPriceOf(v2, trancheIdOf(v2, trRow)) ?? 1) * 100;
-            const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
-            const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
-            unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
+            // §3.13 row 3: marked at the price THIS LOAN cleared at (07d), never a price
+            // linearised out of a cleared margin — `bond.md` N7.b's forbidden direction.
             const carryEst = calculateExpectedCarry('LEVERAGED_LOAN', pos.direction, posValueLocal, {
-              policyRate: updatedRegions[pos.region].policyRate,
+              policyRate: reg.policyRate,
               cdsSpreadBps: Number.isNaN(TS.floatingMarginBps[trRow]) ? 200 : TS.floatingMarginBps[trRow]
             });
             weeklyFinancing = carryEst.components.financingCostLocal;
             ctx.attributionCarry += carryEst.weeklyCarryLocal;
-            const pnlMove = unrealizedPnL - prevPnL;
-            ctx.attributionCreditSpread += pnlMove * 0.8;
-            ctx.attributionMacroRates += pnlMove * 0.2;
+            // §3.26-a: a floater has no rate leg — its price moves with its margin, and its
+            // coupon moves with the rate. The whole move is credit; the 80/20 is gone.
+            ctx.attributionCreditSpread += pnlMove;
             marginReq = pos.notional * fxRateToUsd * marginRate;
             maintMargin = marginReq * 0.65;
           }
+          pos.markedSpreadBps = spreadNow;
         }
         break;
       }
 
       case 'GOV_BOND': {
         const maturityWeek = pos.maturityWeek || (pos.openedWeek ? pos.openedWeek + Math.round((pos.tenorYears || 10) * 52) : (pos.tenorYears ? nextWeek + Math.round(pos.tenorYears * 52) : nextWeek + 520));
-        const remainingTenorYears = Math.max(0.01, (maturityWeek - nextWeek) / 52);
-        const sovParams = updatedRegions[pos.region].yieldCurveParams;
-        const bondPriced = priceSovereignBond(remainingTenorYears, pos.fixedRate || 0.04, sovParams);
-        currentPrice = bondPriced.price;
+        // §3.26-a: THE MARK IS THE TRANCHE'S PRINT — the price its own auction struck or carried
+        // (07c), never the fitted curve at the position's tenor, which is what `priceSovereignBond`
+        // was. A position that names no tranche, or whose tranche has never printed, keeps the
+        // mark it had. Its terms are its own: the coupon it was struck with, on the sovereign's
+        // own schedule.
+        const printed = pos.trancheId ? clearedPriceOf(v2, asInstrumentId(pos.trancheId)) : undefined;
+        currentPrice = printed !== undefined && printed > 0 ? printed * 100 : pos.currentPrice;
+        const fixedRate = pos.fixedRate ?? defect(`sovereign position ${pos.id} carries no coupon`);
+        const terms: PaperTerms = {
+          annualCouponRate: fixedRate,
+          periodWeeks: Math.round(52 / SOVEREIGN_PAYMENTS_PER_YEAR),
+          weeksToMaturity: maturityWeek - nextWeek,
+        };
         const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
         const entryValueLocal = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
 
         unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
-        dv01 = (pos.quantity / 100) * bondPriced.dv01 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
+        dv01 = pos.quantity * dv01PerUnitFace(terms, currentPrice / 100) * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
 
         const carryEst = calculateExpectedCarry('GOV_BOND', pos.direction, posValueLocal, {
           policyRate: updatedRegions[pos.region].policyRate,
-          couponRate: pos.fixedRate || 0.04
+          couponRate: fixedRate
         });
         weeklyFinancing = carryEst.components.financingCostLocal;
         ctx.attributionCarry += carryEst.weeklyCarryLocal;

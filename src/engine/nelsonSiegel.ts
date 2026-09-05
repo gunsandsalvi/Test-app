@@ -98,53 +98,6 @@ export function calculateTenorZeroRates(params: NelsonSiegelParams) {
 }
 
 /**
- * Zero-coupon discount factor P(0, t) = exp(-y(t) * t)
- */
-export function calculateDiscountFactor(t: number, params: NelsonSiegelParams): number {
-  const zeroRate = calculateNelsonSiegelZeroRate(t, params);
-  return Math.exp(-zeroRate * t);
-}
-
-/**
- * Closed-form price of a fixed-rate coupon bond using Nelson-Siegel curve
- * Annual coupon payments, face value = 100
- */
-export function priceSovereignBond(
-  maturityYears: number,
-  couponRate: number,
-  params: NelsonSiegelParams,
-  spreadBps: number = 0
-): { price: number; yieldToMaturity: number; macaulayDuration: number; modifiedDuration: number; dv01: number } {
-  let pv = 0;
-  let weightedTime = 0;
-  const spread = spreadBps / 10000;
-  const annualCoupon = 100 * couponRate;
-
-  for (let t = maturityYears; t > 0; t -= 1) {
-    const baseZeroRate = calculateNelsonSiegelZeroRate(t, params);
-    const effectiveRate = baseZeroRate + spread;
-    const df = Math.exp(-effectiveRate * t);
-    const cashFlow = t === maturityYears ? annualCoupon + 100 : annualCoupon;
-    pv += cashFlow * df;
-    weightedTime += t * cashFlow * df;
-  }
-
-  const macaulayDuration = pv > 0 ? weightedTime / pv : maturityYears;
-  const ytm = calculateNelsonSiegelZeroRate(maturityYears, params) + spread;
-  const modifiedDuration = macaulayDuration / (1 + ytm);
-  // DV01 = Dollar Value of 01 bp (1 bp change on $100 face value)
-  const dv01 = (pv * modifiedDuration * 0.0001);
-
-  return {
-    price: pv,
-    yieldToMaturity: ytm,
-    macaulayDuration,
-    modifiedDuration,
-    dv01,
-  };
-}
-
-/**
  * §3.25 — A CURVE POINT SAYS WHETHER IT WAS TRADED OR INTERPOLATED.
  *
  * The fit is one owner's (`sovereign-curve.ts`), made once a week through every point the week's

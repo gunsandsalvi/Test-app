@@ -119,7 +119,11 @@ available are the ones any participant has" has an empty set on both sides.
 
 Beside it, unreferenced, is the previous surface. `state.portfolio` (`domain/portfolio.ts`) is
 cash, positions, NAV, margin and five-factor attribution; `12-portfolio-and-positions.ts` marks all
-of it every week; `13-news-and-turn-summary.ts:26-40` rolls the NAV forward and writes a
+of it every week *(2026-09-05, §9.26-a: at the register's prints — a sovereign or corporate
+position is worth what its tranche's own book struck, paper the book has never printed keeps the
+mark it had, the sensitivity is the paper's own schedule at the print's yield, and the credit/rates
+split of a move is measured off the tranche's own spread change rather than written as 70/30 — the
+two formula pricers it read are deleted)*; `13-news-and-turn-summary.ts:26-40` rolls the NAV forward and writes a
 `turnSummary` with a margin alert. And `engine/simulation/trade.ts:executeTrade` — the only thing
 that could ever open a position — **has zero callers.** `grep -rn executeTrade src/` returns its
 own definition and nothing else.

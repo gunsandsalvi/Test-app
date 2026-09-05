@@ -423,11 +423,12 @@ provenance found on the way in: an uncleared BILL used to deposit `zeroRates.ten
 fit's own output, at the wrong tenor — as an observation (D3.a's shape inside the fit), and a bond
 book with nothing to trade deposited the solver's bracket while the price store refused it; only a
 trade is a point now. And both sessions anchor a tranche on its OWN last print, taking the curve's
-point only for paper that has never traded. Still reading the fit as a number: the player's
-position marks (`12-portfolio`, `priceSovereignBond` / `priceCorporateBond`) and
+point only for paper that has never traded. Still reading the fit as a number:
 `domain/pricing/bond.ts:zeroRateAt`, which interpolates linearly between the five published
 points of the fit — a second interpolator over one curve, a lead for `bond.md`'s benchmark row
-rather than a defect of this tree.
+rather than a defect of this tree. (The player's position marks read the fit too until §9.26-a,
+which marks every position at its tranche's own print and deletes `priceSovereignBond` and
+`priceCorporateBond`.)
 
 D6 is the node this tree states most sharply and the code contradicts most plainly.
 `dealer-desk.ts:56`'s `DESK_SPREAD_BPS_BY_BOOK` states the sovereign spread as a constant, which is

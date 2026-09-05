@@ -166,3 +166,14 @@ export function yieldFromPrice(terms: PaperTerms, price: number): number {
   }
   return (lo + hi) / 2;
 }
+
+/**
+ * §3.26-a — THE PRICE SENSITIVITY OF A PRINT, off the paper's own schedule. What one basis point
+ * of yield does to the price, struck AT the yield the print itself implies — a derivative of the
+ * paper's own cash flows, not a point on a fitted curve. Per unit of face, positive for a long.
+ */
+export function dv01PerUnitFace(terms: PaperTerms, price: number): number {
+  if (!(terms.weeksToMaturity > 0) || !(price > 0)) return 0;
+  const y = yieldFromPrice(terms, price);
+  return Math.max(0, priceFromYield(terms, y) - priceFromYield(terms, y + 0.0001));
+}

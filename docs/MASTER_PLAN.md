@@ -551,25 +551,42 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26. **The remaining formula prices, deleted — and WHAT PLANT IS, decided once.** *(11e's last
-    slice folded in here, deliberately: the seed and every birth assign `grossPPEUSD` with no
-    wire and there is no asset kind for plant — `ASSET_KINDS` carries `HOUSE`, not plant. You
-    cannot wire a thing before deciding what it is, and the shape is exactly what the two
-    disagreeing depreciation schedules below are a symptom of: `capexUnderConstruction` already
-    carries plant as a stack of DATED vintages while the sheet carries it as one number. Decide
-    it once, here, and the wire follows; deciding it twice guarantees they diverge again.)* `12-portfolio:141` re-derives a bond price from the
-    cleared OAS through Nelson-Siegel (a round trip that cannot return the cleared price — and it is
-    the ONLY caller of `engine/pricing.ts:priceCorporateBond`/`priceLeveragedLoan`, so both die with
-    it) and splits
-    P&L attribution by invented 70/30, 80/20 and 40/60 fractions that reach the user through the turn
-    summary; `carryCalculator.ts:56-236` is a whole invented spread/yield world beside the cleared
-    one; `stage08-back.ts:1861` falls back to deriving the CDS spread from the OAS, destroying the
-    basis; `05-unit-bidding.ts:2430` runs a SECOND PD model 1,250 lines after the comment claiming
-    there is one; `05-unit-bidding.ts:1182` prices the seller's floor off an invented 5% cost of
-    capital and 60% LGD; `dealer-desk.ts:117` charges a stated real-market spread table as a real
-    cost in five books; `front-core.ts:750` vs `capital-programme.ts:190` run two depreciation
-    schedules that cannot reconcile.
-
+26-b. **The carry is read, not calculated.** `carryCalculator.ts` (138 lines) is an invented
+    spread/yield world beside the cleared one: policy + 50bp "repo", + 40bp, + 20bp, a 375bp loan
+    margin and a 150bp CDS by default, 0.8%/1.5% short drags. A position's carry is its paper's
+    own coupon or margin (the tranche's terms) or the equity's dividend, less its financing at the
+    rate the world clears (`repoRateAnnual`), and a short's borrow at the securities-lending book's
+    fee. Reads only.
+26-c. **A name with no protection book has no CDS spread.** `stage08-back.ts:1910` falls back to
+    the five-year cash spread, destroying the basis by construction; `companyGenerator.ts:539`
+    seeds the CDS as `oas ± random`. `Company.cdsSpreadBps` is undefined until the protection
+    book prints, and every reader (the CDS book's anchor, the index, relative value, the audit,
+    the company view) says so. derivative.md N3.
+26-d. **One cost of capital per firm.** `05-unit-bidding.ts:1209` prices the seller's floor off
+    `0.05 + pd × 0.60` — a stated hurdle and a stated LGD beside the cost of capital the labour
+    stage already computes for the same firm (its own beta against its region's own rate, at its
+    own risk aversion) and the recovery rate its credit carries. One owner for the hurdle
+    (`domain/company-week`), read here. *(The "second PD model" the step named is already gone:
+    both sites read `computeAnnualDefaultProbability`.)*
+26-e. **The desk's spread is a consequence.** `DESK_SPREAD_BPS_BY_BOOK` (dealer-desk.ts) is nine
+    stated real-market widths doing two jobs: a fee on the mid in five books
+    (`financial-clearing-engine` charges `|traded| × bps` beside the one cleared price — dealer-desks
+    C5.a, the-clearing-engine E3, sovereign-credit D6) and the width of every desk's schedule; the
+    FX conversion fee in 05 and `fx-funding`, and the ETF share book, read it too. The width of a
+    desk's schedule is what carrying the position costs it — financing at the repo rate over the
+    holding it expects, plus the risk it bears, the instrument's own measured weekly move at its
+    bank's risk aversion — and the desk earns by buying below and selling above through that
+    schedule; the fee on the mid goes. Split further when reached: the engine, then each book.
+26-f. **WHAT PLANT IS, decided once — and one depreciation schedule.** *(11e's last slice, folded
+    in here deliberately: the seed and every birth assign `grossPPELocal` with no wire and there
+    is no asset kind for plant — `ASSET_KINDS` carries `HOUSE`, not plant. You cannot wire a thing
+    before deciding what it is, and the shape is exactly what the two disagreeing depreciation
+    schedules are a symptom of: `capexUnderConstruction` already carries plant as a stack of DATED
+    vintages while the sheet carries it as one number. Decide it once, and the wire follows;
+    deciding it twice guarantees they diverge again.)* `front-core.ts:418` opens the net plant
+    off the sheet's accumulated depreciation while `capital-programme.ts:190` reduces it by
+    `grossPPELocal / (usefulLifeYears × 52)`: two schedules that cannot reconcile
+    (the-capital-programme A3, A4/A5).
 26b. **Housing clears.** `housingStockUSD`, a median price and an ownership rate are an
     aggregate marked by formula — dwellings have no owners and no price anyone struck, which
     rule 3 does not allow and no step currently covers. Households, builders and estates clear
@@ -1371,6 +1388,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-a — THE PLAYER'S MARKS ARE THE REGISTER'S PRINTS.** `12-portfolio` marked a sovereign
+  position through `priceSovereignBond` — the fitted curve at the position's remaining tenor,
+  never the tranche's own print — and priced un-printed corporate paper through
+  `priceCorporateBond`, a round trip from a cleared spread through Nelson-Siegel. Every position
+  marks at its tranche's print now (`clearedPriceOf`; a sovereign ticket names its tranche), paper
+  the book has never printed keeps the mark it had, and `dv01` is the paper's own schedule at the
+  print's own yield (`pricing/bond.ts:dv01PerUnitFace`); a sovereign position's terms are its own
+  coupon on the sovereign's own schedule (`SOVEREIGN_PAYMENTS_PER_YEAR`, one exported owner) and a
+  position with no coupon is a defect, not a 4% default. Both pricers and `calculateDiscountFactor`
+  are deleted (this was their only caller). The 70/30 and 80/20 attribution fractions are a
+  measurement now: a fixed bond's move is split into what its own spread change explains at this
+  week's curve (`Position.markedSpreadBps` remembers the last mark's spread) and the rest, which is
+  the curve's; a floater has no rate leg, so its whole move is credit. Split per rule 10: 26 is
+  26-a…26-f in §3. `test/bond-dv01.test.ts`. Gates green; no run (rule 11).
 
 **25 — A CURVE POINT SAYS WHETHER IT WAS TRADED OR INTERPOLATED.** `Region.sovereignCurve` records
   the week and the tenors the standing fit was made through (`sovereign-curve.ts` writes it beside

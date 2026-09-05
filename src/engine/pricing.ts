@@ -1,4 +1,3 @@
-import { NelsonSiegelParams, calculateNelsonSiegelZeroRate } from './nelsonSiegel';
 import { CreditRating, Sector } from '../types';
 import { INFLATION_TARGET } from './bootstrap/yield-curves';
 import { EQUITY_RISK_PREMIUM } from './equity-valuation';
@@ -54,58 +53,6 @@ function buildSectorBenchmarks(): Record<Sector, { basePE: number; growthRate: n
   return table;
 }
 export const SECTOR_BENCHMARKS = buildSectorBenchmarks();
-
-/**
- * Corporate Bond Pricing
- * Sovereign Benchmark Yield + OAS Rating Spread
- */
-export function priceCorporateBond(
-  maturityYears: number,
-  couponRate: number,
-  sovCurveParams: NelsonSiegelParams,
-  oasSpreadBps: number,
-  isDefaulted: boolean = false,
-  recoveryRate: number = 0.40
-): { price: number; yieldToMaturity: number; dv01: number; duration: number } {
-  if (isDefaulted) {
-    return {
-      price: recoveryRate * 100, // e.g. 40 on 100 par
-      yieldToMaturity: 0.50,
-      dv01: 0,
-      duration: 0,
-    };
-  }
-
-  const spread = oasSpreadBps / 10000;
-  const annualCoupon = 100 * couponRate;
-  let pv = 0;
-  let weightedTime = 0;
-
-  const cfTimes: number[] = [];
-  for (let t = maturityYears; t > 0; t -= 1) {
-    cfTimes.push(t);
-  }
-
-  for (const t of cfTimes) {
-    const baseZeroRate = calculateNelsonSiegelZeroRate(t, sovCurveParams);
-    const discountRate = baseZeroRate + spread;
-    const df = Math.exp(-discountRate * t);
-    const cf = t === maturityYears ? annualCoupon + 100 : annualCoupon;
-    pv += cf * df;
-    weightedTime += t * cf * df;
-  }
-
-  const ytm = calculateNelsonSiegelZeroRate(maturityYears, sovCurveParams) + spread;
-  const duration = pv > 0 ? (weightedTime / pv) / (1 + ytm) : maturityYears;
-  const dv01 = (pv * duration * 0.0001);
-
-  return {
-    price: pv,
-    yieldToMaturity: ytm,
-    dv01,
-    duration,
-  };
-}
 
 /**
  * Commodity Futures Cost-of-Carry Pricing
