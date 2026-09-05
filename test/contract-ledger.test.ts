@@ -244,12 +244,12 @@ test('§3.17-iv-a: a strike writes no lien on the dealer — the margin is the c
     const marginLocal = 1e6 * 0.02;
     assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: dealer }, 'USD'), 0, 'the dealer holds no client margin');
     assert.equal(partyLienLocal(v2, { kind: 'BANK_SECURITIES', id: dealer }), 0);
-    assert.equal(ccpMarginHeldLocal(v2, 'USA'), marginLocal, 'the USD clearing house holds the margin the contract posted');
+    assert.equal(ccpMarginHeldLocal(v2, 'USA'), 2 * marginLocal, 'the USD clearing house holds the margin both members posted');
     assert.equal(ccpMarginHeldLocal(v2, 'EUR'), 0, 'the contract settles in dollars, so no other house holds any');
     // A resolution novates the book: the margin stays where it is — with the house, not the dealer.
     novateDerivatives(ctx, (p) => (p.kind === 'BANK' && p.id === dealer ? { kind: 'BANK', id: other } : p));
     assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: other }, 'USD'), 0);
-    assert.equal(ccpMarginHeldLocal(v2, 'USA'), marginLocal);
+    assert.equal(ccpMarginHeldLocal(v2, 'USA'), 2 * marginLocal);
     // The contract settles away: the house holds nothing against it.
     keepDerivatives(ctx, []);
     assert.equal(ccpMarginHeldLocal(v2, 'USA'), 0);

@@ -91,7 +91,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.a D3 underlying — the spot rate at the future date | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
 | **A1.b D4 payoff — exchange of two fixed amounts; both notionals move** | `src/domain/derivatives/classes/fx-forward.ts:markToMarketUSDToA` | ❌ |
 | **A1.c D7 price — the forward rate, cleared** | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:strikeFor` | ⚠️ |
-| A1.d D5 currency — two of them, one per leg | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ❌ |
+| A1.d D5 currency — two of them, one per leg | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ❌ |
 | A2 it settles: real amounts in real currencies on the date | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ⚠️ |
 | A3 before then it carries a mark and margin | `src/domain/derivatives/classes/fx-forward.ts:closeOutMoveOf` | ✅ |
 | **A4 the FX swap is a secured loan of one currency against another** | `src/engine/simulation/stages/fx-squaring.ts:squareInterbankFxPositions` | ❌ |

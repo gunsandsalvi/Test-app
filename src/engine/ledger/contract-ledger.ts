@@ -17,11 +17,12 @@ import type { V2World } from '../../engine2/world';
 import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
-import type { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
+import { derivativePartyKey, type DerivativeContract, type DerivativeParty } from '../../domain/derivatives/contract';
 import { type RepoContract, encumberedFaceByBond } from '../../domain/repo';
 import { setLien } from './holdings-ledger';
-import { setAccountLien, ccpCashOf } from './accounts';
-import { ccpOfContract, ccpSheetOf, type CcpSheet } from '../../domain/clearing-house';
+import { setAccountLien, ccpCashOf, obligationCurrencyOf } from './accounts';
+import { ccpOfContract, ccpSheetOf, MEMBERS_PER_CONTRACT, type CcpSheet } from '../../domain/clearing-house';
+import { convert } from '../../domain/currency';
 import { REGION_IDS, type CurrencyCode } from '../../domain/geography';
 import type { SecurityLoan } from '../../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../../domain/prime-brokerage';
@@ -63,10 +64,30 @@ const rowOfContract = (c: DerivativeContract): number => {
  */
 export function ccpMarginHeldLocal(v2: V2World, region: RegionId): number {
   let total = 0;
-  derivativesOf(v2).forEach((c) => { if (ccpOfContract(c).region === region) total += initialMarginLocal(c); });
+  // §3.17-iv-b: both members post, so the house holds the contract's margin twice over.
+  derivativesOf(v2).forEach((c) => { if (ccpOfContract(c).region === region) total += MEMBERS_PER_CONTRACT * initialMarginLocal(c); });
   return total;
 }
 export const ccpSheetAt = (v2: V2World, region: RegionId): CcpSheet => ccpSheetOf(ccpCashOf(v2, region), ccpMarginHeldLocal(v2, region));
+
+/**
+ * §3.17-iv-b — A MEMBER'S MARGIN AT THE HOUSE IS ITS ASSET: the initial margin of every live
+ * contract it stands on, on either side, in the money asked for. A bank carries it on its sheet
+ * beside its register books (`desk-register.ts:bankBookAssetsLocal`), because it posted from its
+ * securities account and reserves left without equity moving.
+ */
+export function memberMarginPostedLocal(v2: V2World, party: DerivativeParty, into: CurrencyCode): number {
+  const key = derivativePartyKey(party);
+  let total = 0;
+  derivativesOf(v2).forEach((c) => {
+    const sides = (derivativePartyKey(c.a) === key ? 1 : 0) + (derivativePartyKey(c.b) === key ? 1 : 0);
+    if (sides) total += sides * convert(initialMarginLocal(c), c.currency, into, v2.fx);
+  });
+  return total;
+}
+/** A bank's margin at the house, in the money it keeps its books in. */
+export const bankMarginAtHouseLocal = (v2: V2World, bankId: EntityId): number =>
+  memberMarginPostedLocal(v2, bankPartyOf(bankId), obligationCurrencyOf(v2, bankPartyOf(bankId)));
 
 /** Every live derivative, materialized in store order — the audits', the UI's and the harness's read. */
 export function derivativesOf(v2: V2World): DerivativeContract[] {

@@ -20,7 +20,7 @@
 
 import { GameState, RegionId } from '../../../types';
 import { derivativesBookOf, strikeDerivatives, keepDerivatives } from '../../ledger/contract-ledger';
-import { ccpOfContract } from '../../../domain/clearing-house';
+import { ccpOfContract, memberMarginAccount } from '../../../domain/clearing-house';
 
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../domain/derivatives/contract';
@@ -161,16 +161,37 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
   };
 }
 
-function payToB(ctx: WeeklyStepContext, c: DerivativeContract, usdToB: number, reason: string, net: Map<string, number>): void {
-  if (!(Math.abs(usdToB) > MIN_LEG_LOCAL)) return;
+/** A member that can still pay and be paid. The default says every member stands. */
+type Stands = (p: DerivativeParty) => boolean;
+const everyoneStands: Stands = () => true;
+
+/**
+ * §3.17-iv-b — EVERY LEG GOES THROUGH THE HOUSE. A contract's two members never pay each other:
+ * the paying side pays the clearing house of the contract's money and the house pays the other
+ * side, so each member faces the house and the house is flat on every leg by construction. A
+ * member that has ceased to exist pays nothing and is paid nothing — its leg is simply not
+ * written — and the house's leg to the OTHER side stands regardless, which is the point of a
+ * CCP: the survivor is paid, and what the house cannot recover from a departed member is the
+ * waterfall's to fund (17-iv-c; until then it is the house's cash, and `O15` shows it short).
+ * Returns nothing; `net` keeps each member's cash settled here for the markets' budget tests.
+ */
+export function payThroughHouse(ctx: WeeklyStepContext, c: DerivativeContract, usdToB: number, reason: string, net: Map<string, number>, stands: Stands = everyoneStands): void {
+  const amount = Math.abs(usdToB);
+  if (!(amount > MIN_LEG_LOCAL)) return;
   const payer = usdToB > 0 ? c.a : c.b;
   const payee = usdToB > 0 ? c.b : c.a;
+  const house = ccpOfContract(c);
   // §3.13c: the contract says what it settles in; `currencyOf(c.regionId)` was a proxy.
-  pay(ctx, { payer, payee, amount: Math.abs(usdToB), currency: c.currency, reason });
-  const pk = derivativePartyKey(payer);
-  const ek = derivativePartyKey(payee);
-  net.set(pk, (net.get(pk) ?? 0) - Math.abs(usdToB));
-  net.set(ek, (net.get(ek) ?? 0) + Math.abs(usdToB));
+  if (stands(payer)) {
+    pay(ctx, { payer, payee: house, amount, currency: c.currency, reason });
+    const pk = derivativePartyKey(payer);
+    net.set(pk, (net.get(pk) ?? 0) - amount);
+  }
+  if (stands(payee)) {
+    pay(ctx, { payer: house, payee, amount, currency: c.currency, reason });
+    const ek = derivativePartyKey(payee);
+    net.set(ek, (net.get(ek) ?? 0) + amount);
+  }
 }
 
 /**
@@ -184,6 +205,7 @@ export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameSt
   const book = derivativesBookOf(ctx);
   const key = derivativePartyKey(party);
   const view = buildDerivativeMarketView(ctx);
+  const stands: Stands = (p) => view.partyState(p) !== 'GONE';
   const net = new Map<string, number>();
   const kept: DerivativeContract[] = [];
   let closed = 0;
@@ -191,12 +213,12 @@ export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameSt
     const onA = derivativePartyKey(c.a) === key;
     if (!onA && derivativePartyKey(c.b) !== key) { kept.push(c); continue; }
     closed++;
-    // A counterparty that has ceased to exist leaves nobody to pay or be paid: flat.
-    if (view.partyState(onA ? c.b : c.a) === 'GONE') continue;
+    // §3.17-iv-b: the house pays the survivor whether or not the other member still exists.
     const profile = derivativeProfile(c.classId);
     const markLocal = profile.markToMarketUSDToA(c, view);
-    if (markLocal !== null) payToB(ctx, c, -(markLocal - (c.settledMarkLocal ?? 0)), 'derivative close-out', net);
-    else payToB(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net);
+    if (markLocal !== null) payThroughHouse(ctx, c, -(markLocal - (c.settledMarkLocal ?? 0)), 'derivative close-out', net, stands);
+    else payThroughHouse(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net, stands);
+    releaseInitialMargin(ctx, c, view);
   }
   if (closed > 0) keepDerivatives(ctx, kept);
   return closed;
@@ -223,21 +245,24 @@ export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameSt
 export function postInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract): void {
   const marginLocal = initialMarginLocal(c);
   if (!(marginLocal > MIN_LEG_LOCAL)) return;
-  pay(ctx, { payer: c.a, payee: ccpOfContract(c), amount: marginLocal, currency: c.currency, reason: 'initial margin posted' });
+  // §3.17-iv-b: BOTH members post — each faces the house, and the house is exposed to each. A
+  // bank posts from its securities account and carries the margin as an asset
+  // (`clearing-house.ts:memberMarginAccount`).
+  const house = ccpOfContract(c);
+  [c.a, c.b].forEach((member) => pay(ctx, { payer: memberMarginAccount(member), payee: house, amount: marginLocal, currency: c.currency, reason: 'initial margin posted' }));
 }
 
 function releaseInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract, view: DerivativeLifecycleView): void {
   const marginLocal = initialMarginLocal(c);
-  // Held by the clearing house, which is where the posting put it; a party that has ceased to
-  // exist has nowhere to receive it, the same rule the close-out legs follow — the CCP keeps
-  // it, and it is the first resource the waterfall (17-iv-c) draws on.
-  if (!(marginLocal > MIN_LEG_LOCAL) || view.partyState(c.a) === 'GONE') return;
-  pay(ctx, {
-    payer: ccpOfContract(c),
-    payee: c.a,
-    amount: marginLocal,
-    currency: c.currency,
-    reason: 'initial margin returned',
+  if (!(marginLocal > MIN_LEG_LOCAL)) return;
+  // Held by the clearing house, which is where the posting put it, and returned to each member
+  // that still exists; a member that has ceased to exist has nowhere to receive it, the same rule
+  // the legs follow — the house keeps it, and it is the first resource the waterfall (17-iv-c)
+  // draws on.
+  const house = ccpOfContract(c);
+  [c.a, c.b].forEach((member) => {
+    if (view.partyState(member) === 'GONE') return;
+    pay(ctx, { payer: house, payee: memberMarginAccount(member), amount: marginLocal, currency: c.currency, reason: 'initial margin returned' });
   });
 }
 
@@ -255,13 +280,14 @@ export function settleDerivativeClass(
   const profile = derivativeProfile(classId);
   const net = new Map<string, number>();
   const kept: DerivativeContract[] = [];
+  const stands: Stands = (p) => view.partyState(p) !== 'GONE';
 
   /** The mark leg: value to A now, less what was already settled, signed to B. */
   const settleMark = (c: DerivativeContract, reason: string): void => {
     const markLocal = profile.markToMarketUSDToA(c, view);
     if (markLocal === null) return;
     const deltaToA = markLocal - (c.settledMarkLocal ?? 0);
-    payToB(ctx, c, -deltaToA, reason, net);
+    payThroughHouse(ctx, c, -deltaToA, reason, net, stands);
     c.settledMarkLocal = markLocal;
   };
 
@@ -269,11 +295,11 @@ export function settleDerivativeClass(
     if (c.classId !== classId) { kept.push(c); continue; }
 
     const event = profile.eventTermination(c, view);
-    if (event) { payToB(ctx, c, event.usdToB, event.reason, net); releaseInitialMargin(ctx, c, view); continue; }
+    if (event) { payThroughHouse(ctx, c, event.usdToB, event.reason, net, stands); releaseInitialMargin(ctx, c, view); continue; }
 
     if (c.maturityWeek <= view.week) {
       const leg = profile.periodicLegUSDToB(c, view);
-      if (leg) payToB(ctx, c, leg.usdToB, leg.reason, net);
+      if (leg) payThroughHouse(ctx, c, leg.usdToB, leg.reason, net, stands);
       settleMark(c, profile.markReasonFinal ?? 'derivative settled');
       releaseInitialMargin(ctx, c, view);
       continue;
@@ -282,20 +308,19 @@ export function settleDerivativeClass(
     const aState = view.partyState(c.a);
     const bState = view.partyState(c.b);
     if (aState !== 'ALIVE' || bState !== 'ALIVE') {
-      // A party that has ceased to exist leaves nobody to pay or be paid: the contract ends
-      // flat. A DEFAULTED party still has an account (its estate's), and settles replacement
-      // value through it like any other claim on the estate.
-      if (aState !== 'GONE' && bState !== 'GONE') {
-        const markLocal = profile.markToMarketUSDToA(c, view);
-        if (markLocal !== null) payToB(ctx, c, -(markLocal - (c.settledMarkLocal ?? 0)), 'derivative close-out', net);
-        else payToB(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net);
-      }
+      // §3.17-iv-b: the house closes the contract out and pays the survivor. A DEFAULTED member
+      // still has an account (its estate's) and pays the house through it like any other claim
+      // on the estate; a member that has ceased to exist pays nothing, and the house's leg to
+      // the other side stands.
+      const markLocal = profile.markToMarketUSDToA(c, view);
+      if (markLocal !== null) payThroughHouse(ctx, c, -(markLocal - (c.settledMarkLocal ?? 0)), 'derivative close-out', net, stands);
+      else payThroughHouse(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net, stands);
       releaseInitialMargin(ctx, c, view);
       continue;
     }
 
     const leg = profile.periodicLegUSDToB(c, view);
-    if (leg) payToB(ctx, c, leg.usdToB, leg.reason, net);
+    if (leg) payThroughHouse(ctx, c, leg.usdToB, leg.reason, net, stands);
     settleMark(c, profile.markReasonLive ?? 'derivative variation margin');
     kept.push(c);
   }

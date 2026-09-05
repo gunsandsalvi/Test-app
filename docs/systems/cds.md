@@ -115,7 +115,7 @@ checked by `scripts/check-atlas.sh`.
 | D1 a stated definition of the credit event, observable by both sides | `src/engine/simulation/stages/derivative-lifecycle.ts:buildDerivativeMarketView` | ⚠️ |
 | D2 a recovery from what the defaulted obligations fetch — an auction | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ⚠️ |
 | **D2.a FORBID no fixed recovery rate** | `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ⚠️ |
-| D3 the payment is real money, big enough to fail the seller | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ✅ |
+| D3 the payment is real money, big enough to fail the seller | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ✅ |
 | D4 the contract terminates on the event | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ✅ |
 | D5 VERIFY Σ protection paid = Σ received; a default is a transfer | — | ❌ |
 | E1 CDS moves credit risk to where it is not observed | `src/engine/simulation/stages/09-concentration-risk.ts:runConcentrationRiskStage` | ⚠️ |
@@ -231,7 +231,7 @@ reason (after C2) the spread cannot express a view.
 ### ❌ D5 / E2 / ⚠️ E3 — THREE THINGS NOBODY ADDS UP
 
 **D5** (Σ protection paid = Σ received, and a default is a transfer). Never computed. It is true
-by construction — `payToB` moves one amount between the contract's two parties — and it is exactly
+by construction — `payThroughHouse` moves one amount from a member to the house and the same amount on to the other (§9.17-iv-b) — and it is exactly
 the kind of "true by construction" that stops being true the first time a class settles twice.
 **A measurement, for §3 step 38.**
 

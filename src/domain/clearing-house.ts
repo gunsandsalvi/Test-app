@@ -13,7 +13,7 @@
  * CCP's own capital (C3's other two lines) come with the waterfall (17-iv-c).
  */
 import { CurrencyCode, REGION_BY_CURRENCY, RegionId } from './geography';
-import { ccpParty, PartyOfKind } from './party';
+import { bankSecuritiesParty, ccpParty, CounterpartyRef, PartyOfKind, PartyRef } from './party';
 
 export interface CcpSheet {
   /** Cash the clearing house holds at the region's banks, in the region's money. */
@@ -43,3 +43,16 @@ export const ccpOfMoney = (currency: CurrencyCode): PartyOfKind<'CCP'> => ccpPar
 export const ccpOfContract = (c: { currency: CurrencyCode }): PartyOfKind<'CCP'> => ccpOfMoney(c.currency);
 /** The region a clearing house keeps its books in — its own. */
 export const ccpRegionOf = (p: PartyOfKind<'CCP'>): RegionId => p.region;
+
+/**
+ * §3.17-iv-b — THE ACCOUNT A MEMBER'S MARGIN MOVES THROUGH. Margin is an asset swap, not income:
+ * a bank member posts it from its securities account (reserves move, equity does not,
+ * `party.ts:BANK_SECURITIES`) and carries what it posted as an asset
+ * (`contract-ledger.ts:bankMarginAtHouseLocal`); a firm or a fund pays it from the one account it
+ * has. Variation margin is P&L and goes through the member's own account, not this one.
+ */
+export const memberMarginAccount = (p: CounterpartyRef): PartyRef => (p.kind === 'BANK' ? bankSecuritiesParty(p) : p);
+
+/** Every contract has two members, and each posts the margin the contract carries (§3.17-ii sizes
+ *  it from the reference's move, which cuts both ways). */
+export const MEMBERS_PER_CONTRACT = 2;

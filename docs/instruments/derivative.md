@@ -82,7 +82,7 @@ checked by `scripts/check-atlas.sh`. The three FORBIDs of **WHAT A DERIVATIVE IS
 | D3 an observable underlying priced elsewhere | `src/domain/derivatives/profile.ts:DerivativeMarketView` | ✅ |
 | **D3.a FORBID no underlying that only exists inside the derivative** | `src/engine/macro/evolution.ts:evolveCommodity` | ⚠️ |
 | D4 a payoff function of D3 | `src/domain/derivatives/profile.ts:periodicLegUSDToB` | ✅ |
-| D5 a currency per leg, legs need not share one | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ⚠️ |
+| D5 a currency per leg, legs need not share one | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ⚠️ |
 | D6 a term: start, end, payment dates between | `src/domain/derivatives/contract.ts:maturityWeek` | ✅ |
 | D6.a a periodicity and accrual convention per periodic leg | `src/domain/derivatives/classes/irs.ts:IRS_PROFILE` | ⚠️ |
 | D7 a price at inception | `src/domain/derivatives/contract.ts:strike` | ✅ |
@@ -182,7 +182,7 @@ to spot, and it carries no interest differential, so it is not covered interest 
 
 ### ⚠️ D5 / D6.a — ONE CURRENCY PER CONTRACT, ONE PERIODICITY, NO ACCRUAL CONVENTION
 
-`derivative-lifecycle.ts:payToB` settles every leg in `currencyOf(c.regionId)` — the contract has
+`derivative-lifecycle.ts:payThroughHouse` settles every leg in the contract's one `currency` — the contract has
 a region, not a currency per leg. An FX forward's two currencies exist only inside its mark, which
 is paid in the holder's home money, so a two-currency instrument (`fx-forwards-and-xcs.md` C1's
 cross-currency swap) cannot be represented at all. Every periodic leg is `/52` — `irs.ts:44`,

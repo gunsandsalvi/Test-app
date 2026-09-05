@@ -90,7 +90,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.d D2 notional — never exchanged | `src/domain/derivatives/contract.ts:notional` | ✅ |
 | **A2 two legs with their own periodicity and accrual convention, need not match** | — | ❌ |
 | A3 the floating leg FIXES on a stated date against the observed reference | `src/domain/derivatives/profile.ts:overnightRateAnnual` | ⚠️ |
-| A4 both legs in one currency | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ✅ |
+| A4 both legs in one currency | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ✅ |
 | B1 a borrower who issued fixed and wants floating, or the reverse | `src/engine/simulation/stages/derivative-markets/irs.ts:runSwapMarket` | ⚠️ |
 | B2 an asset manager with a duration mismatch | `src/domain/institution-profiles.ts:liabilityDriven` | ✅ |
 | B2.a a structural, one-way demand | `src/engine/simulation/stages/institutional-balance-sheet.ts:institutionTotalAssetsLocal` | ✅ |

@@ -96,17 +96,17 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a long-lived bilateral obligation | `src/engine2/obligations.ts:ObligationStore` · `src/domain/derivatives/contract.ts:DerivativeContract` · `src/domain/derivatives/contract.ts:DerivativeReference` | ✅ |
 | A2 the exposure is managed, and how is this system | `src/engine/simulation/stages/derivatives.ts:runDerivativesStage` | ✅ |
-| A3 the same obligation twice, one number from two sides | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ✅ |
+| A3 the same obligation twice, one number from two sides | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ✅ |
 | A4 VERIFY Σ marks = 0 per contract and in aggregate | `src/engine/audit/ownership.ts:o9` | ✅ |
 | B1 two parties agree terms at a cleared price | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | B2 recorded on both books; one contract, not two | `src/engine/ledger/contract-ledger.ts:strikeDerivatives` | ✅ |
 | B3 closed by an offset, an early termination, or expiry | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ⚠️ |
 | B3.a an offset with a different counterparty does not remove the first | `src/domain/derivatives/standing-book.ts:StandingBook` | ✅ |
 | B4 novation, with the old counterparty's consent | `src/engine/simulation/stages/10-mergers.ts:runMergersStage` | ⚠️ |
-| C1 bilateral: face each other, exchange collateral, net per pair | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ⚠️ |
+| C1 bilateral: face each other, exchange collateral, net per pair | — | ❌ |
 | C1.a netting is per counterparty pair | — | ❌ |
-| **C2 cleared: a CCP becomes buyer to the seller and seller to the buyer** | — | ❌ |
-| C2.a it concentrates the risk in a named party | — | ❌ |
+| **C2 cleared: a CCP becomes buyer to the seller and seller to the buyer** | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` · `src/engine/simulation/stages/derivative-lifecycle.ts:postInitialMargin` | ✅ |
+| C2.a it concentrates the risk in a named party | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` · `src/engine/audit/ownership.ts:o15` | ✅ |
 | C3 the CCP is a real entity with a balance sheet | `src/domain/clearing-house.ts:CcpSheet` · `src/engine/ledger/contract-ledger.ts:ccpSheetAt` | ⚠️ |
 | **C4 a stated default waterfall, in order** | — | ❌ |
 | C4.a a member's loss can come from another member's default | — | ❌ |
@@ -121,7 +121,7 @@ checked by `scripts/check-atlas.sh`.
 | D5 margin rises when volatility rises — procyclical, measured | `src/domain/derivatives/profile.ts:closeOutMoveOf` | ⚠️ |
 | E1 a party can fail with open positions | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` | ✅ |
 | E2 closed out at a stated value; a claim on the estate | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ⚠️ |
-| E3 the loss is the mark less collateral, on named survivors | `src/domain/derivatives/profile.ts:closeOutUSDToB` | ⚠️ |
+| E3 the loss is the mark less collateral, on named survivors | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` | ⚠️ |
 | E4 VERIFY the loss chain is traceable party by party | — | ❌ |
 | F1 FORBID no position without a counterparty | `src/engine/audit/ownership.ts:o5` | ⚠️ |
 | F2 FORBID no exposure without margin or a stated reason | `src/domain/derivatives/profile.ts:closeOutMoveOf` | ⚠️ |
@@ -149,7 +149,18 @@ two stores to guess which space a string was in.
 `DerivativeParty` was a second party union re-declaring three of `PartyRef`'s arms; it is
 `CounterpartyRef`, an `Extract` view of the one union, since §9.13-BOOK c-then-3a.
 
-### ⚠️ C3 / ❌ C2, C4, C5 — THE CLEARING HOUSE IS A PARTY WITH A SHEET; NOBODY FACES IT YET
+### ✅ C2 / ⚠️ C3 / ❌ C4, C5 — EVERY MEMBER FACES THE HOUSE; THE HOUSE HAS NO WATERFALL YET
+
+*2026-09-05 (§9.17-iv-b). Novated. No member pays another: `payThroughHouse` writes every leg —
+periodic, mark, event, close-out — as the paying member to the house of the contract's money and
+the house to the other member, so each side faces the house and the house is flat on every leg by
+construction. Both members post initial margin (`postInitialMargin`; the house holds it twice
+over), a bank from its securities account, carrying the margin as an asset beside its register
+books (`contract-ledger.ts:bankMarginAtHouseLocal` in `desk-register.ts:bankBookAssetsLocal`).
+C2.a: the risk concentrates in the house — a member that has ceased to exist pays nothing and the
+house still pays the survivor (`closeOutDerivativesOfParty`), so the loss is the house's, which
+`O15` shows as cash short of margin until 17-iv-c gives it a waterfall. C1 goes to ❌ for the
+honest reason: there is no bilateral book left to net per pair.*
 
 *2026-09-05 (§9.17-iv-a). The region's derivatives clearing house is a party (`party.ts` kind
 `CCP`, keyed by region — NOT the cash books' `CLEARING_HOUSE`, which stays a pass-through) with
@@ -162,25 +173,29 @@ contract's initial margin is posted TO the house of the contract's money
 margin held, and `O15` holds the cash to the contracts. ⚠️ rather than ✅ because C3 names three
 lines and this is one of them: the default fund and the house's own capital are 17-iv-c's.*
 
-Every contract in the book is still bilateral (`contract.ts` `a`/`b`): the house holds the
-margin but is nobody's counterparty, variation margin flows between the two named parties, and a
-member's default is a bilateral close-out. No default fund, no member contributions, no
-waterfall, no clearing member. The only waterfall in `src` is the estate's
-(`estate-resolution.ts:374`, secured → unsecured → equity), which is an issuer's liquidation and
-not a clearing house's.
+What is left is the waterfall: no default fund, no member contributions, no order of resources,
+no clearing-member limit. A member's default closes out through the house at the mark, and a loss
+the house cannot recover sits on its cash with no stack to run down. The only waterfall in `src`
+is the estate's (`estate-resolution.ts:374`, secured → unsecured → equity), which is an issuer's
+liquidation and not a clearing house's.
 
 **Consequence.** C4.a's mutualisation channel — a member losing money because a *different*
 member failed — does not exist in this world, so the largest systemic transmission a derivative
 layer has is unrepresentable. And C5, the tree's hardest FORBID, is unanswerable rather than
 satisfied: there is no finite enumerable resource stack to run past, because there is no stack.
 
-**§3 17-iv-b and 17-iv-c**, in the plan's words: *"each side faces the CCP … variation flows
-THROUGH it, and a default is its waterfall (IM → default fund → mutualisation) rather than a
-bilateral close-out."* Recorded here as five nodes rather than one line, because C3 (the CCP's
-own balance sheet) and C5 (finite resources) are separable pieces of that step and are the ones
-a partial implementation drops — which is why C3 landed first, on its own.
+**§3 17-iv-c**, in the plan's words: *"a default is its waterfall (IM → default fund →
+mutualisation) rather than a bilateral close-out."* Recorded here as five nodes rather than one
+line, because C3 (the CCP's own balance sheet) and C5 (finite resources) are separable pieces of
+that step and are the ones a partial implementation drops — which is why C3 and C2 landed first,
+each on its own.
 
 ### ⚠️ E2 / E3 — A DEAD PARTY'S DERIVATIVES ARE PAID IN FULL, AHEAD OF EVERY RANKED CLAIM
+
+*2026-09-05 (§9.17-iv-b). The survivor is the house now: the dead member's close-out is paid to
+the house through the estate's account, and the house pays the living member whether or not it
+recovers. E3's loss therefore lands on a named party — the house — and E2's claim is the house's
+on the estate; what is still missing is that claim's RANK, below.*
 
 The node says the in-the-money side has **a claim on an estate, not a payoff**. The code has the
 payoff. `estate-resolution.ts:152-153` calls `closeOutDerivativesOfParty` at the moment the estate
@@ -241,7 +256,7 @@ a close-out horizon, scaled by the portfolio's netting"*.
 
 ### ⚠️ D4 / D4.a — A MARGIN CALL IS ALWAYS MET, BECAUSE IT BECOMES A LOAN
 
-`payToB` journals the variation-margin leg unconditionally; there is no cash test and no failure
+`payThroughHouse` journals the variation-margin leg unconditionally; there is no cash test and no failure
 path. A payer who cannot fund it goes negative and `overdraft-sweep.ts:runOverdraftSweep` converts
 the shortfall into credit — a revolver draw for a firm, a prime-brokerage draw for a fund
 (`prime-brokerage.ts:runPrimeBrokerageCloseSweep`), an SME facility for a pool. That is a real
@@ -257,9 +272,14 @@ produces borrowing and never produces selling.
 **§3 step 37-MARGIN**, . It is the missing half of step 17's margin work and should be built with
 it: risk-based margin with no failure path is a bigger number that still cannot fail.
 
-### ⚠️ C1 / C1.a — BILATERAL WITHOUT AN AGREEMENT, GROSS WITHOUT A NETTING SET
+### ❌ C1 / C1.a — NO BILATERAL BOOK, AND NO NETTING SET
 
-The layer is bilateral, but only in the weak sense that each row names two parties. There is no
+*2026-09-05 (§9.17-iv-b). Every contract clears: no member faces another, so the bilateral arm
+of the tree is absent rather than half-built, and C1 says so. C1.a's netting per pair is what a
+bilateral book would need; the cleared book's netting is a per-member figure the house keeps,
+which is 17-v's member view.*
+
+The layer was bilateral, but only in the weak sense that each row named two parties. There is no
 CSA, no netting set, and no per-pair exposure anywhere: `settleDerivativeClass` pays **every
 contract's leg separately**, gross, so two parties with ten offsetting contracts send ten wires.
 C1.a's point — that gross notional and net exposure are orders of magnitude apart — has no number
@@ -325,7 +345,7 @@ does with that claim is `hedge-funds.md`'s B5 (gross, net and equity as three re
 
 ### Also marked, briefly
 
-- **C2.a / C4 ❌** — nobody faces the CCP yet, so nothing concentrates and no waterfall exists — C above.
+- **C4 ❌** — the house has no waterfall yet — C above.
 - **D2 ✅** — variation margin flows for every class (§9.17-iii gave IRS and CDS their marks) — A4/D2.b.
 - **F1 ⚠️** — `O5` checks both parties are alive for the one book (§9.13-BOOK d4a: it read a firm party by a `ticker` it no longer carried, so every firm party counted dead — it reads the entity id now); the player's legacy positions have no `b` at all — `../instruments/derivative.md` D1.a.
 - **F4 ⚠️** — the commodity future cash-settles to `evolveCommodity`'s formula spot — 37-COMMODITY.

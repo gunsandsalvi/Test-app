@@ -131,7 +131,7 @@ import { ensureV2 } from '../src/engine2/world';
 import { segmentStockLocal } from '../src/engine/ledger/goods-ledger';
 import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
 import { issuedSharesOf, etfSharesOutstandingOf } from '../src/engine2/instruments';
-import { derivativesOf, repoBookOf, publishRepoBook, tradeInvoicesOf } from '../src/engine/ledger/contract-ledger';
+import { derivativesOf, repoBookOf, publishRepoBook, tradeInvoicesOf, bankMarginAtHouseLocal } from '../src/engine/ledger/contract-ledger';
 import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { issuerSpreadAtOnCurve } from '../src/engine/credit-price';
@@ -2396,7 +2396,9 @@ function runHarness() {
         // (§3.13-BOOK d3d: register rows, at gross).
         - deskGrossLocal(ensureV2(state), c.id)
         // HF1: margin loans to hedge funds are this bank's asset too.
-        - (bs.primeBrokerageLoansLocal ?? 0);
+        - (bs.primeBrokerageLoansLocal ?? 0)
+        // §3.17-iv-b: and the margin it posted at the clearing house.
+        - bankMarginAtHouseLocal(ensureV2(state), c.id);
       const idTraced = (process.env.BANK_ID_TRACE ?? '').split(',').includes(c.ticker);
       if (Math.abs(residualLocal) > 5e6 || idTraced) {
         // §7.302 — the composition, printed when it breaks: a 66B one-week residual during the

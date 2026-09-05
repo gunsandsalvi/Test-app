@@ -224,7 +224,7 @@ just each participant's net fill.
 
 The desk's two real constraints are both present and both good: `bankTotalAssetsLocal` adds the
 bank's book assets — its desks' GROSS off the register (`bankBookAssetsLocal`, §9.13-BOOK d3d), a
-short charged like a long — to the leverage denominator one-for-one (D2 `✅`, F2 `✅`), and `buildDealerDeskParticipants:121` limits net purchases to reserves above the bank's
+short charged like a long, and since §9.17-iv-b its margin at the clearing house — to the leverage denominator one-for-one (D2 `✅`, F2 `✅`), and `buildDealerDeskParticipants:121` limits net purchases to reserves above the bank's
 deposit buffer, so a well-capitalised desk can still be unable to bid.
 
 What is missing is D3's **weekly cost**. Nothing charges a desk for carrying a position from one

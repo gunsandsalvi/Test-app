@@ -552,12 +552,8 @@ written from here):
     margin is the reference's own move) and 17-iii (variation margin is the mark, for every
     class) are in §9. What is left, in order:
 17-iv. **THE CCP** — split 2026-09-05, one commit each; 17-iv-a (the clearing house is a party
-    with a balance sheet, and holds the margin) is in §9. What is left, in order:
-17-iv-b. **NOVATION.** Each side faces the CCP: `DerivativeContract` names the house as its
-    counterparty on both legs (a contract's `a`/`b` stay the members; the house stands between
-    them for every payment), the B side posts its own initial margin too, and variation margin
-    flows THROUGH the house — A pays it, the house pays B — so the house is flat on marks by
-    construction and `O9` measures it so. C2, C2.a.
+    with a balance sheet, and holds the margin) and 17-iv-b (novation: every member faces the
+    house) are in §9. What is left:
 17-iv-c. **THE WATERFALL AND THE DEFAULT FUND.** A member's default is the house's waterfall
     rather than a bilateral close-out: the defaulter's margin (already the house's, and kept
     when a party is GONE), then the defaulter's fund contribution, then the house's own capital,
@@ -1636,6 +1632,26 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17-iv-b — NOVATION: EVERY MEMBER FACES THE HOUSE.** No member pays another.
+`derivative-lifecycle.ts:payThroughHouse` (was `payToB`) writes every leg — periodic, mark, event,
+close-out — as two: the paying member to the clearing house of the contract's money, the house to
+the other member; the house is flat on every leg by construction and each member's settled net is
+unchanged. Both members post initial margin (`postInitialMargin`; `ccpMarginHeldLocal` counts
+`MEMBERS_PER_CONTRACT`), and margin is an asset swap, not income: a bank member posts from its
+securities account (`clearing-house.ts:memberMarginAccount`) and carries what it posted as an
+asset — `contract-ledger.ts:memberMarginPostedLocal` / `bankMarginAtHouseLocal`, folded into
+`desk-register.ts:bankBookAssetsLocal` so the leverage ratio and the resolution plan see it, and
+a line of its own in the identity trace, the harness residual and the statement. A member that
+has ceased to exist pays nothing and is paid nothing, and the house's leg to the OTHER member
+stands: `closeOutDerivativesOfParty` and the settle's dead branch no longer end a contract flat
+when one side is GONE — the survivor is paid by the house, the house keeps the departed member's
+margin, and what it cannot recover shows in `O15` as cash short of margin until 17-iv-c's
+waterfall funds it. (The `O9` measurement 17-iv-b's entry promised is already the members' marks
+summing to zero; the house carries none, so there is nothing new to sum.) Atlas C2, C2.a ✅; C1
+❌ (there is no bilateral book left); E2/E3 re-read: the survivor is the house. `test/ccp.test.ts`:
+both members post, the bank from its securities account; A pays the house and the house pays B; a
+departed member's leg is not written and the survivor is still paid. Gates green; no run.
 
 **17-iv-a — THE CLEARING HOUSE IS A PARTY WITH A BALANCE SHEET, AND HOLDS THE MARGIN.** The
 region's derivatives central counterparty is a `PartyRef` (`party.ts` kind `CCP`, keyed by

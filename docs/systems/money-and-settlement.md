@@ -164,7 +164,7 @@ writes to `v2.accounts.balance` outside `accounts.ts` are the seed's (`initializ
 player's own ticket (`trade.ts:90`); `pay`/`payByIds`/`journalPayment` are otherwise the sole
 entry, and `journalPush` writes the wire before the row so a money row without a wire cannot
 exist. Capital calls (`pe-lifecycle.ts:184`), variation margin
-(`derivative-lifecycle.ts:143 payToB`) and every clearing fee (`book-settlement.ts:126`) are
+(`derivative-lifecycle.ts:payThroughHouse`, through the clearing house since §9.17-iv-b) and every clearing fee (`book-settlement.ts:126`) are
 ordinary `pay` calls today. The historical hole recorded in the plan is closed.
 
 **What is not there is the refusal.** `applySettledRow` (accounts.ts:666) tests only that both
