@@ -18,8 +18,10 @@
 import { wire, activeWireJournal } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import type { PartyRef } from './party';
-import type { EntityId } from '../../domain/ids';
-import type { PlantVintage, PlantFlow } from '../../domain/plant';
+import { asInstrumentId, type EntityId, type InstrumentId } from '../../domain/ids';
+import { mergePlant, type PlantVintage, type PlantFlow } from '../../domain/plant';
+import { V2World, internType, typeRefOf } from '../../engine2/world';
+import { mutableHoldings, bookHeadOf, openKindRow, appendLot, recycleLots, relinkBook, instrumentIdAt, markBookDirty } from '../../engine2/holdings';
 
 export const PLANT_ASSET = 'PLANT';
 export const PLANT_QUEUE_ASSET = 'PLANT_QUEUE';
@@ -74,4 +76,79 @@ export function abandonPlant(companyId: EntityId, costLocal: number): void {
  *  and the minting stays visible; a pool carve-out is a wire from the pool, not this. */
 export function bornPlant(companyId: EntityId, costLocal: number): void {
   if (costLocal > 0) flowOf(companyId).bornLocal += costLocal;
+}
+
+// ---- §3.13-BOOK g-ii — THE PLANT ROWS. A firm's plant is rows on its own register book: one
+// row per capital good AND life (`plantInstrumentId`), in units of COST, whose lots are the
+// vintages — the cost each entered service at, the week it entered, price 1 (a register kept in
+// cost is a register nobody can re-mark; what a later buyer paid for a vintage is on its wire,
+// `movePlant`, and W6 reads it there). `plantVintagesOf` reads the rows back as the vintage list
+// `domain/plant.ts` computes on, and `writePlantRows` is the ONE writer: it relinks the firm's
+// plant rows to exactly a vintage list, so every writer of a firm's plant keeps the register by
+// handing it the list it computed (writers first, f1's discipline) — the same columns a bond's or
+// a good's lots live in, and `O14`'s sum rule holds for them too.
+// ----
+
+export const PLANT_KIND = 'PLANT';
+const PLANT_INSTRUMENT_PREFIX = 'PLANT:';
+/** A firm's plant of one capital good with one life: `PLANT:<kind>:<life years>`. */
+export const plantInstrumentId = (kind: string, usefulLifeYears: number): InstrumentId =>
+  asInstrumentId(`${PLANT_INSTRUMENT_PREFIX}${kind}:${usefulLifeYears}`);
+const plantInstrumentParts = (id: string): { kind: string; usefulLifeYears: number } => {
+  const rest = id.slice(PLANT_INSTRUMENT_PREFIX.length);
+  const at = rest.lastIndexOf(':');
+  return { kind: rest.slice(0, at), usefulLifeYears: Number(rest.slice(at + 1)) };
+};
+
+/** The firm's plant as the vintage list its rows hold — in register order, oldest first, equal
+ *  (week, life, kind) folded, exactly the shape `domain/plant.ts` keeps. */
+export function plantVintagesOf(v2: V2World, companyId: EntityId): PlantVintage[] {
+  const H = v2.holdings;
+  const ref = typeRefOf(v2, PLANT_KIND);
+  if (ref < 0) return [];
+  const out: PlantVintage[] = [];
+  for (let r = bookHeadOf(v2, companyId); r >= 0; r = H.next[r]) {
+    if (H.typeRef[r] !== ref) continue;
+    const { kind, usefulLifeYears } = plantInstrumentParts(instrumentIdAt(v2, r));
+    for (let l = H.lotHead[r]; l >= 0; l = H.lotNext[l]) {
+      out.push({ costLocal: H.lotUnits[l], kind, enteredServiceWeek: H.lotWeek[l], usefulLifeYears });
+    }
+  }
+  return mergePlant(out, []);
+}
+
+/** THE ONE WRITER: the firm's plant rows become exactly `vintages` — a row per (kind, life), a
+ *  lot per vintage at its own service week, every other row on the book untouched. An empty list
+ *  takes the plant rows off the book. */
+export function writePlantRows(v2: V2World, companyId: EntityId, region: string, vintages: readonly PlantVintage[]): void {
+  const H = mutableHoldings(v2);
+  const ref = internType(v2, PLANT_KIND);
+  const byInstrument = new Map<string, PlantVintage[]>();
+  for (const v of mergePlant(vintages, [])) {
+    const id = plantInstrumentId(v.kind, v.usefulLifeYears) as string;
+    const list = byInstrument.get(id);
+    if (list) list.push(v); else byInstrument.set(id, [v]);
+  }
+  const existing = new Map<string, number>();
+  const others: number[] = [];
+  for (let r = bookHeadOf(v2, companyId); r >= 0; r = H.next[r]) {
+    if (H.typeRef[r] === ref) existing.set(instrumentIdAt(v2, r) as string, r); else others.push(r);
+  }
+  const kept: number[] = [];
+  byInstrument.forEach((list, id) => {
+    let r = existing.get(id);
+    if (r === undefined) r = openKindRow(v2, companyId, PLANT_KIND, id, region);
+    else {
+      const lots: number[] = [];
+      for (let l = H.lotHead[r]; l >= 0; l = H.lotNext[l]) lots.push(l);
+      recycleLots(v2, lots);
+      H.lotHead[r] = -1; H.lotTail[r] = -1;
+    }
+    let costLocal = 0;
+    for (const v of list) { appendLot(v2, r, v.costLocal, 1, v.enteredServiceWeek); costLocal += v.costLocal; }
+    H.units[r] = costLocal; H.qtyLocal[r] = costLocal; H.shares[r] = Number.NaN;
+    kept.push(r);
+  });
+  relinkBook(v2, companyId, [...others, ...kept]);
+  markBookDirty(v2, companyId);
 }

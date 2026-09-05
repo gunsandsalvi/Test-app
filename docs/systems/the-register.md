@@ -388,7 +388,10 @@ checks reconcile the register against the ladders — not a second store against
 boundary this node used to record is gone. And since §9.13-BOOK g-i the register holds a
 non-financial asset for the first time: the household sector's DWELLINGS are a row on its book
 (`dwelling-ledger.ts`), in units, its lots the houses at the price each was bought at — the same
-columns a bond's or a good's live in.
+columns a bond's or a good's live in. A firm's PLANT has the same shape since g-ii-a
+(`src/engine/ledger/plant-ledger.ts:writePlantRows`): a row per capital good and life, in units of
+cost, its lots the vintages at the week each entered service, read back as the vintage list by
+`plantVintagesOf`; the writers hand it their lists in g-ii-b.
 
 ### Also marked, briefly
 

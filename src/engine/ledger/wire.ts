@@ -18,7 +18,7 @@ import type { PlantFlow } from '../../domain/plant';
 
 /** §3.13-BOOK (e): what a wire moves — every kind the register or a ladder holds (a view of the
  *  one kind list), money, a good, a house, or a bilateral contract. */
-export type AssetKind = HoldingType | 'MONEY' | 'GOOD' | 'CONTRACT' | 'PLANT';
+export type AssetKind = HoldingType | 'MONEY' | 'GOOD' | 'CONTRACT';
 
 export const ASSET_KINDS: readonly AssetKind[] = [
   'MONEY', 'EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER',

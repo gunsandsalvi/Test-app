@@ -41,10 +41,13 @@ export type InstrumentKind =
   | 'GOOD'
   // §3.13-BOOK g-i: the household sector's dwellings — a row on its own book, in dwellings, whose
   // lots are the houses at the price each was bought at.
-  | 'DWELLING';
+  | 'DWELLING'
+  // §3.13-BOOK g-ii: a firm's plant — a row per capital good and life on its own book, in units
+  // of COST, whose lots are the vintages at the week each entered service.
+  | 'PLANT';
 
 /** Where an instrument sits when a book is summed by class. */
-type AssetClass = 'EQUITY' | 'CREDIT' | 'SOVEREIGN' | 'DERIVATIVE' | 'COMMODITY' | 'CASH_LIKE' | 'GOODS' | 'HOUSING';
+type AssetClass = 'EQUITY' | 'CREDIT' | 'SOVEREIGN' | 'DERIVATIVE' | 'COMMODITY' | 'CASH_LIKE' | 'GOODS' | 'HOUSING' | 'PLANT';
 
 interface AssetModule {
   /** For the balance-sheet and NAV views that sum a book by class. */
@@ -102,7 +105,10 @@ type UnitOfMeasure =
   /** A unit of money, whose price is one by definition; the money is the instrument's. */
   | 'MONEY'
   /** One dwelling — the unit the housing register is kept in (§3.13-BOOK g-i). */
-  | 'DWELLINGS';
+  | 'DWELLINGS'
+  /** One unit of money of gross book — what plant is counted in (§3.26-f-iii): a re-mark cannot
+   *  move a register kept in cost, and the vintage's own price is 1 by construction. */
+  | 'COST';
 
 /**
  * ONE LINE PER KIND. A new asset type is a row here; every reader below keeps working, and any
@@ -140,6 +146,7 @@ export const ASSET_REGISTRY: Record<InstrumentKind, AssetModule> = {
   TRS:              { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   GOOD:             { assetClass: 'GOODS',      carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'GOODS_UNITS', ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   DWELLING:         { assetClass: 'HOUSING',    carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'DWELLINGS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  PLANT:            { assetClass: 'PLANT',      carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'COST',        ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
 };
 
 export const assetClassOf = (type: InstrumentKind): AssetClass => ASSET_REGISTRY[type].assetClass;
@@ -162,7 +169,7 @@ const moduleOf = (type: string): AssetModule | undefined => ASSET_REGISTRY[type 
 /** What can sit on a register book or a ladder row — the wire's instrument kinds. */
 export type HoldingType = Extract<InstrumentKind,
   'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER' | 'BANK_FACILITY'
-  | 'ETF_SHARE' | 'MMF_SHARE' | 'PE_FUND_INTEREST' | 'DWELLING'>;
+  | 'ETF_SHARE' | 'MMF_SHARE' | 'PE_FUND_INTEREST' | 'DWELLING' | 'PLANT'>;
 /** What a register row can be. No BANK_FACILITY: a facility is a bank-book loan on the lender's
  *  ladder row, never a register position. DWELLING is here (§3.13-BOOK g-i): only the household
  *  sector's book carries one today, and a landlord's or a foreclosing bank's would be the same row. */

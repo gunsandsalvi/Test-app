@@ -506,17 +506,22 @@ written from here):
        13-BOOK:
     g. **PLANT AND HOUSING JOIN.** g-i (housing) is in §9: the household sector's dwellings are a
        DWELLING row on its register book, lots at the price each was bought at. What is left:
-    g-ii. **PLANT JOINS** — unblocked by 26-f, which decided what a unit of plant is (a vintage:
-       cost, kind, the week it entered service, its own life). A vintage is a LOT — units of
-       COST, price 1 at commissioning, the week its week — under a row of kind PLANT per capital
-       good on the firm's own book, and `Company.plant: PlantVintage[]` becomes a read of those
-       rows (`usefulLifeYearsOf(kind)` is a function of the kind, so the row reproduces the
-       vintage exactly). Two things the register's lot chain cannot do today and the plant does:
-       a move takes a pro-rata SLICE of every vintage (`slicePlant`), not the oldest first, and a
-       vintage LEAVES when fully worn (`retireWornPlant`), which is a retirement by lot week, not
-       by units. Writers first (f1's discipline): every writer keeps the rows while
-       `Company.plant` still equals them, then the readers take the rows, then the field goes.
-       ~58 sites in 23 files; split it when taken.
+    g-ii. **PLANT JOINS** — g-ii-a is in §9: the rows exist (`plant-ledger.ts:writePlantRows` /
+       `plantVintagesOf`, a row per capital good and life in units of cost, lots at the service
+       week, round-trip pinned). Writers first (f1's discipline), what is left:
+    g-ii-b. **THE WRITERS KEEP THE ROWS.** Each of the thirteen writers of `Company.plant` (the
+       rebuild's commissioning and wear-out, the scrap, the estate's abandonment and sale, the
+       spin-off, the merger, the resolution, the seed, a birth's carve-out, the FDI subsidiary's
+       minting, the carriers) hands `writePlantRows` the list it just computed, so the rows equal
+       the field after every write; `O14`'s sum rule already covers the rows, and an O-family
+       check that the two agree per firm is the measurement step 38 takes.
+    g-ii-c. **THE READERS TAKE THE ROWS.** ~30 read sites in 20 files call the `domain/plant.ts`
+       reads on `comp.plant`; they call them on `plantVintagesOf(v2, comp.id)` instead — the
+       domain reads take a vintage list and do not change; sites without a world in reach get
+       the list from a caller that has one.
+    g-ii-d. **THE FIELD GOES.** `Company.plant` is deleted and the writers write rows only; the
+       vintage functions stay the semantics (a writer reads the rows, applies them, writes the
+       rows). W6 keeps closing on the wires and the flows, in cost.
 
     **WHAT IS NOT IN THE BOOK, AND WHY.** SME pool loans, mortgage vintages and consumer pools are
     positions of the BANK with no register of their own — that is 37-LOANBOOK, sequenced there
@@ -1333,6 +1338,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK g-ii-a — THE PLANT ROWS EXIST.** A firm's plant can be rows on its own register book:
+  `PLANT` joins the one kind list (class `PLANT`, counted in `COST` — a register kept in cost is a
+  register nobody can re-mark, and what a later buyer paid for a vintage is on its wire, where W6
+  reads it), one row per capital good AND life (`plantInstrumentId`, because a vintage's life is
+  stamped when it enters service and is not always the kind's), its lots the vintages: the cost
+  each entered service at, at its own service week, price 1. `plant-ledger.ts:writePlantRows` is
+  the one writer — it relinks the firm's plant rows to exactly a vintage list and touches no other
+  row on the book — and `plantVintagesOf` reads them back as the list `domain/plant.ts` computes
+  on. Pinned in `test/plant-register.test.ts`: the seed's age structure, two commissionings folding
+  into one lot, a scrap, a spin-off's slice onto another firm's rows with the service weeks kept,
+  a merger, and the fully worn leaving all round-trip exactly, beside a good's row that never
+  moves. The estate's exhaustive switch states that a firm's plant is not a claim on it. No
+  writer hands it a list yet — g-ii-b — so nothing in a run changes. Gates green; no run
+  (rule 11). Split (rule 1.10): g-ii-b the writers, g-ii-c the readers, g-ii-d the field goes.
 
 **13-BOOK g-i — THE DWELLINGS ARE ON THE REGISTER.** The household sector's dwellings were a
   field (`HousingMarket.ownerOccupiedUnits`, §9.26b-i) beside a wire; they are a row of kind
