@@ -49,7 +49,8 @@ import { currencyOf } from '../../../domain/geography';
 import { RegionId, Region } from '../../../types';
 import { overPledgedByBond } from '../../../domain/collateral';
 import { sovereignTenorResolver } from '../../../domain/government';
-import { materializeGovLadder } from '../../../engine2/tranches';
+import { materializeGovLadder, facilityBookOf } from '../../../engine2/tranches';
+import { isBankUnderPca } from '../../../domain/bank-resolution';
 import { BankingSector } from '../../../domain/banking';
 import {
   RepoContract, RepoPledge, RepoParty, repoInterestToMaturityLocal,
@@ -305,6 +306,12 @@ export function runRegionalRepoSession(
 ): RepoSessionResult {
   const sheetByTicker = new Map<string, BankingSector>();
   banks.forEach((b) => { if (b.bankBalanceSheet) sheetByTicker.set(b.ticker, b.bankBalanceSheet); });
+  // §3.20-LLR-iii — TO THE SOLVENT: the window's seat does not lend to a bank the supervisor
+  // would close. A bank under prompt corrective action borrows from the private lenders in the
+  // book on the same terms as anyone; the seat's size is the OTHER borrowers' need, and its
+  // fills never reach it. Bagehot's fourth condition, on the one facility that has the other three.
+  const windowEligibleBorrowers = new Set<EntityId>();
+  banks.forEach((b) => { if (b.bankBalanceSheet && !isBankUnderPca(b.bankBalanceSheet, facilityBookOf(ctx.v2, b.id))) windowEligibleBorrowers.add(b.id); });
   const week = ctx.nextWeek;
   // §3.13-BOOK (c-then-3b): the auction's SEATS are participant ids that embed a ticker
   // (`participant-keys.ts`), while a contract names its parties by entity id — so the crossing
@@ -436,6 +443,8 @@ export function runRegionalRepoSession(
   const runBook = (args: {
     instrumentId: InstrumentId;
     needLocal: number;
+    /** §3.20-LLR-iii: the part of the need the window may fund — the solvent borrowers'. */
+    windowNeedLocal: number;
     currentBps: number;
     bankReservationBps: number;
     instReservationBps: number;
@@ -466,7 +475,7 @@ export function runRegionalRepoSession(
         demandByInstrumentId: new Map([[args.instrumentId, lenderSchedule(args.instReservationBps, sleeveLocal)]]),
       });
     });
-    if (args.withWindow) {
+    if (args.withWindow && args.windowNeedLocal > 0) {
       // The standing repo facility: a posted rate with unlimited quantity response — a real seat
       // in the book (rule 3's administered exception), which is what makes the ceiling a market
       // outcome instead of a clamp. A perfectly elastic window stands at FULL size exactly AT its
@@ -479,7 +488,7 @@ export function runRegionalRepoSession(
         currentHoldingsByInstrumentId: new Map(),
         demandByInstrumentId: new Map([[args.instrumentId, {
           reservationStat: srfBps - SRF_SEAT_STEP_BPS,
-          maxHoldingLocal: args.needLocal,
+          maxHoldingLocal: args.windowNeedLocal,
           fullSizeStatRange: SRF_SEAT_STEP_BPS,
         }]]),
       });
@@ -524,6 +533,7 @@ export function runRegionalRepoSession(
     ? runBook({
         instrumentId: termInstrumentId,
         needLocal: totalTermNeedLocal,
+        windowNeedLocal: 0,
         currentBps: (reg.repoTermRateAnnual ?? reg.policyRate) * 10000,
         bankReservationBps: termBps,
         instReservationBps: Math.max(0, termBps - ON_RRP_SPREAD_BPS),
@@ -533,10 +543,13 @@ export function runRegionalRepoSession(
 
   // Whatever term did not fund still has to be funded today.
   const onNeedLocal = totalOnNeedLocal + Math.max(0, totalTermNeedLocal - term.totalLentLocal);
+  let eligibleNeedLocal = 0;
+  needByTicker.forEach((n, bankId) => { if (windowEligibleBorrowers.has(bankId)) eligibleNeedLocal += n.onLocal + n.termLocal; });
   const overnight = onNeedLocal > 0
     ? runBook({
         instrumentId: onInstrumentId,
         needLocal: onNeedLocal,
+        windowNeedLocal: totalNeedLocal > 0 ? onNeedLocal * (eligibleNeedLocal / totalNeedLocal) : 0,
         currentBps: priorRepoRateAnnual * 10000,
         bankReservationBps: policyBps,
         instReservationBps: rrpBps,
@@ -569,6 +582,8 @@ export function runRegionalRepoSession(
       if (wantLocal <= 0) return;
       const worked = encumberedWorking.get(ticker)!;
       lentByParty.forEach((lentLocal, pid) => {
+        // §3.20-LLR-iii: the window's fills never reach a bank the supervisor would close.
+        if (pid === CB_SRF_SEAT_ID && !windowEligibleBorrowers.has(bankId)) return;
         const shareLocal = wantLocal * (lentLocal / totalLentLocal);
         if (shareLocal <= 1) return;
         const free = unencumberedByBond(bankSovereignFaceByBond(ctx.v2, bankId), worked);

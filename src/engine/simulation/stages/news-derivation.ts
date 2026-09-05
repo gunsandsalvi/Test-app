@@ -243,6 +243,25 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
     });
   });
 
+  // ---- 6b. §3.20-LLR-iii: the run — a bank's uninsured depositors left it this week. ----
+  banksOf(ctx.updatedCompanies).forEach((b) => {
+    const fledLocal = ctx.updatedRegions[b.region]?.depositorFlightLocal?.[b.id] ?? 0;
+    if (!(fledLocal > 1e6)) return;
+    const streak = ctx.updatedRegions[b.region]?.bankFundingShortStreakWeeks?.[b.id] ?? 0;
+    push({
+      id: `run-${b.ticker}-${week}`,
+      kind: 'depositors leave',
+      category: 'CENTRAL_BANK',
+      title: `Depositors pull ${M(fledLocal)} from ${b.name}`,
+      description: `${b.ticker} has ended ${streak} week${streak === 1 ? '' : 's'} running short of reserves at the close, and the firms and funds that bank there — the uninsured — moved ${M(fledLocal)} to the region's soundest bank this morning, reserves with it. Reserves now ${M(bankReservesOf(ctx.v2, b.id))}.`,
+      cause: `A bank the market and the window would not fund is a bank its depositors can see is weak; each leaves on its own horizon.`,
+      refs: [company(b), region(b.region)],
+      materialityLocal: fledLocal,
+      impactRegion: b.region, impactSector: b.sector, affectedTicker: b.ticker,
+      urgent: true,
+    });
+  });
+
   // ---- 6a. §3.20-LLR-ii: a bank that could not fund. The market and the window have run and it
   // still ends the week below its buffer — nothing lends against that any more. ----
   banksOf(ctx.updatedCompanies).forEach((b) => {

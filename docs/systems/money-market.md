@@ -128,10 +128,10 @@ checked by `scripts/check-atlas.sh`.
 | D2 it bids up for deposits, and depositors respond | `src/engine/macro/banking.ts:liquidityShortfallShare` | ⚠️ |
 | D3 it draws the facility, at the penalty, against collateral | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
 | **D4 it FAILS — for liquidity, with a distinct trigger** | `src/domain/bank-resolution.ts:isBankUnderPca` | ❌ |
-| **D5 a RUN: depositors withdraw because they observe weakness** | — | ❌ |
+| **D5 a RUN: depositors withdraw because they observe weakness** | `src/engine/simulation/stages/depositor-flight.ts:runDepositorFlight` | ✅ |
 | D5.a what they observe must be observable | `src/ui/objects/company.tsx:bankCapitalRatio` | ✅ |
-| D5.b VERIFY a run is self-reinforcing | — | ❌ |
-| **D6 LOLR: freely, good collateral, penalty, solvent — all four** | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` · `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` | ❌ |
+| D5.b VERIFY a run is self-reinforcing | `src/domain/region-macro.ts:depositorFlightLocal` | ⚠️ |
+| **D6 LOLR: freely, good collateral, penalty, solvent — all four** | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` · `src/engine/simulation/stages/repo-clearing.ts:windowEligibleBorrowers` | ✅ |
 | **E1 the policy rate reaches the economy THROUGH this market** | `src/engine/simulation/stages/repo-clearing.ts:RepoSessionResult` | ⚠️ |
 | E2 VERIFY a squeeze here raises funding costs elsewhere | `src/engine/simulation/stages/repo-clearing.ts:fundableNeedLocal` | ⚠️ |
 | **E3 interbank exposure is a contagion path, by name** | `src/domain/repo.ts:RepoContract` | ⚠️ |
@@ -154,7 +154,7 @@ nothing moves. The need is read on settled reserves plus the legs already posted
 are what is still wrong at that close, and D4 (a bank that fails for liquidity) is what the
 unbounded loan still forecloses; A3.a is no longer the cause of them.
 
-### ✅ C5 / ❌ D6 — THE ONLY FACILITY IS THE SEAT, AND IT HAS THREE OF BAGEHOT'S FOUR
+### ✅ C5 / D6 — THE ONLY FACILITY IS THE SEAT, AND IT HAS BAGEHOT'S FOUR
 
 *2026-09-05 (§9.20-LLR-ii).* The model used to contain a correct facility and an incorrect one: the
 standing-facility seat in the repo book — collateralised (pledged paper, per bucket, encumbered),
@@ -164,8 +164,20 @@ the whole remaining shortfall at the close, which took whatever the seat left. T
 The seat is the window's only lending, so C5 holds and C4.b is no longer defeated: a bank out of
 eligible paper is not a borrower and ends the week short (`recordFundingShortfalls`, B7).
 
-D6 stays ❌ for the one condition the seat does not carry: it lends to any bank with paper,
-solvent or not — `the-central-bank.md` D3.a, §3 step 20-LLR-iii.
+*(§9.20-LLR-iii):* and the fourth — the seat lends only to a bank the supervisor would not close
+(`windowEligibleBorrowers`: a bank under PCA borrows from the private lenders in the book on the
+same terms as anyone, and the window's fills never reach it). D6 holds. What a bank overdrawn at
+the central bank pays for it is `chargeOverdrawnReserves`, the penalty rate at the open.
+
+### ✅ D5 / ⚠️ D5.b — THE RUN EXISTS, WHOLESALE FIRST, ON EACH DEPOSITOR'S HORIZON
+
+*(§9.20-LLR-iii).* A bank that ended the week short of its buffer is on the region's record and in
+the news (D5.a's observable). `depositor-flight.ts:runDepositorFlight`, first thing at the open:
+its uninsured depositors — the firms and the institutions that bank there; the household line is
+insured and stays — move to the region's soundest bank, each when the bank has been short for as
+many closes as its own management's patience, and the deposit leaves with the reserves behind it.
+So the bank is shorter at the next close, which is D5.b's loop — built, and measured on
+`Region.depositorFlightLocal`; that it is self-reinforcing in the run is step 38's to read.
 
 ### ✅ B2 / B2.a / ⚠️ B2.b — THE UNSECURED MARKET EXISTS, AT THE CLOSE, ONE BOOK PER NAME
 
@@ -268,8 +280,8 @@ OUT OF SCOPE, stated, not missing.**
 A2.b (a cost the bank can feel for missing its buffer) is the one that would prove the buffer is not
 decoration, and it is unmeasurable today for the reason C5 gives: missing the buffer costs
 policy + 125bp and nothing else. B6.a's term/overnight spread exists as two printed numbers
-(`repoRateAnnual`, `repoTermRateAnnual`) and is never differenced. B2.b and D5.b cannot be measured
-until B2 and D5 exist.
+(`repoRateAnnual`, `repoTermRateAnnual`) and is never differenced. B2.b and D5.b are readable since
+§9.20b and §9.20-LLR-iii (the struck rates per name; `depositorFlightLocal` against the streak).
 
 ### Also marked, briefly
 

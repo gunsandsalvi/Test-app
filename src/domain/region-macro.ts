@@ -790,6 +790,12 @@ export interface Region {
    *  market and window: the state a bank that could not fund ends the week in. Written fresh every
    *  close by `bank-funding-close.ts:recordFundingShortfalls`; empty on a clean close. */
   bankFundingShortfallsLocal?: Record<string, number>;
+  /** §3.20-LLR-iii — consecutive closes each bank (by entity id) has ended short; 0 or absent on a
+   *  clean close. What its uninsured depositors read against their own horizons. */
+  bankFundingShortStreakWeeks?: Record<string, number>;
+  /** §3.20-LLR-iii — what left each bank (by entity id) this week when its uninsured depositors
+   *  moved to a sounder one: the run, measured. Written fresh each week by `depositor-flight.ts`. */
+  depositorFlightLocal?: Record<string, number>;
   neutralRate: number;
   /**
    * PUB2b: what the Taylor rule wanted BEFORE the floor clamped it. The gap between this and the

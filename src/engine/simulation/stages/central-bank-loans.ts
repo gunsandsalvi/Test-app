@@ -86,3 +86,25 @@ export function reseatCentralBankLoans(ctx: WeeklyStepContext, regionId: RegionI
   const reg = ctx.updatedRegions[regionId];
   if (reg) syncCentralBankLoanSheets(ctx, regionId, reg, ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet && c.region === regionId));
 }
+
+/**
+ * §3.20-LLR-iii — AN OVERDRAWN RESERVE ACCOUNT PAYS THE PENALTY RATE. A bank whose account at the
+ * central bank ended the week below zero has borrowed from it by fact — nobody quoted the loan,
+ * nothing secures it — and pays for the week at the window rate plus the unsecured penalty, from
+ * its own account, so the settlement books it to its equity. The overdraft itself stands: nothing
+ * here brings the account to zero, and the harness reads it as the negative reserve it is.
+ */
+export function chargeOverdrawnReserves(ctx: WeeklyStepContext, regionId: RegionId, reg: Region, banks: readonly Bank[]): number {
+  const money = currencyOf(regionId);
+  let chargedLocal = 0;
+  banks.forEach((bank) => {
+    const reservesLocal = bankReservesOf(ctx.v2, bank.id);
+    if (!(reservesLocal < -1)) return;
+    const penaltyLocal = (-reservesLocal * centralBankLoanRateAnnual(reg)) / 52;
+    if (!(penaltyLocal > 1)) return;
+    pay(ctx, { payer: bankParty(bank), payee: { kind: 'CENTRAL_BANK', region: regionId }, amount: penaltyLocal, currency: money, reason: 'overdrawn reserves penalty' });
+    chargedLocal += penaltyLocal;
+  });
+  if (reg.centralBankSheet && chargedLocal > 0) reg.centralBankSheet.lastLoanInterestLocal = (reg.centralBankSheet.lastLoanInterestLocal ?? 0) + chargedLocal;
+  return chargedLocal;
+}

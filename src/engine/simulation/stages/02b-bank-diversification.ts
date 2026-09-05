@@ -44,7 +44,8 @@ import { bankSovereignValueRecord, bankSovereignPositions, bankSovereignBookLoca
 import { maturingAt, repoInterestToMaturityLocal } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
 import { runBankWeeklyLending, planSmeShopping, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, facilityMarginBpsFor } from './bank-lending';
-import { serviceCentralBankLoans } from './central-bank-loans';
+import { serviceCentralBankLoans, chargeOverdrawnReserves } from './central-bank-loans';
+import { runDepositorFlight } from './depositor-flight';
 import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
@@ -89,6 +90,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // all the same, so the remittance under-counted its own expense and the reserves it created
     // stood against nothing.
     if (reg.centralBankSheet) reg.centralBankSheet.lastInterestOnReservesLocal = 0;
+    // §3.20-LLR-iii: THE RUN, first thing in the morning — the uninsured depositors of a bank that
+    // ended last week short leave for the soundest bank, each on its own horizon, and the shares
+    // below are read off the deposits that stayed.
+    runDepositorFlight(ctx, regionId, reg);
 
     // The aggregate stage 2 just computed via evolveBankingSector is this week's fallback
     // seed for any bank that doesn't yet carry its own bankBalanceSheet (e.g. a company
@@ -428,6 +433,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // §3.20-LLR-a: then the window's loans — each row pays its week's interest at its own rate,
     // repays what the bank holds above its buffer, and rolls what it cannot repay.
     serviceCentralBankLoans(ctx, regionId, reg, openBanks);
+    // §3.20-LLR-iii: and an account that ended the week below zero pays the penalty rate on it.
+    chargeOverdrawnReserves(ctx, regionId, reg, openBanks);
     newSheets.forEach(({ bank, sheet }) => {
       // C4: interest on corporate balances is paid to the depositors who earn it —
       // each firm with a positive balance at this bank, pro rata to its balance, at the rate

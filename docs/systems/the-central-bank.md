@@ -109,8 +109,8 @@ checked by `scripts/check-atlas.sh`.
 | C4 reinvestment is a separate decision; the difference is QT | `src/domain/central-bank.ts:reinvestmentShare` | ✅ |
 | D1 the standing facility lends against collateral at a stated rate | `src/engine/macro/banking.ts:SRF_SPREAD_BPS` | ✅ |
 | D2 eligibility and haircuts are ITS choice, a policy instrument | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ⚠️ |
-| **D3 lender of last resort: freely, good collateral, penalty, solvent** | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` · `src/engine/simulation/stages/swap-lines.ts:drawSwapLine` | ⚠️ |
-| **D3.a FORBID it does not lend to an insolvent bank** | `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` | ❌ |
+| **D3 lender of last resort: freely, good collateral, penalty, solvent** | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` · `src/engine/simulation/stages/swap-lines.ts:drawSwapLine` | ✅ |
+| **D3.a FORBID it does not lend to an insolvent bank** | `src/engine/simulation/stages/repo-clearing.ts:windowEligibleBorrowers` | ✅ |
 | **D4 it can REFUSE, and refusal must be reachable** | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` · `src/engine/simulation/stages/bank-funding-close.ts:recordFundingShortfalls` | ✅ |
 | E1 the treasury banks with it; the account is a liability | `src/engine/ledger/accounts.ts:treasuryAccountOf` | ✅ |
 | **E2 FORBID no automatic overdraft** | `src/engine/ledger/accounts.ts:waysAndMeansOf` | ❌ |
@@ -128,7 +128,7 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ⚠️ D3 / ❌ D3.a / ✅ D4 — THE LENDER OF LAST RESORT IS THE SEAT, WITH THREE OF BAGEHOT'S FOUR
+### ✅ D3 / D3.a / D4 — THE LENDER OF LAST RESORT IS THE SEAT, WITH BAGEHOT'S FOUR
 
 *2026-09-05 (§9.20-LLR-ii).* The unsecured, flat-priced, unrefusable loan the funding close struck
 for whatever the market left unfunded is deleted. The window's only lending is the standing-facility
@@ -139,12 +139,14 @@ seat in the repo book, which runs at the close now (§9.20-LLR-i), after the wee
 | freely | ✅ — a posted rate with an elastic quantity, at full size at its price |
 | against good collateral | ✅ — pledged sovereign paper, per bucket, encumbered on the register, bounded by `unencumberedBorrowingCapacityLocal` |
 | at a penalty | ✅ — `srfBps − 1bp`, the top of the corridor, cleared in the book |
-| to the solvent | ❌ — nothing reads `isBankUnderPca` before the seat lends |
+| to the solvent | ✅ — `windowEligibleBorrowers` (§9.20-LLR-iii): a bank under PCA is not the seat's borrower; the private lenders in the book still are |
 
 D4 holds: a bank out of eligible paper is not a borrower at the seat, and after the unsecured book
 on its name (§9.20b) has taken what surplus banks will lend it, it ends the week short — recorded on
-the region (`bank-funding-close.ts:recordFundingShortfalls`) and told by the news. D3.a is the one
-condition left, with what a short bank pays and whether its depositors move: **§3 step 20-LLR-iii**.
+the region (`bank-funding-close.ts:recordFundingShortfalls`) and told by the news. What a bank
+overdrawn at the central bank pays is the penalty rate at the open (`chargeOverdrawnReserves`), and
+its uninsured depositors leave it (`depositor-flight.ts`) — §9.20-LLR-iii. What is left is that a
+bank can FAIL for it: **§3 step 20-LLR-iv**.
 
 In FOREIGN money the swap lines (`domain/swap-lines.ts`, `stages/swap-lines.ts`) lend freely and at
 a penalty — drawn by the central bank from the other central bank and on-lent to its banks for a

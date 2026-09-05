@@ -551,85 +551,16 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-20-LLR. **NOTHING CAN FAIL FOR WANT OF LIQUIDITY, AND THAT IS THE MONEY SYSTEM'S LARGEST HOLE**
-    (user, 2026-09-03, asking whether the desks and the central bank are buyers of last resort so
-    that an auction cannot fail — half right, and the half that is right is not in the auctions).
-
-    **THE AUCTIONS ARE FINE, and the reasons are worth keeping.** A stock book hands nothing to a
-    residual dealer: `unsoldStaysWithHolder: true` in 07b/07c/07d/07e/07f means a seller that
-    finds no buyer KEEPS ITS PAPER (OWN7). The desks are capacity-bounded participants with real
-    reservations (`dealer-desks.ts:106,153`), not a backstop. The central bank's auction order is
-    `plannedPurchasesByBond`, sized by `openMarketPolicy` from the policy rate against the
-    Taylor target — a policy quantity, NOT a response to weak demand, so it cannot rescue a bad
-    auction. And a primary deal is PULLED past the issuer's walk-away
-    (`financial-clearing-engine.ts:779`), while unplaced sovereign issuance is retired outright
-    (07c/07f retire the unplaced face). A treasury CAN fail to place its debt here.
-
-    **WHAT CANNOT FAIL IS A BANK.** `raiseCentralBankLoanUSD` (`bank-lending.ts`) is four lines:
-    it computes the shortfall against the operating buffer and lends **exactly that, always**.
-    No collateral, no haircut, no eligibility test, no penalty rate, no cap, and no path on which
-    the central bank refuses. `bank-funding-close.ts` calls it for every bank every week, up to
-    eight rounds, until every reserve account is at its buffer. **Sized at week 16 of the
-    reference: loans to banks 53,972M USA, 84,231M UK, 77,005M JPN, 11,018M EUR** — the UK's
-    banks are carrying 84B of central-bank credit against 6.4B of reserves.
-
-    Three failures compound into one:
-    · **the facility is unbounded** where the model's OTHER central-bank credit is properly
-      collateral-bounded (`repo-clearing`'s `unencumberedBorrowingCapacityUSD` with real
-      haircuts from `computeSovereignRepoHaircuts`). That is rule 4: two ways to borrow from the
-      same central bank, one of which is disciplined and one of which is not, and the
-      undisciplined one is the escape hatch from the disciplined one;
-    · **resolution triggers on CAPITAL ONLY** (`isBankUnderPca`, `BANK_MIN_CAPITAL_RATIO`), so a
-      bank fails on solvency and never on liquidity — the reverse of the real world, where the
-      overwhelming majority of bank failures are funding events;
-    · **no depositor ever runs.** A grep for depositor flight across the tree returns nothing.
-      Household and corporate deposits move by market share and by the lending book, never
-      because a bank looks weak, so the one mechanism that turns a weak bank into a failed bank
-      does not exist.
-
-    Together these mean the FUNDING CHANNEL cannot transmit anything. A bank can be bleeding
-    reserves, short in four currencies and financed entirely by its central bank, and nothing in
-    the model will price that, withdraw from it, or close it. Bagehot's actual rule — lend freely,
-    against good collateral, at a penalty rate, to the solvent — is three constraints and the
-    model has none of them.
-
-    **THE CAUSE IS AN ORDERING DEFECT, AND EVERYTHING ABOVE IS ITS SYMPTOM** (user, 2026-09-03:
-    *"Don't fix the symptoms, fix the cause."* — the four constraints this step first proposed
-    were all symptom patches; they are struck).
-
-    **The money market clears at stage 3 of about fifty.** `runRegionalRepoSession` — the session
-    where reserve-poor banks fund against collateral, reserve-rich banks and institutional idle
-    cash lend, and the standing facility sits in the book as the posted-rate seat of last resort
-    — is called from **`02b-bank-diversification.ts:413`**. Every book that MOVES reserves runs
-    after it: 07b, 07c, 07d, 07e, 07f, the derivatives, the whole of stage 08's cash walk, and
-    settlement itself at stage 308.
-
-    The two comments in the tree contradict each other and the second one is right.
-    `02b:407` claims *"Every real flow has posted"* — at stage 3, almost nothing has.
-    `bank-funding-close.ts`'s header states the truth: *"the shortfall is made by the books that
-    clear AFTER 02b … A repo session or a raise struck in the morning cannot see any of it. **A
-    real treasury funds its day at the end of the day; this is that.**"* It has the diagnosis
-    exactly right and then implements the wrong thing: instead of moving the MARKET to the close,
-    it puts an unbounded CENTRAL BANK at the close. `02b:409` even asserts *"there is no separate
-    'facility draw' step to run afterwards"*, and `bank-funding-close` at stage 417 is one.
-
-    **So the unbounded loan is a plug for a market that was already closed when the need arose.**
-    In aggregate the banking system's reserves barely move on a week of customer flow — they are
-    REDISTRIBUTED, one bank's drain is another's gain — so a session held after the flows would
-    match almost all of it bank to bank, against collateral, at a cleared rate. The session that
-    runs before them cannot see a single one, so the whole redistribution falls to the central
-    bank: it lends 54–84B a region to the banks that lost reserves while taking 87–250B back
-    through the reverse-repo window from the institutions whose cash the market never placed.
-    **The central bank is doing the interbank market's job because the interbank market is
-    closed by the time there is a job to do.**
-
-    **THE FIX IS TO MOVE THE SESSION, NOT TO BOUND THE LOAN — the session is moved (20-LLR-i) and
-    the loan is deleted (20-LLR-ii), both §9.** What is left:
-    · **20-LLR-iii — the three questions**, only now askable because a bank that cannot fund
-      has somewhere to be: a penalty rate on an overdrawn reserve account, a solvency test on
-      the seat (D3.a: the window does not lend to a bank under PCA), and depositor flight from a
-      bank that ended the week overdrawn (D5). Expect the run to get worse before it gets
-      better, and per rule 11 do not judge the levels on the way.
+20-LLR-iv. **A BANK CAN FAIL FOR LIQUIDITY, WITH A DISTINCT TRIGGER.** (20-LLR — nothing could fail
+    for want of liquidity — is §9 in four parts: the session moved to the close, the unbounded
+    loan deleted, the overdraft priced, the seat made solvent-only and the run built.) Resolution
+    still triggers on capital alone (`isBankUnderPca`). A bank that is overdrawn at the central
+    bank after the close's market and window have run — the state 20-LLR-ii records and 20-LLR-iii
+    charges for and runs on — is a bank that cannot pay, and the supervisor closes it for that
+    whether or not its capital ratio says so. The trigger is the recorded state, not a count of
+    weeks: `bank-resolution` reads the overdraft beside PCA (`money-market.md` D4,
+    `banks-funding-and-liquidity.md` D6). What one bank's run says about the others (E5) is the
+    other absence left on those trees, and it belongs with 37-BANKEQUITY's contagion, not here.
 
 21-BRACKET. **THE BRACKET IS STILL A PRINT, AND IT IS MEASURED: 206 TIMES IN 16 WEEKS.**
     Step 21 below names this; instrumenting `solveClearingStat` counted it. Over the 16-week
@@ -1512,6 +1443,24 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20-LLR-iii — THE THREE QUESTIONS, ANSWERED.** With a bank that cannot fund now having somewhere to
+  be, the three constraints 20-LLR first proposed as patches are mechanisms. (1) A penalty on the
+  overdraft: `central-bank-loans.ts:chargeOverdrawnReserves`, at the open — an account that ended
+  the week below zero pays the window rate plus the unsecured penalty on it, from the bank's own
+  account; the overdraft stands, as the negative reserve it is. (2) The seat lends only to the
+  solvent: `repo-clearing.ts:windowEligibleBorrowers` — a bank under PCA borrows from the private
+  lenders in the book on the same terms as anyone; the window's size is the other borrowers' need
+  and its fills never reach it (Bagehot's fourth, on the one facility with the other three).
+  (3) The run: `stages/depositor-flight.ts:runDepositorFlight`, first thing at the open — a bank
+  that ended last week short (`bankFundingShortStreakWeeks`, the record the close keeps) loses
+  its uninsured depositors, firms and institutions, to the region's soundest bank, each when the
+  bank has been short for as many closes as its own management's patience; the deposit leaves
+  with the reserves behind it, so the bank is shorter at the next close, and the news tells it.
+  The household line, insured, stays (E4). 20-LLR is closed; a bank FAILING for liquidity is
+  20-LLR-iv (inserted). Trees: `money-market.md` D5 ✅ D5.b ⚠️ D6 ✅, `the-central-bank.md` D3 ✅
+  D3.a ✅, `banks-funding-and-liquidity.md` E1 ✅ E3 ✅ E3.a ⚠️ E4.a ✅, `money-and-settlement.md`
+  B3.b ✅. Gates green; no run.
 
 **20-LLR-ii — THE LOAN IS DELETED.** `strikeCentralBankLoan` — the funding close's unsecured,
   flat-priced, unrefusable loan of whatever the market left unfunded — is gone. The standing-facility

@@ -115,13 +115,13 @@ checked by `scripts/check-atlas.sh`.
 | D5 draws the facility, collateralised, at a penalty | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ⚠️ |
 | **D6 it can FAIL TO FUND ITSELF** | `src/domain/bank-resolution.ts:isBankUnderPca` | ❌ |
 | **D6.a FORBID no unbounded, uncollateralised, unpriced line** | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
-| **E1 depositors can leave; A1.c leaves fastest** | — | ❌ |
+| **E1 depositors can leave; A1.c leaves fastest** | `src/engine/simulation/stages/depositor-flight.ts:runDepositorFlight` | ✅ |
 | **E2 they leave because they observe something** | — | ❌ |
 | E2.a and what they observe is observable | `src/ui/objects/company.tsx:bankCapitalRatio` | ✅ |
-| E3 leaving forces D2 and D4 | — | ❌ |
-| E3.a VERIFY the loop is self-reinforcing | — | ❌ |
+| E3 leaving forces D2 and D4 | `src/engine/simulation/stages/depositor-flight.ts:runDepositorFlight` | ✅ |
+| E3.a VERIFY the loop is self-reinforcing | `src/domain/region-macro.ts:depositorFlightLocal` | ⚠️ |
 | E4 deposit insurance breaks it for retail, not wholesale | `src/domain/bank-resolution.ts:bankAssumedLiabilitiesLocal` | ⚠️ |
-| E4.a which is why a run is wholesale first | — | ❌ |
+| E4.a which is why a run is wholesale first | `src/engine/simulation/stages/depositor-flight.ts:runDepositorFlight` | ✅ |
 | E5 a run at one bank is information about others | — | ❌ |
 | F1 deposit lines by class, as reads of who banks there | `src/engine/ledger/accounts.ts:bankDepositLines` | ✅ |
 | F2 the reserve balance, as a read of its account | `src/engine/ledger/accounts.ts:bankReservesOf` | ✅ |
@@ -132,7 +132,14 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ D6 / ✅ D6.a / ❌ E1–E5 — THE LIABILITY SIDE HAS A CONSTRAINT NOW, AND STILL NO FAILURE MODE
+### ❌ D6 / ✅ D6.a E1 E3 E4.a / ⚠️ E3.a / ❌ E5 — THE LIABILITY SIDE HAS A CONSTRAINT AND A RUN, AND STILL NO FAILURE MODE
+
+*2026-09-05 (§9.20-LLR-iii): the run exists. A bank that ended the week short is on the region's
+record; its uninsured depositors — firms and institutions, the household line being insured (E4) —
+leave for the soundest bank, each when the bank has been short for as many closes as its own
+management's patience, and the deposit takes its reserves with it (`depositor-flight.ts`). E1, E3
+and E4.a hold; E3.a is measurable on `depositorFlightLocal`; E5 (what one bank's run says about
+the others) is not read. D6 — that the bank can FAIL for it — is §3 step 20-LLR-iv.*
 
 *2026-09-05 (§9.20-LLR-ii): D6.a holds — the unbounded line is deleted; the only central-bank
 lending is the collateral-bounded, priced seat in the repo book at the close, and a bank it will
@@ -254,5 +261,5 @@ never as the read the node asks for. Both are standing reads, not mechanisms.
 - **A5 ⚠️** — each source is priced somewhere and the mix is a residual of what happened, never a decision.
 - **B1.b ⚠️** — the wholesale rate is one general-collateral repo print for every name — 20b.
 - **D5 ⚠️** — the SRF seat is a real collateralised draw at a penalty and runs before the flows; the close's line is neither — 20-LLR.
-- **E2 / E3 / E3.a ❌** — nothing observes a bank's condition, so nothing leaves because of it and no loop can form — the D6/E1–E5 entry above.
+- **E2 ❌ / E3 ✅ / E3.a ⚠️** — a bank's funding shortfall is observed and its uninsured depositors leave because of it since §9.20-LLR-iii; E2 (the household side observing) stays with the D6/E1–E5 entry above.
 - **F4 ⚠️** — the only outside read of a bank's liquidity is a UI panel (`srfBorrowingLocal`); no participant reads it, so a screen supports at most ⚠️.

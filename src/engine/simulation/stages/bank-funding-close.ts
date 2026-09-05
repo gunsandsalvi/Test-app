@@ -80,12 +80,18 @@ export function recordFundingShortfalls(ctx: WeeklyStepContext): void {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
     const short: Record<string, number> = {};
+    const streak: Record<string, number> = {};
     banksOf(ctx.updatedCompanies, regionId).forEach((bank) => {
       if (!isActiveCompany(bank)) return;
       const reservesLocal = bankReservesOf(ctx.v2, bank.id) + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
       const shortLocal = centralBankShortfallLocal(householdDepositsAt(ctx.v2, bank.ticker, currencyOf(regionId)), reservesLocal, bankCashBufferRatioOf(bank));
-      if (shortLocal > 0) short[bank.id] = Math.round(shortLocal);
+      if (shortLocal > 0) {
+        short[bank.id] = Math.round(shortLocal);
+        // §3.20-LLR-iii: the run of it — what its uninsured depositors read against their horizons.
+        streak[bank.id] = (reg.bankFundingShortStreakWeeks?.[bank.id] ?? 0) + 1;
+      }
     });
     reg.bankFundingShortfallsLocal = short;
+    reg.bankFundingShortStreakWeeks = streak;
   });
 }
