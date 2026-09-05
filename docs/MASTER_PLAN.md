@@ -517,12 +517,11 @@ written from here):
         are `state.derivativesBook`, an object array with one lifecycle writer). d4a (one party
         union and one key across the bilateral books) is in §9. What is left, in order:
     d4c. **ONE STORE** — one kind per commit, in this order; d4c-i (the derivatives), d4c-ii
-        (the repo book) and d4c-iii (the stock-loan book) are in §9.
+        (the repo book), d4c-iii (the stock-loan book) and d4c-iv (the prime-brokerage book) are in §9.
         `engine2/obligations.ts` is the store: kind, class, region, money, party A, party B,
         size, strike, units, settled mark, struck and maturity weeks, the reference and the term;
         each kind below adds its own columns where it has them and joins the same chains, door
         (`contract-ledger.ts`) and liveness check.
-    d4c-iv. **THE PRIME-BROKERAGE BOOK** (`reg.primeBrokerageBook`): broker, fund, drawn, haircut, rate.
     d4c-v. **THE TRADE INVOICES** (`state.tradeInvoices`): seller, buyer, the sub-unit, the invoice
         currency and amount, the booked rate, booked and due weeks.
     d4c-vi. **THE CAPITAL COMMITMENTS** (`peFund.lpCommitments`): fund, LP, committed, drawn — and
@@ -1721,6 +1720,17 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d4c-iv — THE PRIME-BROKERAGE BOOK IS ROWS OF THE CONTRACT STORE.**
+`Region.primeBrokerageBook` is deleted. A line is a row of `engine2/obligations.ts` — the broker
+(its BANK party) as A, the fund as B, the drawn balance as the size, the financing rate as the
+strike, the struck week — plus the one column this kind adds, the haircut. Read as the lines the
+morning session, the two close sweeps, a resolution's novation and `O8` already walk
+(`contract-ledger.ts:primeBrokerageBookOf`, memoised on the epoch), written back whole by
+`publishPrimeBrokerageBook(v2, region, book)` at the four publish points, every party resolving,
+the region's order kept. The two sweeps used to move `drawnLocal` on the region's own objects
+before publishing; they move a COPY now, since the memo's objects are the store's view. Byte-
+identical. Gates green; no run.
 
 **13-BOOK d4c-iii — THE STOCK-LOAN BOOK IS ROWS OF THE CONTRACT STORE.** `Region.securityLoanBook`
 is deleted. A stock loan is a row of `engine2/obligations.ts` — the lender as A, the borrower as B,

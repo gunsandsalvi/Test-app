@@ -9,7 +9,7 @@
  * balance is zero at settlement and the money that was spent has a lender.
  */
 import { WeeklyStepContext } from './context';
-import { publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
+import { primeBrokerageBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
 import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { defect } from '../../../domain/defect';
@@ -81,7 +81,8 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     // ---- 2. Funds of every kind: a prime-brokerage draw at the home bank. Past the line the
     // morning struck it is still funded — the money is already spent — at a penalty the next
     // morning's re-strike replaces with proper terms. ----
-    const book: PrimeBrokerageLine[] = reg.primeBrokerageBook ?? [];
+    // §3.13-BOOK d4c-iv: the lines are the store's; the sweep moves a COPY and publishes it back.
+    const book: PrimeBrokerageLine[] = primeBrokerageBookOf(ctx.v2, regionId).map((l) => ({ ...l }));
     const drawnByBroker = new Map<EntityId, number>();
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
       if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankId) return fund;
@@ -119,7 +120,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       drawnByBroker.set(brokerBankId, (drawnByBroker.get(brokerBankId) ?? 0) + drawLocal);
       return { ...fund, primeBrokerageAvailableLocal: Math.max(0, (fund.primeBrokerageAvailableLocal ?? 0) - withinLineLocal) };
     });
-    publishPrimeBrokerageBook(reg, book); // §3.13-BOOK d4b: the contract ledger's door
+    publishPrimeBrokerageBook(ctx.v2, regionId, book); // §3.13-BOOK d4b: the contract ledger's door
 
     // ---- 3. Pools: an SME facility draw at the region's banks, by their share of the pool's
     // deposits (the split settlement itself uses for a SEGMENT balance). ----

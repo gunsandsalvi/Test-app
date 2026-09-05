@@ -8,13 +8,14 @@ import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
 import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
-import { bookTradeInvoices, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
+import { bookTradeInvoices, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, publishPrimeBrokerageBook, primeBrokerageBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
 import type { WeeklyStepContext } from '../src/engine/simulation/stages/context';
 import type { DerivativeContract } from '../src/domain/derivatives/contract';
 import { asEntityId, asInstrumentId } from '../src/domain/ids';
 import type { TradeInvoice } from '../src/domain/trade-invoice';
 import type { RepoContract } from '../src/domain/repo';
 import type { SecurityLoan } from '../src/domain/securities-lending';
+import type { PrimeBrokerageLine } from '../src/domain/prime-brokerage';
 
 const invoice = (sellerId: string, buyerId: string): TradeInvoice => ({
   sellerId: asEntityId(sellerId), sellerRegion: 'USA', buyerId: asEntityId(buyerId), buyerRegion: 'USA',
@@ -111,6 +112,29 @@ test('§3.13-BOOK d4c-iii: a stock loan is a row of the contract store, recall w
     publishSecurityLoanBook(v2, 'USA', [recalled, rest]);
     assert.deepEqual(securityLoanBookOf(v2, 'USA'), [recalled, rest]);
     assert.throws(() => publishSecurityLoanBook(v2, 'USA', [{ ...loan, id: 'x', borrower: { kind: 'INSTITUTION', id: asEntityId('INST-GHOST') } }]), /no entity, region or bank/);
+  } finally {
+    setActiveWireWorld(undefined);
+  }
+});
+
+test('a prime-brokerage book is rows of the contract store: a line re-struck keeps its row, a repaid one leaves', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  setActiveWireWorld(wireWorldOf(v2, [{ id: asEntityId('USA_BANK1') }], [{ id: asEntityId('INST-HF1') }, { id: asEntityId('INST-HF2') }]));
+  try {
+    const line: PrimeBrokerageLine = {
+      id: 'USA-PB-INST-HF1', regionId: 'USA', brokerId: asEntityId('USA_BANK1'), fundId: asEntityId('INST-HF1'),
+      drawnLocal: 5e8, haircutRate: 0.25, rateAnnual: 0.06, struckWeek: 2,
+    };
+    const other: PrimeBrokerageLine = { ...line, id: 'USA-PB-INST-HF2', fundId: asEntityId('INST-HF2'), drawnLocal: 1e8 };
+    publishPrimeBrokerageBook(v2, 'USA', [line, other]);
+    assert.deepEqual(primeBrokerageBookOf(v2, 'USA'), [line, other]);
+    assert.deepEqual(primeBrokerageBookOf(v2, 'EUR'), [], 'another region reads its own rows');
+    // The close sweep raised the balance and the rate; the morning repaid the other fund.
+    const swept = { ...line, drawnLocal: 6e8, rateAnnual: 0.08, struckWeek: 3 };
+    publishPrimeBrokerageBook(v2, 'USA', [swept]);
+    assert.deepEqual(primeBrokerageBookOf(v2, 'USA'), [swept]);
+    assert.throws(() => publishPrimeBrokerageBook(v2, 'USA', [{ ...line, fundId: asEntityId('INST-GHOST') }]), /no entity, region or bank/);
+    assert.throws(() => publishPrimeBrokerageBook(v2, 'EUR', [swept]), /published on EUR/);
   } finally {
     setActiveWireWorld(undefined);
   }

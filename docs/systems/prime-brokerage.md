@@ -82,7 +82,7 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a named bank and a named client, with a contract | `src/domain/prime-brokerage.ts:PrimeBrokerageLine` · `src/engine/ledger/contract-ledger.ts:publishPrimeBrokerageBook` | ✅ |
+| A1 a named bank and a named client, with a contract | `src/domain/prime-brokerage.ts:PrimeBrokerageLine` · `src/engine2/obligations.ts:writePrimeBrokerageRow` · `src/engine/ledger/contract-ledger.ts:primeBrokerageBookOf` | ✅ |
 | A2 the broker holds the client's assets and knows the position | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageStage` | ⚠️ |
 | **A3 the client can have more than one broker** | — | ❌ |
 | A4 financing spread, stock-borrow fees and commissions | `src/domain/prime-brokerage.ts:weeklyFinancingLocal` | ⚠️ |

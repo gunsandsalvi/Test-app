@@ -20,6 +20,7 @@ import { ABSENT_REF, newRefColumn, type RefColumn, type TypeRef, type RegionRef,
 import type { DerivativeContract, DerivativeReference, DerivativeParty } from '../domain/derivatives/contract';
 import type { RepoContract, RepoPledge, RepoParty } from '../domain/repo';
 import type { SecurityLoan } from '../domain/securities-lending';
+import type { PrimeBrokerageLine } from '../domain/prime-brokerage';
 import { bankPartyOf } from '../domain/party';
 import { currencyOf } from '../domain/geography';
 import { partyFromKey, partyKey } from '../engine/ledger/party';
@@ -31,7 +32,8 @@ export interface ObligationStore {
   cap: number;
   used: number;
   freeHead: number;
-  /** What kind of obligation the row is: 'DERIVATIVE' (d4c-i); the other five kinds join in order. */
+  /** What kind of obligation the row is: 'DERIVATIVE' (d4c-i), 'REPO' (d4c-ii), 'STOCK_LOAN' (d4c-iii),
+   *  'PRIME_BROKERAGE' (d4c-iv); the other two kinds join in order. */
   kindRef: RefColumn<TypeRef>;
   /** The kind's own class — a derivative's `DerivativeClassId`. */
   classRef: RefColumn<TypeRef>;
@@ -64,6 +66,9 @@ export interface ObligationStore {
   positionAtStrike: Float64Array;
   /** d4c-iii — the week the lender sold out from under the loan; -1 = not recalled. */
   recalledWeek: Int32Array;
+  /** §3.13-BOOK d4c-iv — the share of a prime-brokerage client's collateral the broker will not lend
+   *  against this week; NaN for every other kind. */
+  haircut: Float64Array;
   /** Bumped by every write, so a materialized view can tell whether it is current. */
   epoch: number;
   next: Int32Array;
@@ -101,6 +106,7 @@ export function newObligationStore(): ObligationStore {
     refKind: new Int8Array(cap), refText: new Array(cap), termKey: new Array(cap), id: new Array(cap),
     pledges: new Array(cap), epoch: 0,
     instrRef: newRefColumn<InstrRef>(cap, -1), positionAtStrike: new Float64Array(cap).fill(Number.NaN), recalledWeek: new Int32Array(cap).fill(-1),
+    haircut: new Float64Array(cap).fill(Number.NaN),
     next: new Int32Array(cap).fill(-1),
     headByKind: new Map(), tailByKind: new Map(), rowById: new Map(),
   };
@@ -119,6 +125,7 @@ function grow(S: ObligationStore): void {
   const rk = new Int8Array(cap); rk.set(S.refKind); S.refKind = rk;
   S.refText.length = cap; S.termKey.length = cap; S.id.length = cap; S.pledges.length = cap;
   S.instrRef = gR(S.instrRef); S.positionAtStrike = gF(S.positionAtStrike, Number.NaN); S.recalledWeek = gI(S.recalledWeek, -1);
+  S.haircut = gF(S.haircut, Number.NaN);
   S.next = gI(S.next, -1);
   S.cap = cap;
 }
@@ -315,6 +322,50 @@ export function materializeLoan(v2: V2World, r: number): SecurityLoan {
   };
   if (S.recalledWeek[r] >= 0) l.recalledWeek = S.recalledWeek[r];
   return l;
+}
+
+// ---- §3.13-BOOK d4c-iv — THE PRIME-BROKERAGE BOOK: the broker as A, the fund as B, the drawn
+// balance as the size, the financing rate as the strike, the haircut as the kind's own column. ----
+
+/** Write a prime-brokerage line as a new row (ledger-internal). Returns the row. */
+export function writePrimeBrokerageRow(v2: V2World, l: PrimeBrokerageLine): number {
+  const S = mutableObligations(v2);
+  if (S.rowById.has(l.id)) return defect(`prime brokerage line ${l.id} struck twice`);
+  const r = allocRow(S);
+  const kindRef = internType(v2, 'PRIME_BROKERAGE');
+  S.kindRef[r] = kindRef; S.classRef[r] = kindRef; S.regionRef[r] = internRegion(v2, l.regionId);
+  S.currencyId[r] = CURRENCY_ID[currencyOf(l.regionId)];
+  S.aRef[r] = internPartyKey(v2, partyKey(bankPartyOf(l.brokerId))); S.bRef[r] = internPartyKey(v2, partyKey({ kind: 'INSTITUTION', id: l.fundId }));
+  S.notional[r] = l.drawnLocal; S.strike[r] = l.rateAnnual; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
+  S.struckWeek[r] = l.struckWeek | 0; S.maturityWeek[r] = 0;
+  S.refKind[r] = 0; S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = l.id;
+  S.instrRef[r] = ABSENT_REF as InstrRef; S.positionAtStrike[r] = Number.NaN; S.recalledWeek[r] = -1;
+  S.haircut[r] = l.haircutRate;
+  S.rowById.set(l.id, r);
+  appendToKind(S, kindRef, r);
+  S.epoch++;
+  return r;
+}
+
+/** A live line takes its current terms — the balance the sweep moved, the rate a penalty raised,
+ *  the broker a resolution renamed (ledger-internal). */
+export function writePrimeBrokerageTerms(v2: V2World, r: number, l: PrimeBrokerageLine): void {
+  const S = mutableObligations(v2);
+  S.aRef[r] = internPartyKey(v2, partyKey(bankPartyOf(l.brokerId))); S.bRef[r] = internPartyKey(v2, partyKey({ kind: 'INSTITUTION', id: l.fundId }));
+  S.notional[r] = l.drawnLocal; S.strike[r] = l.rateAnnual; S.struckWeek[r] = l.struckWeek | 0; S.haircut[r] = l.haircutRate;
+  S.epoch++;
+}
+
+/** One line row materialized back to the line the sessions and the sweeps read. */
+export function materializePrimeBrokerageLine(v2: V2World, r: number): PrimeBrokerageLine {
+  const S = v2.obligations;
+  const broker = partyFromKey(partyKeyOf(v2, S.aRef[r]));
+  const fund = partyFromKey(partyKeyOf(v2, S.bRef[r]));
+  if (broker?.kind !== 'BANK' || fund?.kind !== 'INSTITUTION') return defect(`prime brokerage row ${r} (${S.id[r]}) names no bank and fund`);
+  return {
+    id: S.id[r], regionId: regionOf(v2, S.regionRef[r]) as RegionId, brokerId: broker.id, fundId: fund.id,
+    drawnLocal: S.notional[r], haircutRate: S.haircut[r], rateAnnual: S.strike[r], struckWeek: S.struckWeek[r],
+  };
 }
 
 /** Relink one kind's chain so that, within `regionId`, exactly `kept` (in order) survive; rows of

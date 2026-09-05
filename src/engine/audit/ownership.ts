@@ -1,7 +1,7 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
-import { derivativesOf, repoBookOf } from '../ledger/contract-ledger';
+import { derivativesOf, repoBookOf, primeBrokerageBookOf } from '../ledger/contract-ledger';
 import type { CounterpartyRef } from '../../domain/party';
 import { deskRowsOf } from '../desk-register';
 import { deskBankIdOf } from '../ledger/holdings-ledger';
@@ -419,12 +419,12 @@ function o8(state: GameState, week: number): AuditFinding[] {
     if (c.reference.kind === 'ISSUER' && !companyById.has(c.reference.issuerId)) deadRef++;
   });
   REGION_IDS.forEach((r) => {
-    const reg = state.regions[r];
     repoBookOf(ensureV2(state), r).forEach((c) => { // §3.13-BOOK d4c-ii: the store's rows
       if (!entityExists(c.borrowerId)) bump('repo borrowers');
       if (!partyExists(c.lender)) bump('repo lenders'); // §3.13-BOOK d4a: the window is a party with a region
     });
-    (reg?.primeBrokerageBook ?? []).forEach((l) => {
+    // §3.13-BOOK d4c-iv: the store's rows.
+    primeBrokerageBookOf(ensureV2(state), r).forEach((l) => {
       if (!companyById.has(l.brokerId)) bump('prime-brokerage brokers');
       if (!institutionById.has(asEntityId(l.fundId))) bump('prime-brokerage funds');
     });

@@ -14,7 +14,7 @@
  * columnar store for the six is slice d4c's.
  */
 import type { V2World } from '../../engine2/world';
-import { rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms, writeLoanRow, writeLoanTerms } from '../../engine2/obligations';
+import { rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import type { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
@@ -157,10 +157,33 @@ export function publishSecurityLoanBook(v2: V2World, regionId: RegionId, book: S
   relinkKindInRegion(v2, 'STOCK_LOAN', regionId, rows);
 }
 
-/** The region's prime-brokerage book: every broker and fund resolves. */
-export function publishPrimeBrokerageBook(reg: { primeBrokerageBook?: PrimeBrokerageLine[] }, book: PrimeBrokerageLine[]): void {
-  book.forEach((l) => { resolvePartyRef(bankPartyOf(l.brokerId), `prime brokerage line ${l.id} broker`); resolvePartyRef({ kind: 'INSTITUTION', id: l.fundId }, `prime brokerage line ${l.id} fund`); });
-  reg.primeBrokerageBook = book;
+/**
+ * §3.13-BOOK d4c-iv — THE PRIME-BROKERAGE BOOK IS ROWS OF THE CONTRACT STORE. A region's lines,
+ * materialized and memoised on the store's epoch: the morning session, the two close sweeps, a
+ * resolution's novation and `O8` all read one copy. A reader that means to CHANGE a line copies it
+ * first — the memo's objects are the store's view, not a scratch book.
+ */
+const pbBookMemo = new WeakMap<V2World, { epoch: number; byRegion: Map<string, PrimeBrokerageLine[]> }>();
+export function primeBrokerageBookOf(v2: V2World, regionId: RegionId): PrimeBrokerageLine[] {
+  let memo = pbBookMemo.get(v2);
+  if (!memo || memo.epoch !== v2.obligations.epoch) { memo = { epoch: v2.obligations.epoch, byRegion: new Map() }; pbBookMemo.set(v2, memo); }
+  let book = memo.byRegion.get(regionId);
+  if (!book) { book = rowsOfKindInRegion(v2, 'PRIME_BROKERAGE', regionId).map((r) => materializePrimeBrokerageLine(v2, r)); memo.byRegion.set(regionId, book); }
+  return book;
+}
+
+/** The region's prime-brokerage book, as a session leaves it: every broker and fund resolves, a
+ *  line the store holds takes its current terms, a new one gets a row, a repaid one is freed. */
+export function publishPrimeBrokerageBook(v2: V2World, regionId: RegionId, book: PrimeBrokerageLine[]): void {
+  const rows = book.map((l) => {
+    if (l.regionId !== regionId) return defect(`prime brokerage line ${l.id} of ${l.regionId} published on ${regionId}'s book`);
+    resolvePartyRef(bankPartyOf(l.brokerId), `prime brokerage line ${l.id} broker`); resolvePartyRef({ kind: 'INSTITUTION', id: l.fundId }, `prime brokerage line ${l.id} fund`);
+    const r = derivativeRowOf(v2, l.id);
+    if (r === undefined) return writePrimeBrokerageRow(v2, l);
+    writePrimeBrokerageTerms(v2, r, l);
+    return r;
+  });
+  relinkKindInRegion(v2, 'PRIME_BROKERAGE', regionId, rows);
 }
 
 /** The week's invoices join the outstanding book: every seller and buyer resolves. */

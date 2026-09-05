@@ -3,7 +3,6 @@
 
 import { RegionId } from './geography';
 
-import { PrimeBrokerageLine } from './prime-brokerage';
 import { Industry } from './industry';
 import { CentralBank } from './central-bank';
 import { BankingSectorView, AssetOwnershipShares } from './banking';
@@ -712,12 +711,8 @@ export interface Region {
    */
   // §3.13-BOOK d4c-ii: the repo book is rows of the world's contract store (`engine2/obligations.ts`),
   // read through `contract-ledger.ts:repoBookOf`; not a field.
-  /**
-   * HF1 — this region's live prime-brokerage lines: which bank finances which fund, how much is
-   * drawn, at what haircut and what rate. Stored once with both parties named, the same shape as
-   * the repo book; the brokers' `primeBrokerageLoansLocal` and the funds' leverage are derived.
-   */
-  primeBrokerageBook?: PrimeBrokerageLine[];
+  // §3.13-BOOK d4c-iv: the prime-brokerage lines are rows of the world's contract store, read
+  // through `contract-ledger.ts:primeBrokerageBookOf`; not a field.
   // DRV — the swap and CDS books moved to the ONE derivative book (GameState.derivativesBook).
   /** HF — the stock loans outstanding in this region: who lent what to whom, at what fee. The
    * short interest in every name is a measurement of this book. */

@@ -1,5 +1,5 @@
 import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
-import { publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
+import { primeBrokerageBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
 import { bankBookAssetsLocal } from '../../desk-register';
 import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
@@ -98,7 +98,8 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
-    const priorBook: PrimeBrokerageLine[] = reg.primeBrokerageBook ?? [];
+    // §3.13-BOOK d4c-iv: the store's rows.
+    const priorBook: PrimeBrokerageLine[] = primeBrokerageBookOf(ctx.v2, regionId);
     const haircuts = measuredHaircutsFor(ctx, regionId, reg);
 
     // ---- Last week's financing, paid. Real money from the fund to the broker that lent it. ----
@@ -234,7 +235,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       }
     });
 
-    publishPrimeBrokerageBook(reg, nextBook); // §3.13-BOOK d4b: the contract ledger's door
+    publishPrimeBrokerageBook(ctx.v2, regionId, nextBook); // §3.13-BOOK d4b: the contract ledger's door
 
     // The brokers' asset line, derived from the book — one writer, the G2 pattern.
     const brokerIds = new Set(nextBook.map((l) => l.brokerId));
@@ -270,7 +271,8 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
-    const book: PrimeBrokerageLine[] = reg.primeBrokerageBook ?? [];
+    // §3.13-BOOK d4c-iv: the lines are the store's; the sweep moves a COPY and publishes it back.
+    const book: PrimeBrokerageLine[] = primeBrokerageBookOf(ctx.v2, regionId).map((l) => ({ ...l }));
     const drawnByBroker = new Map<EntityId, number>();
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
       if (fund.region !== regionId || fund.entityType !== 'HEDGE_FUND' || fund.isDefaulted) return fund;
@@ -313,7 +315,7 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
       drawnByBroker.set(brokerBankId, (drawnByBroker.get(brokerBankId) ?? 0) + drawLocal);
       return { ...fund, primeBrokerageAvailableLocal: Math.max(0, (fund.primeBrokerageAvailableLocal ?? 0) - drawLocal) };
     });
-    publishPrimeBrokerageBook(reg, book);
+    publishPrimeBrokerageBook(ctx.v2, regionId, book);
     if (drawnByBroker.size > 0) {
       // Post-08: the live sheet is the only bank-sheet write that survives (§7.250).
       ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
