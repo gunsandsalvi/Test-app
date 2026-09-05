@@ -9,8 +9,9 @@ import { V2World } from '../../engine2/world';
  * the aggregates are projected. Three identities the seed used to leave open are made exact:
  *
  *  1. **The banks are funded by depositors, not by a lender nobody named.** The seed derived
- *     wholesale funding as the residual after deposits (`applyBankFundingSplit`); that residual
- *     was money owed to nobody. The household sector IS the depositor of last resort in a closed
+ *     wholesale funding as the residual after deposits (a provisional split re-run after each
+ *     house-bank pass, deleted at §3.13-READ D13 — this close is the one derivation, and nothing
+ *     read the stash it wrote); that residual was money owed to nobody. The household sector IS the depositor of last resort in a closed
  *     world, so each bank's household deposit line is what its asset side needs after the real
  *     corporate, institutional and segment balances, and wholesale opens at zero.
  *  2. **The central bank's book backs its liabilities to the dollar.** Reserves exist because the

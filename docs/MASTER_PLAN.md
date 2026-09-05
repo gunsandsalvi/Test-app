@@ -390,16 +390,9 @@ written from here):
     housing** (units must be defined before anything else is possible — step 26 owns that
     decision). Each class is its own commit and each is expected to move the numbers.
 
-    **THE FINISHED CLASSES ARE IN §9** — 13-SOV, 13-CREDIT, 13-EQUITY, 13-BILL and 13-READ, so
-    **inventory at cost versus price is the next class**, once 13-BOOK below is through. What they
-    left OPEN, and nothing else:
-
-    · **13-READ D13 — THE SEED'S REORDERING.** The seed's three house-bank passes share one
-      assignment rule now, but they are still three passes: each feeds `applyBankFundingSplit` in
-      its own scope, and the seed steps between them — the SME and household debt migrations, the
-      pools' opening cash — run against banks that must already carry what the pass before placed.
-      "One pass at the end" means moving the funding-split application to the end of the seed,
-      which wants the seed's step order read whole and is not a collapse.
+    **THE FINISHED CLASSES ARE IN §9** — 13-SOV, 13-CREDIT, 13-EQUITY, 13-BILL and 13-READ (its
+    C2.a and D13 leftovers included), so **inventory at cost versus price is the next class**, once
+    13-BOOK below is through.
 
     **13-BOOK — THE ONE BOOK: ONE ID SPACE, ONE WRITE PATH, AND TABLES THAT CAN BE CHECKED
     AGAINST EACH OTHER** (user, 2026-09-05: *"I want a single source of truth for whatever is
@@ -1329,6 +1322,18 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-READ D13 — THE FUNDING SPLIT IS APPLIED ONCE, AT THE END, AND THE END ALREADY EXISTED.** The
+  seed's step order, read whole (rule 19): the three house-bank passes each re-ran
+  `applyBankFundingSplit` on every bank — a provisional household deposit line struck as the
+  funding residual — and so did the household debt migration; the only readers of that stash are
+  the two debt migrations, which run BEFORE the first pass, and `closeSeedMoney` (§5-CLOSE) strikes
+  the line from scratch off every real deposit line at the end and opens the sector's row itself
+  ("the seed's provisional sizing was a stash, retired here"). So the four applications after the
+  migrations were dead writes and "one pass at the end" was the close, already. The four calls and
+  the function are deleted (-43 code lines); the passes still assign house banks as parties come to
+  exist, which is the reordering the survey mistook for a collapse. The-seed C1 (`closeSeedMoney`)
+  is the row that names the one derivation. Gates green; no run (rule 11).
 
 **13 C2.a — HOUSEHOLDS BID.** The largest holder class in the model held a register book per
   region (13-EQUITY) and could only ever sell it. Now the equity slice of the week's saving splits

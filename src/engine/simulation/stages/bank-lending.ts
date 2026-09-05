@@ -57,7 +57,7 @@ import { bookPnL } from '../../ledger/bank-book';
 import { remainingLifeExpectancyYears, medianAdultAgeYears } from '../../bootstrap/population';
 import { creditRecoveryRate, computeAnnualDefaultProbability } from './shared-helpers';
 import { V2World } from '../../../engine2/world';
-import { bankTotalAssetsLocal, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
+import { MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 import { facilityBookOf } from '../../../engine2/tranches';
 
 /** Covenant-style ceiling on SME pool leverage — the same real lending constraint the bond
@@ -513,7 +513,6 @@ export function migrateHouseholdDebtAtSeed(
     // Equity scales with the risk the books add, at the ratio this bank already ran — no new
     // constant, and the opening capital ratio is preserved by construction.
     sheet.bankEquityLocal = Math.round((sheet.bankEquityLocal + Math.max(0, newHouseholdRwaLocal - replacedRwaLocal) * priorRatio));
-    applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookLocal, Math.round(openingCashOf(hs) * share), seedBankBookLocalOf(sheet)); // the seed's provisional sizing (close-seed strikes the line)
     sheet.bankCapitalRatio = Number((sheet.bankEquityLocal / Math.max(1, bankRwaLocal(sheet, facilityBookLocal))).toFixed(4));
   });
 
@@ -941,43 +940,4 @@ export function facilityMarginBpsFor(
     requiredReturnAnnual: bank ? bankRequiredReturnAnnual(bank, reg) : undefined,
     recoveryRate: creditRecoveryRate(reg),
   });
-}
-
-export function applyBankFundingSplit(
-  sheet: BankingSector,
-  /** The bank's reserves (its account; at the seed, the stash close-seed opens it from). */
-  cashLocal: number,
-  /** Step 10: the bank's facility book — its rows on the borrowers' ladders (`facilityBookOf`). */
-  facilityBookLocal: number,
-  householdDepositsLocal: number,
-  /** CASH: reserves this bank has already been billed for or promised but that have not settled
-   *  yet. The sheet's repo and facility LIABILITIES are struck post-maturity the moment the
-   *  session re-derives them, while the cash for those maturities moves at the settlement pass —
-   *  so a split struck on the raw balance bakes the difference into wholesale funding, where
-   *  nothing ever takes it out again. Measured as a one-week 15.7M identity break on the bank
-   *  whose repo book halved that week. */
-  pendingCashLocal = 0,
-  /** §3.13-BOOK d3b: the bank's own sovereign book — its register rows (at the seed, the stash). */
-  sovLocal = 0
-): void {
-  // CASH/rule 4 — ONE IDENTITY, NOT TWO. This used to re-derive the funding need from its own
-  // partial list of assets: loans, sovereigns and cash, and nothing else. It knew nothing about
-  // repo lent or borrowed, the standing facility, the desks' inventory or the margin loans out to
-  // funds — so it disagreed with `evolveBankingSector`'s residual, which counts all of them, and
-  // whichever ran last won. It went unnoticed while every one of those lines was small or moved
-  // in step with cash; the moment the repo legs became payment instructions and stopped moving
-  // cash in the same breath as the liability, the two derivations came apart and the per-bank
-  // identity broke by the difference.
-  //
-  // `bankTotalAssetsLocal` is the one asset side; the secured funding lines are the liabilities
-  // this split is not responsible for. Whatever is left is what deposits and wholesale money
-  // have to cover.
-  const fundingNeedLocal = Math.round((
-    bankTotalAssetsLocal(sheet, cashLocal, facilityBookLocal, sovLocal) + pendingCashLocal - sheet.bankEquityLocal
-      - (sheet.repoBorrowedLocal) - (sheet.srfBorrowingLocal)
-  ));
-  // §5-CLOSE: household money funds what the real corporate, institutional and segment
-  // balances do not; nothing is written to a lender that does not exist. The seed's own close
-  // (`close-seed.ts`) re-derives this line once every book exists.
-  stashSeedHouseholdLine(sheet, Math.min(fundingNeedLocal, Math.max(0, householdDepositsLocal)));
 }

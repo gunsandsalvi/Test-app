@@ -10,7 +10,7 @@ import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
 import { PREMIUM_TO_SURPLUS_RATIO, INSTITUTIONAL_CAPITAL_RATIO } from '../../domain/institutions';
 import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
-import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, applyBankFundingSplit, seedLoanBookShareLocal } from './stages/bank-lending';
+import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, seedLoanBookShareLocal } from './stages/bank-lending';
 import { loanBooksOf } from '../../domain/banking';
 import { leverageHeadroomLocal } from '../macro/banking';
 import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
@@ -921,10 +921,10 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // its customers deposited is central-bank money, exactly as a week-1 deposit inflow would
         // be. Without this the sheet opens short by the whole corporate line.
         stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + corpLocal + smeLocal);
-        // Now that the corporate leg is known, the funding identity is re-derived: wholesale is
-        // the residual AFTER real deposits, not a plug carrying money the companies already
-        // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
-        applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)), seedBankBookLocalOf(b.bankBalanceSheet!));
+        // §3.13-READ D13: the funding side is struck ONCE, at the close (`close-seed.ts`: the
+        // household line is what the asset side needs after every real deposit line, off every
+        // book that exists by then). The provisional split that used to re-run here after each
+        // house-bank pass wrote a stash nothing read before the close replaced it.
       });
     }
 
@@ -1428,7 +1428,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // open in the shape the weekly engine maintains (§7.4). Until now institutional cash sat
   // outside the banking system, which is the blind spot that let a 64B double-count pass (§7.90).
   (Object.keys(regions) as RegionId[]).forEach(regionId => {
-    const reg = regions[regionId];
     const regionBanks = banksOf(companies, regionId);
     if (regionBanks.length === 0) return;
     const houseBanks = mandateAllocator(regionBanks.map(b => ({
@@ -1439,7 +1438,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     regionBanks.forEach(b => {
       const instLocal = Math.round(byBank.get(b.ticker) ?? 0);
       stashOpeningCash(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!) + instLocal);
-      applyBankFundingSplit(b.bankBalanceSheet!, openingCashOf(b.bankBalanceSheet!), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)), seedBankBookLocalOf(b.bankBalanceSheet!));
     });
   });
 
@@ -1705,7 +1703,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // The relationship is chosen the same way the passes above choose it, and the money is put
   // where it now sits: on the bank's own funding line, with the reserves behind it.
   (Object.keys(regions) as RegionId[]).forEach(regionId => {
-    const reg = regions[regionId];
     const regionBanks = banksOf(companies, regionId);
     if (regionBanks.length === 0) return;
     const lateHouseBanks = mandateAllocator(regionBanks.map(b => ({
@@ -1721,7 +1718,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const corpLocal = Math.round(lateCorporateByBank.get(b.ticker) ?? 0);
       const instLocal = Math.round(lateInstitutionalByBank.get(b.ticker) ?? 0);
       stashOpeningCash(sheet, openingCashOf(sheet) + corpLocal + instLocal);
-      applyBankFundingSplit(sheet, openingCashOf(sheet), facilityBookOf(seedV2, b.id), Math.round(openingCashOf(reg.householdState) * (b.bankMarketShare ?? 1 / regionBanks.length)), seedBankBookLocalOf(sheet));
     });
   });
 
