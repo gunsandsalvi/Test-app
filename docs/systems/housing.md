@@ -92,11 +92,11 @@ checked by `scripts/check-atlas.sh`.
 | A3 owner and occupier can differ, and then there is rent | `src/domain/housing.ts:ownershipRateOf` · `src/domain/industry-registry.ts:housing_rental_services` | ⚠️ |
 | A4 the stock is finite and changes slowly | `src/engine/ledger/dwelling-ledger.ts:moveDwellings` · `src/engine/macro/evolution.ts:owningHouseholdsCount` | ✅ |
 | A5 it depreciates and needs maintenance | — | ❌ |
-| B1 it clears between buyers and sellers, per location | `src/engine/macro/evolution.ts:marginalPriceLocal` | ⚠️ |
+| B1 it clears between buyers and sellers, per location | `src/domain/housing-clearing.ts:clearDwellings` · `src/engine/macro/evolution.ts:dwellingBook` | ✅ |
 | B2 demand is governed by what the buyer can borrow | `src/engine/macro/evolution.ts:affordabilityByTier` | ✅ |
 | B2.a the mortgage rate and the lending standard dominate | `src/engine/macro/evolution.ts:annuityFactorForPricing` | ✅ |
-| B3 supply is inelastic in the short run | `src/engine/macro/evolution.ts:supplyUnitsThisWeek` | ✅ |
-| B4 a seller can refuse; volumes collapse before prices | `src/domain/banking.ts:housingTurnoverAnnual` | ⚠️ |
+| B3 supply is inelastic in the short run | `src/domain/housing-clearing.ts:dwellingOffersOf` · `src/engine/macro/evolution.ts:owningHouseholdsCount` | ✅ |
+| B4 a seller can refuse; volumes collapse before prices | `src/domain/housing-clearing.ts:dwellingOffersOf` · `src/domain/housing-clearing.ts:sellerPayoffLadderOf` | ✅ |
 | B4.a VERIFY a transaction index measures a changing sample | — | ❌ |
 | **B5 rent and price are linked; the yield is a read** | — | ❌ |
 | C1 a loan from a named lender secured on the house | `src/domain/banking.ts:MortgageVintage` | ⚠️ |
@@ -105,7 +105,7 @@ checked by `scripts/check-atlas.sh`.
 | C4 the borrower defaults; the lender takes and sells the house | `src/engine/simulation/stages/bank-lending.ts:vLossLocal` | ⚠️ |
 | C4.a the recovery is what it fetches, and losses correlate | `src/domain/banking.ts:mortgageSeverityAtLtv` | ⚠️ |
 | **C5 the lender's standard is a DECISION, and it tightens** | `src/domain/banking.ts:MORTGAGE_DSTI_LIMIT` | ❌ |
-| C5.a which feeds back into B2.a — the housing cycle | `src/engine/simulation/stages/bank-lending.ts:affordabilityGate` | ⚠️ |
+| C5.a which feeds back into B2.a — the housing cycle | `src/engine/simulation/stages/bank-lending.ts:bindingLtv` | ⚠️ |
 | C6 mortgages can be pooled and sold to a named holder | — | ❌ |
 | D1 house price changes are household wealth changes | `src/domain/housing.ts:housingStockValueLocal` · `src/engine/simulation/stages/household-balance-sheet.ts:housingStockLocal` | ✅ |
 | D2 housing construction is investment and employment | `src/domain/industry-registry.ts:residential_construction` | ✅ |
@@ -185,9 +185,18 @@ speed constant, no clamp, no baseline multiplier: the file records that it repla
 B2, B2.a and B3 are ✅ on the strength of this one walk, and C3 is ✅ because every vintage
 remembers `originationHomePriceLocal` so `vintageCurrentLtv` genuinely moves when the price does.
 
-It is ⚠️ at B1 for one reason only: it is an affordability **walk**, not a book. No named buyer
-and no named seller transact, and `A1.a`'s location is the region, so there is one price per
-region and no sub-market. That is the same finding as A1 and it closes with step 26b.
+*2026-09-05 (§9.26b-ii), B1 and B4 closed:* the walk is a BOOK now (`domain/housing-clearing.ts`).
+The sellers are the owners whose tenure ends this week — the register's units at the turnover the
+banks measure — each reserving at what it must fetch: its mortgage payoff per dwelling off the
+vintage cross-section the bank pass publishes (`sellerPayoffLadderOf`), never below the build cost;
+the builders' completions offer at the build cost; the buyers are the wealth tiers at what each can
+borrow at the keenest quote. A uniform-price cross: the units clear where a bid meets a
+reservation, the price is the last buyer's bid that did, an offer no bid reaches does not clear —
+volumes collapse before prices — and a week in which nothing clears keeps last week's print. The
+mortgage pass reads the units that changed hands at the price struck (`unitsClearedThisWeek`)
+instead of `stock × turnover`, and the affordability gate that stood in for failed completions is
+gone: a buyer the book did not clear borrows nothing. What is still one price per region is
+`A1.a`'s location — the region is the only sub-market there is.
 
 ### ⚠️ C4 / C4.a — DEFAULT IS A LOSS RATE, NOT A FORECLOSURE
 
@@ -236,5 +245,4 @@ markets over one asset that exists on only one side. Closes with 26b-ii and 37-H
 ### Also marked, briefly
 
 - **A5 ❌** — nothing depreciates and nobody maintains anything — A1/A4/E1 above.
-- **B4 ⚠️** — `housingTurnoverAnnual` is a constant, so volumes cannot collapse before prices.
 - **C1 ⚠️** — a mortgage is a vintage secured on a median price, not on a house — A1.

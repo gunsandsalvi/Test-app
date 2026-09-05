@@ -1,4 +1,5 @@
 import { levelPaymentFactor } from '../../domain/pricing';
+import { clearDwellings, dwellingOffersOf } from '../../domain/housing-clearing';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams } from '../nelsonSiegel';
@@ -981,25 +982,30 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     const affordableLoanLocal = (weeklyIncomePerHouseholdLocal * MORTGAGE_DSTI_LIMIT) / annuityFactorForPricing;
     return { households: tierHouseholds, priceLocal: affordableLoanLocal / MORTGAGE_LTV_AT_ORIGINATION };
   }).sort((a, b) => b.priceLocal - a.priceLocal);
-  // The week's supply: existing owners selling, plus what construction actually completed.
-  // §3.26b-i: the owners are the register's units, not a rate times the population.
+  // §3.26b-ii — THE HOUSE PRICE IS A BOOK (`domain/housing-clearing.ts`). The sellers: the owners
+  // whose tenure ends this week — the register's units at the turnover the banks measured off
+  // their own vintages (the seed rate stands in before the first bank pass, §7.4) — each
+  // reserving at what it must fetch, its mortgage payoff per dwelling off the cross-section the
+  // bank pass published, and never below what a dwelling costs to build (the construction
+  // sector's own cleared price, the seller's floor for every produced good, §7.130); plus the
+  // builders' completions at that cost. The buyers: the wealth tiers, each at what it can borrow
+  // at the keenest quote, for the households of its own that move. The price is the last
+  // buyer's bid that met a reservation; an offer no bid reaches does not clear — volumes
+  // collapse before prices — and a week in which nothing clears keeps last week's print.
   const owningHouseholdsCount = Math.max(0, prevHousing.ownerOccupiedUnits);
-  // HSG: what the banks measured off their own vintage cross-sections last week — one sale per
-  // tenure plus the owners who can now afford to trade up. The seed rate stands in only before
-  // the first bank pass has run (§7.4).
   const turnoverRateAnnual = prevHousing.turnoverRateAnnual ?? HOUSING_TURNOVER_SEED_RATE_ANNUAL;
-  const supplyUnitsThisWeek = owningHouseholdsCount * (turnoverRateAnnual / 52) + resSupplyUnits;
-  let absorbed = 0;
-  let marginalPriceLocal = affordabilityByTier[affordabilityByTier.length - 1]?.priceLocal ?? 0;
-  for (const tier of affordabilityByTier) {
-    marginalPriceLocal = tier.priceLocal;
-    absorbed += tier.households * (turnoverRateAnnual / 52);
-    if (absorbed >= supplyUnitsThisWeek) break;
-  }
-  // A house cannot clear below what it costs to build: the construction sector's own cleared
-  // price is the seller's floor, exactly as it is for every other produced good (§7.130).
   const buildCostLocal = Math.max(0, (resCat?.unitPriceLocal ?? 0));
-  const newMedianHomePriceLocal = Math.round(Math.max(marginalPriceLocal, buildCostLocal));
+  const dwellingBook = clearDwellings(
+    dwellingOffersOf({
+      ownerOccupiedUnits: owningHouseholdsCount,
+      turnoverShareThisWeek: turnoverRateAnnual / 52,
+      sellerPayoffLadder: prevHousing.sellerPayoffLadder,
+      buildCostLocal,
+      newUnits: resSupplyUnits,
+    }),
+    affordabilityByTier.map((t) => ({ units: t.households * (turnoverRateAnnual / 52), maxPriceLocal: t.priceLocal })),
+  );
+  const newMedianHomePriceLocal = Math.round(dwellingBook.priceLocal ?? prevHousing.medianHomePriceLocal);
   const newPriceIndex = (prevHousing.baselineHomePriceLocal || 400000) > 0
     ? newMedianHomePriceLocal / (prevHousing.baselineHomePriceLocal || 400000)
     : 1;
@@ -1008,6 +1014,9 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const updatedHousingMarket: HousingMarket = {
     ...prevHousing,
     medianHomePriceLocal: newMedianHomePriceLocal,
+    // §3.26b-ii — the book's week, for the bank pass: what changed hands is what gets a mortgage.
+    unitsOfferedThisWeek: dwellingBook.unitsOffered,
+    unitsClearedThisWeek: dwellingBook.unitsCleared,
     baselineHomePriceLocal: prevHousing.baselineHomePriceLocal || 400000,
     priceIndex: Number(newPriceIndex.toFixed(4)),
     historicalPrices: histPrices,

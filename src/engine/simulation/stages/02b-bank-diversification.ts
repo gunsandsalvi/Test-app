@@ -20,6 +20,7 @@
  * money funds).
  */
 
+import { sellerPayoffLadderOf } from '../../../domain/housing-clearing';
 import { matureInterbankLoans } from './interbank';
 import { currencyOf } from '../../../domain/geography';
 import { repoBookOf } from '../../ledger/contract-ledger';
@@ -608,6 +609,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       if (turnoverBookLocal > 0) {
         reg.housingMarket.turnoverRateAnnual = Number((turnoverWeightedLocal / turnoverBookLocal).toFixed(5));
       }
+      // §3.26b-ii — what the owners must fetch: every vintage's payoff per dwelling, measured off
+      // the region's books for next week's dwelling book (an owner cannot sell below it).
+      reg.housingMarket.sellerPayoffLadder = sellerPayoffLadderOf(
+        newSheets.flatMap(({ sheet }) => (sheet.householdLoans ?? []).filter((pl) => pl.kind === 'MORTGAGE').flatMap((pl) => pl.vintages ?? [])));
     }
   });
 }

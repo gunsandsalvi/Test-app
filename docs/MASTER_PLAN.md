@@ -551,16 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26b-ii. **THE HOUSE PRICE IS A BOOK.** The affordability walk (`evolution.ts:marginalPriceLocal`)
-    prices the marginal buyer honestly and nobody transacts: it becomes a clearing with named
-    sides, in UNITS — the sellers are the owners whose tenure ends (the turnover the banks
-    measure off their own vintages) and, after 37-HOUSING, the estates' foreclosed dwellings,
-    each with a reservation (an owner cannot sell below its mortgage payoff, and can refuse —
-    B4); the buyers are the wealth tiers at what each can borrow at the keenest quote (B2). The
-    struck price is `medianHomePriceLocal`; the struck units are what changed hands, and the
-    mortgage origination reads them instead of `stock × turnover` (`bank-lending.ts:789`). B1
-    ⚠️→✅, B4 ⚠️→✅ (volumes collapse before prices: a bid under the reservation clears nothing).
-
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
 27. **The audit measures what it claims — and its tolerances are float dust (rule 7).** The
@@ -1361,6 +1351,28 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26b-ii — THE HOUSE PRICE IS A BOOK.** The affordability walk priced the marginal buyer honestly
+  and nobody transacted: no seller had a reservation and no offer could go unsold.
+  `domain/housing-clearing.ts`: the OFFERS are the owners whose tenure ends this week (the
+  register's units at the turnover the banks measure off their own vintages), each reserving at
+  what it must fetch — its mortgage payoff per dwelling off the vintage cross-section the bank
+  pass now publishes for next week's book (`sellerPayoffLadderOf`, `HousingMarket.
+  sellerPayoffLadder`; every owner outright before the first pass, §7.4), never below the build
+  cost (the construction sector's own cleared price, the floor the walk already carried) — plus
+  the builders' completions at that cost; the BIDS are the wealth tiers at what each can borrow
+  at the keenest quote, for the households of their own that move. `clearDwellings` is a
+  uniform-price cross: the units clear where a bid meets a reservation, the price is the last
+  buyer's bid that did, an offer no bid reaches does not clear (volumes collapse before prices)
+  and a week in which nothing clears keeps last week's print. `evolution.ts` writes the struck
+  price and the units that changed hands (`unitsClearedThisWeek`); the mortgage pass reads them
+  at the price struck for the sales that discharge loans and the demand it originates, and the
+  affordability gate that stood in for failed completions is gone — a buyer the book did not
+  clear borrows nothing (`bank-lending.ts`, a defect if the pass runs before the book). The
+  secondary market is inside the one household party, so it moves no wire and no register; a new
+  dwelling's wire is 26b-i's. housing B1 ⚠️→✅, B4 ⚠️→✅, C5.a re-cited. Still one price per
+  region: `A1.a`'s location is the only sub-market there is. `test/housing-clearing.test.ts`.
+  Gates green; no run (rule 11).
 
 **26b-i — DWELLINGS EXIST: THE OWNER-OCCUPIED STOCK IS UNITS WITH AN OWNER, AND A HOUSE GETS ITS
   WIRE.** (rule 10 split of "Housing clears"; 26b-ii in §3.) The stock was `population/2.5 ×

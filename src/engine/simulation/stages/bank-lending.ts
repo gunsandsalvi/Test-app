@@ -1,4 +1,5 @@
 import { levelPaymentFactor } from '../../../domain/pricing';
+import { defect } from '../../../domain/defect';
 import { housingStockValueLocal } from '../../../domain/housing';
 import type { Ticker } from '../../../domain/ids';
 import { openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf, seedBankBookLocalOf } from '../../ledger/accounts';
@@ -636,6 +637,11 @@ export function runBankHouseholdLending(
   // the price it was written at, so the losses come from the part of the distribution that is
   // actually above the kink — which is where every dollar of real mortgage loss comes from.
   const medianHomePriceLocal = Math.max(0, reg.housingMarket?.medianHomePriceLocal ?? 0);
+  // §3.26b-ii — what changed hands this week, at the price it struck: the base every mortgage
+  // flow below is written on. The book clears in 02 before this pass runs, so it is this week's.
+  const unitsChangedHandsThisWeek = reg.housingMarket?.unitsClearedThisWeek
+    ?? defect(`${reg.id}: the mortgage pass ran before the week's dwelling book cleared`);
+  const clearedTurnoverLocal = unitsChangedHandsThisWeek * medianHomePriceLocal;
   const mortgagePool = pools.find((p) => p.kind === 'MORTGAGE');
   const mortgageSeverity = bookMortgageSeverity(mortgagePool?.vintages, medianHomePriceLocal);
   const mortgageLossRateAnnual = unsecuredLossRateAnnual * MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER * mortgageSeverity;
@@ -753,7 +759,9 @@ export function runBankHouseholdLending(
       // that keeps gross origination from reading as pure net money creation. It retires whole
       // loans from across the book, so it comes off the vintages pro rata.
       const bookBeforeLocal = vintages.reduce((a, v) => a + v.principalLocal, 0);
-      const salesVolumeLocal = (housingStockLocal * turnoverRateAnnual / 52) * bankShare;
+      // §3.26b-ii — the sales are the BOOK's: the dwellings that changed hands this week at the
+      // price they struck (`evolution.ts`), not the stock times a turnover rate.
+      const salesVolumeLocal = clearedTurnoverLocal * bankShare;
       const bookLtv = housingStockLocal > 0 ? Math.min(2, bookBeforeLocal / (housingStockLocal * bankShare)) : 1;
       const dischargeLocal = Math.min(bookBeforeLocal, salesVolumeLocal * bookLtv);
       if (dischargeLocal > 0 && bookBeforeLocal > 0) {
@@ -779,12 +787,9 @@ export function runBankHouseholdLending(
       // A buyer borrows the lesser of what the lending standard allows on LTV and what its own
       // income supports. When affordability binds, the deal is smaller.
       const bindingLtv = Math.max(0, Math.min(MORTGAGE_LTV_AT_ORIGINATION, affordableLtv));
-      // ...and when it binds hard enough, the deal does not happen at all: a buyer who cannot
-      // raise the loan does not complete, so TRANSACTIONS fall too, not just loan sizes. This is
-      // the borrower's half of what the turnover rate above measures on the seller's side.
-      const affordabilityGate = Math.max(0, Math.min(1, affordableLtv / Math.max(0.01, MORTGAGE_LTV_AT_ORIGINATION)));
-      const demandLocal = (housingStockLocal * turnoverRateAnnual / 52)
-        * bindingLtv * affordabilityGate * appetite * bankShare;
+      // §3.26b-ii — and the transactions are the book's too: a buyer the book did not clear
+      // borrows nothing, so the affordability gate that stood in for failed completions is gone.
+      const demandLocal = clearedTurnoverLocal * bindingLtv * appetite * bankShare;
       const grantedLocal = Math.min(demandLocal, headroomLocal() / Math.max(0.01, MORTGAGE_RISK_WEIGHT));
       declinedOriginationLocal += demandLocal - grantedLocal;
       if (grantedLocal > 0) {

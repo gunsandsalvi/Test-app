@@ -165,6 +165,17 @@ export interface HousingMarket {
    * rate stands in (§7.4).
    */
   turnoverRateAnnual?: number;
+  /**
+   * §3.26b-ii — what the owners must fetch: the payoff per dwelling of every mortgage vintage on
+   * the region's books (`domain/housing-clearing.ts:sellerPayoffLadderOf`), measured by the bank
+   * pass for next week's book. An owner cannot sell below it. Undefined before the first bank
+   * pass has run, where every owner is treated as outright (§7.4).
+   */
+  sellerPayoffLadder?: { units: number; payoffLocal: number }[];
+  /** §3.26b-ii — the book's week: the dwellings offered, and the dwellings that changed hands at
+   *  the price struck (`evolution.ts`). The mortgage origination reads the second. */
+  unitsOfferedThisWeek?: number;
+  unitsClearedThisWeek?: number;
 }
 
 export interface WeatherAnomaly {
