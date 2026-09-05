@@ -615,7 +615,6 @@ function buildRegion(regionId: RegionId): Region {
     // §5-WIRES A3.4: the sector's deposits are its rows at the banks; the seed's provisional
     // sizing rides a stash until close-seed strikes the lines and opens the rows.
     householdState: withOpeningCash({
-      consumerConfidence: 100,
       creditTierBooks: generateCreditTierBooks(creditCardDebtLocal, otherConsumerLoanDebtLocal),
       wageGrowth,
       savingsRate: HOUSEHOLD_SAVINGS_RATE,

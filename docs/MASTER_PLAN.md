@@ -549,26 +549,23 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-18. **Delete every bound whose mechanism already exists.** The audit's inventory, each to be deleted
-    or replaced by the real decision: `evolution.ts:230` (tax rate [0.10,0.50]), `:266-267`
-    (hysteresis), `:323-328` (the whole invented consumer-confidence index, four invented
-    coefficients, an equity return clamped ±0.5 and the index clamped [30,170]), `:830-855` (the
-    Taylor rule's four bounds), `:1416,1424,1427` (commodity yield loss, drift and a 0.5 spot floor),
-    `:1443`; *(the two credit-duration clamps are GONE, §9.13-CREDIT rows 1 and 3: `07b:110-119`
-    blended an issuer's whole ladder into one duration × 0.75 clamped [1,8] and `07d:86-88` took a
-    stated 5-year tenor × 0.7 clamped [1,4], and there is nothing left for either to be the duration
-    OF — every schedule is struck on the paper's own remaining life. That life is its MATURITY, and
-    deriving Macaulay duration off the same cash flows is what this step still owes; both books now
-    hold those cash flows.)* `stage08-back.ts:970` (a payout ratio
-    whose clamp makes a whole patience cohort pay out exactly 100%), `:1961` (a ten-employee floor),
-    `:2029` (an invented book value with a 0.5 floor), `:1774` (a reservation floored at the print);
-    `institution-profiles.ts:66,76` (hurdle [0.02,0.30]); `prime-brokerage.ts:52` (haircut floored at
-    0.01 → 99× leverage); `estate-resolution.ts:441` (capital floored at 0, hiding insolvency);
-    `bank-resolution.ts:168` (`max(0, cash)` hiding an overdrawn reserve account);
-    `central-bank.ts:131,160,180` (CB share, QE pace and max stock share — real-world outcomes used
-    as bounds, rule 2 as well); `double-auction.ts:116` (a 10,000-iteration guard that silently
-    truncates a clearing); `weather.ts`/`evolution.ts:1409-1421` (a global 0.9 yield cap);
-    `02-region-macro.ts:50`; the ±4%/week GDP-growth clamp the code itself flags.
+18-ii. **Delete the bounds in `stage08-back.ts`** (rule 6; 18-i took `evolution.ts`'s — §9): the
+    payout-ratio clamp that makes a whole patience cohort pay out exactly 100%, the ten-employee
+    floor (`:1016`), the `Math.max(0.5, remainingYears)` half-year floors on three pricing sites
+    (`:1348,1364,1423` — a bond with a week left has a week, and its own `PaperTerms` say so), the
+    ten-dollar cash-buffer floor (`:2066`), the invented book value with its 0.5 floor (`:2072`),
+    and a reservation floored at the print. Each deleted or replaced by the real decision.
+18-iii. **Delete the small floors and caps, and make the one guard loud:**
+    `institution-profiles.ts:67,77` (hurdle [0.02, 0.30]); `prime-brokerage.ts:51` (haircut floored
+    at 0.01 → 99× leverage; the broker's own balance sheet is the real cap); `estate-resolution.ts`
+    (capital floored at 0, hiding insolvency); `domain/bank-resolution.ts:147` (`max(0, cash)`
+    hiding an overdrawn reserve account); `central-bank.ts` (QE pace and stock-share caps —
+    real-world outcomes used as bounds, rule 2 as well); `double-auction.ts:116` (a 10,000-iteration
+    guard that silently truncates a clearing: a defect at the site, never a silent break);
+    `weather.ts` if any cap remains; `02-region-macro.ts` if any remains. *(The two credit-duration
+    clamps are GONE, §9.13-CREDIT rows 1 and 3, and there is nothing left for either to be the
+    duration OF — every schedule is struck on the paper's own remaining life; deriving Macaulay
+    duration off the same cash flows is what 18-ii's half-year floors still owe.)*
 19. **Delete the dead bound machinery and the dead boundary scaffolding.** The damper never binds —
     `runClearingKernel` stopped writing `out.damper`, so `damperBoundInstrumentIds` is permanently
     empty while `setDamperStreaks`/`rollDamperStreaks`/`packed.damperStreak`/`GameState.damperBindStreakById`,
@@ -1556,7 +1553,20 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17f-v — SENIORITY, AND THE CDS BASIS MIRROR; 17f CLOSED.** `seniorityRead`: an issuer's
+**18-i — `evolution.ts`'S BOUNDS ARE GONE.** Rule 6, site by site: the tax rate's [0.10, 0.50]
+  band and 0.25 fallback (a non-number is a defect at the site); the 1.5% cap on NAIRU
+  hysteresis; the whole consumer-confidence index (an invented equilibrium off four
+  coefficients, an equity return clamped ±0.5, the index clamped [30, 170]) with its field on
+  `HouseholdState`, its seed, its telemetry and its two UI rows — its two readers read what it
+  was made of: the migration signal and consumer-credit appetite (`bank-lending.ts`) read real
+  wage growth, the appetite's ×2 cap gone too; the Taylor rule's bands (expectations
+  [−20%, +50%] with a 2.5% fallback, both gaps ±10%, the target's 20% ceiling, the policy rate's
+  [−1%, 20%] twice) — the ONE bound that stays is `EFFECTIVE_LOWER_BOUND`, a real thing; the
+  commodity walk's 0.5 spot floor, ±4%/week imbalance cap and 0.9 weather cap (a loss is capped
+  at all of the crop, which is arithmetic). The ±4%/week GDP clamp was already gone. Split from
+  18 per rule 1.10: 18-ii (`stage08-back.ts`) and 18-iii (the small floors and the loud guard)
+  inserted. Atlas: households C1.c re-cited, commodities-spot F3/D1 noted. Gates green; no run.
+- **17f-v — SENIORITY, AND THE CDS BASIS MIRROR; 17f CLOSED.** `seniorityRead`: an issuer's
   senior rung against its subordinated rung nearest the benchmark tenor (`TR_SUBORDINATED` on
   the ladder rows), the trade where the junior pays LESS — the senior bought on the line, the
   junior sold and borrowed — carrying the junior's borrow fee and the senior's financing above

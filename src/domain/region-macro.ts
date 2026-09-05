@@ -196,7 +196,6 @@ export interface CreditTierBook {
 }
 
 export interface HouseholdState {
-  consumerConfidence: number;
   creditTierBooks: CreditTierBook[];
   wageGrowth: number;
   savingsRate: number;

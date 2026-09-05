@@ -572,14 +572,13 @@ export function runBankHouseholdLending(
   let consumerCreditOriginationLocal = 0;
   let declinedOriginationLocal = 0;
 
-  // Borrowing appetite: confident households lever up, a policy rate above neutral cools it —
-  // the same behavioural form the household aggregate used, now the demand half of a priced,
-  // capital-gated origination decision instead of a multiplier on the book's own drift.
-  const cci = reg.householdState?.consumerConfidence ?? 100;
+  // Borrowing appetite: households whose real wages are rising lever up, a policy rate above
+  // neutral cools it — the demand half of a priced, capital-gated origination decision. §3.18-i:
+  // the confidence index this read is gone; its content was real wage growth (the index's
+  // equilibrium was 150 × that on a 100 base, read at 0.5 per unit, so 0.75 per unit of real
+  // wage growth), and the ×2 cap is gone with it (rule 6). An appetite cannot be negative.
   const neutralRate = reg.neutralRate ?? policyRate;
-  const appetite = Math.max(0, Math.min(2,
-    1.0 + ((cci - 100) / 100) * 0.5 - (policyRate - neutralRate) * 4
-  ));
+  const appetite = Math.max(0, 1.0 + ((hs?.wageGrowth ?? 0) - reg.inflation) * 0.75 - (policyRate - neutralRate) * 4);
 
   const unsecuredLossRateAnnual = consumerAnnualLossRate(adjustedUnemploymentRate, hs?.creditTierBooks);
   // Mortgage severity reads the sector's REAL home equity (HH2): foreclosure recovers the house

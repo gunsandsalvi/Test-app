@@ -115,7 +115,11 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ F3 / D1 — THE SPOT PRICE IS A WALKED SERIES, WITH A FLOOR
+### ❌ F3 / D1 — THE SPOT PRICE IS A WALKED SERIES
+
+*2026-09-05 (§9.18-i). The 0.5 floor, the ±4%/week cap on the imbalance term and the 0.9 cap on
+a weather loss are gone (rule 6; a loss is capped at all of the crop, which is arithmetic). The
+walk itself stands until §3 step 22 clears spot.*
 
 `evolution.ts:1424`:
 

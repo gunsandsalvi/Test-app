@@ -36,7 +36,6 @@ export const macro: FunctionModule = {
         <KV k="potential growth" v={pctLevel(r.potentialGdpGrowth)} />
         <KV k="cycle" v={words(r.cycleRegime)} />
         <KV k="consumption · investment" hint="of gdp" v={gdp > 0 ? `${pctLevel(r.consumptionComponentLocal / gdp, 0)} · ${pctLevel(r.investmentComponentLocal / gdp, 0)}` : '—'} />
-        <KV k="consumer confidence" v={num(hs?.consumerConfidence, 0)} />
       </Card>
       <SectionLabel>prices</SectionLabel>
       <Card style={{ padding: '2px 0' }}>

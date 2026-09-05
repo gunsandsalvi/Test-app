@@ -286,7 +286,6 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
       { label: 'Cards · consumer loans', usd: (hs?.creditCardDebtLocal ?? 0) + (hs?.otherConsumerLoanDebtLocal ?? 0) },
       { label: 'Debt to income', text: ratio(hs?.householdDebtToIncomeRatio, 2) },
       { label: 'Savings rate', text: pctLevel(hs?.savingsRate) },
-      { label: 'Consumer confidence', text: (hs?.consumerConfidence ?? 0).toFixed(0) },
     ]} />;
   }
   return (<>

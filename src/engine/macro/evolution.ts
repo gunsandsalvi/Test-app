@@ -36,6 +36,7 @@ import {
   weeklyInterestExpenseLocal, governmentPayrollWeeklyLocal, governmentObligationsWeeklyLocal,
   GOV_HIRING_RESPONSE_TO_STANCE,
 } from '../../domain/government';
+import { defect } from '../../domain/defect';
 import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
 import { splitWageBill } from '../bootstrap/national-accounts';
 import { buildHouseholdCohorts, tierWealthMpc, WEALTH_TIERS } from './household-cohorts';
@@ -130,7 +131,6 @@ export function evolveRegionMacro(
     bankSovereignByBond: Record<string, number>;
   },
   week: number,
-  equityReturn: number = 0,
   prevCommodities: Commodity[] = [],
   /** NAT2: the firms in this region — what it produces is what its weather can take from it. */
   allCompanies: Company[] = []
@@ -142,7 +142,7 @@ export function evolveRegionMacro(
   diagnosticString: string;
 } {
   const { updatedBuffer: newPolicyRateLagBuffer } = pushAndReadLagged(region.policyRateLagBuffer || [], region.policyRate, 6);
-  const { updatedBuffer: newDemandShockLagBuffer, laggedValue: laggedDemandShock } = pushAndReadLagged(region.demandShockLagBuffer || [], globalShock.gdpShock, 4);
+  const { updatedBuffer: newDemandShockLagBuffer } = pushAndReadLagged(region.demandShockLagBuffer || [], globalShock.gdpShock, 4);
   
   const updatedWeather = evolveRegionalWeather(region.id, region.weather, week, allCompanies);
 
@@ -159,7 +159,6 @@ export function evolveRegionMacro(
   const newGdpGrowth = region.gdpGrowth;
 
   const prevHS: HouseholdState = region.householdState || {
-    consumerConfidence: 100,
     wageGrowth: region.wageGrowth,
     savingsRate: 0.06,
     realConsumptionGrowth: 0.02,
@@ -237,7 +236,9 @@ export function evolveRegionMacro(
 
   // Tax rate is a slow second fiscal lever — austerity nudges it up, stimulus nudges it down, same cadence as fiscalStanceScore
   const taxRateDrift = week % 13 === 0 ? -newFiscalStanceScore * 0.001 : 0;
-  const newEffectiveTaxRate = Math.max(0.10, Math.min(0.50, isFinite(region.effectiveTaxRate + taxRateDrift) ? region.effectiveTaxRate + taxRateDrift : 0.25));
+  // §3.18-i: no [0.10, 0.50] band and no 0.25 fallback (rule 6) — the rate is what the stance has
+  // moved it to, and a rate that is not a number is a defect at the site, not a default.
+  const newEffectiveTaxRate = Number.isFinite(region.effectiveTaxRate + taxRateDrift) ? region.effectiveTaxRate + taxRateDrift : defect(`${region.id} effective tax rate is not a number`);
 
   // FRM: revenue is MEASURED — stage 11 sums what the bases actually paid (PUB1b/1c). This
   // carries last week's measurement forward for the stages that read it before the new one
@@ -274,7 +275,8 @@ export function evolveRegionMacro(
 
   const isHighUnemp = region.unemploymentRate > region.nairu + 0.005;
   const weeksAboveNairu = isHighUnemp ? (region.weeksAboveNairu ?? 0) + 1 : Math.max(0, (region.weeksAboveNairu ?? 0) - 2);
-  const hysteresis = Math.min(0.015, weeksAboveNairu * 0.00005);
+  // §3.18-i: the 1.5% cap on hysteresis is gone (rule 6); the drift is what the weeks above say.
+  const hysteresis = weeksAboveNairu * 0.00005;
   const hysteresisDelta = isHighUnemp ? hysteresis / 52 : -hysteresis / 104;
   const baseNairu = week % 52 === 0
     ? (Number((region.nairu + (newParticipation - region.laborForceParticipation) * 52 * 0.15).toFixed(4)))
@@ -288,7 +290,6 @@ export function evolveRegionMacro(
   // a third representation that was written weekly, read by NOTHING, and wrong anyway (it
   // omitted the entire private tier and printed 37% against a full-employment economy).
   const newUnemployment = region.unemploymentRate;
-  const unempDelta = 0;
 
   // Occupation Pools & Retraining Dynamics (Stage 2: X3 & X4)
   const defaultOccupationShares: Record<OccupationType, number> = BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
@@ -329,20 +330,19 @@ export function evolveRegionMacro(
     : getBlendedWageGrowth(currentLaborForceShares, currentOccupationPools);
   const laggedWageGrowth = newWageGrowth;
   
-  const cciUnempMultiplier = (newCycleRegime === 'Recession' || newCycleRegime === 'Slowdown') && unempDelta > 0 ? 0.75 : 0.5;
-  const cciEquilibrium = 100 + (newWageGrowth - region.inflation) * 150 - Math.max(0, newUnemployment - nairu) * 200 - Math.max(0, region.expectedInflation - piStar) * 80 + laggedDemandShock * 1000;
-  const cciReversion = (cciEquilibrium - prevHS.consumerConfidence) * 0.08;
-  const unempShock = unempDelta > 0 ? cciUnempMultiplier * unempDelta * 100 : 0;
-  const boundedEquityReturn = Math.max(-0.5, Math.min(0.5, isFinite(equityReturn) ? equityReturn : 0));
-  const rawCCI = prevHS.consumerConfidence + cciReversion + 0.05 * (boundedEquityReturn * 100) - unempShock;
-  const newCCI = isFinite(rawCCI) ? Math.max(30, Math.min(170, Number(rawCCI.toFixed(2)))) : 100;
+  // §3.18-i: THE CONSUMER-CONFIDENCE INDEX IS GONE. It was an invented level (an equilibrium off
+  // four coefficients, a reversion, an equity return clamped ±0.5, the index clamped [30, 170])
+  // that nothing decided off any more: consumption is households' real income and wealth, and
+  // the two readers it had left — the migration signal and consumer-credit appetite — read the
+  // real wage growth it was mostly made of.
 
   // Population Growth & Net Migration Dynamics (Part AG)
   // DEM — both clamps gone (rule 6). Population growth was held inside [−3%, +4%] and the
   // migration signal inside ±1%, so a region could neither shrink nor boom however its own
   // fertility, mortality and attractiveness moved — which is the whole quantity this project
   // exists to make vary. A population cannot go negative; that is arithmetic and stays below.
-  const migrationAttractivenessSignal = ((newCCI - 100) / 100) * 0.0006;
+  // The signal reads what it always encoded: real wage growth, which is what draws people in.
+  const migrationAttractivenessSignal = (newWageGrowth - region.inflation) * 0.0006;
   const birthRate = region.birthRateAnnual ?? 0.010;
   // DEM: mortality follows the share of the population that is old, which drifts every week, so
   // an ageing region's death rate rises on its own rather than sitting at a seeded constant.
@@ -501,7 +501,8 @@ export function evolveRegionMacro(
   const debtServiceDrag = (newDebtServiceBurden - baselineDebtServiceBurden) * 0.4;
 
   // Update newRealConsumptionGrowth with real balance-sheet channels:
-  const trendConsumptionGrowth = region.potentialGdpGrowth * (newCCI / 100);
+  // §3.18-i: the trend is the trend — it was scaled by the confidence index, which is gone.
+  const trendConsumptionGrowth = region.potentialGdpGrowth;
   // DIST/MAC — LAST week's measured savings rate. This term runs before the cohorts are built,
   // and the rate is now their output, so it reads the most recent one that exists. A lag here is
   // right anyway: what a household spends out of a real wage gain this week is governed by the
@@ -827,22 +828,26 @@ export function evolveRegionMacro(
   // around it.
   const newCoreInflation = region.coreInflation;
   const rawExp = region.expectedInflation * 0.9 + newInflation * 0.1;
-  const newExpectedInflation = isFinite(rawExp) ? Number(Math.max(-0.20, Math.min(0.50, rawExp)).toFixed(4)) : 0.025;
+  // §3.18-i: no [−20%, +50%] band on expectations and no 2.5% fallback (rule 6).
+  const newExpectedInflation = Number.isFinite(rawExp) ? Number(rawExp.toFixed(4)) : defect(`${region.id} expected inflation is not a number`);
 
   // Calibrated Inertial Taylor Rule:
   // Target: i*_t = r* + pi_t + 0.5(pi_t - pi*) + 0.5(y_t - y*)
   const rStar = region.neutralRate; // US: 1.00%, UK: 0.75%, EU: 0.50%, JP: -0.25%
   
-  const output_gap = Math.max(-0.10, Math.min(0.10, newGdpGrowth - potentialGdp));
-  const inflation_gap = Math.max(-0.10, Math.min(0.10, newExpectedInflation - piStar));
+  // §3.18-i: the ±10% caps on both gaps and the 20% ceiling on the target are gone (rule 6). The
+  // ONE bound that stays is the effective lower bound, which is a real thing the central bank
+  // cannot set a rate below (`central-bank.ts:EFFECTIVE_LOWER_BOUND`).
+  const output_gap = newGdpGrowth - potentialGdp;
+  const inflation_gap = newExpectedInflation - piStar;
   const taylorTarget = rStar + newExpectedInflation + 0.5 * inflation_gap + 0.5 * output_gap;
-  const clampedTaylorTarget = Math.max(EFFECTIVE_LOWER_BOUND, Math.min(0.20, taylorTarget));
+  const clampedTaylorTarget = Math.max(EFFECTIVE_LOWER_BOUND, taylorTarget);
 
   let rateChanged = false;
   let rateDeltaBps = 0;
 
   // Policy Lag: Smooth movement toward Taylor Target each week (moves 15% of the way)
-  const targetPolicyRate = Math.max(-0.01, Math.min(0.20, region.policyRate + 0.15 * (clampedTaylorTarget - region.policyRate)));
+  const targetPolicyRate = Math.max(EFFECTIVE_LOWER_BOUND, region.policyRate + 0.15 * (clampedTaylorTarget - region.policyRate));
 
   // Update inflation deviation streak
   const isAboveTarget = region.inflation > piStar + 0.01;
@@ -856,7 +861,7 @@ export function evolveRegionMacro(
     // Round to nearest 25 bps (0.0025)
     const roundedMove = Math.round(rawMove / 0.0025) * 0.0025;
     newPolicyRate = region.policyRate + roundedMove;
-    newPolicyRate = Math.max(-0.01, Math.min(0.20, newPolicyRate));
+    newPolicyRate = Math.max(EFFECTIVE_LOWER_BOUND, newPolicyRate);
   }
 
   if (Math.abs(newPolicyRate - region.policyRate) > 0.0001) {
@@ -868,11 +873,10 @@ export function evolveRegionMacro(
 
   // --- DIAGNOSTIC TELEMETRY OUTPUT ---
   const capexBps = Math.round((microFeedback.capexGdpContribution ?? 0) * 10000);
-  const consBps = Math.round(((prevHS.consumerConfidence ?? 100) - 100) * 0.0001 * 10000);
   const outGapBps = Math.round(output_gap * 10000);
   const infGapBps = Math.round(inflation_gap * 10000);
   
-  const diagnosticString = `Prior GDP: ${(region.gdpGrowth * 100).toFixed(2)}% | CapEx Boost: ${capexBps > 0 ? '+' : ''}${capexBps} bps | Cons Demand: ${consBps > 0 ? '+' : ''}${consBps} bps | Net Realized GDP: ${(newGdpGrowth * 100).toFixed(2)}%
+  const diagnosticString = `Prior GDP: ${(region.gdpGrowth * 100).toFixed(2)}% | CapEx Boost: ${capexBps > 0 ? '+' : ''}${capexBps} bps | Net Realized GDP: ${(newGdpGrowth * 100).toFixed(2)}%
 Potential GDP: ${(potentialGdp * 100).toFixed(2)}% | Output Gap: ${outGapBps > 0 ? '+' : ''}${outGapBps} bps | CPI: ${(newInflation * 100).toFixed(2)}% (Gap ${infGapBps > 0 ? '+' : ''}${infGapBps} bps)
 Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.policyRate * 100).toFixed(2)}% | Meeting Decision: ${rateChanged ? `${rateDeltaBps > 0 ? '+' : ''}${rateDeltaBps} bps -> ${(newPolicyRate * 100).toFixed(2)}%` : 'Hold'}`;
 
@@ -1202,7 +1206,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     governmentInterestWeeklyLocal: Math.round(govInterestWeeklyLocal),
     employerPayrollTaxWeeklyLocal: Math.round((employerPayrollTaxLocal / 52)),
     householdState: {
-      consumerConfidence: newCCI,
       creditTierBooks: normalizedTiers,
       wageGrowth: newWageGrowth,
       savingsRate: newSavingsRate,
@@ -1395,7 +1398,8 @@ export function evolveCommodity(
       yieldLossShare += (r.weather.yieldImpactPct ?? 0) * decay;
     }
   });
-  yieldLossShare = Math.max(0, Math.min(0.9, yieldLossShare));
+  // §3.18-i: a crop cannot lose more than all of itself — that is arithmetic; the 0.9 cap was not.
+  yieldLossShare = Math.max(0, Math.min(1, yieldLossShare));
 
   const drift = demandShock * dt + randomEps;
   
@@ -1403,10 +1407,12 @@ export function evolveCommodity(
   const { ratio: rawClearingRatio, supplyUnits: rawSupplyUnits, demandUnits } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions, privateSegmentSupplyLocal, fxToUsd);
   const supplyUnits = rawSupplyUnits * (1 - yieldLossShare);
   const clearingRatio = rawClearingRatio * (1 - yieldLossShare);
-  const supplyDemandDrift = Math.max(-0.04, Math.min(0.04, (clearingRatio - 1.0) * 0.12));
+  // §3.18-i: the ±4%/week cap on the imbalance term is gone (rule 6); step 22 replaces the walk.
+  const supplyDemandDrift = (clearingRatio - 1.0) * 0.12;
   const rawDriftExponent = drift * 0.4 + supplyDemandDrift;
   const safeDriftExponent = isFinite(rawDriftExponent) ? rawDriftExponent : 0;
-  const newSpot = Math.max(0.5, Number((comm.spotPrice * Math.exp(safeDriftExponent)).toFixed(2))); // 0.5 floor stays
+  // §3.18-i: no 0.5 floor (rule 6) — an exponential of a finite exponent is positive on its own.
+  const newSpot = Number((comm.spotPrice * Math.exp(safeDriftExponent)).toFixed(2));
   
   const change1W = Number((newSpot - comm.spotPrice).toFixed(2));
 
