@@ -16,6 +16,7 @@
  * Violations print inline the week they happen (capped per week), and the end prints a grouped
  * summary. Exit code 1 on any violation.
  */
+import { plantGrossLocal, plantNetLocal, plantDepreciationAnnualLocal } from '../src/domain/plant';
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { businessLoanBookOf, consumerLoanBookOf, swapLineDrawnLocal } from '../src/domain/banking';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, householdDepositsAt, resetAccount, adjustBankReserves, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../src/engine/ledger/accounts';
@@ -1658,18 +1659,15 @@ const indModule: HarnessModule = (() => {
       const rev = firms.reduce((a, c) => a + c.annualRevenue, 0);
       const ebitda = firms.reduce((a, c) => a + c.ebitda, 0);
       const inputs = firms.reduce((a, c) => a + (c.lastWeekPurchasesLocal ?? 0) * 52, 0);
-      const netPpe = firms.reduce((a, c) => a + Math.max(0, (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0)), 0);
+      const netPpe = firms.reduce((a, c) => a + plantNetLocal(c.plant, s.currentWeek), 0);
       const coc = Math.max(0, (s.regions[r].zeroRates?.tenor10Y ?? s.regions[r].policyRate));
       const below = firms.filter(c => {
-        const np = Math.max(0, (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0));
+        const np = plantNetLocal(c.plant, s.currentWeek);
         return c.ebitda < np * (coc + (c.beta ?? 1) * 0.05);
       }).length;
       // CAP — DOES CAPEX COVER DEPRECIATION? The number IND13's stock exposed, measured at the
       // FLOW so it is not hidden behind the commissioning lead and the maintenance EMA.
-      const dep = firms.reduce((a, c) => {
-        const gross = c.grossPPELocal ?? 0;
-        return a + gross / 12;
-      }, 0);
+      const dep = firms.reduce((a, c) => a + plantDepreciationAnnualLocal(c.plant, s.currentWeek), 0);
       const capexA = firms.reduce((a, c) => a + (c.capex ?? 0), 0);
       out.push(`  ${r}: capex ${B(capexA)}/yr vs depreciation ${B(dep)}/yr = ${(dep > 0 ? capexA / dep : 0).toFixed(2)}x [1.0x replaces the stock]`);
       // CAP — WHERE THE CAPEX BIDS DIE. The five capex weights sum to 1, so the bids ARE the
@@ -1751,8 +1749,7 @@ const indModule: HarnessModule = (() => {
       const carryLocal = carryFirms.reduce((a, c) => a + (c.taxLossCarryforwardLocal ?? 0), 0);
       const deferredLocal = firms.reduce((a, c) => a + (c.deferredTaxLiabilityLocal ?? 0), 0);
       const basisLocal = firms.reduce((a, c) => a + (c.taxBasisPpeLocal ?? 0), 0);
-      const netBookLocal = firms.reduce((a, c) =>
-        a + Math.max(0, (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0)), 0);
+      const netBookLocal = firms.reduce((a, c) => a + plantNetLocal(c.plant, s.currentWeek), 0);
       out.push(`  ${carryFirms.length} of ${firms.length} firms carry a loss carryforward, ${B(carryLocal)} in total`);
       out.push(`  tax basis ${B(basisLocal)} vs book net PP&E ${B(netBookLocal)} — deferred tax liability ${B(deferredLocal)}`);
     }
@@ -1783,7 +1780,7 @@ const indModule: HarnessModule = (() => {
     out.push('--- IND13: capital that has arrived and is not yet plant ---');
     const aucFirms = s.companies.filter(c => isActiveCompany(c) && (c.assetsUnderConstruction ?? []).length > 0);
     const aucLocal = aucFirms.reduce((a, c) => a + (c.assetsUnderConstruction!).reduce((b, l) => b + l.valueLocal, 0), 0);
-    const grossPpeLocal = s.companies.filter(isActiveCompany).reduce((a, c) => a + (c.grossPPELocal ?? 0), 0);
+    const grossPpeLocal = s.companies.filter(isActiveCompany).reduce((a, c) => a + plantGrossLocal(c.plant, s.currentWeek), 0);
     const commissionedLocal = s.companies.reduce((a, c) => a + (c.capexCommissionedLastWeekLocal ?? 0), 0);
     out.push(`  ${aucFirms.length} firms carrying construction in progress, ${B(aucLocal)} against ${B(grossPpeLocal)} of gross PP&E (${pct(grossPpeLocal ? aucLocal / grossPpeLocal : 0)})`);
     out.push(`  entered service this week: ${B(commissionedLocal)}`);

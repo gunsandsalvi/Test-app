@@ -6,10 +6,10 @@ import type { Company } from '../src/types';
 
 const firm = (over: Record<string, unknown> = {}): Company => ({
   management: { patienceWeeks: 10, riskAversion: 1, appointedWeek: 0 },
-  growthCapex: 52e6, maintenanceCapex: 52e6, grossPPELocal: 1e9, accumulatedDepreciationLocal: 4e8,
+  growthCapex: 52e6, maintenanceCapex: 52e6, plant: [{ costLocal: 1e9, enteredServiceWeek: 10 - 0.4 * 520, usefulLifeYears: 10 }],
   annualRevenue: 2e9, stockPrice: 10, eps: 1, ...over,
 } as unknown as Company);
-const base = { marketCapLocal: 1e9, costOfDebtAnnual: 0.04, effectiveTaxRate: 0.25, ebitdaAnnual: 4e8, ebitAnnual: 3e8, cashLocal: 2e8, rating: 'BBB' as const };
+const base = { week: 10, marketCapLocal: 1e9, costOfDebtAnnual: 0.04, effectiveTaxRate: 0.25, ebitdaAnnual: 4e8, ebitAnnual: 3e8, cashLocal: 2e8, rating: 'BBB' as const };
 
 test('a more averse management targets less of the lender\'s room', () => {
   assert.equal(targetLeverageOf('BBB', { patienceWeeks: 10, riskAversion: 1, appointedWeek: 0 }), COVENANT_LEVERAGE_CEILING.BBB);

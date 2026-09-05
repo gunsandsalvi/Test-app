@@ -170,8 +170,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
 
     // Per-company real primitives, computed once per region-week — never inside the participants
     // loop, which would recompute them once per entity per name.
-    const bookEquityById = new Map(regionCompanies.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id))]));
-    const netInvestmentRateById = new Map(regionCompanies.map((c) => [c.id, companyNetInvestmentRate(c)]));
+    const bookEquityById = new Map(regionCompanies.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id), ctx.nextWeek)]));
+    const netInvestmentRateById = new Map(regionCompanies.map((c) => [c.id, companyNetInvestmentRate(c, ctx.nextWeek)]));
 
     // §7.327 — THE DEMAND BUILD'S DENSE COLUMNS. The participants loop below runs
     // entities × companies with ~6 Map probes and two `positionKey` string builds per pair

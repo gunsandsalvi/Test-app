@@ -35,8 +35,8 @@ import { SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
 import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
 import { industryOfSubUnit, firmInputIntensities, annualCarryingCostRateOf, INDUSTRY_REGISTRY } from '../domain/industry-registry';
 import { SECTOR_OCCUPATION_MIX } from '../domain/region-macro';
-import { SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
-import { annualDepreciationLocal, usefulLifeYearsOf } from '../domain/company-week/capital-programme';
+import { usefulLifeYearsOf } from '../domain/company-week/capital-programme';
+import { plantNetLocal, plantDepreciationAnnualLocal } from '../domain/plant';
 import { CogsCostDrivers } from '../engine/companyGenerator';
 import { industrialIncome } from '../domain/company-week/income-statement';
 import { fulfillmentRatio } from '../domain/company-week/inventory';
@@ -141,8 +141,8 @@ export interface FrontSeam {
   recurringBase0: Float64Array;                // NaN = undefined
   baselineGrowthRatioResolved: Float64Array;   // ?? growthCapexResolved / max(1, annualRevenue)
   baselineEbitdaMarginResolved: Float64Array;  // ?? ebitda / max(1, annualRevenue)
-  openingGrossPpeLocal: Float64Array;
-  openingNetPpeLocal: Float64Array;
+  depreciationAnnualLocal: Float64Array;       // the register's year charge at the opening (§3.26-f-ii)
+  openingNetPpeLocal: Float64Array;            // the register's net at the opening
   taxBasisOpenLocal: Float64Array;               // ?? openingNet
   carryforwardLocal: Float64Array;               // ?? 0
   usefulLifeYears: Float64Array;               // usefulLifeYearsOf (the one schedule's life)
@@ -288,7 +288,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     recurringBase0: lane64(n),
     baselineGrowthRatioResolved: lane64(n),
     baselineEbitdaMarginResolved: lane64(n),
-    openingGrossPpeLocal: lane64(n),
+    depreciationAnnualLocal: lane64(n),
     openingNetPpeLocal: lane64(n),
     taxBasisOpenLocal: lane64(n),
     carryforwardLocal: lane64(n),
@@ -414,10 +414,11 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     S.baselineGrowthRatioResolved[row] = nn(CN.baselineGrowthCapexToRevenueRatio[row],
       growthCapexResolved / Math.max(1, annualRev));
     S.baselineEbitdaMarginResolved[row] = nn(CN.baselineEbitdaMargin[row], ebitdaV / Math.max(1, annualRev));
-    const openingGross = nn(CN.grossPPELocal[row], annualRev * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
-    S.openingGrossPpeLocal[row] = openingGross;
-    const openingNet = Math.max(0, openingGross - nn(CN.accumulatedDepreciationLocal[row], openingGross * 0.45));
+    // §3.26-f-ii — the plant is the register, read at the week's opening: its net (the tax
+    // basis's default and the deferred-tax read) and its year's charge (the P&L's D&A).
+    const openingNet = plantNetLocal(comp.plant, nextWeek);
     S.openingNetPpeLocal[row] = openingNet;
+    S.depreciationAnnualLocal[row] = plantDepreciationAnnualLocal(comp.plant, nextWeek);
     S.taxBasisOpenLocal[row] = nn(CN.taxBasisPpeLocal[row], openingNet);
     S.carryforwardLocal[row] = nn(CN.taxLossCarryforwardLocal[row], 0);
     S.usefulLifeYears[row] = usefulLifeYearsOf(comp);
@@ -742,9 +743,9 @@ export function runFrontCore(
     const industrialPnl = industrialIncome({
       revenueLocal: newRevenue,
       ebitdaMargin: newEbitdaMargin,
-      // §3.26-f-i — the one schedule: the opening gross plant over its life, the same number the
-      // capital core rolls the stock forward by (÷52). It was `revenue × 0.05`.
-      depreciationAnnualLocal: annualDepreciationLocal(S.openingGrossPpeLocal[row], S.usefulLifeYears[row]),
+      // §3.26-f-i/ii — the one schedule on the opening register, the same number the capital
+      // core rolls the stock forward by (÷52). It was `revenue × 0.05`.
+      depreciationAnnualLocal: S.depreciationAnnualLocal[row],
       annualInterestLocal: annualInterest,
       taxRate: S.effectiveTaxRate[ri],
       sharesOutstanding: S.sharesOutstanding[row],

@@ -13,6 +13,7 @@
  * Runs after every mechanism stage and before the feed is assembled (13-news).
  */
 
+import { plantGrossLocal } from '../../../domain/plant';
 import { swapLineBookOf } from '../../ledger/contract-ledger';
 import { GameState, Company, RegionId } from '../../../types';
 import { marketCapAt } from '../../../engine2/instruments';
@@ -238,7 +239,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       title: `${c.name} starts mothballing its plant`,
       description: `${c.ticker} has run part of its plant idle for its management's horizon — it makes what it expects to sell — and begins taking it offline (${P(share, 1)} this week, no upkeep, no staff). Revenue ${M(c.annualRevenue)}, expected earnings ${M(c.expectedEbitdaLocal ?? c.ebitda)}, ${N(c.employeeCount)} people.`,
       refs: [company(c), region(c.region)],
-      materialityLocal: (c.grossPPELocal ?? 0) * share,
+      materialityLocal: plantGrossLocal(c.plant, week) * share,
       impactRegion: c.region, impactSector: c.sector, affectedTicker: c.ticker,
     });
   });

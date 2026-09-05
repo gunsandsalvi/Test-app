@@ -21,10 +21,10 @@ import { FREIGHT_ASSET_SPEC, type FreightMode } from '../carrier';
 import { PATIENCE_MEDIAN_WEEKS } from '../preferences';
 
 export interface CapitalProgrammeInputs {
-  /** The plant, as a stock. */
-  grossPPELocal: number;
-  accumulatedDepreciationLocal: number;
-  usefulLifeYears: number;
+  /** §3.26-f-ii — the one schedule's year-rate on the week's opening register
+   *  (`domain/plant.ts:plantDepreciationAnnualLocal`): what the plant wears this year. The upkeep
+   *  target is it on the active plant, and the stock rolls forward by its 52nd. */
+  depreciationAnnualLocal: number;
   /** What the firm earns and holds this week. */
   weeklyEbitdaLocal: number;
   weeklyInterestLocal: number;
@@ -71,8 +71,8 @@ interface CapitalProgramme {
   growthCapexLocal: number;
   rndExpenseLocal: number;
   capexLocal: number;
-  /** The week's slice of the one schedule (`annualDepreciationLocal`): what the stock rolls
-   *  forward by, and 1/52 of what the P&L charged — the same number, by construction. */
+  /** The week's slice of the one schedule (`plant.ts:plantDepreciationAnnualLocal`): 1/52 of what
+   *  the P&L charged, and what the register wore this week — the same number, by construction. */
   weeklyDepreciationLocal: number;
   /** How much of this firm's free cash flow has nowhere productive to go. The dividend rule reads
    *  it, which is why it is reported rather than kept private: a firm out of reinvestment
@@ -81,10 +81,11 @@ interface CapitalProgramme {
 }
 
 /**
- * §3.26-f-i — THE ONE DEPRECIATION SCHEDULE: straight-line, the gross plant over its useful life,
- * a year-rate. The P&L's D&A on both statement paths (and in the C front core), the stock's weekly
- * reduction, the upkeep target, the valuation's net-investment read and every seed's EBIT are this
- * number — one owner, so a firm that doubles its plant doubles the charge against its earnings,
+ * §3.26-f-i — THE ONE DEPRECIATION SCHEDULE lives with the plant it runs on
+ * (`domain/plant.ts:annualDepreciationLocal`, per vintage; `plantDepreciationAnnualLocal` over a
+ * register). The P&L's D&A on both statement paths (and in the C front core), the stock's weekly
+ * reduction, the upkeep target below, the valuation's net-investment read and every seed's EBIT
+ * are that one number — so a firm that doubles its plant doubles the charge against its earnings,
  * which is what building capacity costs. It was six derivations of one fact: five percent of
  * REVENUE on the P&L (a firm that doubled its plant took no extra charge, so capacity was free on
  * the income statement and on the tax base built from it), the plant over its life on the stock,
@@ -92,13 +93,11 @@ interface CapitalProgramme {
  * and a carrier's fleet life at its seed against its sector's in the engine.
  *
  * MAINTENANCE CAPEX IS DEPRECIATION — the spend that keeps the capital stock whole as it wears
- * out — so the upkeep target is this same number. It used to be derived from its own current
- * value (an EMA of itself with no anchor), so whatever it was seeded at is what it stayed, and
- * capital ARRIVED at ~0.5% of the stock a year against ~8% straight-line depreciation.
+ * out — so the upkeep target is this same number on the active plant. It used to be derived from
+ * its own current value (an EMA of itself with no anchor), so whatever it was seeded at is what
+ * it stayed, and capital ARRIVED at ~0.5% of the stock a year against ~8% straight-line
+ * depreciation.
  */
-export function annualDepreciationLocal(grossPPELocal: number, usefulLifeYears: number): number {
-  return grossPPELocal / Math.max(1, usefulLifeYears);
-}
 
 /** Straight-line useful life of a sector's plant — years until a fully-loaded asset base (fabs
  *  and servers, heavy plant and refineries) is fully worn. Lives with the schedule that runs it. */
@@ -115,8 +114,9 @@ export const SECTOR_PPE_USEFUL_LIFE_YEARS: Record<Sector, number> = {
  * The life the schedule runs a firm's plant over — ONE owner of the read. A carrier's plant is
  * its fleet, so its life is the fleet's own (`FREIGHT_ASSET_SPEC`: a ship's 25 years, a truck's
  * 10) — the seed struck the carrier's EBIT at that life while the engine ran it at its sector's
- * 18, two schedules for one fleet. Every other firm's is its sector's. (§3.26-f-ii puts the life
- * on the vintage itself, where a machine's differs from the building's.)
+ * 18, two schedules for one fleet. Every other firm's is its sector's. §3.26-f-ii: the life is
+ * stamped on the vintage when it enters service (`domain/plant.ts`), so this is read at
+ * commissioning and at the seed, and a vintage that changes hands keeps the life it was built with.
  */
 export function usefulLifeYearsOf(firm: { sector: Sector; carrierFleet?: { assets: readonly { mode: FreightMode }[] } }): number {
   const fleet = firm.carrierFleet?.assets;
@@ -124,12 +124,17 @@ export function usefulLifeYearsOf(firm: { sector: Sector; carrierFleet?: { asset
   return SECTOR_PPE_USEFUL_LIFE_YEARS[firm.sector];
 }
 
+/** §5-DYN: mothballed plant draws no upkeep — that saving is most of why a firm mothballs — so the
+ *  upkeep target is the schedule's year-rate on the share of the plant that is online. */
+function activeDepreciationAnnualLocal(i: CapitalProgrammeInputs): number {
+  return i.depreciationAnnualLocal * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
+}
+
 /** What a firm can put behind upkeep this week: operating cash, a small draw, and — only if it is
  *  investment grade — a bridge. A distressed company cannot borrow its way out of deferred upkeep. */
 function maintenanceFundingCapacityLocal(i: CapitalProgrammeInputs): number {
   const weeklyOperatingCashFlow = i.weeklyEbitdaLocal - i.weeklyInterestLocal;
-  const activePpeLocal = i.grossPPELocal * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
-  const weeklyDesired = annualDepreciationLocal(activePpeLocal, i.usefulLifeYears) / 52;
+  const weeklyDesired = activeDepreciationAnnualLocal(i) / 52;
   const borrowing = bridgeCapacityLocal(i, weeklyDesired);
   return Math.max(0, weeklyOperatingCashFlow) + Math.max(0, i.cashLocal) * 0.05 + borrowing;
 }
@@ -148,9 +153,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   // buffer, feels a dear coupon harder and rations cash sooner.
   const patience = i.patienceWeeks ?? PATIENCE_MEDIAN_WEEKS;
   const ra = i.riskAversion ?? 1;
-  // §5-DYN: mothballed plant draws no upkeep — that saving is most of why a firm mothballs.
-  const activePpeLocal = i.grossPPELocal * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
-  const targetMaintenanceCapexLocal = annualDepreciationLocal(activePpeLocal, i.usefulLifeYears);
+  const targetMaintenanceCapexLocal = activeDepreciationAnnualLocal(i);
   const weeklyDesiredMaintenance = targetMaintenanceCapexLocal / 52;
   const weeklyOperatingCashFlow = i.weeklyEbitdaLocal - i.weeklyInterestLocal;
   const borrowingCapacity = bridgeCapacityLocal(i, weeklyDesiredMaintenance);
@@ -223,7 +226,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
     rndExpenseLocal: 0,
     capexLocal: maintenanceCapexLocal + growthCapexLocal,
     payoutPressure,
-    weeklyDepreciationLocal: annualDepreciationLocal(i.grossPPELocal, i.usefulLifeYears) / 52,
+    weeklyDepreciationLocal: i.depreciationAnnualLocal / 52,
   };
 }
 

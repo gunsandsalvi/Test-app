@@ -1,4 +1,5 @@
 
+import { plantNetLocal } from '../../domain/plant';
 import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
 import type { EntityId } from '../../domain/ids';
 import { companyParty, bankPartyOf } from '../../domain/party';
@@ -75,7 +76,7 @@ import { mandateAllocator, assignHouseBanks } from '../../domain/primary-market'
 import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, ItemizedHolding, INDUSTRY_SUBUNITS, DebtTranche } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
-import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
+import { generateInitialCompanies, generatePrivateCompanies, SEED_WEEK, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
 import { openAccount, openingCashOf, stashOpeningCash, stashSeedHouseholdLine, seedGovLadderOf, seedCentralBankBookOf, stashSeedBankBook, seedBankBookOf, seedBankBookLocalOf, openSectorRow } from '../ledger/accounts';
 import { newWireJournal, setActiveWireJournal, setActiveWireWorld, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { wireWorldOf } from '../ledger/wire-world';
@@ -548,7 +549,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const reg = regions[regionId];
       const segs = reg.smePools || [];
       const seeds = generatePrivateFirmSeeds(regionId, segs);
-      const firms = generatePrivateCompanies(regionId, seeds, reg.policyRate, allTickers, allNames);
+      const firms = generatePrivateCompanies(regionId, seeds, reg.policyRate, allTickers, allNames, SEED_WEEK);
 
       // HC3b: the named private tier SELLS. It was held out with a measurement — injecting its
       // supply into markets sized for public supply cost 10-22% of growth — and what changed is
@@ -1248,7 +1249,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           c.employeeCount, SECTOR_OCCUPATION_MIX[c.sector] ?? { GENERAL: 1.0 },
           baseAnnualWageLocal, unitPools, 1.0
         ) * 52;
-        const netPpeLocal = Math.max(0, (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0));
+        const netPpeLocal = plantNetLocal(c.plant, SEED_WEEK); // §3.26-f-ii: the register at the seed week
         capitalChargeLocal += netPpeLocal * costOfCapitalOf(c, riskFreeRateOf(reg)); // §3.26-d: one owner
       });
       if (basePayrollLocal > 0) {
@@ -1331,7 +1332,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   publishFxRatesNow(seedV2, fxPairs);
   const carrierIds = new Set<Ticker>(companies.map(c => c.ticker));
   const carrierNames = new Set<string>(companies.map(c => c.name));
-  const carriers = generateCarriers(regions, seededUnitMassTonnes, seedFxToUsd, carrierIds, carrierNames);
+  const carriers = generateCarriers(regions, seededUnitMassTonnes, seedFxToUsd, carrierIds, carrierNames, SEED_WEEK);
   companies.push(...carriers);
   const seededFreightRates = (() => {
     const { bookings } = seedFreightDemand(regions, seededUnitMassTonnes, seedFxToUsd);
@@ -1353,7 +1354,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       regions[r].tradeBalance = regions[r].exportsLocal - regions[r].importsLocal;
     });
     const clearing = runFreightClearing({
-      carriers, regions, unitMassTonnes: seededUnitMassTonnes, bookings, fxToUsd: seedFxToUsd,
+      carriers, regions, unitMassTonnes: seededUnitMassTonnes, bookings, fxToUsd: seedFxToUsd, week: SEED_WEEK,
     });
     // A lane no carrier serves still needs a price to be evaluated against, or a route can never
     // open: what it would cost to sail is the honest answer until somebody does.
@@ -1739,7 +1740,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // `createInitialGameState` AFTER `openSeededBooks` has issued the rows it walks.
 
   const state: GameState = {
-    currentWeek: 1,
+    currentWeek: SEED_WEEK,
     year: 2026,
     rngSeed: seed,
     rngState: getRngState(),

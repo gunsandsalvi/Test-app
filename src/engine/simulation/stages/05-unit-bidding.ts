@@ -29,7 +29,7 @@ import { patienceWeeksOf, riskAversionOf, expectationFromHistory, adaptiveExpect
 import { TIER_SPEND_MIX } from '../../macro/household-cohorts';
 import { subUnitYieldLossShareOf } from '../../macro/weather';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { SECTOR_PPE_INTENSITY } from '../constants';
+import { plantNetLocal } from '../../../domain/plant';
 import { purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
 import { pay, payByIds, internReason, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
@@ -971,14 +971,8 @@ function buildRegionSupplyPlans(
     // what the capital can make. The line carries its own capital productivity — units a week per
     // dollar of net PP&E, fixed the first time it trades — and capacity is that times the capital
     // it has now. IND1/IND13 already grow PP&E by what was DELIVERED and COMMISSIONED, so
-    // capacity simply reads the result.
-    //
-    // Stage 05 runs BEFORE stage 08 on week 1, so `grossPPELocal` is not set yet: it carries stage
-    // 08's own opening fallback here, or the ratio would be fixed against a one-dollar plant.
-    const grossPPEForCapacityLocal = comp.grossPPELocal
-      ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
-    const netPPEForCapacityLocal = Math.max(1,
-      grossPPEForCapacityLocal - (comp.accumulatedDepreciationLocal ?? (grossPPEForCapacityLocal * 0.45)));
+    // capacity simply reads the result — §3.26-f-ii: off the plant register, at this week.
+    const netPPEForCapacityLocal = Math.max(1, plantNetLocal(comp.plant, week));
     if (!(line.unitsPerNetPpeDollar! > 0)) {
       const openingCapacityUnits =
         ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / referencePriceLocal;
@@ -1083,7 +1077,7 @@ function buildRegionSupplyPlans(
     // "fully staffed" at its old headcount and doubled output nobody worked for; scaled with
     // net PP&E, more plant needs more people to run it — which is what makes hiring the way a
     // grown firm's output actually grows.
-    const staffedShare = Math.max(0, (comp.employeeCount ?? 0) / fullStaffingCapHeads(comp));
+    const staffedShare = Math.max(0, (comp.employeeCount ?? 0) / fullStaffingCapHeads(comp, week));
     // What the plant can make THIS WEEK. A harvest is not a decision: the crop ripens
     // once a year and no price makes it ripen twice. Averages to 1 over the year, so this moves
     // output around the calendar and never adds any.
@@ -1230,7 +1224,7 @@ function buildRegionSupplyPlans(
     // plant, this line's share of it, over the week's units. It was `(0.05 + pd × 0.60) × 1.5`: a
     // stated hurdle, a stated loss-given-default and a stated shape, beside the cost of capital the
     // labour stage already charged the same firm with.
-    const lineCapitalChargeWeeklyLocal = weeklyCapitalChargeLocal(comp, riskFreeRateOf(reg)) * Math.max(0, line.revenueShare ?? 1);
+    const lineCapitalChargeWeeklyLocal = weeklyCapitalChargeLocal(comp, riskFreeRateOf(reg), week) * Math.max(0, line.revenueShare ?? 1);
 
     // SHARE VERSUS MARGIN, expressed only through the real offer price.
     //

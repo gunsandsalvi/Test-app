@@ -77,11 +77,11 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a stock of productive assets held by a named firm | `src/engine2/stage08-back.ts:newGrossPPELocal` | ✅ |
+| A1 a stock of productive assets held by a named firm | `src/domain/plant.ts:PlantVintage` · `src/domain/plant.ts:plantGrossLocal` | ✅ |
 | A2 capacity is a function of the stock | `src/engine/simulation/stages/05-unit-bidding.ts:unitsPerNetPpeDollar` | ✅ |
-| A3 it depreciates — a cost and a reduction | `src/domain/company-week/capital-programme.ts:annualDepreciationLocal` · `src/domain/company-week/income-statement.ts:industrialIncome` | ✅ |
-| A4 capital is specific | `src/engine/simulation/stages/estate-resolution.ts:peersOf` | ⚠️ |
-| A5 its value is what it can produce; it can be written down | `src/domain/company-week/capital-programme.ts:capacityRetirement` | ⚠️ |
+| A3 it depreciates — a cost and a reduction | `src/domain/plant.ts:plantDepreciationAnnualLocal` · `src/domain/company-week/income-statement.ts:industrialIncome` | ✅ |
+| A4 capital is specific | `src/domain/plant.ts:slicePlant` · `src/engine/simulation/stages/estate-resolution.ts:peersOf` | ⚠️ |
+| A5 its value is what it can produce; it can be written down | `src/domain/plant.ts:scrapPlantShare` · `src/domain/company-week/capital-programme.ts:capacityRetirement` | ⚠️ |
 | **B1 invests when the return beats the cost of capital** | `src/domain/company-week/capital-programme.ts:desiredGrowthCapex` · `src/domain/company-week/cost-of-capital.ts:costOfCapitalOf` | ❌ |
 | B1.a the return comes from expected demand and price | `src/engine2/stage08-lanes.ts:categoryShortfall` | ⚠️ |
 | **B1.b the cost of capital comes from the markets** | `src/engine2/front-core.ts:effectiveDebtRate` | ⚠️ |
@@ -96,7 +96,7 @@ checked by `scripts/check-atlas.sh`.
 | C2 paid in cash, out of an account, in a currency | `src/engine2/stage08-back.ts:makeCashPoster` | ✅ |
 | C3 a lag between spend and capacity | `src/domain/industry-registry.ts:commissioningLeadWeeksOf` | ✅ |
 | C4 it is irreversible | `src/domain/company-week/capital-programme.ts:capacityRetirement` | ✅ |
-| D1 K′ = K + I − D, per firm | `src/engine2/stage08-back.ts:newAccumulatedDepreciationLocal` | ✅ |
+| D1 K′ = K + I − D, per firm | `src/domain/plant.ts:commissionVintage` · `src/domain/plant.ts:retireWornPlant` | ✅ |
 | D2 the aggregate stock is Σ(firms) | `src/engine/simulation/stages/estate-resolution.ts:regionalPpeAbsorptionWeeks` | ✅ |
 | D3 a failed firm's capital goes to somebody named | `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` | ✅ |
 | **D4 capacity, output and utilisation reconcile** | — | ❌ |
@@ -171,14 +171,16 @@ life; a profile firm was charged a stated twenty years whatever its sector; the 
 5% and 4.5% of revenue and the filed quarters off 80% of capex; and a carrier was seeded at its
 fleet's life and run at its sector's.
 
-One owner now: `annualDepreciationLocal(gross, life)` — straight-line, a year-rate — and
-`usefulLifeYearsOf(firm)` beside it (a carrier's plant is its fleet, so its life is the fleet's:
-a ship's 25 years, a truck's 10). The P&L takes it on both statement paths (`industrialIncome`,
-`profileIncome`, and the C front core through the opening gross lane), the stock rolls forward by
-its 52nd (`weeklyDepreciationLocal`), the upkeep target is it, `companyNetInvestmentRate` reads it,
-and every seed strikes EBIT off it. The cost against profit and the reduction in the stock are one
-number by construction, which is what A3 asks. What is still one dollar number is the plant itself
-— A4 / A5 below, §3 step 26-f-ii.
+One owner now: `plant.ts:annualDepreciationLocal(cost, life)` — straight-line, a year-rate, per
+vintage — summed over the register by `plantDepreciationAnnualLocal`, with `usefulLifeYearsOf(firm)`
+stamping a vintage's life when it enters service (a carrier's plant is its fleet, so its life is the
+fleet's: a ship's 25 years, a truck's 10). The P&L takes it on both statement paths
+(`industrialIncome`, `profileIncome`, and the C front core through the `depreciationAnnual` seam
+lane), the register wears by it (`wornShareOf`), the upkeep target is it on the online plant,
+`companyNetInvestmentRate` reads it, and every seed strikes EBIT off it. The cost against profit and
+the reduction in the stock are one number by construction, which is what A3 asks — and since
+26-f-ii a fully worn vintage leaves the register, so the charge stops when the plant is gone (the
+scalar carried worn plant in gross for ever and kept charging upkeep and depreciation on it).
 
 ### ❌ B4 — NO OPTION TO WAIT
 
@@ -208,17 +210,27 @@ week and the cash raising next week's cap. E3 says investment is debt-funded *at
 is the link that makes credit growth and investment the same cycle; here they are two decisions that
 communicate through a cash balance with a one-week lag and no shared hurdle. Falls out of B1's step.
 
-### ⚠️ A4 / A5 — PLANT IS ONE DOLLAR NUMBER
+### ⚠️ A4 / A5 — PLANT IS DATED VINTAGES NOW, AND STILL HAS NO KIND
 
-`grossPPELocal` is a scalar. It has no type, no vintage and no location beyond its owner, so A4's
-specificity exists only as an accident of ownership: `sellPlantToBidders` will only sell a dead firm's
-plant to same-region, same-sector peers, and a buyer converts those dollars into capacity at **its
-own** `unitsPerNetPpeDollar` — a steel mill's plant becomes whatever the buyer makes. A5 is the same
-shape: plant is carried at cost less straight-line depreciation and is never revalued against what it
-can produce; the only write-down is `capacityRetirement`'s scrap of a share mothballed for a year.
-**§3 step 26-f-ii** (the decision: plant is dated vintages, each with its own life, and the sheet
-reads them) and **26-f-iii** (the plant wire and W6). 26-f-i closed the schedule half — A3 above —
-and left the shape: the charge is right, but it is still charged on one number.
+*2026-09-05 (§9.26-f-ii):* plant is a register of dated vintages (`domain/plant.ts`): what each
+commissioning cost, the week it entered service, its own life. Gross, net, accumulated depreciation
+and the week's charge are READS of it; `grossPPELocal` and `accumulatedDepreciationLocal` are gone
+from the company and the row store, and so are the `× 0.45` / `× 0.35` worn fractions the seed
+stated — a stationary plant is vintages spread evenly over the life, half worn, built not asserted.
+Every writer is a vintage move: commissioning appends, a scrap retires the OLDEST first
+(`scrapPlantShare`), a spin-off slices every vintage pro rata (`slicePlant`, and its share of the
+construction queue with it — the structuredClone had given both books the whole queue), a merger
+and a resolution concatenate (`mergePlant`, the queue too), and the estate's buyers take slices at
+the cleared price of book — the machines keep their age and life when they change hands.
+
+What A4 still lacks is a KIND. A vintage is specific in time (dated, lived) but carries no record of
+the capital good it was made from, so specificity across firms is still an accident of ownership:
+`sellPlantToBidders` sells to same-region, same-sector peers, a merger moves vintages across sectors,
+and a buyer converts them into capacity at **its own** `unitsPerNetPpeDollar` — a steel mill's plant
+becomes whatever the buyer makes. A5 is the same shape: a vintage is carried at cost less wear and
+never revalued against what it can produce; the only write-down is `capacityRetirement`'s scrap of a
+share mothballed for a year (now the oldest vintages, by vintage). **§3 step 26-f-iv** (the vintage's
+kind: the sub-unit of the capital good it was commissioned from, which the purchase already knows).
 
 ### ❌ D4 / E4 — THE TWO VERIFY NODES ARE NEVER MEASURED
 

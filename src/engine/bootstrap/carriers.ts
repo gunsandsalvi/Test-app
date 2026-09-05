@@ -37,7 +37,8 @@ import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../equ
 import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financing';
 import { generateUniqueTicker, generateUniqueName } from './firms';
 import { carrierEntityId } from '../../domain/entity-keys';
-import { annualDepreciationLocal, usefulLifeYearsOf } from '../../domain/company-week/capital-programme';
+import { usefulLifeYearsOf } from '../../domain/company-week/capital-programme';
+import { seedPlantVintages, plantNetLocal, plantDepreciationAnnualLocal } from '../../domain/plant';
 import type { Ticker } from '../../domain/ids';
 
 /**
@@ -158,7 +159,9 @@ export function generateCarriers(
   unitMassTonnes: Record<string, number>,
   fxToUsd: FxToUsd,
   existingTickers: Set<Ticker>,
-  existingNames: Set<string>
+  existingNames: Set<string>,
+  /** §3.26-f-ii: the week the fleets' registers open. */
+  openingWeek: number
 ): Company[] {
   const { tonnesByLane, bookings } = seedFreightDemand(regions, unitMassTonnes, fxToUsd);
   const allAssets = buildFleetForLanes(tonnesByLane, 0);
@@ -196,14 +199,16 @@ export function generateCarriers(
     ticker: `SEED_CARRIER_${i}`,
     region: c.region,
     carrierFleet: { assets: c.assets, fuelInventoryTonnes: 0, lastWeekTonneNm: 0, lastWeekFreightRevenueLocal: 0 },
+    // no books yet: the seed auction prices the fleet at marginal cost before its plant exists.
+    plant: [],
   })) as unknown as Company[];
-  const clearing = runFreightClearing({ carriers: provisional, regions, unitMassTonnes, bookings, fxToUsd });
+  const clearing = runFreightClearing({ carriers: provisional, regions, unitMassTonnes, bookings, fxToUsd, week: openingWeek });
 
   return staffed.map((c, idx) => buildCarrierCompany(
     c.region, c.assets, idx, regions, unitMassTonnes,
     clearing.carrierRevenueLocal.get(`SEED_CARRIER_${idx}`) ?? 0,
     clearing.carrierTonnesCarried.get(`SEED_CARRIER_${idx}`) ?? 0,
-    existingTickers, existingNames
+    existingTickers, existingNames, openingWeek
   ));
 }
 
@@ -227,7 +232,8 @@ function buildCarrierCompany(
   clearedWeeklyRevenueLocal: number,
   clearedWeeklyTonnesCarried: number,
   existingTickers: Set<Ticker>,
-  existingNames: Set<string>
+  existingNames: Set<string>,
+  openingWeek: number
 ): Company {
   const ticker = generateUniqueTicker(existingTickers);
   const name = generateUniqueName(`${region} Logistics`, 'Industrials', existingNames);
@@ -272,9 +278,12 @@ function buildCarrierCompany(
   const employeeCount = Math.max(1, crewCount);
 
   const ebitda = annualRevenue - annualFuelCost - annualCrewCost;
-  // §3.26-f-i — the one schedule at the fleet's own life (`usefulLifeYearsOf`): the same
-  // number the engine will charge this carrier every week, so it opens in the shape it runs.
-  const depreciation = annualDepreciationLocal(grossPPELocal, usefulLifeYearsOf({ sector: 'Industrials', carrierFleet: { assets } }));
+  // §3.26-f-ii — the fleet is a register of vintages at the hulls' own cost and life, half worn
+  // (a stationary fleet, `seedPlantVintages`), opened at the seed week; the stated 35% is gone.
+  // §3.26-f-i — and its depreciation is the one schedule on that register: the same number the
+  // engine will charge this carrier every week, so it opens in the shape it runs.
+  const plant = seedPlantVintages(grossPPELocal, usefulLifeYearsOf({ sector: 'Industrials', carrierFleet: { assets } }), openingWeek);
+  const depreciation = plantDepreciationAnnualLocal(plant, openingWeek);
   const ebit = ebitda - depreciation;
 
   const policyRate = regions[region].policyRate ?? 0.045;
@@ -307,7 +316,7 @@ function buildCarrierCompany(
   // ladder, equity clearing, default — instead of needing a special case in each. Seeded through
   // the SAME valuation function the market itself prices with, never a multiple.
   const sharesOutstanding = Math.max(1, Math.round(grossPPELocal / 1000));
-  const bookEquityLocal = grossPPELocal * (1 - 0.35) - debtBase + Math.max(0, ebitda) * 0.6;
+  const bookEquityLocal = plantNetLocal(plant, openingWeek) - debtBase + Math.max(0, ebitda) * 0.6;
   const stockPrice = Number(fairValuePerShare({
     annualEarningsLocal: Math.round((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE)),
     sharesOutstanding,
@@ -352,8 +361,7 @@ function buildCarrierCompany(
     growthCapex: 0,
     baselineGrowthCapexToRevenueRatio: 0,
     maintenanceShortfallStreak: 0,
-    grossPPELocal,
-    accumulatedDepreciationLocal: Math.round(grossPPELocal * 0.35),
+    plant,
     executionQuality: 1.0,
     occupationMixDrift: {},
     creditRating: rating,

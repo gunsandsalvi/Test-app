@@ -1,4 +1,5 @@
 import { RegionId, currencyOf } from '../../domain/geography';
+import { plantGrossLocal, plantAccumulatedDepreciationLocal } from '../../domain/plant';
 import { bankSovereignBookLocal } from '../../engine/sovereign-register';
 /**
  * AU · statements — a firm's P&L, balance sheet and cash flow (the latest filed quarter beside
@@ -152,8 +153,8 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     ) : (
       <Statement units="USD millions · the live book (no quarter filed yet)" asOf={asOf} lines={[
         { label: 'Cash', usd: cashOf(ensureV2(world.state), c) },
-        { label: 'Gross plant', usd: c.grossPPELocal },
-        { label: 'Accumulated depreciation', usd: -(c.accumulatedDepreciationLocal ?? 0) },
+        { label: 'Gross plant', usd: plantGrossLocal(c.plant, world.state.currentWeek) },
+        { label: 'Accumulated depreciation', usd: -plantAccumulatedDepreciationLocal(c.plant, world.state.currentWeek) },
         { label: 'Total debt', usd: ladderTotalLocal(ensureV2(world.state), c.id), total: true },
       ]} />
     );

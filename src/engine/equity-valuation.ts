@@ -21,7 +21,7 @@
  */
 
 import { Company } from '../types';
-import { annualDepreciationLocal, usefulLifeYearsOf } from '../domain/company-week/capital-programme';
+import { plantNetLocal, plantDepreciationAnnualLocal } from '../domain/plant';
 
 /** §3.26-d: the premium is stated once, with the firm's cost of capital (`domain/company-week/
  *  cost-of-capital.ts`); re-exported here for the valuation's own readers. */
@@ -91,12 +91,11 @@ export function fairValuePerShare(inputs: EquityValuationInputs): number {
  * grows a product line's physical capacity by, so what a business is worth and what it can make
  * move off one number instead of two.
  */
-export function companyNetInvestmentRate(comp: Company): number {
-  const grossPPE = comp.grossPPELocal ?? 0;
-  const netPPE = Math.max(1, grossPPE - (comp.accumulatedDepreciationLocal ?? 0));
-  // §3.26-f-i: the one schedule, at the firm's own life.
-  const depreciationAnnualLocal = annualDepreciationLocal(grossPPE, usefulLifeYearsOf(comp));
-  return ((comp.growthCapex ?? 0) - depreciationAnnualLocal) / netPPE;
+export function companyNetInvestmentRate(comp: Company, week: number): number {
+  // §3.26-f-ii: the plant is the register, read at `week` — its net, and the one schedule's
+  // year-rate on it.
+  const netPPE = Math.max(1, plantNetLocal(comp.plant, week));
+  return ((comp.growthCapex ?? 0) - plantDepreciationAnnualLocal(comp.plant, week)) / netPPE;
 }
 
 /** Real book equity: the balance sheet's own shareholders' equity where a filing exists. */
@@ -111,7 +110,7 @@ export function companyNetInvestmentRate(comp: Company): number {
  * and 07d had already changed ten stages earlier. A default that silently reads a stale mirror is
  * the shape rule 19 names; making the parameter required is what stops it coming back.
  */
-export function companyBookEquityLocal(comp: Company, cashLocal: number, totalDebtLocal: number): number {
+export function companyBookEquityLocal(comp: Company, cashLocal: number, totalDebtLocal: number, week: number): number {
   // A BANK's book equity is the equity line of its own balance sheet, not a PP&E-and-cash
   // reckoning built for an operating company. Its assets are loans, securities and reserves and
   // its liabilities are deposits and borrowings; the generic formula below sees almost none of
@@ -121,7 +120,7 @@ export function companyBookEquityLocal(comp: Company, cashLocal: number, totalDe
   const latest = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
   const filed = latest?.balanceSheet?.shareholdersEquity;
   if (filed !== undefined && isFinite(filed)) return filed;
-  return (comp.grossPPELocal ?? 0) - (comp.accumulatedDepreciationLocal ?? 0) + cashLocal - totalDebtLocal;
+  return plantNetLocal(comp.plant, week) + cashLocal - totalDebtLocal; // §3.26-f-ii: the register's net
 }
 
 /**
@@ -141,14 +140,16 @@ export function companyFairValuePerShare(
    *  `companyBookEquityLocal`; the default this had was last week's mirror. */
   totalDebtLocal: number,
   /** §3.13-BOOK dIV: the shares in issue, read by the caller off the instrument index. */
-  sharesOutstanding: number
+  sharesOutstanding: number,
+  /** §3.26-f-ii: the week the plant register is read at. */
+  week: number
 ): number {
   if (comp.isDefaulted) return 0;
   return fairValuePerShare({
     annualEarningsLocal: comp.netIncome,
     sharesOutstanding,
-    bookEquityLocal: companyBookEquityLocal(comp, cashLocal, totalDebtLocal),
-    netInvestmentRate: companyNetInvestmentRate(comp),
+    bookEquityLocal: companyBookEquityLocal(comp, cashLocal, totalDebtLocal, week),
+    netInvestmentRate: companyNetInvestmentRate(comp, week),
     riskFreeRate,
     beta: comp.beta ?? 1,
     holderRequiredReturn,

@@ -254,7 +254,7 @@ export function carryRatesByRegion(regions: Record<RegionId, Region>): Record<st
 
 export function runSourcingIntentStage(state: GameState, ctx: WeeklyStepContext): void {
   const fxToUsd = (regionId: RegionId) => getFxToUsd(state.fxPairs, regionId);
-  const marginal = marginalRatesForAllLanes(collectCarriers(state), ctx.updatedRegions, state.unitMassTonnes, fxToUsd);
+  const marginal = marginalRatesForAllLanes(collectCarriers(state), ctx.updatedRegions, state.unitMassTonnes, fxToUsd, ctx.nextWeek);
   const intent = computeSourcingIntent({
     regions: ctx.updatedRegions,
     subUnitIds: Object.values(INDUSTRY_SUBUNITS).flat().map(su => su.unitId),

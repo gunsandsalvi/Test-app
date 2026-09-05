@@ -7,11 +7,12 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planCapitalProgramme, annualDepreciationLocal, usefulLifeYearsOf, commissionCapital, CapitalProgrammeInputs }
+import { planCapitalProgramme, usefulLifeYearsOf, commissionCapital, CapitalProgrammeInputs }
   from '../src/domain/company-week/capital-programme';
+import { annualDepreciationLocal } from '../src/domain/plant';
 
 const healthy = (over: Partial<CapitalProgrammeInputs> = {}): CapitalProgrammeInputs => ({
-  grossPPELocal: 1_200_000_000, accumulatedDepreciationLocal: 540_000_000, usefulLifeYears: 12,
+  depreciationAnnualLocal: annualDepreciationLocal(1_200_000_000, 12),
   weeklyEbitdaLocal: 4_000_000, weeklyInterestLocal: 500_000,
   cashLocal: 200_000_000, currentLiabilitiesLocal: 300_000_000,
   annualRevenueLocal: 1_000_000_000, newRevenueLocal: 1_000_000_000,
@@ -24,9 +25,9 @@ const healthy = (over: Partial<CapitalProgrammeInputs> = {}): CapitalProgrammeIn
 });
 
 test('maintenance is anchored to the plant, not to its own last value', () => {
-  // THE DEFECT: the target must move with gross PP&E and useful life and with nothing else.
+  // THE DEFECT: the target must move with the plant's own charge and with nothing else.
   assert.equal(annualDepreciationLocal(1_200_000_000, 12), 100_000_000);
-  const doubled = planCapitalProgramme(healthy({ grossPPELocal: 2_400_000_000 }));
+  const doubled = planCapitalProgramme(healthy({ depreciationAnnualLocal: annualDepreciationLocal(2_400_000_000, 12) }));
   assert.equal(doubled.targetMaintenanceCapexLocal, 200_000_000);
   // And it does NOT move when only the prior value moves.
   const a = planCapitalProgramme(healthy({ priorMaintenanceCapexLocal: 1 }));
@@ -36,8 +37,8 @@ test('maintenance is anchored to the plant, not to its own last value', () => {
 
 test('§3.26-f-i: the P&L charge and the stock\'s reduction are one schedule', () => {
   // A3: depreciation is a real cost against profit AND a real reduction in the stock — the SAME
-  // number. The programme's weekly reduction is the schedule's year-rate sliced by 52, and the
-  // upkeep target is the year-rate itself; the P&L takes the year-rate (income-statement.test).
+  // number. The programme's weekly reduction is the register's year-rate sliced by 52, and the
+  // upkeep target is the year-rate itself on the online plant; the P&L takes the year-rate.
   const schedule = annualDepreciationLocal(1_200_000_000, 12);
   const programme = planCapitalProgramme(healthy());
   assert.equal(programme.weeklyDepreciationLocal, schedule / 52);

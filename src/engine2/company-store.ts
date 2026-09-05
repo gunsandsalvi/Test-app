@@ -47,8 +47,8 @@ const F64_FIELDS = [
   'antitrustWeeksAboveThreshold', 'employeeCount', 'previousEmployeeCount', 'baselineEmployeeCount',
   'baselineNetPpeLocal', 'payrollWeeklyLocal', 'realInputConsumptionCostWeeklyLocal', 'ebitda',
   'baselineEbitdaMargin', 'ebit', 'netIncome', 'eps', 'sharesOutstanding', 'cash', 'totalDebt',
-  'currentLiabilities', 'capex', 'previousCapex', 'maintenanceCapex', 'growthCapex', 'grossPPELocal',
-  'accumulatedDepreciationLocal', 'capexCommissionedLastWeekLocal', 'rndExpense',
+  'currentLiabilities', 'capex', 'previousCapex', 'maintenanceCapex', 'growthCapex',
+  'capexCommissionedLastWeekLocal', 'rndExpense',
   'baselineGrowthCapexToRevenueRatio', 'maintenanceShortfallStreak', 'executionQuality',
   // clocks / market
   'earningsWeekModulo', 'lastEarningsReportWeek', 'lastEarningsSurprisePct', 'mmfSharesLocal',

@@ -3,6 +3,7 @@
  *  financial. Product lines, debt tranches, the three statements, credit, and the real input and
  *  output inventories it holds. No parallel firm type anywhere (§7.33). */
 
+import { plantNetLocal } from './plant';
 import { InstrumentId, type EntityId, type Ticker } from './ids';
 import { RegionId } from './geography';
 import { defect } from './defect';
@@ -352,8 +353,15 @@ export interface Company {
   previousCapex?: number;
   maintenanceCapex: number;
   growthCapex: number;
-  grossPPELocal: number;
-  accumulatedDepreciationLocal: number;
+  /**
+   * §3.26-f-ii — THE PLANT, as dated vintages (`domain/plant.ts`): what each commissioning cost,
+   * the week it entered service, its own life. Gross, net, accumulated depreciation and the
+   * week's charge are READS of it at the week asked (`plantGrossLocal`, `plantNetLocal`,
+   * `plantAccumulatedDepreciationLocal`, `plantDepreciationAnnualLocal`); the two scalars they
+   * replace were kept in step by hand by six writers and could not be told apart when they drifted.
+   * Oldest first; every writer returns a new array.
+   */
+  plant: import('./plant').PlantVintage[];
   /** IND1: capital goods that actually ARRIVED last week, at landed cost. Real net investment. */
   /**
    * IND13 — ASSETS UNDER CONSTRUCTION: capital that has arrived and is not yet plant.
@@ -689,10 +697,10 @@ export function banksOf(companies: readonly Company[], region?: RegionId): Compa
  * against — recorded at first read, the `unitsPerNetPpeDollar` pattern — so IND1's delivered
  * capex raises the ceiling and depreciation lowers it, symmetrically.
  */
-export function fullStaffingCapHeads(c: Company): number {
+export function fullStaffingCapHeads(c: Company, week: number): number {
   const baselineHeads = c.baselineEmployeeCount ?? 0;
   if (!(baselineHeads > 0)) return Math.max(1, c.employeeCount ?? 1);
-  const netPpeLocal = (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0);
+  const netPpeLocal = plantNetLocal(c.plant, week);
   // §5-PROD: a firm that has LEARNED runs the same plant with fewer people — the ceiling is
   // heads-per-plant at the firm's own current unit-labour productivity, not its baseline's.
   const learning = Math.max(1e-6, c.learningMultiplier ?? 1);

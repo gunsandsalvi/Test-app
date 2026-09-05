@@ -42,7 +42,8 @@ import { defect } from '../domain/defect';
 import { setClearedPrice, clearedPriceOf } from './prices';
 import { rowSpreadBps, issuerSpreadAtOnCurve } from '../engine/credit-price';
 import { partyId } from '../engine/ledger/party';
-import { planCapitalProgramme, capacityRetirement, annualDepreciationLocal } from '../domain/company-week/capital-programme';
+import { planCapitalProgramme, capacityRetirement, usefulLifeYearsOf } from '../domain/company-week/capital-programme';
+import { commissionVintage, retireWornPlant, scrapPlantShare, plantGrossLocal, plantAccumulatedDepreciationLocal } from '../domain/plant';
 import { learningUpdate, seedCumulativeUnits } from '../domain/company-week/learning';
 import { creditMetrics, revolverDrawLocal, isInDefault } from '../domain/company-week/credit-standing';
 import { callEconomics, callableAmountLocal } from '../domain/company-week/debt-ladder';
@@ -149,15 +150,14 @@ interface CapitalBlockOut {
   rndExpenseLocal: number;
   occupationMixDrift: NonNullable<Company['occupationMixDrift']>;
   capexLocal: number;
-  grossPPELocal: number;
-  accumulatedDepreciationLocal: number;
   weeklyDepreciationLocal: number;
   payoutPressure: number;
   /** §7.317 step 1.3 — the block's comp writes, returned as data; the caller applies them at
    *  the original write points (the future post pass). All-or-none per the seeding rule. */
   learningWrites?: { cumulativeUnits: number; multiplier: number; growthAnnual: number };
   retirementWrites: { idleStreakWeeks: number; mothballedPpeShare: number; mothballedStreakWeeks: number };
-  scrapWrites?: { grossPPELocal: number; accumulatedDepreciationLocal: number };
+  /** §3.26-f-ii — the share of the plant to scrap, oldest vintages first; a register write applied main-side. */
+  scrapWrites?: { scrappedShare: number };
 }
 
 function runCapitalBlock(row: number, L: BackLanes, args: {
@@ -166,7 +166,6 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   weeklyInterest: number;
   effectiveDebtRate: number;
   newExecutionQuality: number;
-  capexCommissionedThisWeekLocal: number;
   nextWeek: number;
   priorOccupationMixDrift: Company['occupationMixDrift'];
   homeBankId: EntityId | undefined;
@@ -176,15 +175,13 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
   bridgeMarginBps: number;
 }): CapitalBlockOut {
   const { newEbitda, newRevenue, weeklyInterest, effectiveDebtRate, newExecutionQuality,
-    capexCommissionedThisWeekLocal, nextWeek, priorOccupationMixDrift, homeBankId,
+    nextWeek, priorOccupationMixDrift, homeBankId,
     bridgeMarginBps } = args;
   // §7.317 step 1.3 — THE CAPITAL CORE READS LANES, NOT THE OBJECT. Every `x ?? d` the object
   // read had becomes `Number.isNaN(lane) ? d : lane` on the same value; the scrap/learning
   // read-after-write chains thread locals carrying exactly the values the object carried.
-  const usefulLifeYearsForCapex = L.usefulLifeYears[row];
-  const g0 = L.grossPPELocal[row];
-  const a0 = L.accumulatedDepreciationLocal[row];
-  const grossPPEForCapex = Number.isNaN(g0) ? L.ppeDefaultLocal[row] : g0;
+  // §3.26-f-ii — the plant is the register's read at the week's opening (stage08-lanes).
+  const grossPPEForCapex = L.plantGrossLocal[row];
   const addressableGrowthAnnual = L.addressableGrowthAnnual[row];
   const categoryShortfall = L.categoryShortfall[row];
   const avgCompetitiveness = L.avgCompetitiveness[row];
@@ -237,24 +234,15 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
       priorMothballedShare: Number.isNaN(L.mothballedPpeShare[row]) ? 0 : L.mothballedPpeShare[row],
       priorMothballedStreakWeeks: Number.isNaN(L.mothballedStreakWeeks[row]) ? 0 : L.mothballedStreakWeeks[row],
     });
-  let scrapWrites: CapitalBlockOut['scrapWrites'];
-  // the object chain: after a scrap both fields are DEFINED; without one they keep their
-  // seam values (possibly undefined). gCur/aCur carry NaN for "still undefined".
-  let gCur = g0;
-  let aCur = a0;
-  if (retirement.scrappedShare > 0) {
-    const scrappedGrossLocal = grossPPEForCapex * retirement.scrappedShare;
-    const scrappedDepLocal = (Number.isNaN(a0) ? grossPPEForCapex * 0.45 : a0) * retirement.scrappedShare;
-    gCur = Math.max(0, grossPPEForCapex - scrappedGrossLocal);
-    aCur = Math.max(0, (Number.isNaN(a0) ? 0 : a0) - scrappedDepLocal);
-    scrapWrites = { grossPPELocal: gCur, accumulatedDepreciationLocal: aCur };
-  }
+  // §3.26-f-ii — a scrap is a register write (the oldest vintages first), applied main-side by
+  // `applyCapCompWrites`; this core is lane-only. The week's programme runs on the opening
+  // register and the scrap lands at the close — one week, the model's clock.
+  const scrapWrites: CapitalBlockOut['scrapWrites'] = retirement.scrappedShare > 0
+    ? { scrappedShare: retirement.scrappedShare } : undefined;
 
   const programme = planCapitalProgramme({
-    grossPPELocal: grossPPEForCapex,
+    depreciationAnnualLocal: L.plantDepreciationAnnualLocal[row],
     mothballedPpeShare: retirement.mothballedShare,
-    accumulatedDepreciationLocal: Number.isNaN(aCur) ? (grossPPEForCapex * 0.45) : aCur,
-    usefulLifeYears: usefulLifeYearsForCapex,
     weeklyEbitdaLocal: newEbitda / 52,
     weeklyInterestLocal: weeklyInterest,
     cashLocal: L.cashLocal[row],
@@ -334,14 +322,9 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
 
   const newCapex = L.isBanksSector[row] === 1 ? 0 : (newMaintenanceCapex + newGrowthCapex);
 
-  // PP&E roll-forward (IND13: grows by what was COMMISSIONED; the lag is the capacity cycle).
-  const priorGrossPPE = Number.isNaN(gCur) ? L.ppeDefaultLocal[row] : gCur;
-  const priorAccumulatedDepreciation = Number.isNaN(aCur) ? (priorGrossPPE * 0.45) : aCur;
-  // ONE owner of book depreciation: the capital programme's straight-line rule (§6.1's
-  // "three depreciations in 08" row — this was the second copy of the same formula).
+  // §3.26-f-ii — the register IS the roll-forward (what wore out leaves it, what entered service
+  // joins it), written at the rebuild; nothing here rolls a scalar it could disagree with.
   const weeklyDepreciation = programme.weeklyDepreciationLocal;
-  const newGrossPPELocal = priorGrossPPE + capexCommissionedThisWeekLocal;
-  const newAccumulatedDepreciationLocal = Math.min(newGrossPPELocal, priorAccumulatedDepreciation + weeklyDepreciation);
   return {
     maintenanceCapexLocal: newMaintenanceCapex,
     maintenanceShortfallStreak: newMaintenanceShortfallStreak,
@@ -351,8 +334,6 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
     rndExpenseLocal: newRndExpense,
     occupationMixDrift: newOccupationMixDrift,
     capexLocal: newCapex,
-    grossPPELocal: newGrossPPELocal,
-    accumulatedDepreciationLocal: newAccumulatedDepreciationLocal,
     weeklyDepreciationLocal: weeklyDepreciation,
     payoutPressure: programme.payoutPressure,
     learningWrites,
@@ -715,7 +696,7 @@ function runCashWalk(args: {
 /** §7.325 W1 — core-A's comp writes, returned as data by the capital core and applied here.
  *  Serial/barrier callers apply them inside A (the original write points); a worker A defers
  *  them, and the main thread applies each firm's writes in row order before the redemptions. */
-export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapitalBlock>, L: BackLanes, row: number): void {
+export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapitalBlock>, L: BackLanes, row: number, nextWeek: number): void {
   if (cap.learningWrites) {
     comp.cumulativeOutputUnits = cap.learningWrites.cumulativeUnits;
     comp.learningMultiplier = cap.learningWrites.multiplier;
@@ -729,10 +710,8 @@ export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapi
   comp.idleStreakWeeks = cap.retirementWrites.idleStreakWeeks;
   comp.mothballedPpeShare = cap.retirementWrites.mothballedPpeShare;
   comp.mothballedStreakWeeks = cap.retirementWrites.mothballedStreakWeeks;
-  if (cap.scrapWrites) {
-    comp.grossPPELocal = cap.scrapWrites.grossPPELocal;
-    comp.accumulatedDepreciationLocal = cap.scrapWrites.accumulatedDepreciationLocal;
-  }
+  // §3.26-f-ii — the scrap retires the oldest vintages first, off the register.
+  if (cap.scrapWrites) comp.plant = scrapPlantShare(comp.plant, cap.scrapWrites.scrappedShare, nextWeek).plant;
 }
 
 /** §7.325 W2 — the fields a worker STRIPS from its A result before postMessage (functions,
@@ -888,9 +867,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
       const profileModule = PROFILE_REGISTRY[profileKey]!;
       // §5-TAXR — the same opening-stock attributes the front pass derives; a profile firm's
       // tax fields are untouched by the pass, so this rebuild reads the same values.
-      const openingGrossPpeLocal = Number.isNaN(L8.grossPPELocal[row]) ? L8.ppeDefaultLocal[row] : L8.grossPPELocal[row];
-      const openingNetPpeLocal = Math.max(0,
-        openingGrossPpeLocal - (Number.isNaN(L8.accumulatedDepreciationLocal[row]) ? openingGrossPpeLocal * 0.45 : L8.accumulatedDepreciationLocal[row]));
+      const openingNetPpeLocal = L8.plantNetLocal[row];
       const taxAttrs = {
         taxBasisPpeLocal: comp.taxBasisPpeLocal ?? openingNetPpeLocal,
         usefulLifeYears: L8.usefulLifeYears[row],
@@ -921,9 +898,9 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
         inputCostAnnualLocal: profileInputCostLocal,
         payrollAnnualLocal: weeklyPayrollLocal * 52,
         profileCostsAnnualLocal: pnl.profileCostsAnnualLocal,
-        // §3.26-f-i — the one schedule, on the same opening plant and life the capital core
-        // rolls the stock forward with. It was a stated twenty years, whatever the sector.
-        depreciationAnnualLocal: annualDepreciationLocal(openingGrossPpeLocal, L8.usefulLifeYears[row]),
+        // §3.26-f-i/ii — the one schedule on the opening register, the lane the capital core
+        // reads too. It was a stated twenty years, whatever the sector.
+        depreciationAnnualLocal: L8.plantDepreciationAnnualLocal[row],
         annualInterestLocal: annualInterest,
         taxRate,
         sharesOutstanding: L8.sharesOutstanding[row],
@@ -945,7 +922,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // maintenance credit event is emitted at its original sequence point.
     const cap = runCapitalBlock(row, d.backLanes, {
       newEbitda, newRevenue, weeklyInterest,
-      effectiveDebtRate, newExecutionQuality, capexCommissionedThisWeekLocal, nextWeek,
+      effectiveDebtRate, newExecutionQuality, nextWeek,
       priorOccupationMixDrift: L8.occupationMixDrift[row],
       homeBankId: L8.homeBankId[row],
       // §3.13: what this borrower's own bonds say a five-year claim on it costs. A borrower with
@@ -954,7 +931,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
         v2, updatedRegions[L8.region[row]], L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS
       )?.spreadBps ?? L8.facilityMarginBps[row],
     });
-    if (comp) applyCapCompWrites(comp, cap, L8, row);
+    if (comp) applyCapCompWrites(comp, cap, L8, row, nextWeek);
     const newMaintenanceCapex = cap.maintenanceCapexLocal;
     const newMaintenanceShortfallStreak = cap.maintenanceShortfallStreak;
     const weeklyDebtFundedPortion = cap.debtFundedMaintenanceLocal;
@@ -963,8 +940,6 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     const newRndExpense = cap.rndExpenseLocal;
     const newOccupationMixDrift = cap.occupationMixDrift;
     const newCapex = cap.capexLocal;
-    const newGrossPPELocal = cap.grossPPELocal;
-    const newAccumulatedDepreciationLocal = cap.accumulatedDepreciationLocal;
     const weeklyDepreciation = cap.weeklyDepreciationLocal;
     const programme = { payoutPressure: cap.payoutPressure };
 
@@ -1067,7 +1042,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
     // line, and default only when both are gone. The full sweep decision at the bottom still
     // runs — by then cash is at or below the buffer, so it cannot double-redeem.
   if (S08K_PROF) s08k.cash += performance.now() - __k1;
-  return { annualInterest, bankCredit, cap, capexCommissionedThisWeekLocal, carryingCostLocal, cash, cashLedger, costDriversLocal, effectiveDebtRate, facilityInterestWeeklyLocal, maintenanceFundingTranches, measuredInputConsumptionWeeklyLocal, newAccumulatedDepreciationLocal, newBaselineDividendYield, newCapex, newCoverage, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPELocal, newGrowthCapex, newInputSupplyConstraintFactor, newLeverage, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRecentFulfillmentEMA, newRecurringBaseLocal, newRevenue, newRndExpense, newTotalDebt, post, sec, stillUnderConstruction, targetProductionLocal, taxPaidAnnualRateLocal, updatedProductLines, weeklyDepreciation, weeklyInterest, weeklyPayrollLocal };
+  return { annualInterest, bankCredit, cap, capexCommissionedThisWeekLocal, carryingCostLocal, cash, cashLedger, costDriversLocal, effectiveDebtRate, facilityInterestWeeklyLocal, maintenanceFundingTranches, measuredInputConsumptionWeeklyLocal, newBaselineDividendYield, newCapex, newCoverage, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrowthCapex, newInputSupplyConstraintFactor, newLeverage, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRecentFulfillmentEMA, newRecurringBaseLocal, newRevenue, newRndExpense, newTotalDebt, post, sec, stillUnderConstruction, targetProductionLocal, taxPaidAnnualRateLocal, updatedProductLines, weeklyDepreciation, weeklyInterest, weeklyPayrollLocal };
 }
 
 /** §7.321 the BARRIER: the liquidity redemption against the regional book, first-come in row
@@ -1799,7 +1774,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     }
 
     const financing = decideCorporateFinancing({
-      comp,
+      comp, week: nextWeek,
       marketCapLocal: L8.stockPrice[row] * L8.sharesOutstanding[row],
       costOfDebtAnnual: costOfNewDebtAnnual,
       effectiveTaxRate: reg.effectiveTaxRate,
@@ -1948,10 +1923,14 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
     }
     const core = pre ?? runBackCore(comp, row, d);
-    const { annualInterest, bondCallPremiumLocal, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, capexCommissionedThisWeekLocal, cashLedger, costDriversLocal, debtIssuanceThisWeek, debtRepaymentThisWeek, isDefaulted, loanCallPremiumLocal, measuredInputConsumptionWeeklyLocal, newAccumulatedDepreciationLocal, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrossPPELocal, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseLocal, newRevenue, newRndExpense, newTotalDebt, preActionFixedLocal, preActionFloatingLocal, preFaceByRow, rowList, sec, stillUnderConstruction, targetProductionLocal, updatedProductLines, weeklyDepreciation, weeklyPayrollLocal, post, cash } = core;
+    const { annualInterest, bondCallPremiumLocal, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, capexCommissionedThisWeekLocal, cashLedger, costDriversLocal, debtIssuanceThisWeek, debtRepaymentThisWeek, isDefaulted, loanCallPremiumLocal, measuredInputConsumptionWeeklyLocal, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseLocal, newRevenue, newRndExpense, newTotalDebt, preActionFixedLocal, preActionFloatingLocal, preFaceByRow, rowList, sec, stillUnderConstruction, targetProductionLocal, updatedProductLines, weeklyDepreciation, weeklyPayrollLocal, post, cash } = core;
     const L8 = d.backLanes;
     const reg = updatedRegions[L8.region[row]];
     const weekUpdate = companyUpdates[L8.ticker[row]];
+    // §3.26-f-ii — THE REGISTER IS THE ROLL-FORWARD: what wore out this week leaves it, what
+    // entered service joins it as this week's vintage at the firm's own life (the scrap, if any,
+    // already landed through `applyCapCompWrites`). Gross, net and the charge are reads of it.
+    const newPlant = commissionVintage(retireWornPlant(comp.plant, nextWeek).plant, capexCommissionedThisWeekLocal, nextWeek, usefulLifeYearsOf(comp));
     const TS = v2.tranches;
     const update = weekUpdate;
     let buybacksThisWeek = buybacksFromCore;
@@ -2088,7 +2067,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     if (L8.publiclyListed[row] === 1 && excessCash > 5 && debtToEquity < 0.6 && L8.sharesOutstanding[row] > 10 && !isDefaulted && newStockPrice > 0) {
       // §3.18-ii: the firm's REAL book equity per share (`equity-valuation.ts:companyBookEquityLocal`)
       // — not an invented `cash + 0.8 × revenue − debt` with a 0.5 floor.
-      const estimatedBookValuePerShare = companyBookEquityLocal(comp, cash.usd, newTotalDebt) / L8.sharesOutstanding[row];
+      const estimatedBookValuePerShare = companyBookEquityLocal(comp, cash.usd, newTotalDebt, nextWeek) / L8.sharesOutstanding[row];
       // "Cheap" against the same arithmetic the market itself prices this company with (07e /
       // equity-valuation.ts), at the board's own cost of capital — not against a sector P/E
       // table. A board that buys back stock is taking the other side of that auction, so it has
@@ -2099,7 +2078,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         reg.zeroRates?.tenor10Y ?? reg.policyRate,
         REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
         newTotalDebt,
-        L8.sharesOutstanding[row]
+        L8.sharesOutstanding[row], nextWeek
       );
       const isCheap = newStockPrice < estimatedBookValuePerShare || newStockPrice < boardFairValuePerShare * 0.95;
       const buybackShare = isCheap ? 0.60 : 0.25;
@@ -2190,8 +2169,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         debtIssuanceThisWeek,
         debtRepaymentThisWeek,
         buybacksThisWeek,
-        newGrossPPELocal,
-        newAccumulatedDepreciationLocal,
+        plantGrossLocal(newPlant, nextWeek),
+        plantAccumulatedDepreciationLocal(newPlant, nextWeek),
         weeklyDepreciation * 13,
         costDriversLocal,
         newShortTermDebtLocal,
@@ -2312,7 +2291,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.growthCapex = round1(newGrowthCapex);
 
-    comp.grossPPELocal = round1(newGrossPPELocal);
+    comp.plant = newPlant;
 
       // IND1: read by stage 05's capacity growth — real net investment is what arrived.
       // IND13 — the plant grew by what entered service. Both lines are named on the rebuild
@@ -2321,8 +2300,6 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     comp.capexCommissionedLastWeekLocal = round1(capexCommissionedThisWeekLocal);
 
     comp.assetsUnderConstruction = stillUnderConstruction;
-
-    comp.accumulatedDepreciationLocal = round1(newAccumulatedDepreciationLocal);
 
     comp.rndExpense = round1(newRndExpense);
 

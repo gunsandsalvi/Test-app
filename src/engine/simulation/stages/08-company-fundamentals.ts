@@ -223,7 +223,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // world.
   // §7.317 steps 1.1-1.2 — the back seam: one pass reads every firm's capital-block inputs
   // into typed lanes before the shard loop; the core reads rows, not objects.
-  const backLanes = buildBackLanes(state.companies, updatedRegions, companyUpdates, new Set(state.institutionalEntities.map(e => e.id)), ctx.carrierFreightRevenue, ctx.channelMarginRevenue, companyStore, v2);
+  const backLanes = buildBackLanes(state.companies, updatedRegions, companyUpdates, new Set(state.institutionalEntities.map(e => e.id)), ctx.carrierFreightRevenue, ctx.channelMarginRevenue, companyStore, v2, nextWeek);
   const backDeps: import('../../../engine2/stage08-back').BackKernelDeps = {
     state, ctx, v2, F, backLanes, nextWeek, currentWeekMod13, updatedRegions, companyUpdates, entityById,
     regionMedianRevenueLocal, systemicStressFactorGlobal, retainCashLedger, mmfSweepBooks,
@@ -451,7 +451,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
               // value, closures on the REAL ctx, pass-throughs from main's own F.
               aRes[i] = rebuildBackCoreA(cross, i, backDeps);
               streamAfterA[i] = F.rngAfter[i]; // non-profile A is draw-free (§7.317)
-              applyCapCompWrites(companyRows[i], aRes[i]!.cap, backLanes, i);
+              applyCapCompWrites(companyRows[i], aRes[i]!.cap, backLanes, i, nextWeek);
             }
           }
         }

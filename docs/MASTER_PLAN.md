@@ -551,24 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-f-ii. **PLANT IS DATED VINTAGES, and the sheet reads them.** *(26-f's decision.)*
-    `assetsUnderConstruction` already carries capital as `{valueLocal, entersServiceWeek}[]`, and
-    what enters service keeps that shape: `Company.plant: {costLocal, enteredServiceWeek,
-    usefulLifeYears}[]` — one vintage per commissioning, each wearing straight-line from its own
-    service week over its own life (a ship's 25 years and a truck's 10, `FREIGHT_ASSET_SPEC`;
-    a machine's, its sector's), retired from the register when fully worn. `grossPPELocal` and
-    `accumulatedDepreciationLocal` become READS of the register (`plantGrossLocal`,
-    `plantNetLocal`) and leave the company and the row store; the `× 0.45` / `× 0.35`
-    accumulated-depreciation defaults (`front-core.ts:418`, `stage08-back.ts` ×4,
-    `05-unit-bidding.ts:981`, `companyGenerator.ts:33/1293`, `carriers.ts:354`) die into the
-    seed's own age structure — a stationary plant replaced at a constant rate is vintages spread
-    evenly over the life, which IS half worn: a derivation, not a fraction. Every writer becomes
-    a vintage move: commissioning appends; scrap (`capacityRetirement`) retires the oldest first;
-    a spin-off slices every vintage pro rata; a merger and a bank resolution concatenate; the
-    estate offers vintages and the bidders take them at the cleared price of book. Rule §5's
-    row-5 lesson applies: the company rebuild's fixed field list must name `plant` in the same
-    commit, or the register is dropped weekly and every reader sees an empty plant.
-    the-capital-programme A4/A5 ⚠️→✅, D1 re-cited.
 26-f-iii. **THE PLANT WIRE, and W6.** *(the wire follows the decision.)* A `PLANT` asset kind in
     `ASSET_KINDS` (`wire.ts:22` carries `HOUSE` and no plant); every move of a vintage between
     parties — the estate's sale, a merger, a spin-off, a resolution — is a wire of that kind at
@@ -576,7 +558,19 @@ written from here):
     on the journal the way `goods-ledger.ts` records production and scrappage. `W6 wires
     reproduce the plant` (`audit/wires.ts`): per firm, Δ(gross plant) = commissioned − retired −
     scrapped + wires in − wires out, at W4's dust rule (a share of the gross flow, never of the
-    stock). Closes 11e's "the seed and every birth assign `grossPPELocal` with no wire".
+    stock) — and the construction queue is capital not yet plant, so a lot that arrives, moves at
+    a merger or a spin-off (26-f-ii moves it), or is commissioned is a leg of the same identity.
+    Closes 11e's "the seed and every birth assign `grossPPELocal` with no wire".
+26-f-iv. **A VINTAGE HAS A KIND.** (the-capital-programme A4, A5.) A vintage is specific in
+    time — dated, lived — and in nothing else: `PlantVintage` carries no record of the capital
+    good it was made from, so a merger moves a steel mill's vintages into a software firm and
+    the buyer makes software with them at its own `unitsPerNetPpeDollar`, and the estate's
+    same-sector rule (`peersOf`) is the only specificity there is. The purchase already knows the
+    good (`05-unit-bidding.ts:addInputInventory` and `goods-arrival.ts` push the lot from a named
+    CAPITAL_GOOD sub-unit): stamp it on the lot and the vintage, seed the register from the
+    sector's capital-goods mix, and let capacity per line read the vintages whose kind serves
+    it — which is what makes misallocation possible and costly (A4), and gives A5 a value that
+    is what the vintage can produce rather than what it cost.
 26b. **Housing clears.** `housingStockUSD`, a median price and an ownership rate are an
     aggregate marked by formula — dwellings have no owners and no price anyone struck, which
     rule 3 does not allow and no step currently covers. Households, builders and estates clear
@@ -1378,6 +1372,37 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-f-ii — PLANT IS DATED VINTAGES, AND THE SHEET READS THEM.** The decision 26-f asked for.
+  `Company.plant: PlantVintage[]` (`domain/plant.ts`): one vintage per commissioning — what it
+  cost, the week it entered service, its own life (`usefulLifeYearsOf` at commissioning: a ship's
+  25 years, a fab's 7) — wearing straight-line from its own service week and LEAVING the register
+  when fully worn, so the charge stops when the plant is gone (the scalar carried worn plant in
+  gross for ever and charged upkeep and depreciation on it). Gross, net, accumulated depreciation
+  and the year's charge are READS (`plantGrossLocal`, `plantNetLocal`,
+  `plantAccumulatedDepreciationLocal`, `plantDepreciationAnnualLocal`) at the week asked;
+  `grossPPELocal` and `accumulatedDepreciationLocal` are gone from the company, the row store
+  (`company-store.ts`), the back lanes (`ppeDefaultLocal` with them) and the seam — the front
+  core ships the register's charge as the `depreciationAnnual` lane (JS and C), and every reader
+  (twenty-two sites: capacity, staffing, the capital charge, the insurable base, book equity, the
+  net-investment rate, the estate, the freight floor, the harness, the UI) takes the week. Every
+  writer is a vintage move: the rebuild retires what wore out and appends what entered service
+  (`retireWornPlant`, `commissionVintage`); a scrap retires the OLDEST first (`scrapPlantShare`,
+  returned by the lane-only core as a share and applied main-side); a spin-off slices every
+  vintage pro rata (`slicePlant`) and its share of the construction queue with it — the
+  structuredClone had given both books the whole queue, capital minted twice; a merger and a bank
+  resolution concatenate (`mergePlant`), and the target's construction queue moves too (an
+  acquired shell never commissioned it: capital that arrived and then never existed); the estate
+  re-reads the dead firm's register weekly, its buyers take slices at the cleared price of book
+  (the machines keep their age and life), and the last week abandons what no bidder took. The
+  seed's `× 0.45` / `× 0.35` worn fractions and the six `?? × 0.45` fallbacks are gone: a
+  stationary plant is vintages spread evenly over the life, half worn (`seedPlantVintages`, at
+  `SEED_WEEK`; a birth's carve-out at its own week), and a carrier's fleet is a register at the
+  hulls' own cost and life. the-capital-programme A1/A3/D1 re-cited to `plant.ts`; A4/A5 stay ⚠️
+  honestly — a vintage is specific in time and in nothing else — and 26-f-iv (its KIND) is
+  inserted after 26-f-iii. `test/plant.test.ts` (half worn by construction; gross = net +
+  accumulated at every week; the charge stops when a vintage is worn; scrap takes the oldest;
+  a slice conserves cost and age). Gates green; no run (rule 11).
 
 **26-f-i — ONE DEPRECIATION SCHEDULE: THE P&L CHARGES WHAT THE PLANT WEARS.** (26-f's first
   slice; rule 10 split into 26-f-i/ii/iii, the other two in §3.) Depreciation was six derivations

@@ -579,7 +579,7 @@ export function runPeLifecycleForRegion(
         // market a discount.
         const patientValuePerShare = companyFairValuePerShare(
           listedTarget, cashOf(ctx.v2, listedTarget), riskFreeRate, PATIENT_HOLDER_REQUIRED_RETURN,
-          ladderTotalLocal(ctx.v2, listedTarget.id), issuedSharesOf(ctx.v2, listedTarget.id)
+          ladderTotalLocal(ctx.v2, listedTarget.id), issuedSharesOf(ctx.v2, listedTarget.id), ctx.nextWeek
         );
         const takeoutPricePerShare = Math.max(listedTarget.stockPrice, patientValuePerShare);
         const takeoutValueLocal = takeoutPricePerShare * issuedSharesOf(ctx.v2, listedTarget.id);
@@ -837,7 +837,7 @@ export function runFirmBirthsForRegion(
   ctx: WeeklyStepContext,
   nextWeek: number,
   generate: (regionId: RegionId, seeds: import('../../bootstrap/private-firms').PrivateFirmSeed[],
-             policyRate: number, tickers: Set<Ticker>, names: Set<string>) => Company[]
+             policyRate: number, tickers: Set<Ticker>, names: Set<string>, openingWeek: number) => Company[]
 ): Company[] {
   // Quarterly, like every other structural event in this simulation.
   if (nextWeek % 13 !== 0) return [];
@@ -900,7 +900,7 @@ export function runFirmBirthsForRegion(
       leverage: 2.5,
       sponsorStyle: random() < 0.5,
       employeeCount: employees,
-    }], reg.policyRate, tickers, names);
+    }], reg.policyRate, tickers, names, nextWeek);
     if (newborn.length === 0) return;
     newborn.forEach((c) => { tickers.add(c.ticker); names.add(c.name); });
 

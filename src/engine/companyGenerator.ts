@@ -11,7 +11,8 @@ import { getInitialRegions, CORPORATE_TAX_RATE_BY_REGION } from './macro/initial
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
 import { getRegionProductivityPerCapitaLocal } from './bootstrap/population';
 import { SECTOR_PPE_INTENSITY } from './simulation/constants';
-import { annualDepreciationLocal, usefulLifeYearsOf } from '../domain/company-week/capital-programme';
+import { usefulLifeYearsOf } from '../domain/company-week/capital-programme';
+import { seedPlantVintages, plantGrossLocal, plantNetLocal, plantAccumulatedDepreciationLocal, plantDepreciationAnnualLocal, type PlantVintage } from '../domain/plant';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from './equity-valuation';
 import { UNIVERSE_SCALE, PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
@@ -29,9 +30,9 @@ export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
 // Generic (sector-unaware) fallback used only by buildQuarterlyFundamentalSnapshot when a
 // caller hasn't wired up a real PP&E figure — every real call site below passes one explicitly.
 const DEFAULT_PPE_INTENSITY = 0.5;
-// A freshly-generated company is seeded partway through its asset life, not brand new — this is
-// the accumulated-depreciation fraction of gross PP&E used at that seed point.
-const INITIAL_ACCUM_DEPRECIATION_FRACTION = 0.45;
+/** The week the seed's books are struck at: `initialization.ts` opens the world here, and every
+ *  seeded vintage's age is measured from it (§3.26-f-ii). */
+export const SEED_WEEK = 1;
 
 function getCategoryDemandSeedLocal(
   category: string,
@@ -138,11 +139,9 @@ export function buildQuarterlyFundamentalSnapshot(
   debtIssuance: number = 0,
   debtRepayment: number = 0,
   buybacks: number = 0,
-  // Real PP&E stock roll-forward (gross cost less accumulated depreciation) — a genuine asset
-  // the company actually purchased and is running down, not a financing-side (debt) proxy.
-  // Callers always seed/carry this from the company's own PP&E history; the fallback below only
-  // covers a caller that hasn't been wired up yet, and is revenue-scaled (what this company
-  // actually produces), never debt-scaled (an unrelated financing decision).
+  // §3.26-f-ii: the plant register's reads at the filing week (`plantGrossLocal`,
+  // `plantAccumulatedDepreciationLocal`) — a filed sheet carries numbers, the register is the
+  // fact behind them. A caller with none is a defect; there is no fallback plant.
   grossPPELocal?: number,
   accumulatedDepreciationLocal?: number,
   // §3.26-f-i: the quarter's depreciation is the one schedule's (annual ÷ 4, or the week's × 13).
@@ -213,8 +212,8 @@ export function buildQuarterlyFundamentalSnapshot(
   const workingCapitalLocal = annualRevenue * 0.08;
   const accountsReceivable = workingCapitalLocal * 0.6;
   const accountsPayable = workingCapitalLocal * 0.4;
-  const grossPPE = grossPPELocal ?? (annualRevenue * DEFAULT_PPE_INTENSITY / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION));
-  const accumulatedDepreciation = accumulatedDepreciationLocal ?? (grossPPE * INITIAL_ACCUM_DEPRECIATION_FRACTION);
+  const grossPPE = grossPPELocal ?? defect('a filed quarter with no gross plant — the register\'s read is required');
+  const accumulatedDepreciation = accumulatedDepreciationLocal ?? defect('a filed quarter with no accumulated depreciation — the register\'s read is required');
   const netPPE = grossPPE - accumulatedDepreciation;
   const totalAssets = cash + accountsReceivable + finishedGoodsInventoryLocal + rawMaterialsInventoryLocal + netPPE;
   const shortTermDebt = shortTermDebtLocal ?? (totalDebt * 0.15);
@@ -477,12 +476,17 @@ export function generateInitialCompanies(
       // intensity x revenue), not off its debt — debt is a financing choice, unrelated to what
       // the asset side of the balance sheet actually is.
       const ppeIntensity = SECTOR_PPE_INTENSITY[tmpl.sector] ?? DEFAULT_PPE_INTENSITY;
-      const initialGrossPPELocal = tmpl.revBase * ppeIntensity / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
-      const initialAccumulatedDepreciationLocal = initialGrossPPELocal * INITIAL_ACCUM_DEPRECIATION_FRACTION;
-      const initialNetPPELocal = initialGrossPPELocal - initialAccumulatedDepreciationLocal;
+      // §3.26-f-ii — the plant is a register of dated vintages. The intensity table is NET plant
+      // to revenue; a stationary plant is half worn (`seedPlantVintages`), so its gross is twice
+      // that, and gross, net and accumulated depreciation are READS of the register at the seed
+      // week — the stated 45% worn fraction is gone.
+      const seedPlant = seedPlantVintages(2 * tmpl.revBase * ppeIntensity, usefulLifeYearsOf({ sector: tmpl.sector }), SEED_WEEK);
+      const initialGrossPPELocal = plantGrossLocal(seedPlant, SEED_WEEK);
+      const initialAccumulatedDepreciationLocal = plantAccumulatedDepreciationLocal(seedPlant, SEED_WEEK);
+      const initialNetPPELocal = plantNetLocal(seedPlant, SEED_WEEK);
       // §3.26-f-i — EBIT is struck off the one schedule on the plant just seeded, the number the
       // engine charges from week 1. It was `revBase × 0.05`, a second schedule.
-      const da = annualDepreciationLocal(initialGrossPPELocal, usefulLifeYearsOf({ sector: tmpl.sector }));
+      const da = plantDepreciationAnnualLocal(seedPlant, SEED_WEEK);
       const ebit = Math.max(10, ebitda - da);
 
       // Revenue-per-employee scales off the region's own generated productivity-per-worker
@@ -618,8 +622,7 @@ export function generateInitialCompanies(
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
         debtTranches,
         capex,
-        grossPPELocal: initialGrossPPELocal,
-        accumulatedDepreciationLocal: initialAccumulatedDepreciationLocal,
+        plant: seedPlant,
         maintenanceCapex,
         growthCapex,
         baselineGrowthCapexToRevenueRatio: growthCapex / Math.max(1, tmpl.revBase),
@@ -974,14 +977,16 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
   // §3.13c: `satisfies keyof Company` — these are FIELD NAMES in strings, and without the
   // constraint a rename would leave one behind silently, scaling everything but it. Same shape
   // as the lane lists in `company-store.ts`.
-  const SIZED_FIELDS = ['annualRevenue', 'baselineAnnualRevenue', 'grossPPELocal',
-    'accumulatedDepreciationLocal', 'ebitda', 'ebit', 'netIncome', 'capex', 'maintenanceCapex',
+  const SIZED_FIELDS = ['annualRevenue', 'baselineAnnualRevenue',
+    'ebitda', 'ebit', 'netIncome', 'capex', 'maintenanceCapex',
     // `annualInterest` was in this list and is NOT a field — it is DERIVED from the ladder
     // (`front-core.ts:trancheWeekAccrual`), which is scaled below. The string was dead: the scale
     // no-ops on `undefined`, so nothing happened and nothing said so.
     'growthCapex', 'currentLiabilities', 'technicalReservesLocal', 'aumLocal',
     'insurancePremiumsWrittenLocal', 'insuranceClaimsPaidLocal'] as const satisfies readonly (keyof Company)[];
   SIZED_FIELDS.forEach(scale);
+  // §3.26-f-ii: the plant is a register; each vintage's cost scales with the firm.
+  c.plant = ((c.plant as PlantVintage[] | undefined) ?? []).map((v) => ({ ...v, costLocal: v.costLocal * k }));
   ((c.debtTranches as DebtTranche[] | undefined) ?? []).forEach((t) => { t.principalLocal *= k; });
   ((c.historicalFundamentals as FundamentalSnapshot[] | undefined) ?? [])
     .forEach((snap) => scaleSnapshot(snap as unknown as Record<string, unknown>, k));
@@ -1232,7 +1237,9 @@ export function generatePrivateCompanies(
   seeds: PrivateFirmSeed[],
   regionPolicyRate: number,
   existingTickers: Set<Ticker>,
-  existingNames: Set<string>
+  existingNames: Set<string>,
+  /** §3.26-f-ii: the week the firm's books open — the seed's, or a birth's. */
+  openingWeek: number
 ): Company[] {
   return seeds.map((seed, idx) => {
     // SEG-A: a born firm's sector is its INDUSTRY's sector, straight from the registry — the
@@ -1252,9 +1259,11 @@ export function generatePrivateCompanies(
       ? t.principalLocal * (t.couponRate ?? 0.05)
       : t.principalLocal * (regionPolicyRate + (t.floatingMarginBps ?? 200) / 10000)), 0);
     const ppeIntensity = SECTOR_PPE_INTENSITY[sector] ?? 0.5;
-    const grossPPELocal = Math.round(revBase * ppeIntensity / 0.65);
+    // §3.26-f-ii — the register: net plant `revBase × intensity`, half worn (a carve-out's plant
+    // is existing plant), at the opening week. The stated 35% worn fraction is gone.
+    const plant = seedPlantVintages(2 * Math.round(revBase * ppeIntensity), usefulLifeYearsOf({ sector }), openingWeek);
     // §3.26-f-i — EBIT off the one schedule on the plant just seeded (it was `revBase × 0.045`).
-    const da = annualDepreciationLocal(grossPPELocal, usefulLifeYearsOf({ sector }));
+    const da = plantDepreciationAnnualLocal(plant, openingWeek);
     const ebit = Math.max(1, ebitda - da);
     const coverage = ebit / Math.max(0.5, annualInterest);
     // CRD/: the seed rater sees the same facts the weekly one does, so a firm born without
@@ -1294,7 +1303,7 @@ export function generatePrivateCompanies(
       capex, maintenanceCapex, growthCapex: capex - maintenanceCapex,
       baselineGrowthCapexToRevenueRatio: (capex - maintenanceCapex) / Math.max(1, revBase),
       maintenanceShortfallStreak: 0,
-      grossPPELocal, accumulatedDepreciationLocal: Math.round(grossPPELocal * 0.35),
+      plant,
       executionQuality: 1.0,
       occupationMixDrift: {},
       creditRating: rating,

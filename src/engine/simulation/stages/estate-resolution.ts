@@ -14,6 +14,7 @@
  * goods — and the discount a buyer takes is the return it needs for the time it is tied up.
  */
 
+import { plantNetLocal, slicePlant, mergePlant } from '../../../domain/plant';
 import { tradeInvoicesOf } from '../../ledger/contract-ledger';
 import { assertNever } from '../../../domain/defect';
 import { bankParty, bankSecuritiesParty, ccpParty, companyParty, companyPartyOf } from '../../../domain/party';
@@ -238,9 +239,13 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // week's offer, until the programme's last week, when the unwanted plant is abandoned: a
     // scrap is not a sale to nobody.
     const ppeWeeks = Math.max(1, regionalPpeAbsorptionWeeks(ctx, index, estate.regionId));
+    // §3.26-f-ii — the estate's plant is the dead firm's register, re-read each week like its
+    // stock and its invoices; what the programme's last week cannot sell is abandoned off it.
+    estate.assets.ppeLocal = comp ? plantNetLocal(comp.plant, ctx.nextWeek) : 0;
     const ppeOfferedLocal = estate.assets.ppeLocal / weeksLeft(ppeWeeks);
     const plant = sellPlantToBidders(ctx, estate, comp, ppeOfferedLocal);
-    estate.assets.ppeLocal -= weeksLeft(ppeWeeks) <= 1 ? ppeOfferedLocal : plant.soldLocal;
+    if (weeksLeft(ppeWeeks) <= 1 && comp) comp.plant = [];
+    estate.assets.ppeLocal = comp ? plantNetLocal(comp.plant, ctx.nextWeek) : 0;
     thisWeek.ppeSoldLocal += plant.soldLocal;
     thisWeek.plantPriceOfBook = plant.priceOfBook;
 
@@ -348,11 +353,11 @@ function peersOf(ctx: WeeklyStepContext, estate: Estate, comp: Company | undefin
 function sellPlantToBidders(
   ctx: WeeklyStepContext, estate: Estate, comp: Company | undefined, offeredLocal: number
 ): { soldLocal: number; priceOfBook: number | undefined } {
-  if (!(offeredLocal > 1)) return { soldLocal: 0, priceOfBook: undefined };
+  if (!(offeredLocal > 1) || !comp) return { soldLocal: 0, priceOfBook: undefined };
   const instrumentId = asInstrumentId(`ESTATE-PLANT:${estate.companyId}`);
   const bidders: ClearingParticipant[] = [];
   peersOf(ctx, estate, comp).forEach((peer) => {
-    const netPpeLocal = (peer.grossPPELocal ?? 0) - (peer.accumulatedDepreciationLocal ?? 0);
+    const netPpeLocal = plantNetLocal(peer.plant, ctx.nextWeek);
     if (!(netPpeLocal > 0)) return; // no plant of its own: no return on capital to read a bid from
     const roc = (peer.ebit ?? 0) / netPpeLocal;
     // §3.26-d: against ITS OWN cost of capital (one owner) — the region's long rate at its own
@@ -406,7 +411,13 @@ function sellPlantToBidders(
       currency: currencyOf(estate.regionId),
       reason: 'estate plant sold at auction',
     });
-    peer.grossPPELocal = (peer.grossPPELocal ?? 0) + takenLocal;
+    // §3.26-f-ii — the plant moves as vintages: the buyer takes its share of every vintage on
+    // the dead firm's register (the machines keep their age and life), at the cleared price of
+    // book; `takenLocal` is net book, the unit the auction cleared in.
+    const remainingNetLocal = plantNetLocal(comp.plant, ctx.nextWeek);
+    const split = slicePlant(comp.plant, remainingNetLocal > 0 ? Math.min(1, takenLocal / remainingNetLocal) : 0);
+    peer.plant = mergePlant(peer.plant, split.taken);
+    comp.plant = split.kept;
     estate.lastWeek?.buyerIds.push(peer.id);
     soldLocal += takenLocal;
   });
@@ -664,8 +675,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   // estate takes what the register actually claims; O7 owns the size of the gap and step 11f owns
   // closing it.
 
-  const grossPpeLocal = comp.grossPPELocal ?? 0;
-  const netPpeLocal = Math.max(0, grossPpeLocal - (comp.accumulatedDepreciationLocal ?? 0));
+  const netPpeLocal = plantNetLocal(comp.plant, ctx.nextWeek); // §3.26-f-ii: the register's read
   return {
     companyId: comp.id,
     ticker: comp.ticker,
@@ -702,7 +712,7 @@ function regionalPpeAbsorptionWeeks(
   let weeklyCapexLocal = 0;
   ctx.updatedCompanies.forEach((c) => {
     if (c.region !== regionId) return;
-    installedLocal += Math.max(0, (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0));
+    installedLocal += plantNetLocal(c.plant, ctx.nextWeek);
     weeklyCapexLocal += Math.max(0, (c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)) / 52;
   });
   const out = (!(weeklyCapexLocal > 0) || !(installedLocal > 0)) ? 52

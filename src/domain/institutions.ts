@@ -1,6 +1,7 @@
 /** The non-bank institutions — insurers, managers, pension funds, hedge funds, PE, money funds,
  *  ETFs — their mandates, their real books and the claims their beneficiaries hold on them. */
 
+import { plantGrossLocal, type PlantVintage } from './plant';
 import { RegionId } from './geography';
 import { ItemizedHolding } from './banking';
 import { FinancialStatementProfile } from './company';
@@ -264,9 +265,10 @@ export interface InsuranceBook {
  *  share of its book that re-shops each week. */
 const INSURANCE_POLICY_TERM_WEEKS = 52;
 
-/** What a firm has to lose, and therefore insures: its plant and the revenue that runs through it. */
-export const corporateInsurableBaseLocal = (c: { grossPPELocal?: number; annualRevenue: number }): number =>
-  Math.max(0, c.grossPPELocal ?? 0) + Math.max(0, c.annualRevenue);
+/** What a firm has to lose, and therefore insures: its plant (gross, read off the register at
+ *  `week` — §3.26-f-ii) and the revenue that runs through it. */
+export const corporateInsurableBaseLocal = (c: { plant: readonly PlantVintage[]; annualRevenue: number }, week: number): number =>
+  Math.max(0, plantGrossLocal(c.plant, week)) + Math.max(0, c.annualRevenue);
 
 /** What a household sector has to lose: its net worth and its income. */
 export const householdInsurableBaseLocal = (netWorthLocal: number, incomeLocal: number): number =>

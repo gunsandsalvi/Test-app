@@ -31,6 +31,7 @@
  *   SEED_BURN_IN_TRACE=1     print the trace every 4 weeks (auto mode prints its summary anyway)
  */
 
+import { plantGrossLocal } from '../../domain/plant';
 import { GameState } from '../../types';
 import { productionLeadWeeksOf } from '../../domain/industry-registry';
 import { INDUSTRY_SUBUNITS } from '../../domain/industry';
@@ -109,7 +110,7 @@ export function probeSteadyState(s: GameState): Record<string, number> {
   let ppe = 0;
   let mothballed = 0;
   for (const c of s.companies) {
-    const g = Number(c.grossPPELocal) || 0;
+    const g = plantGrossLocal(c.plant, s.currentWeek);
     ppe += g;
     mothballed += g * (Number(c.mothballedPpeShare) || 0);
   }

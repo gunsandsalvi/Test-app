@@ -289,8 +289,8 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     });
     const floatValueById = new Map(listed.map((c) => [c.id, issuedSharesOf(ctx.v2, c.id) * c.stockPrice]));
     const totalFloatValueLocal = listed.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;
-    const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id))]));
-    const netInvestmentRateById = new Map(listed.map((c) => [c.id, companyNetInvestmentRate(c)]));
+    const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id), ctx.nextWeek)]));
+    const netInvestmentRateById = new Map(listed.map((c) => [c.id, companyNetInvestmentRate(c, ctx.nextWeek)]));
     const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
 
     const shortFunds = ctx.updatedInstitutionalEntities.filter(

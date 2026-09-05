@@ -16,8 +16,8 @@
 import { profileKeyOf } from '../engine/simulation/stages/profiles/types';
 import { Company } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
-import { SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
 import { usefulLifeYearsOf } from '../domain/company-week/capital-programme';
+import { plantGrossLocal, plantNetLocal, plantDepreciationAnnualLocal } from '../domain/plant';
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
 import { isPubliclyListed, managedEntityIdsOf } from '../domain/company';
 import { industryOfSubUnit, financingProfileOf } from '../domain/industry-registry';
@@ -30,9 +30,10 @@ import type { Ticker, EntityId } from '../domain/ids';
 export interface BackLanes {
   n: number;
   // --- capital block inputs (comp scalars; NaN = the field was undefined) ---
-  grossPPELocal: Float64Array;
-  accumulatedDepreciationLocal: Float64Array;
-  ppeDefaultLocal: Float64Array;          // annualRevenue × sector intensity, the ?? fallback
+  /** §3.26-f-ii — the plant register's reads at the week's opening (`domain/plant.ts`). */
+  plantGrossLocal: Float64Array;
+  plantNetLocal: Float64Array;
+  plantDepreciationAnnualLocal: Float64Array;
   annualRevenueLocal: Float64Array;
   cashLocal: Float64Array;
   currentLiabilitiesLocal: Float64Array;
@@ -126,6 +127,7 @@ export function buildBackLanes(
   channelMarginRevenue: Record<string, number>,
   S: CompanyStore,
   v2: V2World,
+  nextWeek: number,
 ): BackLanes {
   // §3.13-BOOK (c-then-3b): keyed by ENTITY id, because `homeBankId` is what asks.
   const bankById = new Map(companies.filter((c) => c.isBankEntity).map((c) => [c.id, c]));
@@ -138,7 +140,7 @@ export function buildBackLanes(
   const N = S.num, T = S.str;
   const L: BackLanes = {
     n,
-    grossPPELocal: N.grossPPELocal, accumulatedDepreciationLocal: N.accumulatedDepreciationLocal, ppeDefaultLocal: f(),
+    plantGrossLocal: f(), plantNetLocal: f(), plantDepreciationAnnualLocal: f(),
     annualRevenueLocal: N.annualRevenue, cashLocal: N.cash, currentLiabilitiesLocal: N.currentLiabilities,
     maintenanceCapexLocal: N.maintenanceCapex, growthCapexLocal: N.growthCapex, capexLocal: N.capex,
     maintenanceShortfallStreak: N.maintenanceShortfallStreak, baselineGrowthCapexToRevenueRatio: N.baselineGrowthCapexToRevenueRatio,
@@ -175,7 +177,9 @@ export function buildBackLanes(
     const c = companies[i];
     const reg = updatedRegions[c.region];
     const wu = companyUpdates[c.ticker];
-    L.ppeDefaultLocal[i] = c.annualRevenue * (SECTOR_PPE_INTENSITY[c.sector] ?? 0.5);
+    L.plantGrossLocal[i] = plantGrossLocal(c.plant, nextWeek);
+    L.plantNetLocal[i] = plantNetLocal(c.plant, nextWeek);
+    L.plantDepreciationAnnualLocal[i] = plantDepreciationAnnualLocal(c.plant, nextWeek);
     L.usefulLifeYears[i] = usefulLifeYearsOf(c);
     L.producedUnitsThisWeek[i] = wu?.producedUnitsThisWeek ?? 0;
     L.plantCapacityUnitsThisWeek[i] = wu?.plantCapacityUnitsThisWeek ?? 0;

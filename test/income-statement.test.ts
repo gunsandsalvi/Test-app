@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { netIncomeLocal, corporateTax, industrialIncome, profileIncome } from '../src/domain/company-week/income-statement';
-import { annualDepreciationLocal } from '../src/domain/company-week/capital-programme';
+import { annualDepreciationLocal } from '../src/domain/plant';
 
 test('a profit is taxed', () => {
   assert.equal(netIncomeLocal(1000, 0, 0.25).netLocal, 750);

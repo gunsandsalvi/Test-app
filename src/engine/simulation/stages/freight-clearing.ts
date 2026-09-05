@@ -18,6 +18,7 @@
  * to the rate.
  */
 
+import { plantNetLocal } from '../../../domain/plant';
 import { GameState, Region, RegionId, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { laneDistanceNm } from '../../../domain/geography';
@@ -107,7 +108,8 @@ function buildCarrierOffers(
   carriers: Company[],
   regions: Record<RegionId, Region>,
   unitMassTonnes: Record<string, number>,
-  fxToUsd: FxToUsd
+  fxToUsd: FxToUsd,
+  week: number
 ): { offersByLane: Map<string, AuctionOffer[]>; marginalByLane: Record<string, number>; capacityByLane: Record<string, number> } {
   const offersByLane = new Map<string, AuctionOffer[]>();
   const marginalByLane: Record<string, number> = {};
@@ -122,7 +124,7 @@ function buildCarrierOffers(
     // return its hulls require is a real cost of offering the capacity, and a floor without it
     // prices freight where the fleet cannot be replaced.
     // §3.26-d: the return its hulls require has one owner (`domain/company-week/cost-of-capital.ts`).
-    const netPpeLocal = Math.max(0, (carrier.grossPPELocal ?? 0) - (carrier.accumulatedDepreciationLocal ?? 0));
+    const netPpeLocal = plantNetLocal(carrier.plant, week); // §3.26-f-ii: the fleet's register
     const costOfCapital = costOfCapitalOf(carrier, riskFreeRateOf(regions[home]));
     const fleetCapacityTonnes = (carrier.carrierFleet?.assets ?? []).reduce((a, x: FreightAsset) => {
       const d = laneDistanceNm(x.laneFrom, x.laneTo);
@@ -179,9 +181,10 @@ export function marginalRatesForAllLanes(
   carriers: Company[],
   regions: Record<RegionId, Region>,
   unitMassTonnes: Record<string, number>,
-  fxToUsd: FxToUsd
+  fxToUsd: FxToUsd,
+  week: number
 ): Record<string, number> {
-  return buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd).marginalByLane;
+  return buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd, week).marginalByLane;
 }
 
 export function runFreightClearing(args: {
@@ -190,11 +193,13 @@ export function runFreightClearing(args: {
   unitMassTonnes: Record<string, number>;
   bookings: LaneBooking[];
   fxToUsd: FxToUsd;
+  /** §3.26-f-ii: the week the carriers' plant registers are read at. */
+  week: number;
 }): FreightClearing {
-  const { carriers, regions, unitMassTonnes, bookings, fxToUsd } = args;
+  const { carriers, regions, unitMassTonnes, bookings, fxToUsd, week } = args;
   const result = emptyFreightClearing();
 
-  const { offersByLane, marginalByLane, capacityByLane } = buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd);
+  const { offersByLane, marginalByLane, capacityByLane } = buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd, week);
   const carrierByTicker = new Map(carriers.map((c) => [c.ticker, c]));
   result.marginalRatePerTonneLaneMoneyByLane = marginalByLane;
   result.laneCapacityTonnes = capacityByLane;
@@ -297,6 +302,7 @@ export function runFreightClearingStage(state: GameState, ctx: WeeklyStepContext
     unitMassTonnes: state.unitMassTonnes,
     bookings: ctx.laneBookings,
     fxToUsd,
+    week: ctx.nextWeek,
   });
   // A lane nobody currently serves still needs a price, or a route can never open: what it would
   // cost to sail is the honest answer until somebody does.

@@ -9,6 +9,7 @@
  * equity premium on the firm's own beta, weighted by what THIS management requires of its plant —
  * a risk-averse board wants more for the same beta (`domain/preferences.ts`).
  */
+import { plantNetLocal, type PlantVintage } from '../plant';
 import { Preferences, riskAversionOf } from '../preferences';
 
 /** Compensation for equity's residual risk, over the holder's own cost of capital. Stated once. */
@@ -26,11 +27,12 @@ export function costOfCapitalOf(firm: { beta?: number; management?: Preferences 
   return Math.max(0, riskFreeRate + (firm.beta ?? 1) * EQUITY_RISK_PREMIUM * riskAversionOf(firm.management));
 }
 
-/** The weekly charge the firm's net plant carries at that rate — the cost of holding it a week. */
+/** The weekly charge the firm's net plant carries at that rate — the cost of holding it a week.
+ *  §3.26-f-ii: the net plant is a read of the register at `week`. */
 export function weeklyCapitalChargeLocal(
-  firm: { beta?: number; management?: Preferences; grossPPELocal?: number; accumulatedDepreciationLocal?: number },
-  riskFreeRate: number
+  firm: { beta?: number; management?: Preferences; plant: readonly PlantVintage[] },
+  riskFreeRate: number,
+  week: number
 ): number {
-  const netPpeLocal = Math.max(0, (firm.grossPPELocal ?? 0) - (firm.accumulatedDepreciationLocal ?? 0));
-  return (netPpeLocal * costOfCapitalOf(firm, riskFreeRate)) / 52;
+  return (plantNetLocal(firm.plant, week) * costOfCapitalOf(firm, riskFreeRate)) / 52;
 }

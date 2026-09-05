@@ -7,6 +7,7 @@
  * the sequence — see that file's header comment for why.)
  */
 
+import { slicePlant, mergePlant } from '../../../domain/plant';
 import { restateBankSheetStatistics } from '../../../domain/bank-resolution';
 import { marketCapAt } from '../../../engine2/instruments';
 import { registerCompanyEquity, setIssuedUnits } from '../../ledger/instrument-ledger';
@@ -151,8 +152,17 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     spin.employeeCount = employees;
     spin.stockPrice = Number(spinPrice.toFixed(4));
     spin.debtTranches = [];
-    spin.grossPPELocal = (parent.grossPPELocal ?? 0) * share;
-    spin.accumulatedDepreciationLocal = (parent.accumulatedDepreciationLocal ?? 0) * share;
+    // §3.26-f-ii — the plant moves as vintages: the line's share of every vintage goes with the
+    // spin-off (the machines keep their age), and so does that share of the construction queue —
+    // the structuredClone had given BOTH books the whole queue, capital minted twice.
+    {
+      const split = slicePlant(parent.plant, share);
+      spin.plant = split.taken;
+      parent.plant = split.kept;
+      const queue = parent.assetsUnderConstruction ?? [];
+      spin.assetsUnderConstruction = queue.map((lot) => ({ ...lot, valueLocal: lot.valueLocal * share }));
+      parent.assetsUnderConstruction = queue.map((lot) => ({ ...lot, valueLocal: lot.valueLocal * (1 - share) }));
+    }
     if (spin.baselineNetPpeLocal !== undefined) spin.baselineNetPpeLocal = spin.baselineNetPpeLocal * share;
     spin.antitrustWeeksAboveThreshold = 0;
     revHistSeed(ctx.v2!, rowOf(ctx.v2!, spin.id), spin.annualRevenue);
@@ -198,8 +208,6 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     parent.netIncome = Number((parent.netIncome * (1 - share)).toFixed(1));
     parent.ebitda = Number((parent.ebitda * (1 - share)).toFixed(1));
     parent.employeeCount = Math.max(1, parent.employeeCount - employees);
-    parent.grossPPELocal = (parent.grossPPELocal ?? 0) * (1 - share);
-    parent.accumulatedDepreciationLocal = (parent.accumulatedDepreciationLocal ?? 0) * (1 - share);
     if (parent.baselineNetPpeLocal !== undefined) parent.baselineNetPpeLocal = parent.baselineNetPpeLocal * (1 - share);
     parent.stockPrice = Number((parent.stockPrice * (1 - share)).toFixed(4));
     parent.antitrustWeeksAboveThreshold = 0;
@@ -311,8 +319,12 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   setIssuedUnits(ctx.v2, equityInstrumentId(acquirer.id), Number((issuedSharesOf(ctx.v2, acquirer.id) + newShares).toFixed(3)));
   acquirer.annualRevenue = Number((acquirer.annualRevenue + target.annualRevenue * 0.85).toFixed(1));
   acquirer.employeeCount += Math.round(target.employeeCount * 0.75);
-  acquirer.grossPPELocal = (acquirer.grossPPELocal ?? 0) + (target.grossPPELocal ?? 0);
-  acquirer.accumulatedDepreciationLocal = (acquirer.accumulatedDepreciationLocal ?? 0) + (target.accumulatedDepreciationLocal ?? 0);
+  // §3.26-f-ii — the target's plant joins the acquirer's register vintage by vintage (each keeps
+  // its age and life), and so does its construction queue: a lot that has arrived and not yet
+  // entered service is capital, and an acquired shell never commissions it.
+  acquirer.plant = mergePlant(acquirer.plant, target.plant);
+  acquirer.assetsUnderConstruction = [...(acquirer.assetsUnderConstruction ?? []), ...(target.assetsUnderConstruction ?? [])];
+  target.assetsUnderConstruction = [];
 
   // Merge product lines
   if (target.productLines && acquirer.productLines) {
@@ -527,8 +539,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   target.capex = 0;
   target.maintenanceCapex = 0;
   target.growthCapex = 0;
-  target.grossPPELocal = 0;
-  target.accumulatedDepreciationLocal = 0;
+  target.plant = [];
 
   ctx.recentMergers.push({
     acquirerTicker: acquirer.ticker,

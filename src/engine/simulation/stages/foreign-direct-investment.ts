@@ -78,7 +78,7 @@ export function runForeignDirectInvestment(
   ctx: WeeklyStepContext,
   nextWeek: number,
   generate: (regionId: RegionId, seeds: PrivateFirmSeed[],
-             policyRate: number, tickers: Set<Ticker>, names: Set<string>) => Company[]
+             policyRate: number, tickers: Set<Ticker>, names: Set<string>, openingWeek: number) => Company[]
 ): Company[] {
   const born: Company[] = [];
   const subsidiaryExists = (parent: Company, region: RegionId): boolean =>
@@ -132,7 +132,7 @@ export function runForeignDirectInvestment(
         employeeCount: employees,
         productMixBySubUnit: flows,
       }];
-      const babies = generate(target, seeds, reg.policyRate, tickers, names);
+      const babies = generate(target, seeds, reg.policyRate, tickers, names, nextWeek);
       if (babies.length === 0) continue;
       const sub = babies[0];
 

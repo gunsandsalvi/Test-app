@@ -15,6 +15,7 @@
  * The plan (domain/bank-resolution.ts) decides who eats the hole; this stage only executes it.
  */
 
+import { mergePlant } from '../../../domain/plant';
 import { reseatSwapLines } from './swap-lines';
 import { reseatCentralBankLoans } from './central-bank-loans';
 import { GameState, RegionId, Company } from '../../../types';
@@ -199,12 +200,11 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     }
     rekeyBankLinks(state, ctx, regionId, bank, acquirer);
     // Premises and people go with the books: the branches open on Monday under the new name.
-    acquirer.grossPPELocal = (acquirer.grossPPELocal ?? 0) + (bank.grossPPELocal ?? 0);
-    acquirer.accumulatedDepreciationLocal = (acquirer.accumulatedDepreciationLocal ?? 0) + (bank.accumulatedDepreciationLocal ?? 0);
+    acquirer.plant = mergePlant(acquirer.plant, bank.plant); // §3.26-f-ii: vintage by vintage
     acquirer.employeeCount += bank.employeeCount;
     acquirer.annualRevenue += bank.annualRevenue;
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (bank.bankMarketShare ?? 0)).toFixed(6));
-    bank.grossPPELocal = 0; bank.accumulatedDepreciationLocal = 0; bank.employeeCount = 0;
+    bank.plant = []; bank.employeeCount = 0;
     bank.annualRevenue = 0; bank.ebitda = 0; bank.ebit = 0; bank.bankMarketShare = 0;
 
     // ---- 3. Settle the reserve legs while both sheets still exist, then verify the shell is empty. ----

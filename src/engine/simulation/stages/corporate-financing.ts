@@ -28,6 +28,7 @@
  * closes to them precisely when they most want it open.
  */
 
+import { plantNetLocal } from '../../../domain/plant';
 import { riskAversionOf, patienceWeeksOf, Preferences } from '../../../domain/preferences';
 import { Company, CreditRating } from '../../../types';
 
@@ -125,6 +126,8 @@ interface FinancingDecision {
  */
 export function decideCorporateFinancing(params: {
   comp: Company;
+  /** §3.26-f-ii: the week the plant register is read at. */
+  week: number;
   /** §3.13-BOOK dIV: the market cap as the caller read it — price × the index's shares in issue. */
   marketCapLocal: number;
   /** The company's real all-in cost of new debt: risk-free curve plus its own cleared spread. */
@@ -137,7 +140,7 @@ export function decideCorporateFinancing(params: {
   cashLocal: number;
   rating: CreditRating;
 }): FinancingDecision {
-  const { comp, marketCapLocal, costOfDebtAnnual, effectiveTaxRate, ebitdaAnnual, totalDebtLocal, cashLocal, rating } = params;
+  const { comp, week, marketCapLocal, costOfDebtAnnual, effectiveTaxRate, ebitdaAnnual, totalDebtLocal, cashLocal, rating } = params;
   // §5-BRAINS — the CFO's own risk weight: a risk-averse one needs a wider spread to act,
   // levers up more slowly and pays down faster. The median is the stated rule.
   const ra = riskAversionOf(comp.management);
@@ -158,7 +161,7 @@ export function decideCorporateFinancing(params: {
   // and the issuer count decaying 324 → 252 — recorded in the plan's RVr close-out).
   const afterTaxCostOfDebt = costOfDebtAnnual * (1 - effectiveTaxRate);
   const nopatAnnual = Math.max(0, (params.ebitAnnual ?? ebitdaAnnual * 0.75)) * (1 - effectiveTaxRate);
-  const netPPELocal = Math.max(1, (comp.grossPPELocal ?? 0) - (comp.accumulatedDepreciationLocal ?? 0));
+  const netPPELocal = Math.max(1, plantNetLocal(comp.plant, week));
   const investedCapitalLocal = netPPELocal + comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
   const returnOnInvestedCapital = nopatAnnual / investedCapitalLocal;
   const earningsYield = comp.stockPrice > 0 ? comp.eps / comp.stockPrice : 0;

@@ -159,7 +159,7 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
   firmExposure.forEach((exposureByIssuer, holderId) => {
     const firm = companyById.get(holderId);
     if (!firm || firm.isBankEntity || !isActiveCompany(firm)) return;
-    const equityLocal = companyBookEquityLocal(firm, cashOf(ctx.v2, firm), ladderTotalLocal(ctx.v2, firm.id));
+    const equityLocal = companyBookEquityLocal(firm, cashOf(ctx.v2, firm), ladderTotalLocal(ctx.v2, firm.id), ctx.nextWeek);
     addNeeds(firm, companyParty(firm), equityLocal, exposureByIssuer);
   });
 
