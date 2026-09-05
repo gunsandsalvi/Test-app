@@ -20,6 +20,7 @@
  * money funds).
  */
 
+import { matureInterbankLoans } from './interbank';
 import { currencyOf } from '../../../domain/geography';
 import { repoBookOf } from '../../ledger/contract-ledger';
 import type { EntityId } from '../../../domain/ids';
@@ -423,6 +424,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     });
 
     if (reg.centralBankSheet) reg.centralBankSheet.lastLoanInterestLocal = 0;
+    // §3.20b: last night's interbank loans repay first — principal between reserve accounts,
+    // interest between the banks' own accounts — before anyone repays the window.
+    matureInterbankLoans(ctx, regionId, newSheets.map(({ bank, sheet }) => ({ id: bank.id, ticker: bank.ticker, region: bank.region, management: bank.management, bankBalanceSheet: sheet })));
     newSheets.forEach(({ bank, sheet }) => {
       // The central bank's loan is repaid from cash above the buffer (the liability
       // leaves here, bank-lending owns the write; the cash leaves at settlement, extinguishing
@@ -525,6 +529,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       swapLineDrawnByRegion: newSheets.reduce<Record<string, number>>((acc, { sheet }) => { Object.entries(sheet.swapLineDrawnByRegion ?? {}).forEach(([k, v]) => { acc[k] = (acc[k] ?? 0) + v; }); return acc; }, {}),
       sovereignAccruedCouponLocal: sumField((s) => s.sovereignAccruedCouponLocal ?? 0),
       primeBrokerageLoansLocal: sumField((s) => s.primeBrokerageLoansLocal ?? 0),
+      interbankLentLocal: sumField((s) => s.interbankLentLocal ?? 0),
+      interbankBorrowedLocal: sumField((s) => s.interbankBorrowedLocal ?? 0),
       householdDepositInterestWeeklyLocal: sumField((s) => s.householdDepositInterestWeeklyLocal ?? 0),
       lastBillAccretionWeeklyLocal: sumField((s) => s.lastBillAccretionWeeklyLocal ?? 0),
       reservesInterestWeeklyLocal: sumField((s) => s.reservesInterestWeeklyLocal ?? 0),

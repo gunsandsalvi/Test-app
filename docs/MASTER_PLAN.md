@@ -549,10 +549,6 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-20b. **The interbank unsecured market.** The last boundary line's named successor, and it was
-    never built: surplus banks lend to short ones at policy plus the borrower's own spread, and
-    only what no bank will lend reaches a standing facility. Today a short bank goes straight to
-    the window. Pairs with step 20's lending capacity.
 20c. **A solvent bank answers its own margin.** X1 reports a solvent bank running a negative
     margin (UK: ORDO, 6 of 16 weeks at HEAD) and the bank does nothing about it. Run off the book,
     reprice deposits, cut costs — the bank profile's response to its own margin. Step 30b owns the
@@ -1517,6 +1513,22 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20b — THE INTERBANK UNSECURED MARKET, AT THE CLOSE.** The boundary's named successor, built:
+  `stages/interbank.ts:runInterbankSession` runs inside the funding close (after the day's flows,
+  before the window). Each bank below its buffer is its own YIELD_LIKE book on its NAME; every
+  bank above its buffer posts a schedule starting at the front of the borrower's own cleared
+  credit curve (`issuerSpreadAtOnCurve`; the posted constant for a bank nothing has priced) and
+  fully committed by the top of the corridor; borrowers clear strongest name first, so a doubted
+  name pays more or finds no bid, and only the unfilled remainder reaches
+  `raiseCentralBankLoanLocal` (now read on settled reserves plus posted legs). The loan is a row
+  of the contract store (`domain/interbank.ts`, kind `INTERBANK`; `interbankBookOf` /
+  `publishInterbankBook`), principal between reserve accounts at the close, repaid at the next
+  open with interest between the banks' own accounts (`matureInterbankLoans`, 02b, before the
+  window is repaid); the sheets' `interbankLentLocal`/`interbankBorrowedLocal` are derived from
+  the book, in the leverage denominator, M5's identity and a resolution's transfer;
+  `Region.interbankRateAnnual` is the struck average. `money-market.md` B2 ✅ B2.a ✅ B2.b ⚠️
+  (readable, step 38's to read), `banks-funding-and-liquidity.md` D1 ✅. Gates green; no run.
 
 **20-iii — OCCUPATIONAL SUPPLY MOVES TO WHERE THE VACANCIES ARE.** Step 20 is closed with this.
   Each occupation's labour force was `totalLaborForce × share`, the share drifting in

@@ -140,8 +140,8 @@ function m5(state: GameState, week: number): AuditFinding[] {
     const bs = b.bankBalanceSheet!;
     const sov = bankSovereignBookLocal(ensureV2(state), b.id); // §3.13-BOOK d3b: register rows
     const desks = deskSignedLocal(ensureV2(state), b.id); // §3.13-BOOK d3d: register rows, signed
-    const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.id)) + sov + bankReservesOf(ensureV2(state), b.id) + (bs.repoLentLocal ?? 0) + (bs.sovereignAccruedCouponLocal ?? 0) + desks + (bs.primeBrokerageLoansLocal ?? 0);
-    const liabilities = depositsOf(bs, stateDepositLines(state, b)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0) + swapLineDrawnLocal(bs, currencyOf(b.region), ensureV2(state).fx);
+    const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.id)) + sov + bankReservesOf(ensureV2(state), b.id) + (bs.repoLentLocal ?? 0) + (bs.interbankLentLocal ?? 0) + (bs.sovereignAccruedCouponLocal ?? 0) + desks + (bs.primeBrokerageLoansLocal ?? 0);
+    const liabilities = depositsOf(bs, stateDepositLines(state, b)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal ?? 0) + (bs.interbankBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0) + swapLineDrawnLocal(bs, currencyOf(b.region), ensureV2(state).fx);
     const residual = assets - liabilities - bs.bankEquityLocal;
     if (Math.abs(residual) > Math.max(1e7, assets * 2e-3)) out.push({ family: 'M', check: 'M5 bank sheet closes', week, usd: residual, message: `${b.region}:${b.ticker} assets ${B(assets)} − liabilities ${B(liabilities)} − equity ${B(bs.bankEquityLocal)} = ${B(residual)}` });
   });

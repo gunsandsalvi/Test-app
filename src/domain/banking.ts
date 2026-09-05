@@ -141,6 +141,12 @@ export interface BankingSector {
    */
   repoLentLocal: number;
   repoBorrowedLocal: number;
+  /** §3.20b — this bank's UNSECURED overnight interbank position, struck at the funding close
+   *  and matured at the next open (`stages/interbank.ts`): what it lent other banks (an asset)
+   *  and what it borrowed from them (a liability). DERIVED from the region's interbank book by
+   *  the session and the maturity, like the repo lines above. */
+  interbankLentLocal?: number;
+  interbankBorrowedLocal?: number;
   /**
    * CAL — sovereign interest this bank has EARNED but not yet been PAID. A coupon accrues every
    * week and settles on the bucket's date, so in between it is a receivable, and a real one: the

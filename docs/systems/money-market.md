@@ -103,9 +103,9 @@ checked by `scripts/check-atlas.sh`.
 | **A3 the need is knowable only AFTER the day's flows** | `src/engine/simulation/stages/repo-clearing.ts:needByTicker` | ⚠️ |
 | **A3.a therefore the market must clear after them** | `src/engine/simulation/stages/02b-bank-diversification.ts:runRegionalRepoSession` | ❌ |
 | B1 every bank posts a schedule; who lends is the OUTCOME | `src/engine/simulation/stages/repo-clearing.ts:lenderSchedule` | ✅ |
-| **B2 unsecured lending prices the borrower's name** | — | ❌ |
-| B2.a a doubted name pays more, or finds no bid | — | ❌ |
-| B2.b VERIFY the strongest-to-weakest spread measures stress | — | ❌ |
+| **B2 unsecured lending prices the borrower's name** | `src/engine/simulation/stages/interbank.ts:runInterbankSession` · `src/domain/interbank.ts:InterbankLoan` | ✅ |
+| B2.a a doubted name pays more, or finds no bid | `src/engine/simulation/stages/interbank.ts:runInterbankSession` | ✅ |
+| B2.b VERIFY the strongest-to-weakest spread measures stress | `src/domain/region-macro.ts:interbankRateAnnual` | ⚠️ |
 | B3 secured lending prices the collateral | `src/domain/repo.ts:RepoContract` · `src/engine2/obligations.ts:materializeRepo` · `src/engine/ledger/contract-ledger.ts:publishRepoBook` | ✅ |
 | B3.a eligibility is per asset, and something is ineligible | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` | ✅ |
 | B3.b haircuts by asset and tenor | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
@@ -178,22 +178,24 @@ implemented, and it is *defeated* — a bank with no eligible paper drops out of
 entirely, its shortfall becomes invisible to the session, and the close then lends it the whole
 amount unsecured. **Already §3 step 20-LLR.**
 
-### ❌ B2 / B2.a / B2.b — THERE IS NO UNSECURED MARKET, SO NO NAME IS EVER PRICED. Already §3 step 20b
+### ✅ B2 / B2.a / ⚠️ B2.b — THE UNSECURED MARKET EXISTS, AT THE CLOSE, ONE BOOK PER NAME
 
-A grep for `interbank` across `src` returns only FX squaring. Every contract in `reg.repoBook` is
-secured general collateral, and `lenderSchedule(reservationBps, maxHoldingLocal)` carries a
-reservation and a size and **no borrower argument at all** — at one cleared GC rate a lender's cash
-is fungible and each borrower draws pro rata (`strike`, `repo-clearing.ts:510`). So a lender cannot
-have a view on a name, B2.a's "no bid at all" cannot happen, and B2.b's strong-to-weak spread does
-not exist because there is only one rate.
+*2026-09-05 (§9.20b).* `stages/interbank.ts:runInterbankSession` runs inside the funding close —
+after the day's flows, where A3 says the need is knowable — before the window is asked for
+anything. Each short bank is its own YIELD_LIKE book on its NAME: every surplus bank's schedule
+starts at the front of the borrower's own cleared credit curve (`issuerSpreadAtOnCurve`, the spread
+its bonds print; the posted constant only for a bank nothing has priced) and commits its whole
+surplus by the top of the corridor. The borrowers clear in order of that spread, so the strongest
+name takes the cash first and the doubted one bids for what is left, pays more, or finds no bid —
+B2.a — and only the unfilled remainder reaches `raiseCentralBankLoanLocal`. The loan is a row of
+the contract store (`domain/interbank.ts`, kind `INTERBANK`), principal moved between reserve
+accounts at the close and repaid at the next open with interest between the banks' own accounts
+(`matureInterbankLoans`, 02b), the sheets' `interbankLentLocal`/`interbankBorrowedLocal` derived
+from the book and in M5's identity.
 
-§3 step 20b names exactly this ("the last boundary line's named successor, and it was never built:
-surplus banks lend to short ones at policy plus the borrower's own spread, and only what no bank
-will lend reaches a standing facility"). Two things this mapping adds to that step: it should be
-sequenced AFTER 20-LLR's move (an unsecured book held at stage 3 would price nothing either), and
-the borrower's own spread already exists as a cleared number — its credit curve
-(`engine/credit-price.ts`, read off the bank's own cleared paper), which 02b
-already reads at `:294`.
+B2.b is now READABLE and not yet read: the struck rates per name are on the book and their
+principal-weighted average on `Region.interbankRateAnnual`; the strong-to-weak spread is step 38's
+measurement. The session's collateral-free window behind it is still 20-LLR's.
 
 ### ⚠️ A2.a — THREE ANSWERS TO ONE BUFFER, AND ALL THREE ARE THE SAME CONSTANT. Already §3 step 30b (sibling)
 

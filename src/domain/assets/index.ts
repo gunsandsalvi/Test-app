@@ -33,6 +33,8 @@ export type InstrumentKind =
   | 'ETF_SHARE' | 'MMF_SHARE' | 'PE_FUND_INTEREST'
   // The books the adapters clear (§3.13-BOOK dII): nobody issues them, nobody holds them.
   | 'IRS' | 'CDS' | 'CDS_INDEX' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'BOND_FUTURE' | 'REPO' | 'SBL'
+  // §3.20b: the interbank unsecured book, one per borrowing bank's name.
+  | 'INTERBANK'
   // §3.17b-iii: the index option book, cleared like the others. TRS has no class and no market.
   | 'OPTION' | 'TRS'
   // §3.13-BOOK f3: a firm's input inventory — a good, on its own book, in the good's own units.
@@ -125,6 +127,8 @@ export const ASSET_REGISTRY: Record<InstrumentKind, AssetModule> = {
   BOND_FUTURE:      { assetClass: 'DERIVATIVE', carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   /** A repo is money lent against paper: its size is cash and its price a rate. */
   REPO:             { assetClass: 'CASH_LIKE',  carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'YIELD_LIKE',  countedIn: 'MONEY',       ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  /** §3.20b — the interbank unsecured book: one bank's reserves lent to another on its name, priced as a spread. */
+  INTERBANK:        { assetClass: 'CASH_LIKE',  carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'YIELD_LIKE',  countedIn: 'MONEY',       ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   /** The stock-borrow book: shares out on loan, priced as a fee. */
   SBL:              { assetClass: 'EQUITY',     carriesCoupon: false, lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'SHARES',      ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   OPTION:           { assetClass: 'DERIVATIVE', carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },

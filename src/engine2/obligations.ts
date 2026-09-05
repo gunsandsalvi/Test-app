@@ -18,6 +18,7 @@ import type { V2World } from './world';
 import { internType, typeOf, internRegion, regionOf, internPartyKey, partyKeyOf, internInstrument, instrumentOf, CURRENCY_ID, currencyOfId } from './world';
 import { ABSENT_REF, newRefColumn, type RefColumn, type TypeRef, type RegionRef, type PartyKeyRef, type InstrRef } from './refs';
 import type { DerivativeContract, DerivativeReference, DerivativeParty } from '../domain/derivatives/contract';
+import type { InterbankLoan } from '../domain/interbank';
 import type { RepoContract, RepoPledge, RepoParty } from '../domain/repo';
 import type { SecurityLoan } from '../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../domain/prime-brokerage';
@@ -324,6 +325,49 @@ export function materializeRepo(v2: V2World, r: number): RepoContract {
     id: S.id[r], regionId: regionOf(v2, S.regionRef[r]) as RegionId, lender, borrowerId: borrower.id,
     principalLocal: S.notional[r], rateAnnual: S.strike[r], struckWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
     collateral: (S.pledges[r] ?? []).map((p) => ({ bondId: p.bondId, faceLocal: p.faceLocal })),
+  };
+}
+
+// ---- §3.20b — THE INTERBANK BOOK: lender as A, borrower as B (both banks), principal as the
+// size, the rate as the strike. Unsecured: no pledges. ----
+
+/** Write an interbank loan as a new row (ledger-internal). Returns the row. */
+export function writeInterbankRow(v2: V2World, c: InterbankLoan): number {
+  const S = mutableObligations(v2);
+  if (S.rowById.has(c.id)) return defect(`interbank loan ${c.id} struck twice`);
+  const r = allocRow(S);
+  const kindRef = internType(v2, 'INTERBANK');
+  S.kindRef[r] = kindRef; S.classRef[r] = kindRef; S.regionRef[r] = internRegion(v2, c.regionId);
+  S.currencyId[r] = CURRENCY_ID[currencyOf(c.regionId)];
+  S.aRef[r] = internPartyKey(v2, partyKey(bankPartyOf(c.lenderId))); S.bRef[r] = internPartyKey(v2, partyKey(bankPartyOf(c.borrowerId)));
+  S.notional[r] = c.principalLocal; S.strike[r] = c.rateAnnual; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
+  S.struckWeek[r] = c.struckWeek | 0; S.maturityWeek[r] = c.maturityWeek | 0;
+  S.refKind[r] = 0; S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = c.id;
+  S.pledges[r] = [];
+  S.rowById.set(c.id, r);
+  appendToKind(S, kindRef, r);
+  bump(S, kindRef);
+  return r;
+}
+
+/** A live interbank row takes the loan's current terms (ledger-internal). */
+export function writeInterbankTerms(v2: V2World, r: number, c: InterbankLoan): void {
+  const S = mutableObligations(v2);
+  S.aRef[r] = internPartyKey(v2, partyKey(bankPartyOf(c.lenderId))); S.bRef[r] = internPartyKey(v2, partyKey(bankPartyOf(c.borrowerId)));
+  S.notional[r] = c.principalLocal; S.strike[r] = c.rateAnnual;
+  S.struckWeek[r] = c.struckWeek | 0; S.maturityWeek[r] = c.maturityWeek | 0;
+  bump(S, S.kindRef[r]);
+}
+
+/** One interbank row materialized back to the loan the stages read. */
+export function materializeInterbank(v2: V2World, r: number): InterbankLoan {
+  const S = v2.obligations;
+  const lender = partyFromKey(partyKeyOf(v2, S.aRef[r]));
+  const borrower = partyFromKey(partyKeyOf(v2, S.bRef[r]));
+  if (lender === undefined || borrower === undefined || lender.kind !== 'BANK' || borrower.kind !== 'BANK') return defect(`interbank row ${r} (${S.id[r]}) names a party the key table cannot read`);
+  return {
+    id: S.id[r], regionId: regionOf(v2, S.regionRef[r]) as RegionId, lenderId: lender.id, borrowerId: borrower.id,
+    principalLocal: S.notional[r], rateAnnual: S.strike[r], struckWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
   };
 }
 

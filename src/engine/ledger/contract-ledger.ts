@@ -13,8 +13,9 @@
  * The books keep their shapes and the stages keep their arithmetic; only the writes moved. One
  * columnar store for the six is slice d4c's.
  */
+import type { InterbankLoan } from '../../domain/interbank';
 import type { V2World } from '../../engine2/world';
-import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeUnits, writeDerivativeSize, writeDerivativeParties, writeRepoRow, writeCcpFundRow, writeCcpFundAmount, materializeCcpFund, ccpFundIdOf, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
+import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, writeInterbankRow, writeInterbankTerms, materializeInterbank, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeUnits, writeDerivativeSize, writeDerivativeParties, writeRepoRow, writeCcpFundRow, writeCcpFundAmount, materializeCcpFund, ccpFundIdOf, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import { derivativePartyKey, type DerivativeClassId, type DerivativeContract, type DerivativeParty } from '../../domain/derivatives/contract';
@@ -316,6 +317,28 @@ export function publishRepoBook(v2: V2World, regionId: RegionId, book: RepoContr
     const was = before.get(bankId) ?? new Map<string, number>(), now = after.get(bankId) ?? new Map<string, number>();
     new Set([...was.keys(), ...now.keys()]).forEach((bondId) => setLien(v2, bankId, 'GOV_BOND', bondId as InstrumentId, regionId, now.get(bondId) ?? 0));
   });
+}
+
+/** §3.20b — THE INTERBANK BOOK: a region's unsecured bank-to-bank loans, rows of the contract
+ *  store read and written the way the repo book is. */
+const interbankBookMemo = new WeakMap<V2World, { epoch: number; byRegion: Map<string, InterbankLoan[]> }>();
+export function interbankBookOf(v2: V2World, regionId: RegionId): InterbankLoan[] {
+  let memo = interbankBookMemo.get(v2);
+  if (!memo || memo.epoch !== v2.obligations.epoch) { memo = { epoch: v2.obligations.epoch, byRegion: new Map() }; interbankBookMemo.set(v2, memo); }
+  let book = memo.byRegion.get(regionId);
+  if (!book) { book = rowsOfKindInRegion(v2, 'INTERBANK', regionId).map((r) => materializeInterbank(v2, r)); memo.byRegion.set(regionId, book); }
+  return book;
+}
+export function publishInterbankBook(v2: V2World, regionId: RegionId, book: InterbankLoan[]): void {
+  const rows = book.map((c) => {
+    if (c.regionId !== regionId) return defect(`interbank loan ${c.id} of ${c.regionId} published on ${regionId}'s book`);
+    resolvePartyRef(bankPartyOf(c.lenderId), `interbank ${c.id} lender`); resolvePartyRef(bankPartyOf(c.borrowerId), `interbank ${c.id} borrower`);
+    const r = derivativeRowOf(v2, c.id);
+    if (r === undefined) return writeInterbankRow(v2, c);
+    writeInterbankTerms(v2, r, c);
+    return r;
+  });
+  relinkKindInRegion(v2, 'INTERBANK', regionId, rows);
 }
 
 /**

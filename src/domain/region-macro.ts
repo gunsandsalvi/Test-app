@@ -703,6 +703,9 @@ export interface Region {
    * sheets carry positions, never a second copy of the rate.
    */
   repoRateAnnual: number;
+  /** §3.20b — what the interbank unsecured book struck at the last close, principal-weighted;
+   *  undefined until a loan has cleared. A read of the book, never an input to it. */
+  interbankRateAnnual?: number;
   /**
    * REPO1 — this region's live secured-funding book: every open contract, with its lender, its
    * borrower, the rate it was struck at, when it matures and the specific paper pledged. Stored

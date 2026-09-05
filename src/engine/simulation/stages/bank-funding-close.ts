@@ -1,7 +1,8 @@
 /**
  * THE FUNDING CLOSE: a bank whose reserve account ends the week below its operating
- * buffer raises wholesale money overnight to cover it, at its own cleared spread, from the same
- * lenders the morning roll repays (bank-lending.ts's `unrenewedWholesaleLocal`, in 02b).
+ * buffer raises money overnight to cover it — §3.20b: FIRST from the banks that ended above
+ * theirs, unsecured, on its name and at the market's price of it (`interbank.ts`), and only for
+ * what no bank will lend from the central bank.
  *
  * Why at the close and not in 02b beside the roll: the shortfall is made by the books that clear
  * AFTER 02b — the desks buy inventory sized by capital, not by cash, and the settlement of a
@@ -22,7 +23,10 @@ import { isActiveCompany } from '../../../domain/company';
 import { raiseCentralBankLoanLocal } from './bank-lending';
 import { bankCashBufferRatioOf } from '../../macro/banking';
 import { WeeklyStepContext } from './context';
-import { pay, runSettlementStage } from './settlement';
+import { pay, pendingSettlementLocal, runSettlementStage } from './settlement';
+import { runInterbankSession } from './interbank';
+import { banksOf } from '../../../domain/company';
+import { RegionId } from '../../../types';
 
 /** A round can leave another bank short (the borrower's settlement drains it); the rounds
  *  converge geometrically and eight is far past the dollar. */
@@ -32,10 +36,20 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
   void state;
   for (let round = 0; round < MAX_ROUNDS; round++) {
     let raisedAny = false;
+    // §3.20b: the market clears per region before the window is asked; a bank's need is read on
+    // settled reserves plus the legs already posted, this round's interbank fills included.
+    (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
+      const reg = ctx.updatedRegions[regionId];
+      if (!reg) return;
+      const banks = banksOf(ctx.updatedCompanies, regionId).filter((b) => isActiveCompany(b));
+      if (banks.length === 0) return;
+      const unfunded = runInterbankSession(ctx, regionId, reg, banks);
+      if ([...unfunded.values()].some((v) => v > 0)) raisedAny = true;
+    });
     ctx.updatedCompanies.forEach((bank) => {
       if (!bank.isBankEntity || !bank.bankBalanceSheet || !isActiveCompany(bank)) return;
       const sheet = bank.bankBalanceSheet;
-      const reservesLocal = bankReservesOf(ctx.v2, bank.id);
+      const reservesLocal = bankReservesOf(ctx.v2, bank.id) + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
       const raisedLocal = raiseCentralBankLoanLocal(sheet, householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)), reservesLocal, bankCashBufferRatioOf(bank));
       if (raisedLocal <= 0) return;
       raisedAny = true;

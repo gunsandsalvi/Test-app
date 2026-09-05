@@ -171,3 +171,7 @@ export const peFundInterestId = (regionId: RegionId, fundIndex: number): Instrum
 /** The facility a company is born owing — the debt half of a sponsor's capital structure. */
 export const birthFacilityTrancheId = (companyId: string, week: number): InstrumentId =>
   asInstrumentId(`${companyId}-FACILITY-BIRTH-${week}`);
+
+/** §3.20b — the interbank unsecured book on one borrowing bank's NAME: one instrument per borrower. */
+export const interbankInstrumentId = (regionId: RegionId, borrowerId: string): InstrumentId =>
+  asInstrumentId(`INTERBANK:${regionId}:${borrowerId}`);

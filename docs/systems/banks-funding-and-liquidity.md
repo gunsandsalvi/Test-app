@@ -88,7 +88,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.b corporate, operational | `src/engine/ledger/accounts.ts:corporateDepositsAt` | ✅ |
 | A1.c institutional/wholesale, rate-sensitive | `src/engine/ledger/accounts.ts:institutionalDepositsAt` | ⚠️ |
 | A1.d VERIFY stickiness differs by class | `src/engine/macro/banking.ts:stressedOutflowLocal` | ⚠️ |
-| A2 wholesale borrowing — interbank, repo, CP | `src/domain/repo.ts:repoBorrowedLocal` | ⚠️ |
+| A2 wholesale borrowing — interbank, repo, CP | `src/domain/repo.ts:repoBorrowedLocal` · `src/domain/interbank.ts:interbankBorrowedLocal` | ⚠️ |
 | A2.a short, and it rolls | `src/domain/repo.ts:maturingAt` | ✅ |
 | A3 capital: equity and subordinated debt | `src/domain/banking.ts:bankEquityLocal` | ⚠️ |
 | A4 the central bank, on the corridor's terms | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ⚠️ |
@@ -107,7 +107,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 maturity transformation is the business | `src/domain/banking.ts:MORTGAGE_TERM_WEEKS` | ✅ |
 | C3.a VERIFY the gap is measurable | — | ❌ |
 | C4 VERIFY the position is the residue of everyone's week | `src/engine/simulation/stages/settlement.ts:runSettlementStage` | ✅ |
-| D1 borrows in the market, secured or unsecured | `src/engine/simulation/stages/repo-clearing.ts:runRegionalRepoSession` | ⚠️ |
+| D1 borrows in the market, secured or unsecured | `src/engine/simulation/stages/repo-clearing.ts:runRegionalRepoSession` · `src/engine/simulation/stages/interbank.ts:runInterbankSession` | ✅ |
 | D2 sells or pledges liquid assets | `src/engine/simulation/stages/repo-clearing.ts:selectCollateral` | ✅ |
 | D3 bids up for deposits | `src/engine/macro/banking.ts:liquidityShortfallShare` | ✅ |
 | **D4 shrinks its assets: it stops lending** | `src/engine/simulation/stages/bank-lending.ts:runBankWeeklyLending` | ❌ |
@@ -180,14 +180,13 @@ into what it pays, so C2's buffer and D3's deposit bidding cost it the same whet
 about to fail. **§3 step 37-COSTOFCAPITAL** — small in code (one term in one function, one rate reconciled)
 and load-bearing for every price in `banks-lending.md` C.
 
-### ⚠️ D1 / A2 — THE MARKET IS SECURED-ONLY, SO A NAME IS NEVER PRICED. Already §3 step 20b
+### ✅ D1 / ⚠️ A2 — SECURED IN THE MORNING, UNSECURED ON THE NAME AT THE CLOSE
 
-`runRegionalRepoSession` is general-collateral repo: one cleared rate for every borrower, and a
-lender's schedule (`lenderSchedule`, `repo-clearing.ts:363`) carries a reservation and a size and no
-view of who is borrowing. There is no unsecured interbank book anywhere in the tree — a grep for
-`interbank` returns only FX squaring. So A2's first member and D1's "or unsecured" are absent, and
-the only unsecured lender a bank has is the central bank, at a rate that does not price it.
-Step 20b names exactly this and says it "was never built".
+*2026-09-05 (§9.20b).* `runRegionalRepoSession` is still general-collateral repo at one rate; the
+unsecured leg is `stages/interbank.ts:runInterbankSession` at the funding close — one book per
+short bank, every surplus bank's schedule starting at the front of the borrower's own cleared
+credit curve, the strongest name funded first, the remainder to the window. D1's "or unsecured"
+holds. A2 stays ⚠️ for its third member: a bank issues no commercial paper of its own.
 
 ### ⚠️ C2.a — THE BUFFER IS A CONSTANT WEIGHTED BY A PRIMITIVE. Already §3 step 30b (its sibling)
 

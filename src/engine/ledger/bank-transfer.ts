@@ -33,6 +33,8 @@ export function absorbBankSheet(v2: V2World, acquirerId: EntityId, targetId: Ent
   acquirer.srfBorrowingLocal = (acquirer.srfBorrowingLocal ?? 0) + (target.srfBorrowingLocal ?? 0); target.srfBorrowingLocal = 0;
   acquirer.repoBorrowedLocal = (acquirer.repoBorrowedLocal ?? 0) + (target.repoBorrowedLocal ?? 0); target.repoBorrowedLocal = 0;
   acquirer.repoLentLocal = (acquirer.repoLentLocal ?? 0) + (target.repoLentLocal ?? 0); target.repoLentLocal = 0;
+  acquirer.interbankLentLocal = (acquirer.interbankLentLocal ?? 0) + (target.interbankLentLocal ?? 0); target.interbankLentLocal = 0;
+  acquirer.interbankBorrowedLocal = (acquirer.interbankBorrowedLocal ?? 0) + (target.interbankBorrowedLocal ?? 0); target.interbankBorrowedLocal = 0;
   acquirer.onRrpLendingLocal = (acquirer.onRrpLendingLocal ?? 0) + (target.onRrpLendingLocal ?? 0); target.onRrpLendingLocal = 0;
   // The credit books.
   acquirer.businessLoans = [...(acquirer.businessLoans || []), ...(target.businessLoans || [])];

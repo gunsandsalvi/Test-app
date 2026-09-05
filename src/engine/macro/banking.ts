@@ -97,6 +97,8 @@ export function bankTotalAssetsLocal(sheet: BankingSector, cashLocal: number, fa
   // behind it absorb any imbalance.
   return loanBooksOf(sheet, facilityBookLocal) + bookAssetsLocal
     + Math.max(0, cashLocal) + (sheet.repoLentLocal ?? 0)
+    // §3.20b: an unsecured loan to another bank consumes the leverage ratio like any loan.
+    + (sheet.interbankLentLocal ?? 0)
     // CAL: a coupon earned and not yet paid is an asset the bank holds against the treasury.
     + (sheet.sovereignAccruedCouponLocal ?? 0)
     // HF1: a margin loan to a fund consumes the leverage ratio like any other loan.
@@ -528,6 +530,9 @@ export function evolveBankingSector(
     // a window draw is a contract with the central bank as the named lender. These four are then
     // DERIVED from the region's book. What came due settled in step 1 above.
     srfBorrowingLocal: survivingSrfLocal,
+    // §3.20b: the interbank lines mature at the open and are re-struck at the close; carried here.
+    interbankLentLocal: prevBanking.interbankLentLocal ?? 0,
+    interbankBorrowedLocal: prevBanking.interbankBorrowedLocal ?? 0,
     onRrpLendingLocal: 0,
     repoLentLocal: survivingRepoLentLocal,
     repoBorrowedLocal: survivingRepoBorrowedLocal,
