@@ -403,7 +403,7 @@ written from here):
     anywhere** — every weekly write recomputes `valueLocal = units × a price`, so the warehouse is
     revalued UP when the market rises (`goods.md` E2.c's exact FORBID: profit the firm has not
     earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
-    all). Seven slices, in this order, because each one is load-bearing for the next:
+    all). What is left of its slices, in this order, because each is load-bearing for the next:
 
     v-c-ii. **THE INCOME STATEMENT CHARGES WHAT IT SOLD** (`goods.md` F5: *revenue on delivery;
        COGS is the units that left*). Today `newEbitdaMargin` is `1 − (input draw + payroll + other
@@ -1228,6 +1228,25 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-v-c-ii-a — AND THE ARITHMETIC, NOT ONLY THE ARITY.** Inserted before `13-INV-v-c-ii` as
+  its prerequisite (rule 10): that slice rewrites `newEbitdaMargin`, which is mirrored by hand in
+  `native/kernels.c`, and §9.13-INV-ii-c's gate counts SLOTS — it cannot see a number changed in
+  one language and not the other. Nothing else could either: no §4 gate loads `kernels.node`, and
+  `stage08-front.ts` calls the C in preference to the JS wherever the addon is built, so a fork in
+  the shared arithmetic is a fork in the world with the whole suite green. `test/native-mirror.test.ts`
+  now runs both cores over one synthetic firm — every seam lane populated, a debt rung, a product
+  line, an output row — and compares the core's outputs, the scratch pass's lanes and the lot book
+  the draw consumed from, BIT FOR BIT. Not to a tolerance: §7.370 measured what a tolerance admits
+  — three firms differing at the eighth digit at week 1 were a 13% price gap by week 13 — so the
+  1e-12 the port's old oracle allowed is exactly the drift class this must catch. The comparison
+  restores each lane to the allocators' OWN opening state between the two runs rather than zeroing
+  it, which is what the test's first run caught: `allocCoreOut` opens `industrialLineAt` at −1
+  (*this firm has no such line*) and neither core writes it when none qualifies, so a blanket zero
+  reports the sentinel itself as a fork. Where no addon is built it says so and passes — the arity
+  gate is what holds the two in step there, and a machine that runs the C is a machine that
+  verifies it. `allocScratch` is exported for it, since a second copy of the scratch layout in the
+  test would be the same fork one level up. Gates green; no run (rule 11).
 
 **13-INV-v-c-i — THE COST OF WHAT IT SOLD, MEASURED.** `writeFinishedRows` draws the week's
   deliveries off the register's own lots first-in-first-out, so what those units COST falls out of
