@@ -9,10 +9,18 @@
 //                          five sites and made a typo a silent `undefined`. 77 remain; this is a
 //                          ratchet, so it warns rather than errors until they are gone.
 //   no-floating-promises   nothing here is async today, and the rule is what stops that changing
-//                          silently in an engine whose determinism depends on ordering.
+//                          silently in an engine whose determinism depends on ordering. An ERROR;
+//                          node:test's `test()`/`describe()`/`it()` return a promise the runner
+//                          owns, and are declared safe rather than `void`ed 296 times.
 //   no-unnecessary-condition  §7.234 found `if (accExpected > 0)` guarding a value that was always
-//                          0, and a check that had never fired in the life of the file.
+//                          0, and a check that had never fired in the life of the file; §3.28's NaN
+//                          passed every `>` the same way. A WARNING under the gate's
+//                          `--max-warnings` — THE RATCHET, struck at the honest count (§4), may
+//                          fall and never rise; §3.29-iii/iv pay it.
 //   eqeqeq / no-fallthrough   the switch-heavy dispatch §7.229 counted at 75 sites.
+//
+// §3.29-ii: both type-aware rules were named here and configured nowhere — no `parserOptions.
+// project`, so neither could run. `projectService` turns them on (the gate goes from 12 s to 25 s).
 //
 // Style rules are deliberately absent. This file is for defects.
 
@@ -25,7 +33,14 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: new URL('.', import.meta.url).pathname } },
     rules: {
+      // The two type-aware rules this project paid for (the header). A floating promise is a
+      // defect; the runner's own test calls are the one known-safe shape.
+      '@typescript-eslint/no-floating-promises': ['error', {
+        allowForKnownSafeCalls: [{ from: 'package', package: 'node:test', name: ['test', 'describe', 'it'] }],
+      }],
+      '@typescript-eslint/no-unnecessary-condition': 'warn',
       // THE RATCHET. 77 today; this may fall and never rise. When it reaches zero, make it an error.
       '@typescript-eslint/no-explicit-any': 'warn',
       // Real defects, not style.

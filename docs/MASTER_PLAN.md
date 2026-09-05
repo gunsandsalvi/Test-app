@@ -553,17 +553,6 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-29-ii. **The two paid-for lint rules are on, and their backlog is a ratchet.** *(rule 10 split of
-    "the gates actually gate"; 29-i, the three hygiene greps, is done.)* `eslint.config.js:6` names
-    `no-floating-promises` and `no-unnecessary-condition` as the rules this project paid for (§7.234's
-    `if (accExpected > 0)` that had never fired; step 28's NaN) and configures neither — no
-    `parserOptions.project`, so neither can run. Measured with them on: `no-floating-promises` 296,
-    every one a node:test `test()` call — the known-safe call, declared as such, not a defect;
-    `no-unnecessary-condition` 1,565 across 171 files — 688 `??` whose left side cannot be nullish,
-    535 `?.` on a value that cannot be, 173 always-truthy, 126 always-falsy, 32 comparisons of types
-    with no overlap. Turn `projectService` on (the gate goes from 12 s to 25 s); floating promises an
-    ERROR; the conditions a WARNING under the gate's `--max-warnings`, struck at the honest count and
-    allowed only to fall — §4 re-states the gate. 29-iii and 29-iv pay it.
 29-iii. **The dead conditions.** The 331 guards the types say cannot fire (always-truthy,
     always-falsy, no overlap) are each one of two things: a check that never fires — §7.234's class,
     a guard against a state the type already excludes, and rule 12 says delete it, not the rule —
@@ -1215,7 +1204,7 @@ none of them steps a week of the simulation. Green before every commit.
 | Command | Note |
 |---|---|
 | `npx tsc --noEmit` | |
-| `npx eslint src scripts test --no-warn-ignored --max-warnings 0` | **zero.** It used to ratchet; the backlog is gone and a warning is now a failure |
+| `npx eslint src scripts test --no-warn-ignored --max-warnings 1565` | **THE RATCHET, again.** 1,565 is the `no-unnecessary-condition` backlog the type-aware rules found when §9.29-ii turned them on; it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower the number here and in `package.json` with each payment |
 | `npm test` | the unit suite: contracts and arithmetic, never a run |
 | `bash scripts/check-hygiene.sh` | carries `check-atlas.sh` and the stated-literal ratchets |
 | `npm run build` | |
@@ -1342,6 +1331,17 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**29-ii — THE TWO PAID-FOR LINT RULES ARE ON, AND THEIR BACKLOG IS A RATCHET.** `eslint.config.js`
+  named `no-floating-promises` and `no-unnecessary-condition` as the rules this project paid for and
+  configured neither: no `parserOptions.project`, so neither could run. `projectService` is on
+  (the gate takes 25–35 s where it took 12). Floating promises are an ERROR: the 296 the rule found
+  were every node:test `test()` call, the runner's own promise, declared a known-safe call rather
+  than `void`ed 296 times — zero remain. Unnecessary conditions are a WARNING under the gate's
+  `--max-warnings`, struck at the honest count: 1,565 across 171 files (688 `??` whose left side
+  cannot be nullish, 535 `?.` on a value that cannot be, 173 always-truthy, 126 always-falsy, 32
+  comparisons of types with no overlap); §4 and `package.json` carry the number, it may only fall,
+  and 29-iii/iv pay it. Gates green; no run (rule 11).
 
 **29-i — THE THREE HYGIENE GREPS SEE WHAT THEY CLAIM TO.** `check-hygiene.sh`'s fraction ratchet
   dropped every line containing `toFixed(` — the tree's commonest idiom — so a fraction beside a
