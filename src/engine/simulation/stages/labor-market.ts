@@ -43,10 +43,9 @@ import {
   MATCHING_EFFICIENCY, MATCHING_ELASTICITY,
   HIRING_ADJUSTMENT_SPEED_MULTIPLE, LAYOFF_SPEED_MULTIPLE, DISTRESS_LAYOFF_SPEED,
   VACANCY_WITHDRAWAL_RATE_WEEKLY,
-  WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL, WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL,
   COST_OF_LIVING_PASS_THROUGH,
-  MARKET_WAGE_CATCHUP_SPEED_WEEKLY,
   GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
+import { clearLabourMatches, remainingLabourBids, labourPrintOf, LabourBid } from '../../../domain/labour-clearing';
 import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and-wages';
 import { isActiveCompany, fullStaffingCapHeads, RECEIPTS_MEASUREMENT_WEIGHT } from '../../../domain/company';
 import { SmePool } from '../../../domain/region-macro';
@@ -496,6 +495,33 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     /** §3.20-iii: each occupation's own search this week, kept for the mobility pass and the strata. */
     const own = {} as Record<OccupationType, { employedBefore: number; separations: number; openVacancies: number; seekers: number }>;
 
+    // ---- §3.24-i: THE MATCHES CLEAR ON THE WAGE. Every posting is a BID — the employer's
+    // openings in the occupation at the wage it offers relative to the going rate — and the
+    // week's matches go to the highest bids first (`domain/labour-clearing.ts`). A firm paying
+    // over the rate fills before one paying under; the bid that took the last match is the
+    // price the occupation printed. The segments post at the going rate — they have no wage
+    // policy of their own until BP gives them one. ----
+    const segmentBidKey = (seg: SmePool): string => `SEG:${seg.industry}`;
+    const bidsByOcc = {} as Record<OccupationType, LabourBid[]>;
+    OCCUPATIONS.forEach((occ) => { bidsByOcc[occ] = []; });
+    postings.forEach(({ comp, vacancies }) => {
+      if (!(vacancies > 0)) return;
+      const mix = occupationMixFor(comp.sector);
+      OCCUPATIONS.forEach((occ) => {
+        const units = vacancies * (mix[occ] ?? 0);
+        if (units > 0) bidsByOcc[occ].push({ key: comp.ticker, units, bidIndex: comp.offeredWageIndex ?? 1.0 });
+      });
+    });
+    segmentPostings.forEach(({ seg, vacancies }) => {
+      if (!(vacancies > 0)) return;
+      const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector) as Partial<Record<OccupationType, number>>;
+      OCCUPATIONS.forEach((occ) => {
+        const units = vacancies * (mix[occ] ?? 0);
+        if (units > 0) bidsByOcc[occ].push({ key: segmentBidKey(seg), units, bidIndex: 1.0 });
+      });
+    });
+    const filledByKeyByOcc = {} as Record<OccupationType, Map<string, number>>;
+
     OCCUPATIONS.forEach((occ) => {
       const supplyForOcc = totalLaborForce * (shares[occ] ?? BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] ?? 0.2);
       // NOT clipped to supply. Clipping it here was a measurement that lied: an occupation
@@ -515,9 +541,15 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
           * Math.pow(openVacancies, MATCHING_ELASTICITY)
           * Math.pow(seekers, 1 - MATCHING_ELASTICITY)
         : 0;
-      const hires = Math.max(0, Math.min(matches, openVacancies, seekers));
+      // What a week of search produced, allocated on the bids. Matches on the carried stock that
+      // no bid this week can take land nowhere: a posting is an employer's, and an anonymous
+      // carried opening has none until 37-EMPLOYMENT's register gives it one.
+      const float = Math.max(0, Math.min(matches, openVacancies, seekers));
+      const cleared = clearLabourMatches(bidsByOcc[occ], float);
+      const hires = cleared.filledUnits;
 
       hiresByOcc[occ] = hires;
+      filledByKeyByOcc[occ] = cleared.filledByKey;
       own[occ] = { employedBefore, separations, openVacancies, seekers };
       // LABOR_TRACE=1 — the two sides of the flow, per (region, occupation): which one drives
       // a monotone unemployment climb is the whole question.
@@ -550,7 +582,10 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const moved = occupationalMobility(unmatched, unfilled);
       const nextShares = { ...shares } as Record<OccupationType, number>;
       OCCUPATIONS.forEach((occ) => {
-        hiresByOcc[occ] += moved.into[occ];
+        // §3.24-i: the movers take what the occupation's own search left, in the same bid order.
+        const second = clearLabourMatches(remainingLabourBids(bidsByOcc[occ], filledByKeyByOcc[occ]), moved.into[occ]);
+        second.filledByKey.forEach((u, k) => filledByKeyByOcc[occ].set(k, (filledByKeyByOcc[occ].get(k) ?? 0) + u));
+        hiresByOcc[occ] += second.filledUnits;
         nextShares[occ] = Math.max(0, (shares[occ] ?? BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] ?? 0.2)
           + (moved.into[occ] - moved.outOf[occ]) / totalLaborForce);
       });
@@ -609,75 +644,40 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       carriedVacanciesByOcc[occ] = Math.max(0, openVacancies - hires) * (1 - VACANCY_WITHDRAWAL_RATE_WEEKLY);
     });
 
-    // ---- 4. The hires land on the REAL employers, pro-rata to what each posted IN EACH
-    // OCCUPATION — so a firm that wanted twenty engineers in a market that could fill twelve
-    // stays eight short, which is the constraint HH6 lets it answer by paying more.
-    //
-    // The fill ratio has to be per-occupation, not one number for the region: a global ratio
-    // let a firm hire past the supply of the occupation it was actually short of (measured:
-    // employers' books ran 3.2% above what the occupations could staff, and the pools clipped
-    // at the supply cap to hide it). A firm short of engineers can still fill its general
-    // roles, and that is exactly what a per-occupation ratio says. ----
-    const fillRatioByOcc = {} as Record<OccupationType, number>;
-    OCCUPATIONS.forEach((occ) => {
-      fillRatioByOcc[occ] = vacanciesByOcc[occ] > 0
-        ? Math.min(1, hiresByOcc[occ] / vacanciesByOcc[occ])
-        : 0;
-    });
-    /** What one employer's posted vacancies actually filled, at its own occupation mix. */
-    const filledFor = (vacancies: number, mix: Partial<Record<OccupationType, number>>): number =>
-      OCCUPATIONS.reduce((a, occ) => a + vacancies * (mix[occ] ?? 0) * fillRatioByOcc[occ], 0);
+    // ---- 4. The hires land on the REAL employers: what each one's bids took, occupation by
+    // occupation — so a firm that wanted twenty engineers and bid under the market for them
+    // stays short of engineers and can still fill its general roles. ----
+    const filledForKey = (key: string): number =>
+      OCCUPATIONS.reduce((a, occ) => a + (filledByKeyByOcc[occ].get(key) ?? 0), 0);
+    /** §3.24-i: the price each occupation printed this week, relative to the going rate it was
+     *  bid against; an occupation nothing filled printed nothing. */
+    const clearedIndexByOcc = {} as Record<OccupationType, number | undefined>;
+    OCCUPATIONS.forEach((occ) => { clearedIndexByOcc[occ] = labourPrintOf(bidsByOcc[occ], filledByKeyByOcc[occ]); });
 
     postings.forEach(({ comp, vacancies, layoffs, quits }) => {
-      const hired = filledFor(vacancies, occupationMixFor(comp.sector));
+      const hired = filledForKey(comp.ticker);
       const next = Math.max(1, Math.round(comp.employeeCount + hired - layoffs - quits));
       if (!ctx.companyUpdates[comp.ticker]) ctx.companyUpdates[comp.ticker] = {};
       ctx.companyUpdates[comp.ticker].employeeCount = next;
       ctx.companyUpdates[comp.ticker].previousEmployeeCount = comp.employeeCount;
 
-      // ---- HH6: this firm's wage decision, off its OWN measured hiring difficulty. ----
+      // ---- §3.24-i: THIS FIRM'S BID, OFF THE PRICE THE MARKET JUST PRINTED. ----
       const unfilledShare = vacancies > 0 ? Math.max(0, Math.min(1, 1 - hired / vacancies)) : 0;
-      // Wage PUSH: postings it could not fill. Wage PULL: a margin below its own baseline —
-      // a firm losing money does not give raises, which is the employer side of the bargain.
-      const currentMargin = comp.annualRevenue > 0 ? comp.ebitda / comp.annualRevenue : 0;
-      const marginShortfall = Math.max(0, (comp.baselineEbitdaMargin ?? currentMargin) - currentMargin);
-      // EMP (§7.110): AND THE SAME MEASURE, THE OTHER WAY UP.
-      //
-      // `unfilledShare` runs [0, 1]: it can say a firm found hiring hard, never that it found it
-      // easy. So the wage was a price on the way UP and administered on the way DOWN, and the
-      // going rate — which moves by `(avgOffer − 1) × speed + cola` — had nothing to pull it
-      // below the level the seed happened to solve for. **Measured: at 33.6% unemployment with
-      // tightness at 0.000, the employment-weighted average offer was RISING (1.0000 → 1.0181)
-      // and the going rate had fallen 1.9% in twenty weeks, all of it composition.** A wage that
-      // cannot fall under a third of the workforce out of work is not a price (rule 3).
-      //
-      // The mirror of "could not fill" is "could fill at will": how slack the market it is
-      // hiring into actually is, which this stage already measures as tightness. At tightness 1
-      // and above nothing changes — difficulty is the whole signal, exactly as before. Below it,
-      // a firm that filled what it posted is paying more than it needs to, by the margin the
-      // market is slack. One coefficient, used in both directions; no new parameter.
-      const slackEase = Math.max(0, 1 - (reg.laborMarketTightness ?? 1));
-      const hiringPressure = unfilledShare - slackEase;
-      // LAB: unbounded. The +25%/-15% band this replaces was the mechanism's substitute — with
-      // labor demand now responding to affordability, a firm that offers more than it can fund
-      // is cutting its own headcount next week, which is the discipline the band was standing in
-      // for. Its own push and pull are the whole decision.
-      const targetChangeAnnual = hiringPressure * WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL
-        - marginShortfall * WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL;
       const prevIndex = comp.offeredWageIndex ?? 1.0;
+      const mixW = occupationMixFor(comp.sector);
+      // What it took to fill this week, in this firm's own occupation mix: the marginal bid in
+      // each occupation it hires from. An occupation nothing filled printed nothing, and the
+      // going rate stands in (1.0 — every bid is relative to it).
+      const clearedForMix = OCCUPATIONS.reduce((a, occ) => a + (mixW[occ] ?? 0) * (clearedIndexByOcc[occ] ?? 1.0), 0);
 
       // ---- RENT-SHARING: A MORE PRODUCTIVE FIRM PAYS MORE. ----
       //
-      // The two terms above are the only firm-specific ones in the wage decision and BOTH
-      // MEAN-REVERT, so nothing accumulates: measured across 2,512 employers, `offeredWageIndex`
-      // ran p10 0.988 to p99 1.002 — a **1.01x** spread (§7.172). Every worker in an occupation
-      // earned the same, which is why `TIER_WAGE_MULTIPLIER` had to state a 32.5x one and why
-      // that stated number carried over half the top tier's income.
-      //
       // What a firm can pay is its own SURPLUS PER WORKER — what a head produces above the
       // non-wage cost of employing it — and a share of that reaches the wage because the worker
-      // can leave. The pull is toward the level that share implies, not a jump to it: a wage is
-      // sticky, and the existing push/pull already carry the cyclical half.
+      // can leave (`RENT_SHARE_TO_LABOUR`, the one bargaining primitive). Measured before it
+      // existed, `offeredWageIndex` ran p10 0.988 to p99 1.002 across 2,512 employers (§7.172):
+      // every worker in an occupation earned the same, and a stated 32.5x tier multiplier
+      // carried the whole within-occupation income distribution.
       const headcount = Math.max(1, comp.employeeCount);
       const nonWageCostLocal = Math.max(0, comp.annualRevenue - comp.ebitda) - weeklyWageBillLocal(
         headcount, occupationMixFor(comp.sector), baseAnnualWageLocal, reg.occupationPools, prevIndex) * 52;
@@ -685,36 +685,39 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const goingWagePerHeadLocal = (weeklyWageBillLocal(
         headcount, occupationMixFor(comp.sector), baseAnnualWageLocal, reg.occupationPools, 1.0) * 52) / headcount;
       // The target premium is the share of the surplus that exceeds the going wage. A firm with
-      // no surplus above it offers no premium; one earning twice it offers a real one.
+      // no surplus above it offers no premium; one earning twice it offers a real one — and one
+      // whose surplus has fallen below the going wage is pulled under it, which is the employer's
+      // side of the bargain (a firm losing money does not give raises).
       const rentTargetIndex = goingWagePerHeadLocal > 0
         ? 1 + RENT_SHARE_TO_LABOUR * ((surplusPerHeadLocal - goingWagePerHeadLocal) / goingWagePerHeadLocal)
         : 1;
-      // Closed over about a YEAR — the gap expressed directly as an annual rate, so no speed
-      // constant is invented. A firm reprices to its own productivity roughly annually; borrowing
-      // the cyclical push's 0.10 would have taken a decade, which is not a wage decision.
-      const rentPullAnnual = (rentTargetIndex - prevIndex) / Math.max(0.01, prevIndex);
-      // The change applies DIRECTLY. An earlier form blended the level against itself
-      // (`prev*inertia + prev*(1+t/52)*(1-inertia)`), which algebraically delivers t x 0.06 —
-      // six percent of the intended move, so no firm's wage ever went anywhere. Stickiness
-      // belongs in the size of the target and in the market's catch-up speed below, not in a
-      // blend of a level with a scaled copy of itself.
+      // A firm the market rationed bids what it took to fill — the price it can now see — or the
+      // bargain's level, whichever is higher; a firm that filled bids the bargain's level. Either
+      // way it closes the gap at its own management's horizon (domain/preferences.ts), the one
+      // pace this model gives a decision: a one-month management reprices in a month, a one-year
+      // one over the year. No push speed, no pull speed, no slack coefficient — those three
+      // (`WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL`, `WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL`, the
+      // tightness ease) were the wage moving AFTER an allocation it could not affect.
+      const target = unfilledShare > 1e-3 ? Math.max(clearedForMix, rentTargetIndex) : rentTargetIndex;
       // A wage cannot be negative; nothing else bounds what a firm offers.
-      const nextIndex = Math.max(0, prevIndex * (1 + (targetChangeAnnual + rentPullAnnual) / 52));
+      const nextIndex = Math.max(0, prevIndex + (target - prevIndex) / patienceWeeksOf(comp.management));
       ctx.companyUpdates[comp.ticker].offeredWageIndex = Number(nextIndex.toFixed(5));
       ctx.companyUpdates[comp.ticker].unfilledVacancyShare = Number(unfilledShare.toFixed(4));
     });
     segmentPostings.forEach(({ seg, vacancies, layoffs, quits }: { seg: SmePool; vacancies: number; layoffs: number; quits: number }) => {
-      const mix = (occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector)) as Partial<Record<OccupationType, number>>;
-      const hired = filledFor(vacancies, mix);
+      const hired = filledForKey(segmentBidKey(seg));
       seg.employment = Math.max(0, Math.round(seg.employment + hired - layoffs - quits));
     });
 
-    // ---- HH6: the going rate per occupation is the employment-weighted average of what the
-    // firms in it actually offer. It used to be a region-level tightness formula walking an
-    // index that no employer's payroll referred to — two representations of one wage, and
-    // neither of them anybody's decision. Now a firm that cannot fill raises its offer, that
-    // raises the occupation's going rate, and that is wage-push arriving through a decision
-    // instead of through a coefficient. ----
+    // ---- §3.24-i: THE GOING RATE IS THE AVERAGE WAGE PAID — a read of the employers' own
+    // levels, not a walk toward them. Every firm's wage is `going rate × its own index`; the
+    // segments and the government pay the going rate itself. So the rate an occupation IS paid
+    // is the employment-weighted average of all of those, and that is what the pool publishes.
+    // It moves when firms reprice (at their own horizons, above) and when hires enter at their
+    // employers' levels — stickiness as a consequence of the relationships that persist and of
+    // the segments' inertia, with no catch-up speed (`MARKET_WAGE_CATCHUP_SPEED_WEEKLY` closed
+    // 15% of this same gap a week; the other 85% was the going rate disagreeing with what was
+    // being paid). ----
     const wageNumeratorByOcc: Record<OccupationType, number> = {
       GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0,
       SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0,
@@ -730,33 +733,31 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         wageDenomByOcc[occ] += w;
       });
     });
-    // Segment pools and the government pay the going rate — they have no wage policy of their
-    // own until BP/PUB give them one — so they are deliberately NOT in this average, which is
-    // an average of the firms that actually make a wage decision.
-    // The going rate closes part of the gap to what firms are collectively offering, and the
-    // firms' relative premium decays by the same factor — otherwise the same premium would be
-    // counted again every week. What is left is a real wage level that moved because employers
-    // decided to move it.
+    (reg.smePools || []).forEach((seg) => {
+      const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector) as Partial<Record<OccupationType, number>>;
+      OCCUPATIONS.forEach((occ) => {
+        const w = Math.max(0, seg.employment) * (mix[occ] ?? 0);
+        wageNumeratorByOcc[occ] += w;
+        wageDenomByOcc[occ] += w;
+      });
+    });
+    Object.entries(GOVERNMENT_OCCUPATION_MIX).forEach(([occ, share]) => {
+      const w = Math.max(0, reg.governmentEmployment) * (share ?? 0);
+      wageNumeratorByOcc[occ as OccupationType] += w;
+      wageDenomByOcc[occ as OccupationType] += w;
+    });
     const marketCatchupByOcc = {} as Record<OccupationType, number>;
     OCCUPATIONS.forEach((occ) => {
-      if (!(wageDenomByOcc[occ] > 0)) { marketCatchupByOcc[occ] = 0; return; }
-      const avgOffer = wageNumeratorByOcc[occ] / wageDenomByOcc[occ];
-      // Two forces move the going rate: what firms are collectively bidding over it (tightness,
-      // through their own decisions) and the cost of living the workforce bargains to recover.
-      // A market with no cost-of-living channel lets real wages fall one-for-one with inflation
-      // forever, which is not a labor market anybody works in.
-      // §7.345 — COST-OF-LIVING RECOVERY IS BARGAINING, AND BARGAINING NEEDS AN OUTSIDE OPTION.
-      // The burn-in (the first run of the engine to its own fixed point) found the doom loop
-      // the u-ratchet always was: a firm sheds, output falls, the print rises, the going rate
-      // recovered 60% of that rise REGARDLESS of a third of the workforce out of work, margins
-      // went to zero, and the next firm shed. A worker recovers the cost of living only where
-      // it can credibly leave — the same concave job-finding rate the quit rate already rides
-      // on (§7.210: ONE representation of how easily a job is found), which is 1 at neutral
-      // tightness and falls to zero with it. No new number: the matching function's own.
+      const avgPaid = wageDenomByOcc[occ] > 0 ? wageNumeratorByOcc[occ] / wageDenomByOcc[occ] : 1;
+      // The cost of living the workforce bargains to recover, on top of what is paid. §7.345 —
+      // COST-OF-LIVING RECOVERY IS BARGAINING, AND BARGAINING NEEDS AN OUTSIDE OPTION: a worker
+      // recovers it only where it can credibly leave — the same concave job-finding rate the quit
+      // rate rides on (§7.210), 1 at neutral tightness and zero with none. §3.24-ii moves this
+      // into the seekers' own reservation, where a real wage is actually defended.
       const bargainingPower = Math.min(1, Math.pow(
         Math.max(0, reg.laborMarketTightness ?? 1) / NEUTRAL_LABOR_TIGHTNESS, MATCHING_ELASTICITY));
       const colaWeekly = (reg.inflation ?? 0) * COST_OF_LIVING_PASS_THROUGH * bargainingPower / 52;
-      const catchup = (avgOffer - 1) * MARKET_WAGE_CATCHUP_SPEED_WEEKLY + colaWeekly;
+      const catchup = avgPaid * (1 + colaWeekly) - 1;
       marketCatchupByOcc[occ] = catchup;
       const prev = pools[occ]?.wageIndex ?? 1.0;
       // LAB: the going rate is a price and carries no band. It used to sit in [0.1, 20] with its
@@ -768,10 +769,12 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         wageIndex: Number(next.toFixed(5)),
         // The going rate's own growth, annualized — what household income is paid at.
         wageGrowthAnnual: Number((catchup * 52).toFixed(4)),
+        // §3.24-i: the price the occupation printed this week, against the rate it was bid at.
+        clearedWageIndex: clearedIndexByOcc[occ] === undefined ? undefined : Number(clearedIndexByOcc[occ]!.toFixed(5)),
       };
     });
-    // Each firm's premium is relative to a rate that just moved, so renormalize it: a firm that
-    // stops pushing drifts back to parity as the market catches up to where it already was.
+    // Each firm's premium is relative to a rate that just moved, so renormalize it: the firm's
+    // nominal wage is what it decided, and the rate it is expressed against is now the average.
     employers.forEach((comp) => {
       const upd = ctx.companyUpdates[comp.ticker];
       if (!upd || upd.offeredWageIndex === undefined) return;

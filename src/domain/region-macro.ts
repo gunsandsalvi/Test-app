@@ -504,6 +504,10 @@ export interface OccupationPool {
   /** HH5 — hires and separations this week, the real gross flows behind the net change. */
   hiresThisWeek?: number;
   separationsThisWeek?: number;
+  /** §3.24-i — the price this occupation printed this week: the marginal bid that took the last
+   *  match, relative to the going rate it was bid against (`domain/labour-clearing.ts`).
+   *  Undefined when nothing filled. */
+  clearedWageIndex?: number;
 }
 
 /** Trend labor-productivity growth: the same real force that lets output per worker rise over
@@ -539,19 +543,14 @@ export const BASELINE_QUIT_RATE_WEEKLY = SEPARATION_RATE_MONTHLY / (52 / 12);
 export const VACANCY_WITHDRAWAL_RATE_WEEKLY = 0.10;
 
 /**
- * HH6 — how a firm sets the wage it OFFERS, relative to the going rate for its occupation mix.
- *
- * The mechanism the model was missing: a firm that cannot fill its openings raises its offer,
- * and that is wage-push. Before this, the occupation wage index moved on a region-level
- * tightness formula while a company's payroll appeared nowhere except as a margin nudge — two
- * representations of one wage, and neither was anybody's decision.
- *
- * Bargaining is two-sided, so both sides are here: an unfilled vacancy pushes the offer UP,
- * and a margin below the firm's own baseline pushes it DOWN (a firm losing money does not give
- * raises). The occupation index then becomes the employment-weighted average of what firms
- * actually pay — derived, one representation.
+ * §3.24-i — HOW A FIRM SETS THE WAGE IT OFFERS: it bids. Its postings in each occupation are a bid
+ * at its own `offeredWageIndex`, the week's matches go to the highest bids
+ * (`domain/labour-clearing.ts`), and a firm the market rationed bids the price it saw print, at
+ * its own management's horizon. The two speeds that stood here — `WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL`
+ * (0.10 a year per share unfilled) and `WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL` (0.45) — were the wage
+ * moving AFTER an allocation it could not affect, and `MARKET_WAGE_CATCHUP_SPEED_WEEKLY` (0.15)
+ * walked the going rate toward what was paid instead of reading it. All three are gone.
  */
-export const WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL = 0.10;
 /**
  * How much of the cost of living a workforce actually recovers in its wage. Bargaining is over
  * REAL wages — a workforce facing 10% inflation asks for something close to 10% just to stand
@@ -565,19 +564,6 @@ export const WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL = 0.10;
  * number is below one.
  */
 export const COST_OF_LIVING_PASS_THROUGH = 0.6;
-/** How hard a squeezed margin pulls the offer back — the employer's side of the bargain. */
-export const WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL = 0.45;
-/**
- * How fast the GOING RATE absorbs the premium firms are collectively offering over it. A firm's
- * `offeredWageIndex` is its wage RELATIVE to the going rate, so if the average firm is bidding
- * 2% above, the market rate must rise toward that — and the relative premium must then decay,
- * or the same 2% would be counted again every week (compounding a 2% premium weekly is 180% a
- * year, which is what the first version did). The market closes ~15% of the gap each week, a
- * five-week half-life: wages are sticky but not frozen.
- */
-export const MARKET_WAGE_CATCHUP_SPEED_WEEKLY = 0.15;
-/** Bounds on the annual pace at which one firm re-rates its own offer. */
-/** Bounds on how far one firm's offer can drift from its occupations' going rate. */
 /**
  * How much a firm's relative pay changes its quit rate. A firm paying 10% below market loses
  * people faster; one paying above keeps them. This is what makes a raise DO something, and it

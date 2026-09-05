@@ -81,7 +81,7 @@ Written 2026-09-03 from the domain, code shut.
 
 ## 2. THE MAPPING
 
-Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+Mapped 2026-09-03; re-marked 2026-09-05 (§9.24-i). `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
 checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
@@ -89,7 +89,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 hours of a named person's time to a named firm | `src/engine/simulation/stages/labor-market.ts:employedByOccBefore` | ⚠️ |
 | A2 the price is the wage, per unit of time, in a currency | `src/engine/bootstrap/labor-and-wages.ts:getBaseAnnualWageLocal` | ✅ |
 | A3 labour is heterogeneous: skill, sector, region | `src/domain/region-macro.ts:OCCUPATION_TYPES` | ⚠️ |
-| A3.a so unemployment and vacancies can be high at once | `src/engine/simulation/stages/labor-market.ts:fillRatioByOcc` · `src/engine/simulation/stages/labor-market.ts:occupationalMobility` | ✅ |
+| A3.a so unemployment and vacancies can be high at once | `src/domain/labour-clearing.ts:clearLabourMatches` · `src/engine/simulation/stages/labor-market.ts:occupationalMobility` | ✅ |
 | A4 the relationship persists — employment is a state | `src/domain/company.ts:employeeCount` | ⚠️ |
 | **B1 a household decides whether to work, given the wage** | `src/engine/macro/evolution.ts:participationDrift` | ❌ |
 | B2 the workforce is finite | `src/domain/region-macro.ts:laborForceCount` | ✅ |
@@ -102,10 +102,10 @@ checked by `scripts/check-atlas.sh`.
 | **C3 firing has a cost, and the asymmetry is the cycle** | `src/domain/region-macro.ts:LAYOFF_SPEED_MULTIPLE` | ⚠️ |
 | C4 a failed firm releases its workers at once | `src/engine/simulation/stages/labor-market.ts:runLaborReconciliationStage` | ✅ |
 | C5 a vacancy is a real posted intention, and can go unfilled | `src/engine/simulation/stages/labor-market.ts:carriedVacanciesByOcc` | ✅ |
-| **D1 the wage is a price that CLEARS** | `src/engine/simulation/stages/labor-market.ts:fillRatioByOcc` | ❌ |
-| D2 it does not clear instantly — wages are sticky | `src/domain/region-macro.ts:MARKET_WAGE_CATCHUP_SPEED_WEEKLY` | ⚠️ |
+| D1 the wage is a price that CLEARS | `src/domain/labour-clearing.ts:clearLabourMatches` | ⚠️ |
+| D2 it does not clear instantly — wages are sticky | `src/engine/simulation/stages/labor-market.ts:avgPaid` | ⚠️ |
 | D2.a so the adjustment falls on quantity | `src/engine/simulation/stages/labor-market.ts:hiresByOcc` | ✅ |
-| **D2.b VERIFY stickiness is the contract's, not a coefficient** | `src/domain/region-macro.ts:MARKET_WAGE_CATCHUP_SPEED_WEEKLY` | ❌ |
+| D2.b VERIFY stickiness is the contract's, not a coefficient | `src/engine/simulation/stages/labor-market.ts:avgPaid` | ⚠️ |
 | D3 the matching is imperfect | `src/domain/region-macro.ts:MATCHING_ELASTICITY` | ✅ |
 | D4 VERIFY unemployment and vacancies move against each other | `src/engine/simulation/stages/labor-market.ts:vacancyRate` | ⚠️ |
 | E1 wages are household income | `src/engine/macro/household-cohorts.ts:wageIncomeLocal` | ✅ |
@@ -121,32 +121,34 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ D1 / D2.b — THE WAGE IS NOT A PRICE: LABOUR IS RATIONED BY POSTING, AND PAYING MORE BUYS NOTHING
+### ⚠️ D1 / D2 / D2.b — THE MATCHES CLEAR ON THE BID; THE SUPPLY SIDE HAS NO RESERVATION YET, AND THE STICKINESS HAS NO CONTRACT
 
-`labor-market.ts:585-598`:
+*2026-09-05 (§9.24-i). The fill ratio is gone. Every posting is a bid — the employer's openings in
+an occupation at its own `offeredWageIndex` — and the week's matches go to the highest bids first,
+pro rata within an equal bid (`domain/labour-clearing.ts:clearLabourMatches`); the movers of the
+mobility pass take what the first pass left, in the same order. The bid that took the last match
+is the occupation's print (`OccupationPool.clearedWageIndex`). A firm the market rationed bids that
+price, or its own rent-sharing level if higher, and closes the gap at its management's horizon —
+`WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL`, `WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL` and the tightness
+ease are deleted. The going rate is the employment-weighted average of what is actually paid —
+firms at their own levels, the segments and the government at the rate — a read, not a walk;
+`MARKET_WAGE_CATCHUP_SPEED_WEEKLY` is deleted with it.*
 
-```
-fillRatioByOcc[occ] = vacanciesByOcc[occ] > 0 ? Math.min(1, hiresByOcc[occ] / vacanciesByOcc[occ]) : 0;
-const filledFor = (vacancies, mix) => OCCUPATIONS.reduce((a, occ) =>
-  a + vacancies * (mix[occ] ?? 0) * fillRatioByOcc[occ], 0);
-```
+What is still ⚠️:
 
-One ratio per occupation, applied identically to every employer. `offeredWageIndex` is not in it:
-a firm paying 40% over the going rate fills the same share of its postings as one paying 40%
-under. Wages move *after* the allocation, off `unfilledShare` — so the wage is a **consequence of
-being rationed**, never a bid that changes the rationing.
-
-**Already §3 step 24**, which names these exact lines. Two things this mapping adds to it:
-
-- **D2.b is a separate finding inside the same code.** Stickiness here is
-  `MARKET_WAGE_CATCHUP_SPEED_WEEKLY = 0.15` and `WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL = 0.10`
-  (`region-macro.ts:529,553`) — two speed constants on an index. There is **no contract**: no
-  agreed wage with a term, no renegotiation date, no cost of reopening one, so there is nothing
-  for the stickiness to be a consequence *of*. The tree forbids exactly this substitution, and
-  step 24's fix has to build the contract, not just put the wage in the auction.
-- **A4 is the same absence one level up.** `employeeCount` is an integer on the firm. There is no
-  employment relationship object anywhere — a hire and a separation are additions and subtractions
-  to a count, which is why C2's cost, C3's cost and D2's renegotiation all have nowhere to live.
+- **D1** — the demand side clears on price; the supply side does not yet post one. A seeker
+  accepts any bid, so in a slack market (matches beyond the postings) the print is the lowest bid
+  that filled and nothing bounds it below. **§3 step 24-ii** gives the seekers their reservation —
+  the outside option the model already pays (`UNEMPLOYMENT_REPLACEMENT_RATE`), defended in real
+  terms, so the cost of living is recovered where it is actually recovered and
+  `COST_OF_LIVING_PASS_THROUGH` dies with it.
+- **D2 / D2.b** — the stickiness is now a consequence of two real things — a firm reprices at its
+  own horizon, and the segments and the government pay the rate that was — and of no coefficient.
+  It is not yet a consequence of a CONTRACT: there is no agreed wage with a term, no renegotiation
+  date, no cost of reopening one (A4: `employeeCount` is an integer on the firm). **§3
+  37-EMPLOYMENT**, which lists D2/D2.b; the quit rule's elasticity and the vacancy withdrawal rate
+  land there too, since a quit and a withdrawal are what a worker and an employer do to a posting
+  they own.
 
 ### ❌ B1 — NOBODY DECIDES WHETHER TO WORK
 
@@ -164,9 +166,9 @@ to its own price: a wage boom draws nobody in and a collapse pushes nobody out, 
 much" (hours) does not exist at all — labour is heads, never hours. The discouraged-worker margin,
 which is a large part of why measured unemployment lags a recovery, cannot occur.
 
-**§3 step 37-SMALL**, . It is small in code and it pairs naturally with step 24: once a wage is a
-price, a household's reservation wage is what decides whether it posts itself, and the two stated
-drift constants die together.
+**§3 step 24-ii** takes the reservation half — a seeker accepts nothing below its outside option,
+now that a wage is a price. The participation half — whether a household posts itself at all,
+given the wage — stays **37-SMALL**, and the two stated drift constants die with it.
 
 ### ⚠️ C2 / C3 — THE ASYMMETRY IS A PAIR OF SPEEDS, NOT A PAIR OF COSTS
 
@@ -232,5 +234,5 @@ Both are **a measurement, for §3 step 38**.
 
 ### Also marked, briefly
 
-- **C1 ⚠️** — a firm posts toward a target headcount from its plan, not from a marginal-product test against the wage — step 24.
+- **C1 ⚠️** — a firm posts toward a target headcount from its plan; its bid is bounded by what a head adds only through the affordability rule, not per hire — 37-EMPLOYMENT (a hire is a contract at a wage).
 - **E4 ⚠️** — job loss reaches debt service as `(u − nairu) × 0.02`, a region aggregate — `households.md` E4.

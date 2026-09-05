@@ -551,11 +551,18 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-24. **Labour clears on the wage.** `labor-market.ts:587-596` applies one fill ratio per occupation
-    identically to every employer, so `offeredWageIndex` has ZERO effect on hiring — paying more only
-    lowers quits. Labour is rationed by posted vacancies, not cleared on price, and the comment at
-    `:578` says otherwise. The ~13 bare constants in `region-macro.ts:489-621` ARE the labour
-    market's answer today (rule 2).
+24-ii. **The seekers have a reservation.** *(24-i is in §9: the matches clear on the bid, the
+    marginal bid is the print, the going rate is a read of what is paid; three wage speeds
+    deleted.)* A seeker accepts nothing below its outside option — the benefit the model already
+    pays (`UNEMPLOYMENT_REPLACEMENT_RATE`, a POLICY primitive) on the going rate — defended in REAL
+    terms: the reservation rises with the price level, which is where the cost of living is
+    actually recovered, so `COST_OF_LIVING_PASS_THROUGH` and the bargaining-power term on
+    `NEUTRAL_LABOR_TIGHTNESS` die into it. In a slack market the print then falls to the
+    reservation, not to zero; in a tight one the bids set it. labour D1 → ✅ and B1's first half.
+    The participation decision — whether a household posts itself at all — stays 37-SMALL; the
+    remaining labour constants (the two hiring speeds, the distress speed, the withdrawal rate, the
+    two quit elasticities) are 37-EMPLOYMENT's and 37-SMALL's, where the posting and the quit get
+    an owner.
 25. **A CURVE POINT SAYS WHETHER IT WAS TRADED OR INTERPOLATED.** *(The two-owners half is DONE —
     §9.13-SOV row 5. `sovereign-curve.ts` fits once through every cleared point and publishes every
     field as a read of it, and `P6` is now the guard on that rather than a measurement of it.)*
@@ -1045,9 +1052,10 @@ step that owns its node; where it does not yet, the step below is the owner.
     payment could sever, and no household that can be told its earner lost a job. This is the
     non-financial twin of 13-BOOK: a register of employment rows (firm, cohort, wage, start week)
     behind one door, from which the wage bill, the unemployment rate and the separation flow are
-    reads. Step 24 (labour clears on the wage) needs it — a bid for labour is a bid for a
-    contract — and 37-SMALL's labour C2/C3 lands on it. Medium; after 37-MANDA, which is the
-    largest consumer of a transfer of employees.
+    reads. §9.24-i cleared the matches on the bid without it; what still needs it is D2.b
+    (stickiness as the contract's), the quit elasticity and the vacancy withdrawal rate (a
+    posting an employer owns, a quit a worker does to it), and 37-SMALL's labour C2/C3. Medium;
+    after 37-MANDA, which is the largest consumer of a transfer of employees.
 
 37-BIRTH. **A FIRM'S AGE IS WRITTEN AND NEVER READ, AND THE ENTRANT'S SIZE IS A CONSTANT.**
     (firm-birth-and-death B2, A4.a; m-and-a E3's headcount half. D1, D4/D4.a and D6.a — the death
@@ -1099,7 +1107,8 @@ step that owns its node; where it does not yet, the step below is the owner.
     · **households D5.a** — MMF shares are issued pro rata and never chosen, so the deposit / money
       fund / bill substitution never happens, and **F2** — nobody inherits anything;
     · **labour B1** — participation moves by a constant keyed off a regime label with the wage
-      nowhere in it, and **C2/C3** — firing has no cost, only a pair of speeds;
+      nowhere in it *(the reservation half is 24-ii; this is whether a household posts itself at
+      all)*, and **C2/C3** — firing has no cost, only a pair of speeds;
     · **freight E2** — `laneFillRatio` and `shippedShareByLaneSubUnit` are computed and read by
       nobody, so capacity sets the PRICE of distance and never the QUANTITY;
     · **goods B1.b** — `inputSupplyConstraintFactor` reaches only the UI;
@@ -1384,6 +1393,24 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**24-i — THE MATCHES CLEAR ON THE WAGE.** One fill ratio per occupation, `min(1, hires/vacancies)`,
+  applied identically to every employer — so an offer 40% over the going rate filled the same share
+  as one 40% under, and the wage moved AFTER the allocation off the share it could not fill.
+  `domain/labour-clearing.ts:clearLabourMatches`: every posting is a BID (the employer's openings
+  in an occupation at its own `offeredWageIndex`; the segments post at the going rate), the week's
+  matches go to the highest bids first, pro rata within an equal bid, and the mobility pass's
+  movers clear what the first pass left in the same order; hires are what landed on a bid. The bid
+  that took the last match is the occupation's print (`OccupationPool.clearedWageIndex`, on the
+  occupation view). A firm the market rationed bids that price or its rent-sharing level, whichever
+  is higher, a firm that filled bids the bargain's level, and either closes the gap at its own
+  management's horizon (`patienceWeeksOf`) — `WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL` (0.10),
+  `WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL` (0.45) and the tightness ease deleted. The going rate is
+  the employment-weighted average of what is actually paid (firms at their levels, segments and
+  government at the rate), a read; `MARKET_WAGE_CATCHUP_SPEED_WEEKLY` (0.15) deleted. Split per
+  rule 10: 24-ii (the seekers' reservation; COLA dies into it) inserted; D2.b, the quit elasticity
+  and the withdrawal rate are 37-EMPLOYMENT's. labour A3.a re-cited, D1 ❌→⚠️, D2 ⚠️, D2.b ❌→⚠️.
+  `test/labour-clearing.test.ts`. Gates green; no run (rule 11).
 
 **23 — THE INPUT PRICE INDEX DIES INTO THE CLEARED PRICE.** Stage `04-input-output` is deleted
   whole, because every part of it was a second representation of what stage 05 clears: its demand

@@ -62,6 +62,7 @@ export const occupation = defineObject<Occupation>({
           <Stat label="wage index" value={num(p.wageIndex, 3)} sub={<ChangeSub series={wage} />} />
           <Stat label="wage growth" value={pctLevel(p.wageGrowthAnnual)} sub="annualised" />
           <Stat label="vacancies" value={count(Math.round(p.vacancies ?? 0))} sub={`hired ${count(Math.round(p.hiresThisWeek ?? 0))} · left ${count(Math.round(p.separationsThisWeek ?? 0))}`} />
+          <Stat label="cleared bid" value={p.clearedWageIndex !== undefined ? pctLevel(p.clearedWageIndex - 1, 1) : '—'} sub={p.clearedWageIndex !== undefined ? 'vs the going rate, this week' : 'nothing filled this week'} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           {cohorts.map((c) => (
