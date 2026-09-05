@@ -547,27 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-14-SHELL. **THE SHELL, BEFORE THE VIEWS THAT SIT IN IT** (user, 2026-09-04: *"the UI lags when
-    showing the holders section given it's so long, put instead the top 50 and a button to click
-    to expand at the bottom (same applies for every long list); when I click on the search bar at
-    the bottom the whole page shifts up as the keyboard opens, I want the page to be sticky and
-    only the search bar to move up."*) **Inserted here, ahead of 14 and 15**, because those two
-    re-label every row and put PRICE and DM/OAS side by side in every fixed-income view: they
-    land ON these lists, and a list that already stalls at its full length does not improve with
-    two more columns.
-    · **A LONG LIST IS RENDERED WHOLE — AND WHERE IT IS NOT, THE REST IS UNREACHABLE.**
-      `ui.tsx:115` `Table` maps `rows` entire, and ten of its twelve callers hand it everything
-      they hold (`holders.tsx:58`, the one the user hit, is a register with no cap on it). The two
-      that do cap each invented their own: `screener.tsx:50` slices at 400 and says so underneath,
-      `book.tsx:90` at 60 and `index-object.tsx:47` at 40 and neither says anything. Three
-      constants answer one question (rule 4) and two of them drop rows silently, which is a
-      truncation the reader can neither see nor undo. ONE cap, in `Table`, with the count and the
-      expand control beneath it; the three call-site slices and the screener's hint go.
-    · **THE KEYBOARD MOVES THE PAGE INSTEAD OF THE BAR.** The shell is `position: fixed; inset: 0`
-      over a `flexDirection: 'column'` (`Aurora.tsx:217`) with the command bar as its last child,
-      so when the on-screen keyboard opens the visual viewport shrinks and the whole column —
-      header, function strip and panel — is pushed up with it. The bar tracks the keyboard; what
-      is above it holds still.
 14. **Nomenclature** (rule 9). A tranche's display name is issuer + coupon + maturity
     (`KRLN 4.75% 2031`), a loan issuer + margin + maturity (`KRLN L+350 2029`), a bill issuer +
     tenor, a sovereign the same. `ui/objects/tranche.tsx:50` currently labels with the internal id.
@@ -1676,6 +1655,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**14-SHELL — THE SHELL, BEFORE THE VIEWS THAT SIT IN IT.** (user, 2026-09-04.) ONE cap for every
+long list: `ui.tsx:Table` renders its first `TABLE_CAP` (50) rows and says so beneath them — "the
+first 50 of N · show all", and the reverse once shown — and no caller slices: the screener's 400
+and its hint, `book.tsx`'s 60, `index-object.tsx`'s 40, `contracts.tsx`'s 100 and `diag.tsx`'s 80
+are deleted (five constants for one question, three of them silent truncations). And the keyboard
+moves the bar, not the page: the viewport meta asks the keyboard to OVERLAY the page rather than
+resize it (`interactive-widget=overlays-content`, so every browser reports it the way iOS does),
+`Aurora.tsx:useVisualViewport` reads the visual viewport's scroll offset and the keyboard's height
+off `window.visualViewport`'s own events, the fixed shell counter-moves by the offset (it holds
+still on screen) and the command bar alone translates up by the keyboard's height. A browser
+without `visualViewport` reports nothing and the shell is as it was. Gates green; no run, no
+device.
 
 **13f — AN ACCRUED COUPON IS AN ASSET OF EVERY HOLDER.** An institution's total assets — the one
 read every sizing pass, the household residual and the UI take (`domain/institutions.ts:

@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- §3.14-SHELL: the on-screen keyboard OVERLAYS the page instead of resizing it, on every
+         browser that knows the keyword, so the shell can place its command bar off the visual
+         viewport (Aurora.tsx) and hold everything else still. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=overlays-content" />
     <title>Aurora</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=Manrope:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />

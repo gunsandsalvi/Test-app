@@ -42,7 +42,7 @@ export const contracts: FunctionModule = {
         {settled !== 0 ? <KV k="mark settled to the longs" hint="cumulative variation margin" v={money(settled)} /> : null}
         {classes.map((c) => <KV key={c} k={classWord(c)} v={`${count(mine.filter((k) => k.classId === c).length)} · ${money(mine.filter((k) => k.classId === c).reduce((a, k) => a + k.notional, 0))}`} />)}
       </Card>
-      <Table rows={shown.slice(0, 100)} keyOf={(k) => k.id} columns={[
+      <Table rows={shown} keyOf={(k) => k.id} columns={[
         { key: 'id', label: 'contract', width: 1.6, render: (k) => <Link to={{ type: 'contract', id: k.id }} nav={nav}>{classWord(k.classId)}</Link> },
         { key: 'a', label: 'a', width: 0.8, render: (k) => { const r = partyRef(world, k.a); return r ? <Link to={r} nav={nav}>{partyName(world, k.a)}</Link> : partyName(world, k.a); } },
         { key: 'b', label: 'b', width: 0.8, render: (k) => { const r = partyRef(world, k.b); return r ? <Link to={r} nav={nav}>{partyName(world, k.b)}</Link> : partyName(world, k.b); } },

@@ -40,7 +40,7 @@ export const diag: FunctionModule = {
       </>) : null}
       <SectionLabel>the names</SectionLabel>
       {rows.length === 0 ? <Card style={{ padding: 14, color: T.muted }}>nothing bound — every print cleared inside its cap.</Card> : (
-        <Table rows={rows.slice(0, 80)} keyOf={(x) => `${x.book}:${x.id}`} columns={[
+        <Table rows={rows} keyOf={(x) => `${x.book}:${x.id}`} columns={[
           { key: 'name', label: 'name', render: (x) => { const r = instrumentRef(world, x.id); return r ? <Link to={r} nav={nav}>{instrumentName(world, x.id)}</Link> : x.id; } },
           { key: 'book', label: 'book', render: (x) => x.book },
           { key: 'dir', label: 'wanted', render: (x) => x.dir || '—' },

@@ -4,7 +4,7 @@
  * tabular numerals. Every identifier rendered anywhere is a link (the depth rule).
  */
 
-import { ReactNode, useRef } from 'react';
+import { ReactNode, useRef, useState } from 'react';
 import { ObjectRef } from './world';
 
 export const T = {
@@ -112,11 +112,23 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 /** A sortable, statement-style table: first column left, the rest right-aligned numerals. */
+/**
+ * §3.14-SHELL — ONE CAP FOR EVERY LONG LIST. A table renders its first `TABLE_CAP` rows and says
+ * so beneath them, with the control that shows the rest; the caller hands it everything it holds
+ * and never slices. Three call sites used to cap on their own (400 with a hint, 60 and 40 in
+ * silence) and ten rendered whole — a register of holders stalled the phone at its full length,
+ * and a silent slice was a truncation the reader could neither see nor undo.
+ */
+export const TABLE_CAP = 50;
+
 export function Table<R>({ columns, rows, sortKey, onSort, keyOf }: {
   columns: { key: string; label: string; render: (r: R) => ReactNode; sortable?: boolean; width?: number }[];
   rows: R[]; sortKey?: string; onSort?: (k: string) => void; keyOf: (r: R) => string;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const grid = columns.map((c, i) => `minmax(0, ${c.width ?? (i === 0 ? 1.4 : 1)}fr)`).join(' ');
+  const capped = !expanded && rows.length > TABLE_CAP;
+  const shown = capped ? rows.slice(0, TABLE_CAP) : rows;
   return (
     <Card style={{ overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: grid, gap: 6, alignItems: 'center', height: 34, padding: '0 12px', background: '#161c25' }}>
@@ -126,11 +138,17 @@ export function Table<R>({ columns, rows, sortKey, onSort, keyOf }: {
           </span>
         ))}
       </div>
-      {rows.map((r) => (
+      {shown.map((r) => (
         <div key={keyOf(r)} style={{ display: 'grid', gridTemplateColumns: grid, gap: 6, alignItems: 'center', minHeight: 40, padding: '0 12px', borderBottom: `1px solid ${T.rule}` }}>
           {columns.map((c, i) => <span key={c.key} style={{ ...(i === 0 ? {} : mono), textAlign: i === 0 ? 'left' : 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.render(r)}</span>)}
         </div>
       ))}
+      {rows.length > TABLE_CAP ? (
+        <div onClick={() => setExpanded((x) => !x)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 40, padding: '0 12px', cursor: 'pointer' }}>
+          <Hint>{capped ? `the first ${TABLE_CAP} of ${rows.length}` : `all ${rows.length}`}</Hint>
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.accent }}>{capped ? 'show all' : 'show fewer'}</span>
+        </div>
+      ) : null}
     </Card>
   );
 }

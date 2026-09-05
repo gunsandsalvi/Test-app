@@ -25,8 +25,8 @@ export function columnsFor(world: World, type: ObjectType, anchorId?: string): A
   return m.peers.columns;
 }
 
-export function Screener({ world, nav, type, ids, columns, sort: initialSort, subtitle, limit = 400, noun, hide }: {
-  world: World; nav: Nav; type: ObjectType; ids: string[]; columns?: AnyColumn[]; sort?: string; subtitle?: string; limit?: number; noun?: [string, string]; hide?: string[];
+export function Screener({ world, nav, type, ids, columns, sort: initialSort, subtitle, noun, hide }: {
+  world: World; nav: Nav; type: ObjectType; ids: string[]; columns?: AnyColumn[]; sort?: string; subtitle?: string; noun?: [string, string]; hide?: string[];
 }) {
   const m = moduleOf(type);
   const cols = (columns ?? columnsFor(world, type)).filter((c) => !hide?.includes(c.key));
@@ -47,9 +47,8 @@ export function Screener({ world, nav, type, ids, columns, sort: initialSort, su
       {subtitle ? <Hint style={{ textAlign: 'right' }}>{subtitle}</Hint> : null}
     </div>
     {rows.length === 0 ? <Card style={{ padding: 14, color: T.muted }}>nothing in this set this week.</Card> : (
-      <Table rows={sorted.slice(0, limit)} keyOf={(r) => r.id} sortKey={sort} onSort={pick}
+      <Table rows={sorted} keyOf={(r) => r.id} sortKey={sort} onSort={pick}
         columns={cols.map((c) => ({ key: c.key, label: c.label, sortable: true, width: c.width, render: (r: { id: string; obj: unknown }) => c.render(r, world, nav) }))} />
     )}
-    {sorted.length > limit ? <Hint style={{ padding: '0 4px' }}>the first {limit} of {sorted.length} — sort to bring others up.</Hint> : null}
   </>);
 }

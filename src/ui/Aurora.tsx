@@ -114,6 +114,12 @@ export default function Aurora() {
   const nextId = useRef(2);
   const inputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  // §3.14-SHELL — THE KEYBOARD MOVES THE BAR, NOT THE PAGE. The shell is a fixed column over the
+  // LAYOUT viewport; an on-screen keyboard shrinks the VISUAL viewport and the browser scrolls it
+  // to keep the focused input in view, which used to push the header, the strip and the panel up
+  // with the bar. So the shell counter-moves by the visual viewport's offset (it holds still on
+  // screen) and the bar alone moves up by the keyboard's height, off the visual viewport.
+  const keyboard = useVisualViewport();
 
   useEffect(() => { if (webWorkersAvailable()) setClearingWorkersWeb(navigator.hardwareConcurrency ?? 2); }, []);
 
@@ -215,7 +221,7 @@ export default function Aurora() {
   const strip = frame ? functionsFor(frame.ref.type) : [];
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: T.bg, color: T.text, fontFamily: '"Manrope", system-ui, sans-serif', fontSize: 14, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div style={{ position: 'fixed', inset: 0, background: T.bg, color: T.text, fontFamily: '"Manrope", system-ui, sans-serif', fontSize: 14, display: 'flex', flexDirection: 'column', overflow: 'hidden', transform: keyboard.offsetTop ? `translateY(${keyboard.offsetTop}px)` : undefined }} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 52, padding: '0 14px 0 8px', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
         <span onClick={frame ? back : undefined} title="back" style={{ width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: frame ? T.text : T.hint, cursor: frame ? 'pointer' : undefined }}>
@@ -266,8 +272,8 @@ export default function Aurora() {
         <ClockButton label="■" onTap={() => setRunning(false)} disabled={!running} />
       </div>
 
-      {/* command bar */}
-      <div style={{ padding: '8px 12px 14px 12px', borderTop: `1px solid ${T.border}`, marginTop: 8, flexShrink: 0, background: T.bg }}>
+      {/* command bar — tracks the keyboard (§3.14-SHELL) */}
+      <div style={{ padding: '8px 12px 14px 12px', borderTop: `1px solid ${T.border}`, marginTop: 8, flexShrink: 0, background: T.bg, transform: keyboard.height ? `translateY(-${keyboard.height}px)` : undefined }}>
         {barOpen ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8, maxHeight: '50vh', overflowY: 'auto' }}>
             {parsed.frame ? (
@@ -327,6 +333,31 @@ export default function Aurora() {
       </div>
     </div>
   );
+}
+
+/**
+ * §3.14-SHELL — what the on-screen keyboard did to the visual viewport: how far the browser
+ * scrolled it (`offsetTop`) and how much of the layout viewport it covers (`height`, the keyboard's
+ * own height; zero when the visual viewport is the whole layout viewport). Read off
+ * `window.visualViewport` on its own events; a browser without it reports nothing and the shell
+ * stays as it was.
+ */
+function useVisualViewport(): { offsetTop: number; height: number } {
+  const [vv, setVv] = useState({ offsetTop: 0, height: 0 });
+  useEffect(() => {
+    const v = window.visualViewport;
+    if (!v) return;
+    const read = () => {
+      const height = Math.max(0, Math.round(window.innerHeight - v.height));
+      const offsetTop = Math.max(0, Math.round(v.offsetTop));
+      setVv((prev) => (prev.offsetTop === offsetTop && prev.height === height ? prev : { offsetTop, height }));
+    };
+    v.addEventListener('resize', read);
+    v.addEventListener('scroll', read);
+    read();
+    return () => { v.removeEventListener('resize', read); v.removeEventListener('scroll', read); };
+  }, []);
+  return vv;
 }
 
 function ClockButton({ label, onTap, disabled, primary }: { label: string; onTap: () => void; disabled?: boolean; primary?: boolean }) {

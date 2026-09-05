@@ -271,6 +271,15 @@ mutates `GameState` or `V2World`; `recordTape` appends to the UI's own tape. The
 could have written the model — `executeTrade` — is never called. So the atlas's measurements are not
 contaminated by being taken.
 
+**The shell (2026-09-05, §9.14-SHELL).** Not a node — the surface's own mechanics, recorded here because this is the tree the surface sits
+in. Every long list renders through `ui.tsx:Table`, which caps at `TABLE_CAP` rows and says so
+beneath them with the control that shows the rest; no caller slices (`screener.tsx`'s 400 with a
+hint, `book.tsx`'s 60 and `index-object.tsx`'s 40 in silence, `contracts.tsx`'s 100 and `diag.tsx`'s
+80 are gone). And the on-screen keyboard moves the command bar, not the page: `index.html` asks the
+keyboard to overlay the page rather than resize it, and `Aurora.tsx:useVisualViewport` reads what
+the keyboard did to the visual viewport — the shell counter-moves by its scroll offset and the bar
+alone moves up by the keyboard's height.
+
 ### Also marked, briefly
 
 - **A2 ⚠️** — every holder's positions render as the register holds them; "its own" has no referent because there is no actor — C1–C4.

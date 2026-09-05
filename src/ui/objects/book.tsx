@@ -87,7 +87,7 @@ export const book = defineObject<Book>({
           <Stat label="share" value={b.bound.length > 0 ? pctLevel(up / b.bound.length, 0) : '—'} sub="pinned upward" />
         </StatGrid>
         {rows.length === 0 ? <Card style={{ padding: 14, color: '#8d97a6' }}>no name in this book hit its damper this week — every print cleared inside the cap.</Card> : (
-          <Table rows={rows.slice(0, 60)} keyOf={(r) => r.id} columns={[
+          <Table rows={rows} keyOf={(r) => r.id} columns={[
             { key: 'name', label: 'name', render: (r) => { const ref = instrumentRef(world, r.id); return ref ? <Link to={ref} nav={nav}>{instrumentName(world, r.id)}</Link> : r.id; } },
             { key: 'dir', label: 'wanted', render: (r) => r.dir },
             { key: 'streak', label: 'weeks', render: (r) => count(r.streak) },

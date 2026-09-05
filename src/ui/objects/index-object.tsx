@@ -44,7 +44,7 @@ export const index = defineObject<MarketIndex>({
           <Stat label="top weight" value={pctLevel(rows[0]?.weight ?? 0, 1)} sub={rows[0] ? instrumentName(world, rows[0].instrumentId) : ''} />
           <Stat label="top 10" value={pctLevel(rows.slice(0, 10).reduce((a, c) => a + c.weight, 0), 0)} sub="of the index" />
         </StatGrid>
-        <Table rows={rows.slice(0, 40)} keyOf={(r) => r.instrumentId} columns={[
+        <Table rows={rows} keyOf={(r) => r.instrumentId} columns={[
           { key: 'name', label: 'name', render: (r) => { const ref = instrumentRef(world, r.instrumentId); return ref ? <Link to={ref} nav={nav}>{instrumentName(world, r.instrumentId)}</Link> : r.instrumentId; } },
           { key: 'w', label: 'weight', render: (r) => pctLevel(r.weight, 2) },
         ]} />
