@@ -145,7 +145,7 @@ export function fundForeignCurrencyShortfalls(
 
   net.forEach((byCur, partyIdx) => {
     const ref = partyOf(partyIdx);
-    if (!ref || !convertsForItself(ref)) return;
+    if (!convertsForItself(ref)) return;
     const region = regionOf(ref);
     if (!region) return;
     const home = homeCurrencyOf(ctx.v2, ref) ?? currencyOf(region);

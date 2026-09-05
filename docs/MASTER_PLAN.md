@@ -559,14 +559,9 @@ written from here):
     or a type that LIES, where the guard is the only thing catching a runtime `undefined` the
     declaration denies, and the fix is the declaration (an optional field, a `Partial<Record>` for
     a sparse store), never the guard. One directory at a time (rule 10), the budget falling with
-    each: **a** domain, engine2 and test (26), **b** `src/engine` outside the simulation (69) and
-    **c-i** the simulation's guards on total stores and its `|| []` fallbacks (113) are DONE;
-    **c-ii** the simulation's 38 reads of SPARSE stores whose types say total — `ctx.companyUpdates`
-    (a company is touched or not: `Partial<Record>`), `Region.categoryDemand` (a category is carried
-    or not — the type 29-iv's `?.` reads are also right about), the settlement's `net` map, the
-    memo arrays and the tenor/kind lookups in `shared-helpers.ts`, `holdings-view.ts`,
-    `derivative-lifecycle.ts` and `securities-lending.ts`; **d** `src/ui` and `scripts/harness.ts`
-    (96).
+    each: **a** domain, engine2 and test (26), **b** `src/engine` outside the simulation (69),
+    **c-i** the simulation's guards on total stores (113) and **c-ii** its reads of sparse stores
+    (38, the stores' types fixed) are DONE; **d** `src/ui` and `scripts/harness.ts` (96) remain.
 29-iv. **The defensive reads.** The 1,223 `??` and `?.` on values the types say are never nullish
     are the same choice per site: a fallback that cannot run (delete it — a `?? 0` that never
     fires is a stated number with no owner, rule 2) or a type that lies (fix it). `scripts/harness.ts`
@@ -1212,7 +1207,7 @@ none of them steps a week of the simulation. Green before every commit.
 | Command | Note |
 |---|---|
 | `npx tsc --noEmit` | |
-| `npx eslint src scripts test --no-warn-ignored --max-warnings 1300` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
+| `npx eslint src scripts test --no-warn-ignored --max-warnings 1139` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
 | `npm test` | the unit suite: contracts and arithmetic, never a run |
 | `bash scripts/check-hygiene.sh` | carries `check-atlas.sh` and the stated-literal ratchets |
 | `npm run build` | |
@@ -1339,6 +1334,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**29-iii-c-ii — THE SIMULATION'S SPARSE STORES SAY SO.** Thirty-eight guards on reads the types
+  said could not miss, and every one was a store declared total that is sparse by nature. Fixed at
+  the declaration, once each: `ctx.companyUpdates` (a company is touched this week or it is not —
+  the six `if (!u) u = {}` openings are `??=` now), `Region.categoryDemand` (a region carries a
+  category or it does not — the plan for one it does not is a `defect`), the freight rate and
+  capacity by lane and the carriers' marginal rates (a lane nobody quoted has no rate), the
+  lending book's fee by instrument, the desk-book kind table, the settlement's running net per
+  party, the sourcing intent's need and supply per region, and the memo arrays in
+  `holdings-view.ts` and `shared-helpers.ts`. The swap tenor's curve field is an `Object.hasOwn`
+  lookup; a holding row's region is read as the string it is and cast where a `RegionId` is
+  needed. Making the stores honest turned a hundred and fifty `?.` and `??` reads on them from
+  "unnecessary" into right: 1,300 → 1,139, and 29-iv's list shrank with it. Gates green; no run
+  (rule 11).
 
 **29-iii-c-i — THE SIMULATION'S DEAD GUARDS ON TOTAL STORES.** One hundred and thirteen, in one
   shape: `if (!reg) return` on `ctx.updatedRegions[r]` and its `reg?.` cousins across thirty

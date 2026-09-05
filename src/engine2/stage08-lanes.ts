@@ -121,7 +121,7 @@ export interface BackLanes {
 export function buildBackLanes(
   companies: Company[],
   updatedRegions: WeeklyStepContext['updatedRegions'],
-  companyUpdates: Record<string, CompanyWeekUpdate>,
+  companyUpdates: Partial<Record<string, CompanyWeekUpdate>>,
   entityIds: Set<string>,
   carrierFreightRevenue: Record<string, number>,
   channelMarginRevenue: Record<string, number>,

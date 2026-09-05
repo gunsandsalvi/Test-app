@@ -433,7 +433,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
 interface SourcingContext {
   splitByRegionSubUnit: Map<string, SourcingSplit>;
   /** Cleared freight per tonne by lane, each in that lane's own money. */
-  freightRateByLane: Record<string, number>;
+  freightRateByLane: Partial<Record<string, number>>;
   unitMassTonnes: Record<string, number>;
   fxToUsd: FxToUsd;
   /** XB6 — how deep each currency pair is, which is what the invoice currency is priced on. */
@@ -1355,7 +1355,7 @@ function buildRegionDemandPlans(
   week: number
 ): DemandPlan[] {
   const plans: DemandPlan[] = [];
-  const demandState = reg.categoryDemand[subUnitId];
+  const demandState = reg.categoryDemand[subUnitId] ?? defect(`a demand plan for ${subUnitId} in a region that does not carry it`);
   const suppliers = index.suppliersBySubUnit.get(subUnitId) ?? [];
   const supplierSet = suppliers.length > 0 ? new Set(suppliers) : null;
 

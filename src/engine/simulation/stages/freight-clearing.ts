@@ -41,7 +41,7 @@ export interface FreightClearing {
   ratePerTonneLaneMoneyByLane: Record<string, number>;
   /** The floor each lane would clear at if the fleet were idle — what it costs a carrier to sail,
    *  in the lane's own money. */
-  marginalRatePerTonneLaneMoneyByLane: Record<string, number>;
+  marginalRatePerTonneLaneMoneyByLane: Partial<Record<string, number>>;
   /** Tonnes each carrier actually carried, what it earned, and the fuel that took. */
   carrierTonnesCarried: Map<string, number>;
   carrierRevenueLocal: Map<string, number>;
@@ -57,7 +57,7 @@ export interface FreightClearing {
    *  goods auction pays them as parties, and a party is an entity id. */
   carrierShareByLane: Map<string, Map<EntityId, number>>;
   /** Capacity offered and taken, for the diagnostics a freight market is judged on. */
-  laneCapacityTonnes: Record<string, number>;
+  laneCapacityTonnes: Partial<Record<string, number>>;
   laneBookedTonnes: Record<string, number>;
 }
 
@@ -110,10 +110,10 @@ function buildCarrierOffers(
   unitMassTonnes: Record<string, number>,
   fxToUsd: FxToUsd,
   week: number
-): { offersByLane: Map<string, AuctionOffer[]>; marginalByLane: Record<string, number>; capacityByLane: Record<string, number> } {
+): { offersByLane: Map<string, AuctionOffer[]>; marginalByLane: Partial<Record<string, number>>; capacityByLane: Partial<Record<string, number>> } {
   const offersByLane = new Map<string, AuctionOffer[]>();
-  const marginalByLane: Record<string, number> = {};
-  const capacityByLane: Record<string, number> = {};
+  const marginalByLane: Partial<Record<string, number>> = {};
+  const capacityByLane: Partial<Record<string, number>> = {};
 
   carriers.forEach(carrier => {
     const home = carrier.region as RegionId;
@@ -183,7 +183,7 @@ export function marginalRatesForAllLanes(
   unitMassTonnes: Record<string, number>,
   fxToUsd: FxToUsd,
   week: number
-): Record<string, number> {
+): Partial<Record<string, number>> {
   return buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd, week).marginalByLane;
 }
 

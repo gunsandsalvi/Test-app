@@ -984,14 +984,14 @@ export function applyHolderInterestAccruals(
       // The accruing instruments are interned ONCE per type, so the row test below is an integer
       // compare against a dense array — not a string rebuilt from an id and looked up in a map,
       // which would have handed back with one hand what the columns give with the other.
-      const accruingRow: string[] = [];
-      const accruingWeekly: number[] = [];
+      const accruingRow: (string | undefined)[] = []; // sparse: only the accruing instruments
+      const accruingWeekly: (number | undefined)[] = [];
       byId.forEach((v, instrumentText) => {
         const id = INSTRUMENT_IDS.peek(instrumentText);
         if (id >= 0) { accruingRow[id] = instrumentText; accruingWeekly[id] = v; }
       });
       // Pass 1 — each instrument's held total, in register order.
-      const totalByInst: number[] = [];
+      const totalByInst: (number | undefined)[] = [];
       for (let i = lo; i < hi; i++) {
         const row = byTypeRows[i];
         const iid = instCol[row];
@@ -1006,10 +1006,11 @@ export function applyHolderInterestAccruals(
       // to name the issuer — see `deskHoldingsByInstrument`. It names the tranche, and had done
       // since 13b, so this lookup missed on every position it was written for.)
       const deskByInstrument = deskHoldings.get(type);
-      const registerShare: number[] = [];
+      const registerShare: (number | undefined)[] = [];
       const deskTotalOfInst: number[] = [];
       if (deskByInstrument && deskByInstrument.size > 0) {
         accruingRow.forEach((instrumentText, iid) => {
+          if (instrumentText === undefined) return;
           const byDesk = deskByInstrument.get(instrumentText);
           if (!byDesk) return;
           let deskLocal = 0;
@@ -1040,8 +1041,9 @@ export function applyHolderInterestAccruals(
       if (deskByInstrument && deskByInstrument.size > 0) {
         accruingRow.forEach((instrumentText, iid) => {
           const deskLocal = deskTotalOfInst[iid];
-          if (!(deskLocal > 0)) return;
-          const deskCutLocal = accruingWeekly[iid] * (1 - registerShare[iid]);
+          const weeklyLocal = accruingWeekly[iid];
+          if (instrumentText === undefined || weeklyLocal === undefined || !(deskLocal > 0)) return;
+          const deskCutLocal = weeklyLocal * (1 - (registerShare[iid] ?? 1));
           if (!(deskCutLocal > 0)) return;
           deskByInstrument.get(instrumentText)?.forEach((pos) => {
             const shareLocal = deskCutLocal * (pos.faceLocal / deskLocal);

@@ -310,9 +310,10 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         });
       }
       const smoothing = smoothingByCategory[cat] ?? 0.1;
-      const existingEntry = reg.categoryDemand[cat as keyof typeof reg.categoryDemand];
-      const hasPriorDemand = Boolean(existingEntry && existingEntry.demandLevelAnnualLocal > 0);
-      const prevLevel = hasPriorDemand ? existingEntry.demandLevelAnnualLocal : target;
+      const existingEntry = reg.categoryDemand[cat];
+      const priorDemand = existingEntry && existingEntry.demandLevelAnnualLocal > 0 ? existingEntry.demandLevelAnnualLocal : undefined;
+      const hasPriorDemand = priorDemand !== undefined;
+      const prevLevel = priorDemand ?? target;
       const newLevel = hasPriorDemand ? prevLevel * (1 - smoothing) + target * smoothing : target;
       const isStartupTransition = (state.currentWeek <= 1) || prevLevel < newLevel * 0.2 || newLevel < prevLevel * 0.2;
       const rawGrowthAnnual = hasPriorDemand && prevLevel > 0 && !isStartupTransition ? ((newLevel / prevLevel) - 1) * 52 : 0;

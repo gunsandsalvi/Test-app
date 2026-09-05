@@ -502,7 +502,6 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   REGION_IDS.forEach((rid) => {
     const before = state.regions[rid];
     const after = ctx.updatedRegions[rid];
-    if (!before || !after) return;
     const du = after.unemploymentRate - before.unemploymentRate;
     if (Math.abs(du) < 0.005) return;
     const movers = ctx.updatedCompanies
@@ -533,7 +532,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   REGION_IDS.forEach((rid) => {
     const before = state.regions[rid];
     const after = ctx.updatedRegions[rid];
-    if (!before || !after || !(before.consumerPriceIndex > 0)) return;
+    if (!(before.consumerPriceIndex > 0)) return;
     const dp = after.consumerPriceIndex / before.consumerPriceIndex - 1;
     if (Math.abs(dp) < 0.01) return;
     // The category objects are mutated in place; the print's own history ring is the delta.

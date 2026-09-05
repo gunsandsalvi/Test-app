@@ -31,7 +31,7 @@ import { patienceWeeksOf } from '../domain/preferences';
 import { Company, RegionId } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { isActiveCompany } from '../domain/company';
-import { CATEGORY_INPUT_REQUIREMENTS, type CategoryDemandState } from '../domain/market-microstructure';
+import { CATEGORY_INPUT_REQUIREMENTS } from '../domain/market-microstructure';
 import { SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
 import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
 import { industryOfSubUnit, firmInputIntensities, annualCarryingCostRateOf, INDUSTRY_REGISTRY } from '../domain/industry-registry';
@@ -234,7 +234,7 @@ const EMPTY_LINES: ProductLine[] = [];
 interface FrontSeamInputs {
   v2: V2World;
   nextWeek: number;
-  companyUpdates: Record<string, CompanyWeekUpdate>;
+  companyUpdates: Partial<Record<string, CompanyWeekUpdate>>;
   updatedRegions: WeeklyStepContext['updatedRegions'];
   supplyRelsByCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeLocal: number; relationshipStrength: number }[]>;
   supplierShockStats: Map<string, { annualRevenue: number; invUSDByCategory: Map<string, number> }>;
@@ -346,8 +346,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     S.effectiveTaxRate[ri] = reg.effectiveTaxRate;
     const supplied = suppliedSubUnitsByRegion.get(regionIds[ri]);
     for (let si = 0; si < NSUB; si++) {
-      // The store is declared total and is sparse (§3.29-iv owns its type); the read says the truth.
-      const cd = reg.categoryDemand[SUBUNITS[si]] as CategoryDemandState | undefined;
+      const cd = reg.categoryDemand[SUBUNITS[si]];
       const at = ri * NSUB + si;
       if (cd) {
         S.mktExists[at] = 1;
@@ -787,7 +786,7 @@ export function runFrontCore(
 /** POST — the object writes, from the core's outputs, in row order on the main thread. */
 export function applyFrontPost(
   companies: Company[], S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2: V2World,
-  companyUpdates: Record<string, CompanyWeekUpdate>, updatedRegions: WeeklyStepContext['updatedRegions']
+  companyUpdates: Partial<Record<string, CompanyWeekUpdate>>, updatedRegions: WeeklyStepContext['updatedRegions']
 ): void {
   const week = S.nextWeek;
   const shouldSnapshot = week % 13 === 0;

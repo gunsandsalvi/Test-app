@@ -661,7 +661,8 @@ export const SECTOR_OCCUPATION_MIX: Record<string, Partial<Record<OccupationType
 export interface Region {
   id: RegionId;
   name: string;
-  categoryDemand: Record<string, CategoryDemandState>;
+  /** Per sub-unit id, and SPARSE: a category this region does not carry has no entry (§3.29-iii: the type says so). */
+  categoryDemand: Partial<Record<string, CategoryDemandState>>;
   currency: string;
   symbol: string;
   centralBank: string;
@@ -714,7 +715,7 @@ export interface Region {
   // §3.13-BOOK d4c-iii: the stock-loan book is rows of the world's contract store, read through
   // `contract-ledger.ts:securityLoanBookOf`; not a field.
   /** HF — the last cleared borrow fee per name, in annual bps; this book's own prior print. */
-  borrowFeeBpsByCompanyId?: Record<string, number>;
+  borrowFeeBpsByCompanyId?: Partial<Record<string, number>>; // per instrument the lending book has priced
   /** DER1 — the cleared par swap rate per tenor (annualised decimal). */
   swapParRateByTenor?: Record<string, number>;
   /** §3.17-ii — each reference issuer's cleared protection spread, PER TENOR (§3.17d-iii: the

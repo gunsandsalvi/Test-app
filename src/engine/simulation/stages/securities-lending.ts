@@ -69,7 +69,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     const wholeBook: SecurityLoan[] = securityLoanBookOf(ctx.v2, regionId); // §3.13-BOOK d4c-iii: the store's rows
     const bondLoans = wholeBook.filter((l) => isTrancheId(ctx.v2, l.instrumentId));
     const priorBook: SecurityLoan[] = wholeBook.filter((l) => !isTrancheId(ctx.v2, l.instrumentId));
-    const lastFee: Record<string, number> = reg.borrowFeeBpsByCompanyId ?? {};
+    const lastFee: Partial<Record<string, number>> = reg.borrowFeeBpsByCompanyId ?? {};
 
     const listed = ctx.prevActiveFirms.filter(
       (c) => c.region === regionId && isActiveCompany(c) && isPubliclyListed(c)
@@ -547,9 +547,9 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
 function publishBook(
   ctx: WeeklyStepContext,
   regionId: RegionId,
-  reg: { borrowFeeBpsByCompanyId?: Record<string, number> },
+  reg: { borrowFeeBpsByCompanyId?: Partial<Record<string, number>> },
   book: SecurityLoan[],
-  fees: Record<string, number>,
+  fees: Partial<Record<string, number>>,
   priceOf: (instrumentId: string) => number
 ): void {
   publishSecurityLoanBook(ctx.v2, regionId, book); // §3.13-BOOK d4b/d4c-iii: the contract ledger's door
@@ -602,7 +602,7 @@ export function runBondLendingPass(state: GameState, ctx: WeeklyStepContext): vo
     const priorBook = wholeBook.filter((l) => isTrancheId(ctx.v2, l.instrumentId));
     const needs = ctx.borrowNeeds.filter((n) => n.regionId === regionId);
     if (priorBook.length === 0 && needs.length === 0) return;
-    const lastFee: Record<string, number> = reg.borrowFeeBpsByCompanyId ?? {};
+    const lastFee: Partial<Record<string, number>> = reg.borrowFeeBpsByCompanyId ?? {};
     const money = currencyOf(regionId);
     const priceOf = (instrumentId: string): number => trancheClearedPricePerFace(ctx.v2, asInstrumentId(instrumentId)) ?? 0;
     /** What a book can deliver of a rung: its face on the opening register, whatever the kind. */
@@ -758,7 +758,7 @@ export function runBondLendingPass(state: GameState, ctx: WeeklyStepContext): vo
               if (face <= 1e-6) return;
               const loan: SecurityLoan = {
                 id: `${regionId}-SBL-${bondId}-${ctx.nextWeek}-${seq++}`, regionId, instrumentId: bondId,
-                lender: party(lenderId), borrower: party(d.fundId), shares: face, feeBps: lastFee[bondId], currency: money,
+                lender: party(lenderId), borrower: party(d.fundId), shares: face, feeBps: lastFee[bondId] ?? defect(`${bondId} struck a loan with no cleared fee`), currency: money,
                 collateralLocal: face * price, lenderPositionAtStrike: positionAtStrike.get(lenderId) ?? face, struckWeek: ctx.nextWeek,
               };
               deliver(lenderId, d.fundId, bondId, face, price, 'bond loan: paper delivered');

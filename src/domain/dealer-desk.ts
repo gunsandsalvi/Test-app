@@ -80,7 +80,7 @@ export interface DealerDeskPosition {
  *  row's type on the bank's securities book. A desk's inventory is no longer a field on the
  *  sheet (`engine/desk-register.ts` reads the rows); a BOOK is a market name, a KIND is what the
  *  register stores, and the two sovereign books share one kind. */
-export const DESK_BOOK_KIND: Record<string, ItemizedHolding['instrumentType']> = {
+export const DESK_BOOK_KIND: Partial<Record<string, ItemizedHolding['instrumentType']>> = {
   'corporate bond': 'CORP_BOND', 'sovereign bond': 'GOV_BOND', bill: 'GOV_BOND',
   'leveraged loan': 'LEVERAGED_LOAN', equity: 'EQUITY', 'commercial paper': 'COMMERCIAL_PAPER',
 };

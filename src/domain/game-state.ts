@@ -56,7 +56,7 @@ export interface GameState {
   /** XB3a-2 — last cleared freight per tonne by directed lane key ("USA>EUR"), each in that
    *  lane's OWN money (its origin's), which is where the carrier's fuel and crew are paid. What a
    *  buyer forms its next sourcing intent against, converting into its own money to compare. */
-  freightRatePerTonneLaneMoneyByLane: Record<string, number>;
+  freightRatePerTonneLaneMoneyByLane: Partial<Record<string, number>>;
   /** XB6 — the share of each pair's own weekly flow its market could NOT absorb, keyed
    *  "BASE/QUOTE". The model's one real measure of how deep a currency pair is, and what the
    *  invoice-currency choice is priced against. */

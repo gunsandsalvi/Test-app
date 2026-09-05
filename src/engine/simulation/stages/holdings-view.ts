@@ -165,7 +165,7 @@ export function measuredForeignOwnershipAllRegions(state: GameState): Record<Reg
   // ONCE per interned type instead of per row.
   const v2 = ensureV2(state);
   const H = v2.holdings;
-  const keyByTypeRef: ('equity' | 'sovBond' | 'corpBond' | false)[] = [];
+  const keyByTypeRef: ('equity' | 'sovBond' | 'corpBond' | false | undefined)[] = []; // a memo, sparse until a type is met
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
@@ -258,7 +258,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   // silence on fund shares was an undocumented fact, now `isVehicleClaim`; a new holding type
   // gets its class in domain/assets, not here — is resolved once per interned type.
   const Hmo = v2hv.holdings;
-  const keyByTypeRef: ('equity' | 'sovBond' | 'corpBond' | false)[] = [];
+  const keyByTypeRef: ('equity' | 'sovBond' | 'corpBond' | false | undefined)[] = []; // a memo, sparse until a type is met
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     for (let r = bookHeadOf(v2hv, e.id); r >= 0; r = Hmo.next[r]) {

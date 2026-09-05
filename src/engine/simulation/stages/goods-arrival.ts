@@ -92,8 +92,7 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     // `companyUpdates` is keyed by TICKER (its own field, its own commit); a shipment names its
     // buyer by entity id, so the buyer is resolved first and its ticker used for that channel.
     const buyerTicker = buyer?.ticker ?? asTicker(shipment.buyerId);
-    if (!companyUpdates[buyerTicker]) companyUpdates[buyerTicker] = {};
-    const update = companyUpdates[buyerTicker];
+    const update = (companyUpdates[buyerTicker] ??= {});
     const carrier: PartyRef = shipment.carrierId
       ? companyPartyOf(shipment.carrierId)
       : { kind: 'SEGMENT', region: shipment.carrierRegion ?? (buyer?.region ?? 'USA'), industry: 'AutomotiveTransport' };

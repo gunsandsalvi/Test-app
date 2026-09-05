@@ -55,13 +55,14 @@ function hedgeableExposureByRegion(v2: V2World, entity: InstitutionalEntity): Ma
   const out = new Map<RegionId, number>();
   const H = v2.holdings;
   for (let r = bookHeadOf(v2, entity.id); r >= 0; r = H.next[r]) {
-    const issuer = regionOf(v2, H.regionRef[r]) as RegionId;
+    const issuer = regionOf(v2, H.regionRef[r]);
     if (!issuer || issuer === entity.region) continue;
+    const issuerRegion = issuer as RegionId;
     const type = typeOf(v2, H.typeRef[r]);
     const ratio = type === 'EQUITY' ? equityHedgeRatioFor(entity.entityType, entity.hedgeFundStrategy)
       : hedgedAsFixedIncome(type) ? HEDGE_RATIO_FIXED_INCOME : 0;
     if (ratio <= 0) continue;
-    out.set(issuer, (out.get(issuer) ?? 0) + H.qtyLocal[r] * ratio);
+    out.set(issuerRegion, (out.get(issuerRegion) ?? 0) + H.qtyLocal[r] * ratio);
   }
   return out;
 }

@@ -178,9 +178,9 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
       return measuredWeeklyMove(pair?.historicalRates);
     },
     rateWeeklyMoveBps: (r, termKey) => {
-      const field = SWAP_TENOR_ZERO_FIELD[termKey as SwapTenorKey];
-      const curves = region(r)?.historicalZeroCurves;
-      if (!field || !curves) return undefined;
+      const field = Object.hasOwn(SWAP_TENOR_ZERO_FIELD, termKey) ? SWAP_TENOR_ZERO_FIELD[termKey as SwapTenorKey] : undefined;
+      const curves = region(r).historicalZeroCurves;
+      if (!field) return undefined;
       return measuredWeeklyBpsMove(curves.map((z) => z[field] * 10000));
     },
     cdsSpreadWeeklyMoveBps: (issuerId, termKey) => {

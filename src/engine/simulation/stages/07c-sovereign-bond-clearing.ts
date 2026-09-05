@@ -663,7 +663,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // The dealer fee inside the cash leg is an expense: cash left the bank beyond what the
       // bonds cost, and P&L must say so or the balance-sheet identity drifts by the fee.
       const feeLocal = Math.max(0, -(cashDeltaLocal + (newClearedLocal - prevClearedLocal)));
-      if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
+      ctx.companyUpdates[bank.ticker] ??= {};
       // The securities and the P&L; the reserves leg settles below (SETL6), so that the bank
       // that sold and the bank that bought move against each other rather than each moving
       // alone.

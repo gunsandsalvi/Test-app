@@ -125,7 +125,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     && (c.productLines?.length ?? 0) >= 2 && issuedSharesOf(ctx.v2, c.id) > 0 && c.stockPrice > 0);
   blocked.forEach((parent) => {
     const line = [...(parent.productLines ?? [])]
-      .sort((a, b) => (b.categoryMarketShare ?? 0) - (a.categoryMarketShare ?? 0))[0];
+      .sort((a, b) => (b.categoryMarketShare ?? 0) - (a.categoryMarketShare ?? 0)).at(0);
     if (!line) return;
     const share = Math.max(0.05, Math.min(0.9, line.revenueShare ?? 0));
 

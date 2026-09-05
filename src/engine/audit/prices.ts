@@ -229,7 +229,8 @@ function x2(state: GameState, week: number): AuditFinding[] {
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     Object.entries(reg.categoryDemand).forEach(([su, d]) => {
-      const alt = d.cheapestAlternativeLandedLocal;
+      const alt = d?.cheapestAlternativeLandedLocal;
+      if (!d) return;
       if (!alt || alt.week !== state.currentWeek || !(d.unitPriceLocal !== undefined && d.unitPriceLocal > 0)) return;
       routed++;
       if (d.unitPriceLocal - alt.landedLocal > floatDustLocal(d.unitPriceLocal + alt.landedLocal, 4)) { overpaid++; if (routeExamples.length < 3) routeExamples.push(`${r} ${su} paid ${d.unitPriceLocal.toFixed(2)} landed, ${alt.origin} would have landed at ${alt.landedLocal.toFixed(2)}`); }

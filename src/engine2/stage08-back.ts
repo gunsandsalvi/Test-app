@@ -109,7 +109,7 @@ export interface BackKernelDeps {
   nextWeek: number;
   currentWeekMod13: number;
   updatedRegions: WeeklyStepContext['updatedRegions'];
-  companyUpdates: Record<string, CompanyWeekUpdate>;
+  companyUpdates: Partial<Record<string, CompanyWeekUpdate>>;
   entityById: ReadonlyMap<EntityId, GameState['institutionalEntities'][number]>;
   regionMedianRevenueLocal: number;
   systemicStressFactorGlobal: number;

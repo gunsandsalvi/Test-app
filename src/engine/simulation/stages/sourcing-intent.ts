@@ -104,10 +104,10 @@ export function computeSourcingIntent(args: {
   subUnitIds: string[];
   unitMassTonnes: Record<string, number>;
   /** Last cleared freight, USD per tonne, by lane key. Empty at seed. */
-  freightRatePerTonneLaneMoneyByLane: Record<string, number>;
+  freightRatePerTonneLaneMoneyByLane: Partial<Record<string, number>>;
   /** What one tonne costs a carrier to move on a lane — the floor the rate falls to when the
    *  market is slack, used as the expectation before any rate has ever cleared. */
-  marginalRatePerTonneLaneMoneyByLane: Record<string, number>;
+  marginalRatePerTonneLaneMoneyByLane: Partial<Record<string, number>>;
   /** XB3a-4 — the buyer's own weekly cost of capital, per region: what a week of goods sitting in
    *  a pipeline costs whoever has paid for it. */
   carryCostRatePerWeekByRegion: Record<string, number>;
@@ -136,8 +136,8 @@ export function computeSourcingIntent(args: {
     // Every (buyer, origin) pair that is physically possible, with what it would land at.
     interface Pair { buyer: RegionId; origin: RegionId; exWorks: number; exWorksInBuyerMoney: number; landed: number }
     const pairs: Pair[] = [];
-    const needRemaining: Record<string, number> = {};
-    const supplyRemaining: Record<string, number> = {};
+    const needRemaining: Partial<Record<string, number>> = {};
+    const supplyRemaining: Partial<Record<string, number>> = {};
 
     SOURCING_REGION_IDS.forEach(buyer => {
       const buyerState = regions[buyer].categoryDemand[subUnitId];

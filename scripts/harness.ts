@@ -1326,7 +1326,7 @@ const pubModule: HarnessModule = (() => {
 
 /** XB close-out battery (§7.72-77), as a module on the shared run. */
 const xbModule: HarnessModule = (() => {
-  const history: { week: number; rates: Record<string, number> }[] = [];
+  const history: { week: number; rates: Partial<Record<string, number>> }[] = [];
   return {
     name: 'XB battery',
     week(_prev, s, w) {
@@ -2083,6 +2083,7 @@ const spiralModule: HarnessModule = {
         const r = state.regions[region];
         const movers: { id: string; ratio: number; p: number; idx: number; short: number }[] = [];
         Object.entries(r.categoryDemand).forEach(([id, cd]) => {
+          if (!cd) return;
           const p = cd.unitPriceLocal ?? 0;
           const key = `${region}:${id}`;
           const prev = spiralPrevPriceByKey.get(key);

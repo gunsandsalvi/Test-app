@@ -124,7 +124,7 @@ function allocScratch(n: number): FrontPass {
 interface FrontPassInputs {
   v2: V2World;
   nextWeek: number;
-  companyUpdates: Record<string, CompanyWeekUpdate>;
+  companyUpdates: Partial<Record<string, CompanyWeekUpdate>>;
   updatedRegions: WeeklyStepContext['updatedRegions'];
   /** Frozen pre-loop snapshots, built by the stage exactly as before. */
   supplyRelsByCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeLocal: number; relationshipStrength: number }[]>;

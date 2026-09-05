@@ -119,7 +119,8 @@ export interface WeeklyStepContext {
    * and stage 08 consumes, plus two the labour market writes ahead of the company's own week. A
    * carrier for inter-stage hand-off is its own thing and now says so.
    */
-  companyUpdates: Record<string, CompanyWeekUpdate>;
+  /** Per ticker, opened by the first stage that touches the company this week — SPARSE (§3.29-iii). */
+  companyUpdates: Partial<Record<string, CompanyWeekUpdate>>;
   /** §7.250 — set by core.ts the moment stage 08 has consumed the bank-sheet channel. Four
    *  post-08 stages wrote it for nothing (only stage 08 applies it; the context dies with the
    *  week) — bills never accreted, write-offs never landed, silently, both legs together. A
@@ -171,7 +172,7 @@ export interface WeeklyStepContext {
    * `pendingSettlementLocal` (stages/settlement.ts); maintained by `pay`. */
   /** SCALE: the week's running net, dense by party id (stages/settlement.ts). Was a
    *  `Map<string, number>` keyed by a string rebuilt on every one of ~580,000 lookups a week. */
-  pendingNetById: number[];
+  pendingNetById: (number | undefined)[]; // opened per party the first time a leg touches it
   pendingTouchedIds: number[];
   /** What the last settlement run did — read by the invariants harness and the diagnostics. */
   lastSettlementReport?: import('./settlement').SettlementReport;
@@ -303,7 +304,7 @@ export interface WeeklyStepContext {
    *  stage and read by the goods auction. key: `${buyerRegion}|${subUnitId}`. */
   sourcingSplitByRegionSubUnit: Map<string, import('./sourcing-intent').SourcingSplit>;
   /** XB3a-2 — this week's cleared freight per tonne by lane, each in that lane's own money. */
-  freightRatePerTonneLaneMoneyByLane: Record<string, number>;
+  freightRatePerTonneLaneMoneyByLane: Partial<Record<string, number>>; // a lane nobody quoted has no rate
   /** XB3a-3 — tonnage the goods auction actually put on each lane, which is what carriers are
    *  paid for. Booked capacity that went unused earns nothing, as on a real spot market. */
   shippedTonnesByLane: Record<string, number>;
@@ -538,6 +539,5 @@ export function updateBankSheet(
       `ENGINE DEFECT: bank-sheet channel write for ${ticker} after stage 08 consumed it — write the live sheet (§7.250)`
     );
   }
-  if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
-  ctx.companyUpdates[ticker].bankBalanceSheet = sheet;
+  (ctx.companyUpdates[ticker] ??= {}).bankBalanceSheet = sheet;
 }

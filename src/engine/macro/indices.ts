@@ -234,7 +234,7 @@ const getCapWeightedAvgPrice = (capOf: (c: Company) => number, firms: Company[])
 
 function calculatePmiComposite(regions: Record<RegionId, Region>, companies: Company[]): { headline: number; demandComponent: number; capexComponent: number; employmentComponent: number } {
   const usaCompanies = companies.filter(c => c.region === 'USA' && isActiveCompany(c));
-  const avgCategoryDemandGrowth = Object.values(regions.USA.categoryDemand).reduce((s: number, d) => s + d.demandGrowthAnnual, 0) / Math.max(1, Object.keys(regions.USA.categoryDemand).length);
+  const avgCategoryDemandGrowth = Object.values(regions.USA.categoryDemand).reduce((s: number, d) => s + (d?.demandGrowthAnnual ?? 0), 0) / Math.max(1, Object.keys(regions.USA.categoryDemand).length);
   const avgCapexGrowth = usaCompanies.length ? usaCompanies.reduce((s, c) => s + (c.capex - (c.previousCapex ?? c.capex)) / Math.max(1, c.previousCapex ?? c.capex), 0) / usaCompanies.length : 0;
   const avgHeadcountGrowth = usaCompanies.length ? usaCompanies.reduce((s, c) => s + (c.employeeCount - c.previousEmployeeCount) / Math.max(1, c.previousEmployeeCount), 0) / usaCompanies.length : 0;
 

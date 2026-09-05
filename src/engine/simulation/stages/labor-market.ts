@@ -229,8 +229,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const patienceWeeks = patienceWeeksOf(comp.management);
       const riskAversion = riskAversionOf(comp.management);
       const expectedEbitdaLocal = adaptiveExpectation(comp.expectedEbitdaLocal, comp.ebitda, patienceWeeks);
-      if (!ctx.companyUpdates[comp.ticker]) ctx.companyUpdates[comp.ticker] = {};
-      ctx.companyUpdates[comp.ticker].expectedEbitdaLocal = expectedEbitdaLocal;
+      (ctx.companyUpdates[comp.ticker] ??= {}).expectedEbitdaLocal = expectedEbitdaLocal;
 
       // HH6: a firm's OWN quit rate. Paying below the going rate loses people faster; paying
       // above keeps them, which is what makes a raise do something rather than just cost money.
@@ -663,9 +662,9 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     postings.forEach(({ comp, vacancies, layoffs, quits }) => {
       const hired = filledForKey(comp.ticker);
       const next = Math.max(1, Math.round(comp.employeeCount + hired - layoffs - quits));
-      if (!ctx.companyUpdates[comp.ticker]) ctx.companyUpdates[comp.ticker] = {};
-      ctx.companyUpdates[comp.ticker].employeeCount = next;
-      ctx.companyUpdates[comp.ticker].previousEmployeeCount = comp.employeeCount;
+      const update = (ctx.companyUpdates[comp.ticker] ??= {});
+      update.employeeCount = next;
+      update.previousEmployeeCount = comp.employeeCount;
 
       // ---- §3.24-i: THIS FIRM'S BID, OFF THE PRICE THE MARKET JUST PRINTED. ----
       const unfilledShare = vacancies > 0 ? Math.max(0, Math.min(1, 1 - hired / vacancies)) : 0;
@@ -707,8 +706,8 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const target = unfilledShare > 1e-3 ? Math.max(clearedForMix, rentTargetIndex) : rentTargetIndex;
       // A wage cannot be negative; nothing else bounds what a firm offers.
       const nextIndex = Math.max(0, prevIndex + (target - prevIndex) / patienceWeeksOf(comp.management));
-      ctx.companyUpdates[comp.ticker].offeredWageIndex = Number(nextIndex.toFixed(5));
-      ctx.companyUpdates[comp.ticker].unfilledVacancyShare = Number(unfilledShare.toFixed(4));
+      update.offeredWageIndex = Number(nextIndex.toFixed(5));
+      update.unfilledVacancyShare = Number(unfilledShare.toFixed(4));
     });
     segmentPostings.forEach(({ seg, vacancies, layoffs, quits }: { seg: SmePool; vacancies: number; layoffs: number; quits: number }) => {
       const hired = filledForKey(segmentBidKey(seg));

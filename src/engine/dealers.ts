@@ -66,7 +66,7 @@ export function dealersFromBanks(
       const netByKind = new Map<string, number>();
       deskRowsOf(v2, bank.id).forEach((r) => netByKind.set(r.kind, (netByKind.get(r.kind) ?? 0) + r.inventoryLocal));
       const longBooks = new Set(
-        Object.entries(DESK_BOOK_KIND).filter(([, kind]) => (netByKind.get(kind) ?? 0) > 0).map(([book]) => book)
+        Object.entries(DESK_BOOK_KIND).filter(([, kind]) => kind !== undefined && (netByKind.get(kind) ?? 0) > 0).map(([book]) => book)
       );
       const axeAssetClasses = ALL_ASSET_CLASSES.filter((a) => longBooks.has(DESK_BOOK_BY_ASSET_TYPE[a]));
       return {
