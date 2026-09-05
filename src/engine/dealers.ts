@@ -32,8 +32,8 @@ export const DESK_BOOK_BY_ASSET_TYPE: Record<AssetType, string> = {
   EQUITY: 'equity',
   CORP_BOND: 'corporate bond',
   LEVERAGED_LOAN: 'leveraged loan',
-  SOV_BOND: 'sovereign bond',
-  COMMODITY: 'commodity',
+  GOV_BOND: 'sovereign bond',
+  COMMODITY_FUTURE: 'commodity',
   CDS: 'derivatives',
   IRS: 'derivatives',
   TRS: 'derivatives',
@@ -135,7 +135,7 @@ export function quoteDeskFillBps(args: {
  */
 export function getUnifiedInitialMarginRate(assetType: AssetType): number {
   switch (assetType) {
-    case 'SOV_BOND':
+    case 'GOV_BOND':
       return 0.05; // 20x sovereign bond leverage
     case 'IRS':
       return 0.03; // 33x IRS duration leverage
@@ -146,7 +146,7 @@ export function getUnifiedInitialMarginRate(assetType: AssetType): number {
       return 0.05; // 20x CDS notional leverage
     case 'XCS':
       return 0.04; // 25x basis swap leverage
-    case 'COMMODITY':
+    case 'COMMODITY_FUTURE':
       return 0.10; // 10x futures margin
     case 'FX_SPOT':
       return 0.05; // 20x FX spot margin

@@ -10,19 +10,13 @@
 import { RegionId } from './geography';
 import { VIEW_BASE_COMMODITY_CATEGORY_LINKAGE } from './industry-registry';
 import { Sector, CreditRating } from './company';
+import type { InstrumentKind } from './assets';
 
-export type AssetType = 
-  | 'EQUITY' 
-  | 'CORP_BOND' 
-  | 'LEVERAGED_LOAN'
-  | 'SOV_BOND' 
-  | 'CDS' 
-  | 'IRS' 
-  | 'TRS' 
-  | 'XCS' 
-  | 'COMMODITY' 
-  | 'OPTION'
-  | 'FX_SPOT';
+/** §3.13-BOOK (e): the classes the player can trade — a view of the one kind list. A government
+ *  bond is `GOV_BOND` here as it is on the register, and a commodity position is the future the
+ *  engine clears (`COMMODITY_FUTURE`); `OPTION` and `TRS` have no engine market yet. */
+export type AssetType = Extract<InstrumentKind,
+  'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'CDS' | 'IRS' | 'TRS' | 'XCS' | 'COMMODITY_FUTURE' | 'OPTION' | 'FX_SPOT'>;
 
 export interface Position {
   id: string;

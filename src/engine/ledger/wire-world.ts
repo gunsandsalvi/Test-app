@@ -22,7 +22,7 @@ import { assertNever } from '../../domain/defect';
 import type { PartyRef } from '../../domain/party';
 import type { AssetKind, WireWorld } from './wire';
 
-const INSTRUMENT_KINDS: ReadonlySet<AssetKind> = new Set<AssetKind>(['CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER', 'BANK_FACILITY', 'EQUITY', 'ETF_SHARE', 'MMF_SHARE', 'CONTRACT']);
+const INSTRUMENT_KINDS: ReadonlySet<AssetKind> = new Set<AssetKind>(['CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER', 'BANK_FACILITY', 'EQUITY', 'ETF_SHARE', 'MMF_SHARE', 'PE_FUND_INTEREST', 'CONTRACT']);
 
 export function wireWorldOf(
   v2: V2World,
@@ -53,7 +53,7 @@ export function wireWorldOf(
         case 'GOOD': return goods.has(asset);
         case 'MONEY': return currencies.has(asset);
         case 'HOUSE': return undefined;
-        case 'EQUITY': case 'ETF_SHARE': case 'MMF_SHARE': case 'CONTRACT':
+        case 'EQUITY': case 'ETF_SHARE': case 'MMF_SHARE': case 'PE_FUND_INTEREST': case 'CONTRACT':
         case 'CORP_BOND': case 'LEVERAGED_LOAN': case 'GOV_BOND': case 'COMMERCIAL_PAPER': case 'BANK_FACILITY': return undefined; // handled above
         default: return assertNever(kind, 'wireWorld.instrumentExists');
       }

@@ -431,8 +431,9 @@ written from here):
     · **Instruments have no registry of instances.** Debt is `v2.tranches` (real, one writer);
       **equity's issued side is `Company.sharesOutstanding`, a scalar with no instrument record**;
       derivatives are `v2.contracts`; fund shares reuse the holder's ENTITY id as an instrument
-      id; goods are sub-unit ids. The KIND has four taxonomies, which `assets/index.ts` documents
-      and reconciles with a superset rather than replacing — a migration it defers in writing.
+      id; goods are sub-unit ids. ~~The KIND has four taxonomies, which `assets/index.ts` documents
+      and reconciles with a superset rather than replacing.~~ **CLOSED by (e)**: one list,
+      `assets/index.ts:InstrumentKind`, and every other union a view of it.
     · **Positions live in eight stores** — the register plus the bank's `sovereignBondHoldingsByBond`
       and `dealerDeskInventory`, the central bank's book, `Company.treasuryHoldings`, three derived
       regional desk arrays, `etfShares` and `portfolioCompanyIds` — and `v2.lots` beside them.
@@ -512,7 +513,6 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    e. **COLLAPSE THE FOUR TAXONOMIES** into the index's kind.
     f. **ONE POSITION BOOK, AS LOTS** — `v2.holdings` and `v2.lots` merge. A fungible asset sums
        its lots, an identified one addresses them, and **every position gains a basis**, which
        closes `the-register.md` D4 (❌ today, *no code at all*), unblocks the capital-gains base
@@ -1698,6 +1698,23 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK (e) — THE FOUR TAXONOMIES COLLAPSE INTO THE INDEX'S KIND.** `assets/index.ts:
+InstrumentKind` is the one list — the register's nine kinds, the seven book kinds, the player's
+two classes with no engine market — and every other union is a view of it: the wire's `AssetKind`
+(the register's kinds plus money, a good, a house, a contract), the register's `HoldingType`
+and its `ItemizedHoldingType` / `EstateClaimType` / `PrimaryOfferingType` views, the player's
+`AssetType`, the index's own kind (re-exported). The registry answers every question for every
+member (`ASSET_REGISTRY: Record<InstrumentKind, AssetModule>`) and the four per-kind boolean
+maps beside it — ladder paper, vehicle claim, hedged as fixed income, carries rate duration —
+are its columns; `holdingClassOf`, `isTrancheKind`, `heldInShares`, `isVehicleClaim` read it.
+The two disagreements are gone with the lists: the player's `SOV_BOND` is `GOV_BOND` and its
+`COMMODITY` is `COMMODITY_FUTURE`, in 12-portfolio, the carry calculator, the dealers, the news
+shortcut and the trade's class map. Two absences found and closed on the way: `MMF_SHARE` was
+never a register kind though the register holds it, and a private-equity interest moved by wire
+as `CONTRACT` because the wire's list lacked it (`ASSET_KINDS` gains it; the wire world resolves
+it against the index). Every register read is byte-identical; a PE interest's wires now carry
+their own kind. Gates green; no run.
 
 **13-BOOK d5c — POSTED INITIAL MARGIN IS A LIEN ON THE DEALER'S ACCOUNT.**
 `FxDealerBook.initialMarginHeldLocal` is deleted. A client's margin is a lien on the dealer's

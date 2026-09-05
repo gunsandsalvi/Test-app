@@ -17,7 +17,7 @@ import { asInstrumentId, type InstrumentId } from '../../domain/ids';
 
 /** The player's legacy position types onto the registry's classes; anything the registry does
  *  not know is charged at the FX forward's add-on, which is what every derivative paid before. */
-const PLAYER_ASSET_TYPE_CLASS: Record<string, DerivativeClassId> = { IRS: 'IRS', CDS: 'CDS', COMMODITY: 'COMMODITY_FUTURE', FX: 'FX_FORWARD' };
+const PLAYER_ASSET_TYPE_CLASS: Record<string, DerivativeClassId> = { IRS: 'IRS', CDS: 'CDS', COMMODITY_FUTURE: 'COMMODITY_FUTURE', FX: 'FX_FORWARD' };
 const playerPfeAddOnRate = (assetType: string): number =>
   DERIVATIVE_CLASSES[PLAYER_ASSET_TYPE_CLASS[assetType] ?? 'FX_FORWARD'].pfeAddOnRate;
 

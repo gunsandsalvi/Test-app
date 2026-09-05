@@ -187,7 +187,7 @@ export function generateWeeklyNews(
       // moved the market (rule 2).
       const affected = commodities.find((c) => c.id === w.affectedCommodityId);
       const tradeShortcut: TradeableInstrument | undefined = affected ? {
-        assetType: 'COMMODITY',
+        assetType: 'COMMODITY_FUTURE',
         id: affected.id,
         symbol: affected.symbol,
         name: affected.name,

@@ -94,7 +94,7 @@ export function calculateExpectedCarry(
       break;
     }
 
-    case 'SOV_BOND': {
+    case 'GOV_BOND': {
       const coupon = params.couponRate ?? rf;
       const repoCost = rf + 0.002;
       if (isBuyOrLong) {
@@ -146,7 +146,7 @@ export function calculateExpectedCarry(
       break;
     }
 
-    case 'COMMODITY': {
+    case 'COMMODITY_FUTURE': {
       const cy = params.convenienceYield ?? 0.03;
       // Net roll yield = Convenience Yield - Risk-Free USD Cost
       const netRollYield = cy - rf;

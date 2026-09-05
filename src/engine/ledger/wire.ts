@@ -12,16 +12,16 @@ import { PartyRef, partyId, partyOf } from './party';
 import type { EntityId } from '../../domain/ids';
 import { CurrencyCode, CURRENCY_CODES, NUMERAIRE } from '../../domain/geography';
 import { FxTable, PARITY_FX, toNumeraire } from '../../domain/currency';
-import { isVehicleClaim } from '../../domain/assets';
+import { isVehicleClaim, type HoldingType } from '../../domain/assets';
 import { defect } from '../../domain/defect';
 
-export type AssetKind =
-  | 'MONEY' | 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER'
-  | 'ETF_SHARE' | 'MMF_SHARE' | 'BANK_FACILITY' | 'GOOD' | 'HOUSE' | 'CONTRACT';
+/** §3.13-BOOK (e): what a wire moves — every kind the register or a ladder holds (a view of the
+ *  one kind list), money, a good, a house, or a bilateral contract. */
+export type AssetKind = HoldingType | 'MONEY' | 'GOOD' | 'HOUSE' | 'CONTRACT';
 
 export const ASSET_KINDS: readonly AssetKind[] = [
   'MONEY', 'EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER',
-  'ETF_SHARE', 'MMF_SHARE', 'BANK_FACILITY', 'GOOD', 'HOUSE', 'CONTRACT',
+  'ETF_SHARE', 'MMF_SHARE', 'BANK_FACILITY', 'GOOD', 'HOUSE', 'CONTRACT', 'PE_FUND_INTEREST',
 ];
 const kindIdOf = new Map<AssetKind, number>(ASSET_KINDS.map((k, i) => [k, i]));
 export const assetKindOfId = (id: number): AssetKind => ASSET_KINDS[id];

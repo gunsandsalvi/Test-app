@@ -204,7 +204,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         break;
       }
 
-      case 'SOV_BOND': {
+      case 'GOV_BOND': {
         const maturityWeek = pos.maturityWeek || (pos.openedWeek ? pos.openedWeek + Math.round((pos.tenorYears || 10) * 52) : (pos.tenorYears ? nextWeek + Math.round(pos.tenorYears * 52) : nextWeek + 520));
         const remainingTenorYears = Math.max(0.01, (maturityWeek - nextWeek) / 52);
         const sovParams = updatedRegions[pos.region].yieldCurveParams;
@@ -216,7 +216,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
         dv01 = (pos.quantity / 100) * bondPriced.dv01 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
 
-        const carryEst = calculateExpectedCarry('SOV_BOND', pos.direction, posValueLocal, {
+        const carryEst = calculateExpectedCarry('GOV_BOND', pos.direction, posValueLocal, {
           policyRate: updatedRegions[pos.region].policyRate,
           couponRate: pos.fixedRate || 0.04
         });
@@ -379,7 +379,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         break;
       }
 
-      case 'COMMODITY': {
+      case 'COMMODITY_FUTURE': {
         const comm = updatedCommodities.find((c) => c.symbol === pos.symbol || c.id === pos.symbol);
         if (comm) {
           currentPrice = comm.spotPrice;
@@ -389,7 +389,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
           delta = pos.direction === 'LONG' ? posValueLocal : -posValueLocal;
 
-          const carryEst = calculateExpectedCarry('COMMODITY', pos.direction, posValueLocal, {
+          const carryEst = calculateExpectedCarry('COMMODITY_FUTURE', pos.direction, posValueLocal, {
             policyRate: updatedRegions.USA.policyRate,
             convenienceYield: comm.convenienceYield
           });

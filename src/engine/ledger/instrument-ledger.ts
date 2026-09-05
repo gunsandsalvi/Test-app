@@ -15,7 +15,7 @@ import type { InstrumentId, EntityId } from '../../domain/ids';
 import { currencyOf, type CurrencyCode, type RegionId } from '../../domain/geography';
 import { equityInstrumentId, etfShareId } from '../../domain/instrument-keys';
 import { defect } from '../../domain/defect';
-import type { AssetKind } from './wire';
+import type { InstrumentKind } from '../../domain/assets';
 import type { InstitutionalEntityType } from '../../domain/institutions';
 
 /**
@@ -27,9 +27,8 @@ import type { InstitutionalEntityType } from '../../domain/institutions';
  * index therefore holds with NO issuer. Money, goods and houses have their own ledgers; a bilateral
  * contract is slice (d4)'s.
  */
-export type InstrumentKind =
-  | Exclude<AssetKind, 'MONEY' | 'GOOD' | 'HOUSE' | 'CONTRACT'> | 'PE_FUND_INTEREST'
-  | 'IRS' | 'CDS' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'REPO' | 'SBL';
+// §3.13-BOOK (e): the vocabulary is the asset registry's (`domain/assets/index.ts:InstrumentKind`).
+export type { InstrumentKind };
 
 export interface InstrumentDeclaration {
   id: InstrumentId;

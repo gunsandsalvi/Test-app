@@ -17,7 +17,24 @@
  * way to know where the eleven answers live.
  */
 
-import { AssetType } from '../instruments';
+/**
+ * §3.13-BOOK (e) — THE ONE KIND VOCABULARY. Four taxonomies said what kind of instrument a thing
+ * was — the player's `AssetType`, the register's holding union, the estate's claim union, the
+ * primary market's offering union — and then the wire's `AssetKind` and the index's
+ * `InstrumentKind` beside them, disagreeing on whether a government bond is `SOV_BOND` or
+ * `GOV_BOND` and on which of them a fund share or a bank facility even belonged to. This is the
+ * list, and every other union in the model is an `Extract` or `Exclude` view of it: the register's
+ * kinds, the seven book kinds the adapters mint an id for and clear, and the player's two classes
+ * that have no engine market yet. The registry below answers every question for every member.
+ */
+export type InstrumentKind =
+  // What the register holds.
+  | 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER' | 'BANK_FACILITY'
+  | 'ETF_SHARE' | 'MMF_SHARE' | 'PE_FUND_INTEREST'
+  // The books the adapters clear (§3.13-BOOK dII): nobody issues them, nobody holds them.
+  | 'IRS' | 'CDS' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'REPO' | 'SBL'
+  // The player's two classes with no engine market behind them yet.
+  | 'OPTION' | 'TRS';
 
 /** Where an instrument sits when a book is summed by class. */
 export type AssetClass = 'EQUITY' | 'CREDIT' | 'SOVEREIGN' | 'DERIVATIVE' | 'COMMODITY' | 'CASH_LIKE';
@@ -41,6 +58,19 @@ export interface AssetModule {
    * and losing the price that made it.
    */
   readonly countedIn: UnitOfMeasure;
+  /** A kind of paper a ladder row can be — the tranche ledger's wires carry it (W3). */
+  readonly ladderPaper: boolean;
+  /** A claim on a VEHICLE (a fund's shares, a fund interest) rather than on an issuer: the
+   *  ownership views must not sum it into an issuer's paper, or the portfolio underneath is
+   *  counted twice (§7.241). */
+  readonly vehicleClaim: boolean;
+  /** Hedged under a fixed-income FX mandate (fx-hedging): the bond-book classes a real
+   *  liability-matcher's currency policy covers. CP is excluded — 13-week paper's FX exposure
+   *  dies with the paper. */
+  readonly hedgedAsFixedIncome: boolean;
+  /** Carries fixed-RATE duration a swap can substitute for (07g's receiver gap): fixed-coupon
+   *  paper only — a leveraged loan floats and commercial paper is too short to count. */
+  readonly carriesRateDuration: boolean;
 }
 
 /**
@@ -70,127 +100,79 @@ export type UnitOfMeasure =
  * reader that genuinely needs new behaviour gets it by adding a field to `AssetModule`, which the
  * compiler then demands for every existing kind. That is the property a string tag cannot have.
  */
-export const ASSET_REGISTRY: Record<AssetType, AssetModule> = {
-  EQUITY:         { assetClass: 'EQUITY',     carriesCoupon: false, lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'SHARES' },
-  CORP_BOND:      { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: true,  hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR' },
-  LEVERAGED_LOAN: { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR' },
-  SOV_BOND:       { assetClass: 'SOVEREIGN',  carriesCoupon: true,  lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'PAR' },
-  CDS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS' },
-  IRS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS' },
-  TRS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS' },
-  XCS:            { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS' },
-  COMMODITY:      { assetClass: 'COMMODITY',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'GOODS_UNITS' },
-  OPTION:         { assetClass: 'DERIVATIVE', carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'CONTRACTS' },
-  FX_SPOT:        { assetClass: 'CASH_LIKE',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'MONEY' },
+export const ASSET_REGISTRY: Record<InstrumentKind, AssetModule> = {
+  EQUITY:           { assetClass: 'EQUITY',     carriesCoupon: false, lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'SHARES',      ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  CORP_BOND:        { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: true,  hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR',         ladderPaper: true,  vehicleClaim: false, hedgedAsFixedIncome: true,  carriesRateDuration: true },
+  LEVERAGED_LOAN:   { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR',         ladderPaper: true,  vehicleClaim: false, hedgedAsFixedIncome: true,  carriesRateDuration: false },
+  GOV_BOND:         { assetClass: 'SOVEREIGN',  carriesCoupon: true,  lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'PAR',         ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: true,  carriesRateDuration: true },
+  /** CP: an issuer's short paper is corporate credit like its bonds, whatever book prices it. */
+  COMMERCIAL_PAPER: { assetClass: 'CREDIT',     carriesCoupon: false, lendable: true,  hasCreditRisk: true,  quotedAs: 'PRICE',       countedIn: 'PAR',         ladderPaper: true,  vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  /** A facility is a bank-book loan on the lender's ladder row, never a register position. */
+  BANK_FACILITY:    { assetClass: 'CREDIT',     carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'YIELD_LIKE',  countedIn: 'PAR',         ladderPaper: true,  vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  ETF_SHARE:        { assetClass: 'EQUITY',     carriesCoupon: false, lendable: true,  hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'SHARES',      ladderPaper: false, vehicleClaim: true,  hedgedAsFixedIncome: false, carriesRateDuration: false },
+  MMF_SHARE:        { assetClass: 'CASH_LIKE',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'SHARES',      ladderPaper: false, vehicleClaim: true,  hedgedAsFixedIncome: false, carriesRateDuration: false },
+  /** An ownership claim on another entity in the same sector: summing it into a sector aggregate
+   *  double-counts the portfolio companies underneath it (`isIntraSectorClaim`). */
+  PE_FUND_INTEREST: { assetClass: 'EQUITY',     carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'SHARES',      ladderPaper: false, vehicleClaim: true,  hedgedAsFixedIncome: false, carriesRateDuration: false },
+  IRS:              { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  CDS:              { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  FX_SPOT:          { assetClass: 'CASH_LIKE',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'MONEY',       ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  XCS:              { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  COMMODITY_FUTURE: { assetClass: 'COMMODITY',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'GOODS_UNITS', ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  /** A repo is money lent against paper: its size is cash and its price a rate. */
+  REPO:             { assetClass: 'CASH_LIKE',  carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'YIELD_LIKE',  countedIn: 'MONEY',       ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  /** The stock-borrow book: shares out on loan, priced as a fee. */
+  SBL:              { assetClass: 'EQUITY',     carriesCoupon: false, lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'SHARES',      ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  OPTION:           { assetClass: 'DERIVATIVE', carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  TRS:              { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
 };
 
 /** The one lookup. A caller that cannot find its question here should add a field, not a switch. */
-export function assetModule(type: AssetType): AssetModule {
+export function assetModule(type: InstrumentKind): AssetModule {
   return ASSET_REGISTRY[type];
 }
 
-export const assetClassOf = (type: AssetType): AssetClass => ASSET_REGISTRY[type].assetClass;
-export const carriesCoupon = (type: AssetType): boolean => ASSET_REGISTRY[type].carriesCoupon;
-export const isLendable = (type: AssetType): boolean => ASSET_REGISTRY[type].lendable;
+export const assetClassOf = (type: InstrumentKind): AssetClass => ASSET_REGISTRY[type].assetClass;
+export const carriesCoupon = (type: InstrumentKind): boolean => ASSET_REGISTRY[type].carriesCoupon;
+export const isLendable = (type: InstrumentKind): boolean => ASSET_REGISTRY[type].lendable;
 /** What a quantity of this kind is counted in — the other half of every price. */
-export const countedIn = (type: AssetType): UnitOfMeasure => ASSET_REGISTRY[type].countedIn;
-export const hasCreditRisk = (type: AssetType): boolean => ASSET_REGISTRY[type].hasCreditRisk;
+export const countedIn = (type: InstrumentKind): UnitOfMeasure => ASSET_REGISTRY[type].countedIn;
+export const hasCreditRisk = (type: InstrumentKind): boolean => ASSET_REGISTRY[type].hasCreditRisk;
+/** The registry's row for a kind named by a string a store carries; `undefined` for a name that is
+ *  no kind — the caller decides what an unknown means, never a silent class. */
+const moduleOf = (type: string): AssetModule | undefined => ASSET_REGISTRY[type as InstrumentKind];
 
 /**
- * §5-STRUCT step 4 — AND THE OTHER THREE TAXONOMIES.
- *
- * `AssetType` is not the only name this model has for "what kind of instrument is this". There are
- * four, for one real thing (§1.4):
- *
- *   `AssetType`                              11 members, named, in `domain/instruments.ts`
- *   `ItemizedHolding.instrumentType`          7 members, ANONYMOUS inline union in `domain/banking.ts`
- *   `EstateClaim.instrumentType`              5 members, ANONYMOUS inline union in `domain/estate.ts`
- *   `PrimaryOfferingInstrumentType`           3 members, named, in `domain/primary-market.ts`
- *
- * And they disagree: a government bond is `SOV_BOND` in one and `GOV_BOND` in another, while
- * `COMMERCIAL_PAPER`, `PE_FUND_INTEREST`, `ETF_SHARE` and `BANK_FACILITY` each exist in some and
- * not others. Two of the four have no name at all, so nothing can even be counted against them.
- *
- * The union below is the reconciliation — every member any of the four can hold — and the map gives
- * each one an asset class. It is deliberately a superset rather than a replacement: replacing them
- * means touching every holding, claim and offering in the engine, and that is a migration, not a
- * definition. What this buys today is that a reader summing a book by class asks ONE function, and
- * a new instrument gets its class in one place instead of four.
+ * §5-STRUCT step 4 / §3.13-BOOK (e) — THE VIEWS. `AssetType` used to be one of four disagreeing
+ * lists (a government bond was `SOV_BOND` there and `GOV_BOND` on the register; `COMMODITY` there
+ * and `COMMODITY_FUTURE` on the index); the register's, the estate's and the primary market's
+ * unions were reconciled by a superset beside them rather than replaced. Every one of them is a
+ * view of `InstrumentKind` now, so a kind added to the list must be placed in (or excluded from)
+ * each view deliberately, and a name no view carries does not compile.
  */
-export type HoldingType =
-  | 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'SOV_BOND'
-  | 'COMMERCIAL_PAPER' | 'PE_FUND_INTEREST' | 'ETF_SHARE' | 'BANK_FACILITY';
-
-const HOLDING_CLASS: Record<HoldingType, AssetClass> = {
-  EQUITY: 'EQUITY',
-  ETF_SHARE: 'EQUITY',
-  /** An ownership claim on another entity in the same sector. Its own class, because summing it
-   *  into a sector aggregate double-counts the portfolio companies underneath it. */
-  PE_FUND_INTEREST: 'EQUITY',
-  CORP_BOND: 'CREDIT',
-  /** CP: an issuer's short paper is corporate credit like its bonds, whatever book prices it. */
-  COMMERCIAL_PAPER: 'CREDIT',
-  LEVERAGED_LOAN: 'CREDIT',
-  BANK_FACILITY: 'CREDIT',
-  GOV_BOND: 'SOVEREIGN',
-  SOV_BOND: 'SOVEREIGN',
-};
-
-export const holdingClassOf = (type: string): AssetClass | undefined =>
-  HOLDING_CLASS[type as HoldingType];
-
-/**
- * THE OTHER THREE TAXONOMIES, DERIVED FROM THE SUPERSET (step 4's first migration slice).
- * Each was an inline union spelled out where its struct lives — two with no name at all, so
- * nothing could be counted against them and a new member joined one and silently missed the
- * others. They are Exclude/Extract views of `HoldingType` now: one superset owns the members,
- * the compiler connects all four, and a kind added to the superset must be placed in (or
- * excluded from) each view deliberately.
- */
-/** What the institutional register can hold. No SOV_BOND (the register's sovereign rows carry
- *  GOV_BOND) and no BANK_FACILITY (a facility is a bank-book loan, never a register position). */
-export type ItemizedHoldingType = Exclude<HoldingType, 'SOV_BOND' | 'BANK_FACILITY'>;
+/** What can sit on a register book or a ladder row — the wire's instrument kinds. */
+export type HoldingType = Extract<InstrumentKind,
+  'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER' | 'BANK_FACILITY'
+  | 'ETF_SHARE' | 'MMF_SHARE' | 'PE_FUND_INTEREST'>;
+/** What the institutional register can hold. No BANK_FACILITY: a facility is a bank-book loan on
+ *  the lender's ladder row, never a register position. */
+export type ItemizedHoldingType = Exclude<HoldingType, 'BANK_FACILITY'>;
 /** What an estate owes claims against: the corporate capital structure. A sovereign cannot file,
  *  and claims on vehicles resolve at the vehicle, not in a corporate workout. */
-export type EstateClaimType =
-  Exclude<HoldingType, 'SOV_BOND' | 'GOV_BOND' | 'PE_FUND_INTEREST' | 'ETF_SHARE'>;
+export type EstateClaimType = Exclude<HoldingType, 'GOV_BOND' | 'PE_FUND_INTEREST' | 'ETF_SHARE' | 'MMF_SHARE'>;
 /** What the primary market can bring to market (sovereign issuance has its own calendar). */
 export type PrimaryOfferingType = Extract<HoldingType, 'CORP_BOND' | 'LEVERAGED_LOAN' | 'EQUITY'>;
+
+/** Where a kind a store names sits when a book is summed by class; `undefined` for a name that is
+ *  no kind. */
+export const holdingClassOf = (type: string): AssetClass | undefined => moduleOf(type)?.assetClass;
 
 /** True for the ownership claims that must NOT be summed into a sector's holdings of others. */
 export const isIntraSectorClaim = (type: string): boolean => type === 'PE_FUND_INTEREST';
 
-/** Hedged under a fixed-income FX mandate (fx-hedging): the bond-book classes a real
- *  liability-matcher's currency policy covers. CP is excluded — 13-week paper's FX exposure
- *  dies with the paper. */
-const HOLDING_HEDGED_AS_FIXED_INCOME: Record<HoldingType, boolean> = {
-  EQUITY: false, ETF_SHARE: false, PE_FUND_INTEREST: false, COMMERCIAL_PAPER: false,
-  BANK_FACILITY: false, CORP_BOND: true, LEVERAGED_LOAN: true, GOV_BOND: true, SOV_BOND: true,
-};
-export const hedgedAsFixedIncome = (type: string): boolean =>
-  HOLDING_HEDGED_AS_FIXED_INCOME[type as HoldingType] ?? false;
-
-/** Carries fixed-RATE duration a swap can substitute for (07g's receiver gap): fixed-coupon
- *  paper only — a leveraged loan floats and commercial paper is too short to count. */
-const HOLDING_CARRIES_RATE_DURATION: Record<HoldingType, boolean> = {
-  EQUITY: false, ETF_SHARE: false, PE_FUND_INTEREST: false, COMMERCIAL_PAPER: false,
-  BANK_FACILITY: false, LEVERAGED_LOAN: false, CORP_BOND: true, GOV_BOND: true, SOV_BOND: true,
-};
-export const carriesRateDuration = (type: string): boolean =>
-  HOLDING_CARRIES_RATE_DURATION[type as HoldingType] ?? false;
-
-/**
- * Claims on VEHICLES (fund shares, fund interests) rather than on issuers. The ownership views
- * measure who holds an ISSUER's paper; a claim on a fund is a layer above and summing it there
- * double-counts the portfolio underneath (§7.241 — this fact lived as an if-chain's silence).
- */
-const HOLDING_IS_VEHICLE_CLAIM: Record<HoldingType, boolean> = {
-  EQUITY: false, CORP_BOND: false, LEVERAGED_LOAN: false, GOV_BOND: false, SOV_BOND: false,
-  COMMERCIAL_PAPER: false, BANK_FACILITY: false,
-  PE_FUND_INTEREST: true, ETF_SHARE: true,
-};
-export const isVehicleClaim = (type: string): boolean =>
-  HOLDING_IS_VEHICLE_CLAIM[type as HoldingType] ?? false;
+export const hedgedAsFixedIncome = (type: string): boolean => moduleOf(type)?.hedgedAsFixedIncome ?? false;
+export const carriesRateDuration = (type: string): boolean => moduleOf(type)?.carriesRateDuration ?? false;
+export const isVehicleClaim = (type: string): boolean => moduleOf(type)?.vehicleClaim ?? false;
 
 /** The register's issuer-equity rows — the identity question three corporate-action sites ask
  *  (a holder's stake in one named issuer). Lives here so the fact is the registry's, not a
@@ -202,8 +184,7 @@ export const isIssuerEquityRow = (h: { instrumentType?: string }): boolean =>
  *  `quantityShares`; the wire's quantity is shares, its price the cleared level), or FACE at par
  *  (the wire's quantity is dollars at 1). The one fact the ledger, the primary and a merger's
  *  exchange all need, owned here. */
-export const heldInShares = (type: string): boolean =>
-  type === 'EQUITY' || type === 'ETF_SHARE' || type === 'MMF_SHARE' || type === 'PE_FUND_INTEREST';
+export const heldInShares = (type: string): boolean => moduleOf(type)?.countedIn === 'SHARES';
 
 /** §5-WIRES W3 — the kind of paper a debt tranche IS: a bank facility on the lender's book, commercial
  *  paper, a floating-rate loan, or a fixed-rate bond. The tranche ledger's wires carry this kind
@@ -212,5 +193,4 @@ export const trancheKindOf = (t: { isBankFacility?: boolean; isCommercialPaper?:
   'BANK_FACILITY' | 'COMMERCIAL_PAPER' | 'LEVERAGED_LOAN' | 'CORP_BOND' =>
   t.isBankFacility ? 'BANK_FACILITY' : t.isCommercialPaper ? 'COMMERCIAL_PAPER' : t.rateType === 'FLOATING' ? 'LEVERAGED_LOAN' : 'CORP_BOND';
 /** The kinds of paper a ladder row can be — what W3's ladder identity covers. */
-export const isTrancheKind = (kind: string): boolean =>
-  kind === 'BANK_FACILITY' || kind === 'COMMERCIAL_PAPER' || kind === 'LEVERAGED_LOAN' || kind === 'CORP_BOND';
+export const isTrancheKind = (kind: string): boolean => moduleOf(kind)?.ladderPaper ?? false;

@@ -34,7 +34,8 @@ import type { Company } from '../../domain/company';
 
 export type HoldingKind = ItemizedHolding['instrumentType'];
 
-/** The wire's asset kind for a register row: the kinds the wire ledger names, else a contract. */
+/** The wire's asset kind for a register row: the kinds the wire ledger names, else a contract.
+ *  §3.13-BOOK (e): a private-equity interest is a wire kind of its own now; it went as CONTRACT. */
 const kindOfType = (t: string): AssetKind => ((ASSET_KINDS as readonly string[]).includes(t) ? (t as AssetKind) : 'CONTRACT');
 
 export interface HoldingSpec {
