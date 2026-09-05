@@ -69,6 +69,16 @@ export type PartyRef =
  *  exactly the arms it admits instead of re-declaring them. */
 export type PartyOfKind<K extends PartyRef['kind']> = Extract<PartyRef, { kind: K }>;
 
+/** §3.13-BOOK d4a — THE SAME PARTY, compared by what names it: kind and id, or kind and region
+ *  (and industry for a segment). The domain's answer to "is this the lender", with no key string
+ *  — the ledger's `partyKey` is the same identity spelled for a map. */
+export function samePartyRef(a: PartyRef, b: PartyRef): boolean {
+  if (a.kind !== b.kind) return false;
+  if ('id' in a) return 'id' in b && a.id === b.id;
+  if (a.kind === 'SEGMENT') return b.kind === 'SEGMENT' && a.region === b.region && a.industry === b.industry;
+  return 'region' in b && a.region === b.region;
+}
+
 /**
  * The arms that name an ENTITY in the entity store, as opposed to a region or a segment. Five,
  * because a bank appears three times: `BANK` is its own account, `BANK_CREDIT` the deposit it

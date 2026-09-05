@@ -32,6 +32,9 @@ import { defect } from '../defect';
  */
 export type DerivativeParty = CounterpartyRef;
 
+/** §3.13-BOOK d4a: ONE KEY FORMAT. This is the ledger's own `partyKey` (`engine/ledger/party.ts`)
+ *  for the three arms a contract can carry — `KIND:entityId` — spelled here because the domain
+ *  cannot import the ledger's intern table; `test/derivatives.test.ts` holds the two equal. */
 export function derivativePartyKey(p: DerivativeParty): string {
   return `${p.kind}:${p.id}`;
 }

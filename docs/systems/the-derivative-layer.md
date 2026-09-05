@@ -303,5 +303,5 @@ poster's. Closes with step 17's margin rebuild.
 
 - **C2.a / C4 ❌** — no CCP, so nothing concentrates and no waterfall exists — C2–C5 above.
 - **D2 ⚠️** — variation margin flows for the two classes that carry a mark and cannot for IRS and CDS — A4/D2.b.
-- **F1 ⚠️** — `O5` checks both parties are alive for the one book; the player's legacy positions have no `b` at all — `../instruments/derivative.md` D1.a.
+- **F1 ⚠️** — `O5` checks both parties are alive for the one book (§9.13-BOOK d4a: it read a firm party by a `ticker` it no longer carried, so every firm party counted dead — it reads the entity id now); the player's legacy positions have no `b` at all — `../instruments/derivative.md` D1.a.
 - **F4 ⚠️** — the commodity future cash-settles to `evolveCommodity`'s formula spot — 37-COMMODITY.

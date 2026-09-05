@@ -253,9 +253,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             (collateralCalledByBorrower.get(ct.borrowerId) ?? 0) + callLocal);
           pay(ctx, {
             payer: bankSecuritiesPartyOf(ct.borrowerId),
-            payee: ct.lender.kind === 'BANK' ? bankSecuritiesParty(ct.lender)
-              : ct.lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: ct.lender.id }
-                : { kind: 'CENTRAL_BANK', region: regionId },
+            // §3.13-BOOK d4a: the lender is a party; a bank lends from its securities account.
+            payee: ct.lender.kind === 'BANK' ? bankSecuritiesParty(ct.lender) : ct.lender,
             amount: callLocal,
             currency: currencyOf(regionId),
             reason: 'repo collateral call',

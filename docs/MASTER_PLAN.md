@@ -512,14 +512,23 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    d4. **ONE CONTRACT STORE FOR EVERY BILATERAL OBLIGATION** (added 2026-09-04). Derivatives are
-        in `v2.contracts` with one writer; repo contracts (`reg.repoBook`), securities loans, prime-
-        brokerage lines, trade invoices and PE capital commitments are the same thing — two named
-        parties, both of whom must be alive, zero-sum — in five stores with five key formats and
-        five liveness checks (`O4`, `O5`, `O10`, or none). They join the contract store behind the
-        same door, and (d2)'s party resolution covers them for free. A derivative is in the INDEX
-        and the CONTRACT store, never in the position book: nothing is held, and its check is `O9`'s
-        zero-sum, not held = issued.
+    d4. **ONE CONTRACT STORE FOR EVERY BILATERAL OBLIGATION** — split 2026-09-05 (found writing
+        it: the derivatives are NOT in `v2.contracts`, which is the supply-contract table; they
+        are `state.derivativesBook`, an object array with one lifecycle writer). d4a (one party
+        union and one key across the bilateral books) is in §9. What is left, in order:
+    d4b. **ONE DOOR.** A `contract-ledger` is the only writer of the six bilateral books —
+        `state.derivativesBook`, `reg.repoBook`, `reg.securityLoanBook`, `reg.primeBrokerageBook`,
+        `state.tradeInvoices`, `peFund.lpCommitments` — through named operations (strike, draw,
+        repay, novate, close out), each resolving both parties against the wire world (d2) at the
+        write, so a contract on a party that does not exist is refused at the site rather than
+        found by `O5`/`O8` a week later. The books keep their shapes; the stages keep their
+        arithmetic; only the writes move. Byte-identical.
+    d4c. **ONE STORE.** The six books become one columnar contract store beside the register:
+        kind, party A, party B, currency, principal, rate, struck and maturity weeks, and a
+        per-kind terms row (a repo's pledges, a loan's shares, an invoice's booked rate), with
+        `d4b`'s door as its writer and one liveness check (`O5`) over every kind. A derivative is
+        in the INDEX and the CONTRACT store, never in the position book: nothing is held, and its
+        check is `O9`'s zero-sum, not held = issued.
     d5. **A CLAIM ON A POSITION IS A LIEN ON A LOT** (added 2026-09-04). Repo encumbrance
         (`encumberedFaceByBond`), stock-loan collateral and posted initial margin
         (`initialMarginHeldLocal`, a scalar on the desk) are parallel numbers reconciled after the
@@ -1712,6 +1721,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d4a — ONE PARTY UNION AND ONE KEY ACROSS THE BILATERAL BOOKS.** `repo.ts:RepoParty` is
+`PartyOfKind<'BANK' | 'INSTITUTION' | 'CENTRAL_BANK'>` — the window's arm carries its region like
+every other central-bank party, where it was a third variant `{ kind: 'CENTRAL_BANK' }` with the
+book's own key (`repoPartyKey`, `'CB'`), the last party in a bilateral book that the ledger's
+identity did not spell. `repoPartyKey` is deleted: a lender is compared as a party
+(`party.ts:samePartyRef`, no key string), paid as one (`repoLenderParty` maps a bank to its
+securities account and hands every other arm through), and checked for liveness as one (`O8`'s
+repo arm no longer exempts the window). `derivativePartyKey` is documented as the ledger's
+`partyKey` for the three arms a contract carries and a test holds the two equal. FOUND AND FIXED:
+`O5`'s "contracts have two live parties" read a firm party by a `ticker` field it stopped carrying
+at c-then-3b, so every derivative with a bank or company party counted as dead — it reads the
+entity id now, which changes the O5 count (a measurement, step 38's). Byte-identical in every
+number. The step was split here (d4b one door, d4c one store) once writing it showed the plan's
+premise wrong — the derivatives book is an object array, not `v2.contracts`. Gates green; no run.
 
 **13-BOOK dV — AN INDEX CONSTITUENT IS AN INSTRUMENT.** A credit index's constituents were
 ISSUERS in a field called `instrumentId`, each weighted by the market value of everything it owed,

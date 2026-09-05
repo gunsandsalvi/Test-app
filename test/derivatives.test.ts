@@ -16,6 +16,7 @@ import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, standingPfeChargeLocal, 
 import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivatives/hedging';
 import { StandingBook } from '../src/domain/derivatives/standing-book';
 import { asEntityId } from '../src/domain/ids';
+import { partyKey } from '../src/engine/ledger/party';
 
 const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView => ({
   week: 10,
@@ -187,4 +188,13 @@ test('the standing-book index answers exactly what the per-participant walks ans
   assert.equal(index.coverLocal('IRS', 'a', meKey, undefined, 's5'), 15);
   assert.equal(index.pfeChargeLocal(meKey), standingPfeChargeLocal(book, meKey, 10, isIG));
   assert.equal(index.indexed, book.length);
+});
+
+test('§3.13-BOOK d4a: a contract party is keyed the way the ledger keys every party', () => {
+  const bank = bankPartyOf(asEntityId('USA_BANK1'));
+  const inst = { kind: 'INSTITUTION' as const, id: asEntityId('INST-1') };
+  const comp = companyPartyOf(asEntityId('USA_ACME'));
+  assert.equal(derivativePartyKey(bank), partyKey(bank));
+  assert.equal(derivativePartyKey(inst), partyKey(inst));
+  assert.equal(derivativePartyKey(comp), partyKey(comp));
 });

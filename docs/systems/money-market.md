@@ -134,7 +134,7 @@ checked by `scripts/check-atlas.sh`.
 | **D6 LOLR: freely, good collateral, penalty, solvent — all four** | `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` | ❌ |
 | **E1 the policy rate reaches the economy THROUGH this market** | `src/engine/simulation/stages/repo-clearing.ts:RepoSessionResult` | ⚠️ |
 | E2 VERIFY a squeeze here raises funding costs elsewhere | `src/engine/simulation/stages/repo-clearing.ts:fundableNeedLocal` | ⚠️ |
-| **E3 interbank exposure is a contagion path, by name** | `src/domain/repo.ts:repoPartyKey` | ⚠️ |
+| **E3 interbank exposure is a contagion path, by name** | `src/domain/repo.ts:RepoContract` | ⚠️ |
 
 ---
 
@@ -248,7 +248,8 @@ bank that raised its rate is not the bank that gets the money. That last part is
 
 ### ⚠️ E3 — THE CONTAGION PATH IS BUILT AND NOTHING TRAVELS DOWN IT
 
-Every repo contract names both parties (`RepoContract.lender` as a `RepoParty` union, `borrowerId`),
+Every repo contract names both parties (`RepoContract.lender` as a `PartyRef` arm — §9.13-BOOK d4a gave the
+window's arm its region and deleted the book's own key — and `borrowerId`),
 so "a failure lands on its lenders by name" is one map away — and `rekeyBankLinks`
 (`bank-resolution.ts:62`) walks `reg.repoBook` on exactly that key. What it does with it is re-point
 every contract at the assuming bank, so no lender ever takes a loss. Recorded as

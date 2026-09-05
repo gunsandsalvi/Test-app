@@ -243,12 +243,10 @@ export function selectCollateral(
  * liability liquidity needs and retires the shared constant. */
 export const CASH_SLEEVE_OVERNIGHT_SHARE = 0.5;
 
-/** Who a contract's lender is, as a settlement party: a bank's reserves, an institution's
- *  balance, or the central bank's window. */
-const repoLenderParty = (lender: RepoParty, regionId: RegionId): PartyRef =>
-  lender.kind === 'BANK' ? bankSecuritiesParty(lender)
-    : lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: lender.id }
-      : { kind: 'CENTRAL_BANK', region: regionId };
+/** Who a contract's lender is, as a settlement party: a bank lends from its securities account;
+ *  an institution and the central bank's window are the parties they are. */
+const repoLenderParty = (lender: RepoParty): PartyRef =>
+  lender.kind === 'BANK' ? bankSecuritiesParty(lender) : lender;
 
 const CB_SRF_SEAT_ID = 'CB-SRF';
 /** The term book's maturity — one quarter, the tenor the curve's own front point prices,
@@ -328,7 +326,7 @@ export function runRegionalRepoSession(
     }
     pay(ctx, {
       payer: bankSecuritiesPartyOf(c.borrowerId),
-      payee: repoLenderParty(c.lender, regionId),
+      payee: repoLenderParty(c.lender),
       amount: dueLocal,
       currency: currencyOf(regionId),
       reason: 'repo maturity',
@@ -391,7 +389,7 @@ export function runRegionalRepoSession(
                   clearedVolumeLocal: number): RepoSessionResult => {
     reg.repoBook = book;
     // C5: the window's lending is the central bank's ASSET, derived from the same book.
-    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentLocal = Math.round(repoLentLocal(book, { kind: 'CENTRAL_BANK' }));
+    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentLocal = Math.round(repoLentLocal(book, { kind: 'CENTRAL_BANK', region: regionId }));
     reg.repoTermRateAnnual = termRateAnnual === undefined ? undefined : Number(termRateAnnual.toFixed(6));
     // Every scalar the sheets carried is now DERIVED from the book — the G2 pattern.
     banks.forEach((bank) => {
@@ -598,7 +596,7 @@ export function runRegionalRepoSession(
         const lenderBankTicker = bankTickerOfParticipant(pid);
         const lenderBank = lenderBankTicker !== undefined ? bankIdByTicker.get(lenderBankTicker) : undefined;
         const lender: RepoParty = pid === CB_SRF_SEAT_ID
-          ? { kind: 'CENTRAL_BANK' }
+          ? { kind: 'CENTRAL_BANK', region: regionId }
           : lenderBank !== undefined
             ? bankPartyOf(lenderBank)
             // §3.13-BOOK (c2b): the seat's tail IS the entity id — `repoInstitutionSeatId`
@@ -648,7 +646,7 @@ export function runRegionalRepoSession(
       lentByEntity.set(c.lender.id, (lentByEntity.get(c.lender.id) ?? 0) + c.principalLocal);
     }
     pay(ctx, {
-      payer: repoLenderParty(c.lender, regionId),
+      payer: repoLenderParty(c.lender),
       payee: bankSecuritiesPartyOf(c.borrowerId),
       amount: c.principalLocal,
       currency: currencyOf(regionId),
@@ -808,9 +806,7 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
         const callLocal = Math.min(c.principalLocal, c.principalLocal * (releasedFaceLocal / pledgedFaceLocal));
         c.principalLocal -= callLocal;
         repaidLocal += callLocal;
-        const payee: PartyRef = c.lender.kind === 'BANK' ? bankSecuritiesParty(c.lender)
-          : c.lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: c.lender.id }
-            : { kind: 'CENTRAL_BANK', region: regionId };
+        const payee: PartyRef = repoLenderParty(c.lender);
         pay(ctx, {
           payer: bankSecuritiesPartyOf(bankId),
           payee,
@@ -830,6 +826,6 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       });
     });
     reg.repoBook = book.filter((c) => c.principalLocal > 1);
-    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentLocal = Math.round(repoLentLocal(reg.repoBook, { kind: 'CENTRAL_BANK' }));
+    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentLocal = Math.round(repoLentLocal(reg.repoBook, { kind: 'CENTRAL_BANK', region: regionId }));
   });
 }

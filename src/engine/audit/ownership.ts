@@ -1,6 +1,7 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
+import type { CounterpartyRef } from '../../domain/party';
 import { deskRowsOf } from '../desk-register';
 import { deskBankIdOf } from '../ledger/holdings-ledger';
 import { issuedSharesOf, marketCapAt } from '../../engine2/instruments';
@@ -23,7 +24,6 @@ import { asEntityId, asTicker } from '../../domain/ids';
 import { assertNever } from '../../domain/defect';
 import { partyFromKey } from '../ledger/party';
 import type { PartyRef } from '../../domain/party';
-import type { Ticker } from '../../domain/ids';
 import type { EntityId } from '../../domain/ids';
 
 /** Which of O1's four buckets a ladder row falls in. `BANK_FACILITY` is absent, not zero: it is
@@ -421,7 +421,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
     const reg = state.regions[r];
     (reg?.repoBook ?? []).forEach((c) => {
       if (!entityExists(c.borrowerId)) bump('repo borrowers');
-      if (c.lender.kind !== 'CENTRAL_BANK' && !partyExists(c.lender)) bump('repo lenders');
+      if (!partyExists(c.lender)) bump('repo lenders'); // §3.13-BOOK d4a: the window is a party with a region
     });
     (reg?.primeBrokerageBook ?? []).forEach((l) => {
       if (!companyById.has(l.brokerId)) bump('prime-brokerage brokers');
@@ -487,9 +487,15 @@ function o5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const { companyByTicker: tickers, companyById: byId5, institutionById: ents } = partyIndexOfState(state);
   let deadParty = 0, deadLocal = 0;
+  // §3.13-BOOK d4a: a contract's parties are `PartyRef` arms keyed by ENTITY id (c-then-3b); this
+  // read them by a `ticker` field they no longer carry, so every firm party read as dead.
+  const alive = (p: CounterpartyRef): boolean => {
+    if (p.kind === 'INSTITUTION') { const e = ents.get(p.id); return !!e && !e.isDefaulted; }
+    const c = byId5.get(p.id);
+    return !!c && isActiveCompany(c);
+  };
   (state.derivativesBook ?? []).forEach((k) => {
-    const alive = (p: { kind: string; ticker?: Ticker; id?: EntityId }) => p.kind === 'INSTITUTION' ? !!ents.get(p.id!) && !ents.get(p.id!)!.isDefaulted : !!tickers.get(p.ticker!) && isActiveCompany(tickers.get(p.ticker!)!);
-    if (!alive(k.a as never) || !alive(k.b as never)) { deadParty++; deadLocal += k.notional; }
+    if (!alive(k.a) || !alive(k.b)) { deadParty++; deadLocal += k.notional; }
   });
   if (deadParty) out.push({ family: 'O', check: 'O5 contracts have two live parties', week, usd: deadLocal, message: `${deadParty} contracts (${B(deadLocal)}) have a dead or missing party` });
   let overRecovered = 0;

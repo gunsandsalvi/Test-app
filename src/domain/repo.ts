@@ -20,22 +20,17 @@
 
 import { RegionId } from './geography';
 import type { EntityId } from './ids';
-import type { PartyOfKind } from './party';
+import { samePartyRef, type PartyOfKind } from './party';
 import type { InstrumentId } from './ids';
 
 /**
- * §3.13-BOOK (c-then-3a) — the two named arms are views of the ONE union; the central bank's is
- * the one genuine variant in the model and stays declared here. `PartyRef`'s
- * `{ kind: 'CENTRAL_BANK'; region }` carries a region because a payment can cross a border; a
- * repo cannot. `reg.repoBook` is per region, so the region is already stated by the book the
- * contract sits in and `repoPartyKey`'s `'CB'` is unambiguous within it — checked, not assumed
- * (`repo-clearing.ts:379,814` both read one region's book).
+ * §3.13-BOOK (c-then-3a) — the named arms are views of the ONE union. §3.13-BOOK d4a: the central
+ * bank's arm is `PartyRef`'s own, region and all — it used to be a third variant `{ kind:
+ * 'CENTRAL_BANK' }` with a key of its own (`repoPartyKey`'s `'CB'`), the last party in a bilateral
+ * book that the ledger's identity did not spell. A contract's lender is a `PartyRef` now: it is
+ * paid as one, checked for liveness as one, and compared as one (`samePartyRef`).
  */
-export type RepoParty =
-  | PartyOfKind<'BANK'>
-  | PartyOfKind<'INSTITUTION'>
-  /** The standing facility. A posted-rate seat in the auction, and a real counterparty here. */
-  | { kind: 'CENTRAL_BANK' };
+export type RepoParty = PartyOfKind<'BANK' | 'INSTITUTION' | 'CENTRAL_BANK'>;
 
 /** The specific paper pledged: which bond, and how much face of it. */
 export interface RepoPledge {
@@ -60,12 +55,6 @@ export interface RepoContract {
   collateral: RepoPledge[];
 }
 
-export function repoPartyKey(p: RepoParty): string {
-  // §3.13-BOOK (c-then-3b): every named arm is an entity id, and `INST:` is `INSTITUTION:` —
-  // the same party under two key formats, which is what one union was supposed to end.
-  return p.kind === 'CENTRAL_BANK' ? 'CB' : `${p.kind}:${p.id}`;
-}
-
 /** One week's interest on a contract, at the rate it was struck at. */
 export function repoWeeklyInterestLocal(c: RepoContract): number {
   return (c.principalLocal * c.rateAnnual) / 52;
@@ -82,8 +71,7 @@ export function repoBorrowedLocal(book: RepoContract[], bankId: EntityId): numbe
 }
 
 export function repoLentLocal(book: RepoContract[], party: RepoParty): number {
-  const key = repoPartyKey(party);
-  return book.reduce((a, c) => a + (repoPartyKey(c.lender) === key ? c.principalLocal : 0), 0);
+  return book.reduce((a, c) => a + (samePartyRef(c.lender, party) ? c.principalLocal : 0), 0);
 }
 
 /** What the central bank's window has outstanding to one bank — the sheet's `srfBorrowingLocal`. */
