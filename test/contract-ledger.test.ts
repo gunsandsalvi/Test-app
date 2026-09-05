@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
 import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
-import { bookTradeInvoices, tradeInvoicesOf, settleTradeInvoices, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, publishPrimeBrokerageBook, primeBrokerageBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
+import { bookTradeInvoices, tradeInvoicesOf, settleTradeInvoices, commitCapital, lpCommitmentsOf, drawCommitment, returnCommitment, liveObligationPartiesOf, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, publishPrimeBrokerageBook, primeBrokerageBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
 import type { WeeklyStepContext } from '../src/engine/simulation/stages/context';
 import type { DerivativeContract } from '../src/domain/derivatives/contract';
 import { asEntityId, asInstrumentId } from '../src/domain/ids';
@@ -16,6 +16,7 @@ import type { TradeInvoice } from '../src/domain/trade-invoice';
 import type { RepoContract } from '../src/domain/repo';
 import type { SecurityLoan } from '../src/domain/securities-lending';
 import type { PrimeBrokerageLine } from '../src/domain/prime-brokerage';
+import type { LpCommitment } from '../src/domain/commitment';
 
 const invoice = (sellerId: string, buyerId: string): TradeInvoice => ({
   sellerId: asEntityId(sellerId), sellerRegion: 'USA', buyerId: asEntityId(buyerId), buyerRegion: 'USA',
@@ -144,6 +145,33 @@ test('a prime-brokerage book is rows of the contract store: a line re-struck kee
     assert.deepEqual(primeBrokerageBookOf(v2, 'USA'), [swept]);
     assert.throws(() => publishPrimeBrokerageBook(v2, 'USA', [{ ...line, fundId: asEntityId('INST-GHOST') }]), /no entity, region or bank/);
     assert.throws(() => publishPrimeBrokerageBook(v2, 'EUR', [swept]), /published on EUR/);
+  } finally {
+    setActiveWireWorld(undefined);
+  }
+});
+
+test('a capital commitment is a row of the contract store: a call draws it, a distribution returns it', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  setActiveWireWorld(wireWorldOf(v2, [], [{ id: asEntityId('USA_PEF1') }, { id: asEntityId('INST-PEN1') }, { id: asEntityId('INST-PEN2') }]));
+  try {
+    const c1: LpCommitment = { fundId: asEntityId('USA_PEF1'), lpEntityId: asEntityId('INST-PEN1'), regionId: 'USA', committedLocal: 1e9, drawnLocal: 4e8 };
+    const c2: LpCommitment = { ...c1, lpEntityId: asEntityId('INST-PEN2'), committedLocal: 5e8, drawnLocal: 2e8 };
+    commitCapital(v2, c1); commitCapital(v2, c2);
+    assert.deepEqual(lpCommitmentsOf(v2, 'USA_PEF1'), [c1, c2]);
+    assert.deepEqual(lpCommitmentsOf(v2, 'USA_PEF2'), [], 'another fund reads its own rows');
+    assert.throws(() => commitCapital(v2, { ...c1, lpEntityId: asEntityId('INST-GHOST') }), /no entity, region or bank/);
+    assert.throws(() => commitCapital(v2, c1), /written twice/);
+    const [first] = lpCommitmentsOf(v2, 'USA_PEF1');
+    drawCommitment(v2, first, 1e8);
+    assert.equal(lpCommitmentsOf(v2, 'USA_PEF1')[0].drawnLocal, 5e8);
+    returnCommitment(v2, lpCommitmentsOf(v2, 'USA_PEF1')[0], 6e8);
+    assert.equal(lpCommitmentsOf(v2, 'USA_PEF1')[0].drawnLocal, 0, 'a distribution never returns more than was drawn');
+    assert.throws(() => drawCommitment(v2, { ...c1 }, 1), /not on the contract store/);
+    // The one liveness read: every row, its two parties resolved.
+    const live = liveObligationPartiesOf(v2).filter((o) => o.kind === 'COMMITMENT');
+    assert.equal(live.length, 2);
+    assert.deepEqual(live[0].a, { kind: 'INSTITUTION', id: 'USA_PEF1' });
+    assert.deepEqual(live[1].b, { kind: 'INSTITUTION', id: 'INST-PEN2' });
   } finally {
     setActiveWireWorld(undefined);
   }

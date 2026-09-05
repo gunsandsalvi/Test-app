@@ -1,8 +1,7 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
-import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf } from '../ledger/contract-ledger';
-import type { CounterpartyRef } from '../../domain/party';
+import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf, liveObligationPartiesOf } from '../ledger/contract-ledger';
 import { deskRowsOf } from '../desk-register';
 import { deskBankIdOf } from '../ledger/holdings-ledger';
 import { issuedSharesOf, marketCapAt } from '../../engine2/instruments';
@@ -487,18 +486,31 @@ function o8(state: GameState, week: number): AuditFinding[] {
 function o5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const { companyByTicker: tickers, companyById: byId5, institutionById: ents } = partyIndexOfState(state);
-  let deadParty = 0, deadLocal = 0;
-  // §3.13-BOOK d4a: a contract's parties are `PartyRef` arms keyed by ENTITY id (c-then-3b); this
-  // read them by a `ticker` field they no longer carry, so every firm party read as dead.
-  const alive = (p: CounterpartyRef): boolean => {
-    if (p.kind === 'INSTITUTION') { const e = ents.get(p.id); return !!e && !e.isDefaulted; }
-    const c = byId5.get(p.id);
-    return !!c && isActiveCompany(c);
+  // A dead firm with an OPEN estate is still a party: its receiver collects what it is owed.
+  const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
+  // §3.13-BOOK d4c-vi: ONE liveness check over every kind on the contract store — a derivative,
+  // a repo, a stock loan, a prime-brokerage line, a trade invoice, a capital commitment — each
+  // as its two parties. §3.13-BOOK d4a: a party is a `PartyRef` arm keyed by ENTITY id
+  // (c-then-3b); this read the firm arms by a `ticker` they no longer carry, so every firm party
+  // read as dead.
+  const alive = (p: PartyRef | undefined): boolean => {
+    if (p === undefined) return false;
+    switch (p.kind) {
+      case 'INSTITUTION': { const e = ents.get(p.id); return !!e && !e.isDefaulted; }
+      case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': { const c = byId5.get(p.id); return !!c && (isActiveCompany(c) || openEstates.has(c.id)); }
+      case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': return true;
+      default: return assertNever(p, 'o5.alive');
+    }
   };
-  derivativesOf(ensureV2(state)).forEach((k) => {
-    if (!alive(k.a) || !alive(k.b)) { deadParty++; deadLocal += k.notional; }
+  const deadByKind = new Map<string, { n: number; usd: number }>();
+  liveObligationPartiesOf(ensureV2(state)).forEach((o) => {
+    if (alive(o.a) && alive(o.b)) return;
+    const d = deadByKind.get(o.kind) ?? { n: 0, usd: 0 };
+    d.n++; d.usd += o.notional; deadByKind.set(o.kind, d);
   });
-  if (deadParty) out.push({ family: 'O', check: 'O5 contracts have two live parties', week, usd: deadLocal, message: `${deadParty} contracts (${B(deadLocal)}) have a dead or missing party` });
+  deadByKind.forEach((d, kind) => {
+    out.push({ family: 'O', check: 'O5 contracts have two live parties', week, usd: d.usd, message: `${d.n} ${kind} contracts (${B(d.usd)}) have a dead or missing party` });
+  });
   let overRecovered = 0;
   (state.estates ?? []).forEach((e) => { e.claims.forEach((c) => { if (c.recoveredLocal > c.principalLocal * 1.001 + 1) overRecovered++; }); });
   if (overRecovered) out.push({ family: 'O', check: 'O5 recovered ≤ owed', week, usd: overRecovered, message: `${overRecovered} estate claims recovered more than they were owed` });
@@ -516,7 +528,6 @@ function o5(state: GameState, week: number): AuditFinding[] {
   // second try was a full scan of every company PER SHIPMENT; it is the index's other half.
   const idOrTicker = (key: string) => tickers.get(asTicker(key)) ?? byId5.get(asEntityId(key));
   // A dead buyer with an OPEN estate still takes delivery — the receiver liquidates it.
-  const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   const estateOf = new Map((state.estates ?? []).map((e) => [e.companyId, e]));
   const why = new Map<string, number>();
   const bump = (k: string) => why.set(k, (why.get(k) ?? 0) + 1);

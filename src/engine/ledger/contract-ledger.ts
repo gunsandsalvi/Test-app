@@ -14,7 +14,7 @@
  * columnar store for the six is slice d4c's.
  */
 import type { V2World } from '../../engine2/world';
-import { kindEpochOf, writeInvoiceRow, materializeInvoice, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
+import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import type { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
@@ -23,6 +23,10 @@ import type { SecurityLoan } from '../../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../../domain/prime-brokerage';
 import { bankPartyOf, companyPartyOf } from '../../domain/party';
 import type { TradeInvoice } from '../../domain/trade-invoice';
+import type { LpCommitment } from '../../domain/commitment';
+import type { EntityId } from '../../domain/ids';
+import { partyFromKey, partyKey, type PartyRef } from './party';
+import { partyKeyOf } from '../../engine2/world';
 import { resolvePartyRef } from './wire';
 import { defect } from '../../domain/defect';
 
@@ -222,14 +226,60 @@ export function settleTradeInvoices(v2: V2World, stillOutstanding: readonly Trad
   relinkKind(v2, 'TRADE_INVOICE', rows);
 }
 
-/** A capital call draws on a limited partner's commitment; the payment beside it is the LP's. */
-export function drawCommitment(c: { committedLocal: number; drawnLocal: number }, amountLocal: number): void {
+/**
+ * §3.13-BOOK d4c-vi — THE CAPITAL COMMITMENTS ARE ROWS OF THE CONTRACT STORE. A fund's LPs are
+ * its rows in insertion order, memoised on the kind's epoch; each object names its row, which is
+ * how a call or a distribution finds the column it moves. `peFund.lpCommitments` is gone. The
+ * seed's commitments ride a stash from the generator to `openSeededBooks`, like its books.
+ */
+const commitmentMemo = new WeakMap<V2World, { epoch: number; byFund: Map<string, LpCommitment[]> }>();
+export function lpCommitmentsOf(v2: V2World, fundId: string): LpCommitment[] {
+  const epoch = kindEpochOf(v2, 'COMMITMENT');
+  let memo = commitmentMemo.get(v2);
+  if (!memo || memo.epoch !== epoch) { memo = { epoch, byFund: new Map() }; commitmentMemo.set(v2, memo); }
+  let list = memo.byFund.get(fundId);
+  if (!list) {
+    const fundKey = partyKey({ kind: 'INSTITUTION', id: fundId as EntityId });
+    list = rowsOfKind(v2, 'COMMITMENT').filter((r) => partyKeyOf(v2, v2.obligations.aRef[r]) === fundKey)
+      .map((r) => tagRow(materializeCommitment(v2, r), r));
+    memo.byFund.set(fundId, list);
+  }
+  return list;
+}
+
+/** A commitment is struck: both institutions resolve, and a fund has one row per LP. */
+export function commitCapital(v2: V2World, c: LpCommitment): void {
+  resolvePartyRef({ kind: 'INSTITUTION', id: c.fundId }, `commitment to fund`); resolvePartyRef({ kind: 'INSTITUTION', id: c.lpEntityId }, `commitment from LP`);
+  if (!(c.committedLocal >= 0) || !(c.drawnLocal >= 0)) return defect(`commitment ${commitmentIdOf(c.fundId, c.lpEntityId)} of ${c.committedLocal} with ${c.drawnLocal} drawn`);
+  writeCommitmentRow(v2, c);
+}
+
+const seedCommitmentStash = new WeakMap<object, LpCommitment[]>();
+/** The seed's commitments, stashed on the fund entity until the world they resolve against exists. */
+export function stashSeedCommitments(fund: object, list: LpCommitment[]): void { seedCommitmentStash.set(fund, list); }
+export function drainSeedCommitments(v2: V2World, funds: readonly object[]): void {
+  funds.forEach((f) => { (seedCommitmentStash.get(f) ?? []).forEach((c) => commitCapital(v2, c)); seedCommitmentStash.delete(f); });
+}
+
+const rowOfCommitment = (c: LpCommitment): number => {
+  const r = (c as Rowed)[ROW];
+  return r === undefined ? defect(`commitment ${commitmentIdOf(c.fundId, c.lpEntityId)} is not on the contract store`) : r;
+};
+
+/** A capital call draws on a commitment: the drawn balance rises by what was called. */
+export function drawCommitment(v2: V2World, c: LpCommitment, amountLocal: number): void {
   if (!(amountLocal > 0) || !Number.isFinite(amountLocal)) return defect(`capital call of ${amountLocal}`);
-  c.drawnLocal += amountLocal;
+  writeDrawn(v2, rowOfCommitment(c), c.drawnLocal + amountLocal);
 }
 
 /** A distribution returns drawn capital: the commitment becomes available to draw again. */
-export function returnCommitment(c: { committedLocal: number; drawnLocal: number }, amountLocal: number): void {
+export function returnCommitment(v2: V2World, c: LpCommitment, amountLocal: number): void {
   if (!(amountLocal > 0) || !Number.isFinite(amountLocal)) return defect(`distribution of ${amountLocal}`);
-  c.drawnLocal = Math.max(0, c.drawnLocal - amountLocal);
+  writeDrawn(v2, rowOfCommitment(c), Math.max(0, c.drawnLocal - amountLocal));
+}
+
+/** §3.13-BOOK d4c-vi — every live obligation of every kind, its two parties resolved to refs: the
+ *  one liveness check (`O5`) reads this and asks whether both are alive. */
+export function liveObligationPartiesOf(v2: V2World): { kind: string; id: string; a: PartyRef | undefined; b: PartyRef | undefined; notional: number }[] {
+  return liveObligationsOf(v2).map((o) => ({ kind: o.kind, id: o.id, a: partyFromKey(o.a), b: partyFromKey(o.b), notional: o.notional }));
 }

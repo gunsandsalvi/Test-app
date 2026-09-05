@@ -22,6 +22,7 @@ import type { RepoContract, RepoPledge, RepoParty } from '../domain/repo';
 import type { SecurityLoan } from '../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../domain/prime-brokerage';
 import type { TradeInvoice } from '../domain/trade-invoice';
+import type { LpCommitment } from '../domain/commitment';
 import type { CurrencyCode } from '../domain/geography';
 import { bankPartyOf } from '../domain/party';
 import { currencyOf } from '../domain/geography';
@@ -35,7 +36,7 @@ export interface ObligationStore {
   used: number;
   freeHead: number;
   /** What kind of obligation the row is: 'DERIVATIVE' (d4c-i), 'REPO' (d4c-ii), 'STOCK_LOAN' (d4c-iii),
-   *  'PRIME_BROKERAGE' (d4c-iv), 'TRADE_INVOICE' (d4c-v); the commitments join last. */
+   *  'PRIME_BROKERAGE' (d4c-iv), 'TRADE_INVOICE' (d4c-v), 'COMMITMENT' (d4c-vi). */
   kindRef: RefColumn<TypeRef>;
   /** The kind's own class — a derivative's `DerivativeClassId`. */
   classRef: RefColumn<TypeRef>;
@@ -75,6 +76,9 @@ export interface ObligationStore {
   /** §3.13-BOOK d4c-v — the region an obligation is paid INTO where it differs from `regionRef`: a
    *  trade invoice's buyer region (its seller's is the row's region); ABSENT_REF for every other kind. */
   toRegionRef: RefColumn<RegionRef>;
+  /** §3.13-BOOK d4c-vi — what a capital commitment has DRAWN so far, against `notional` committed;
+   *  NaN for every other kind. */
+  drawn: Float64Array;
   /** Bumped by every write, so a materialized view can tell whether it is current. */
   epoch: number;
   /** d4c-v — the same, per kind: a memo of one kind's rows need not rebuild when another kind moved. */
@@ -114,7 +118,7 @@ export function newObligationStore(): ObligationStore {
     refKind: new Int8Array(cap), refText: new Array(cap), termKey: new Array(cap), id: new Array(cap),
     pledges: new Array(cap), epoch: 0,
     instrRef: newRefColumn<InstrRef>(cap, -1), positionAtStrike: new Float64Array(cap).fill(Number.NaN), recalledWeek: new Int32Array(cap).fill(-1),
-    haircut: new Float64Array(cap).fill(Number.NaN), toRegionRef: newRefColumn<RegionRef>(cap, -1), kindEpoch: new Map(),
+    haircut: new Float64Array(cap).fill(Number.NaN), toRegionRef: newRefColumn<RegionRef>(cap, -1), drawn: new Float64Array(cap).fill(Number.NaN), kindEpoch: new Map(),
     next: new Int32Array(cap).fill(-1),
     headByKind: new Map(), tailByKind: new Map(), rowById: new Map(),
   };
@@ -133,7 +137,7 @@ function grow(S: ObligationStore): void {
   const rk = new Int8Array(cap); rk.set(S.refKind); S.refKind = rk;
   S.refText.length = cap; S.termKey.length = cap; S.id.length = cap; S.pledges.length = cap;
   S.instrRef = gR(S.instrRef); S.positionAtStrike = gF(S.positionAtStrike, Number.NaN); S.recalledWeek = gI(S.recalledWeek, -1);
-  S.haircut = gF(S.haircut, Number.NaN); S.toRegionRef = gR(S.toRegionRef);
+  S.haircut = gF(S.haircut, Number.NaN); S.toRegionRef = gR(S.toRegionRef); S.drawn = gF(S.drawn, Number.NaN);
   S.next = gI(S.next, -1);
   S.cap = cap;
 }
@@ -194,7 +198,7 @@ function freeRow(S: ObligationStore, r: number): void {
   S.notional[r] = 0; S.strike[r] = 0; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
   S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = ''; S.pledges[r] = undefined;
   S.instrRef[r] = ABSENT_REF; S.positionAtStrike[r] = Number.NaN; S.recalledWeek[r] = -1;
-  S.haircut[r] = Number.NaN; S.toRegionRef[r] = ABSENT_REF;
+  S.haircut[r] = Number.NaN; S.toRegionRef[r] = ABSENT_REF; S.drawn[r] = Number.NaN;
   S.next[r] = S.freeHead; S.freeHead = r;
 }
 
@@ -427,6 +431,61 @@ export function materializeInvoice(v2: V2World, r: number): TradeInvoice {
     amountCurrency: S.notional[r], bookedUsdPerCurrency: S.strike[r],
     weekBooked: S.struckWeek[r], weekDue: S.maturityWeek[r],
   };
+}
+
+// ---- §3.13-BOOK d4c-vi — THE CAPITAL COMMITMENTS: the fund as A, the limited partner as B, the
+// commitment as the size, what it has drawn as the kind's own column, in the fund's money. ----
+
+/** The one row a fund and an LP have between them. */
+export const commitmentIdOf = (fundId: string, lpId: string): string => `COMMIT:${fundId}:${lpId}`;
+
+/** Write a commitment as a new row (ledger-internal). Returns the row. */
+export function writeCommitmentRow(v2: V2World, c: LpCommitment): number {
+  const S = mutableObligations(v2);
+  const id = commitmentIdOf(c.fundId, c.lpEntityId);
+  if (S.rowById.has(id)) return defect(`commitment ${id} written twice`);
+  const r = allocRow(S);
+  const kindRef = internType(v2, 'COMMITMENT');
+  S.kindRef[r] = kindRef; S.classRef[r] = kindRef; S.regionRef[r] = internRegion(v2, c.regionId);
+  S.currencyId[r] = CURRENCY_ID[currencyOf(c.regionId)];
+  S.aRef[r] = internPartyKey(v2, partyKey({ kind: 'INSTITUTION', id: c.fundId })); S.bRef[r] = internPartyKey(v2, partyKey({ kind: 'INSTITUTION', id: c.lpEntityId }));
+  S.notional[r] = c.committedLocal; S.strike[r] = 0; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
+  S.struckWeek[r] = 0; S.maturityWeek[r] = 0;
+  S.refKind[r] = 0; S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = id;
+  S.instrRef[r] = ABSENT_REF as InstrRef; S.positionAtStrike[r] = Number.NaN; S.recalledWeek[r] = -1; S.haircut[r] = Number.NaN;
+  S.toRegionRef[r] = ABSENT_REF as RegionRef; S.drawn[r] = c.drawnLocal;
+  S.rowById.set(id, r);
+  appendToKind(S, kindRef, r);
+  bump(S, kindRef);
+  return r;
+}
+
+/** A call or a distribution moves what the commitment has drawn (ledger-internal). */
+export function writeDrawn(v2: V2World, r: number, drawnLocal: number): void {
+  const S = mutableObligations(v2);
+  S.drawn[r] = drawnLocal;
+  bump(S, S.kindRef[r]);
+}
+
+/** One commitment row materialized back to the commitment the lifecycle reads. */
+export function materializeCommitment(v2: V2World, r: number): LpCommitment {
+  const S = v2.obligations;
+  const fund = partyFromKey(partyKeyOf(v2, S.aRef[r]));
+  const lp = partyFromKey(partyKeyOf(v2, S.bRef[r]));
+  if (fund?.kind !== 'INSTITUTION' || lp?.kind !== 'INSTITUTION') return defect(`commitment row ${r} (${S.id[r]}) names a party that is no institution`);
+  return { fundId: fund.id, lpEntityId: lp.id, regionId: regionOf(v2, S.regionRef[r]) as RegionId, committedLocal: S.notional[r], drawnLocal: S.drawn[r] };
+}
+
+/** §3.13-BOOK d4c-vi — every live row of every kind, as the two parties and the size: what one
+ *  liveness check over the whole store reads. */
+export function liveObligationsOf(v2: V2World): { kind: string; id: string; a: string; b: string; notional: number }[] {
+  const S = v2.obligations;
+  const out: { kind: string; id: string; a: string; b: string; notional: number }[] = [];
+  S.headByKind.forEach((head, kindRef) => {
+    const kind = typeOf(v2, kindRef);
+    for (let r = head; r >= 0; r = S.next[r]) out.push({ kind, id: S.id[r], a: partyKeyOf(v2, S.aRef[r]), b: partyKeyOf(v2, S.bRef[r]), notional: S.notional[r] });
+  });
+  return out;
 }
 
 /** Relink one kind's chain so that, within `regionId`, exactly `kept` (in order) survive; rows of

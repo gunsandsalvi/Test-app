@@ -199,8 +199,8 @@ export interface InstitutionalEntity {
   peFund?: {
     /** §3.13-BOOK slice (c2a): the firms this sponsor owns. */
     portfolioCompanyIds: EntityId[];
-    /** §3.13-BOOK (c2b): each limited partner is an institution. */
-    lpCommitments: { lpEntityId: EntityId; committedLocal: number; drawnLocal: number }[];
+    // §3.13-BOOK d4c-vi: the LPs' commitments are rows of the world's contract store, read
+    // through `contract-ledger.ts:lpCommitmentsOf`; not a field.
   };
   /**
    * ETF only: the fund's index, its sponsor, its share count and the residual the authorised

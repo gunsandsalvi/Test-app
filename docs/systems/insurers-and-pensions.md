@@ -226,7 +226,7 @@ this is about the loss it covers.
 **C3** — no illiquid sleeve. `INSTITUTION_PROFILES` gives an insurer
 `{ govBondPct, corpBondPct, loanPct, equityPct, cashPct }` and nothing else; the only illiquid
 holdings in the model are `PRIVATE_EQUITY`'s portfolio companies, and no insurer or pension fund
-is an LP (`peFund.lpCommitments` are named entities, and the seed does not put insurers there).
+is an LP (the commitments on the contract store name entities, and the seed does not put insurers there).
 So the thing an insurer is *paid* for — bearing illiquidity because it does not face redemption —
 earns it nothing. MISSING, not out of scope; small once PE's LP list can name them.
 

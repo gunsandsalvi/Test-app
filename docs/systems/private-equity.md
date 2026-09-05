@@ -78,7 +78,7 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a fund with committed capital from named investors | `src/domain/institutions.ts:lpCommitments` | ✅ |
+| A1 a fund with committed capital from named investors | `src/domain/commitment.ts:LpCommitment` · `src/engine2/obligations.ts:writeCommitmentRow` · `src/engine/ledger/contract-ledger.ts:lpCommitmentsOf` | ✅ |
 | **A2 capital is CALLED — a real payment the investor cannot refuse** | `src/engine/simulation/stages/pe-lifecycle.ts:callCapitalLocal` · `src/engine/ledger/contract-ledger.ts:drawCommitment` | ⚠️ |
 | **A2.a the investor must hold liquidity against calls it did not time** | — | ❌ |
 | **A3 a manager on a fee and a share of the gains** | — | ❌ |
@@ -199,7 +199,7 @@ byte-identical — which is the right kind of change.
 
 ### ❌ A3 — THERE IS NO PE MANAGER, NO FEE AND NO CARRY
 
-`peFund` carries `portfolioCompanyIds` and `lpCommitments` and nothing else. There is no
+`peFund` carries `portfolioCompanyIds`, the LPs' commitments are the contract store's rows, and there is nothing else. There is no
 management fee on committed capital, no carried interest on the gains, and no manager entity
 distinct from the fund: `PRIVATE_EQUITY` has `beneficiariesAreHouseholds: false` and
 `liabilityHurdle: undefined`, so nobody is paid for running it and the entire gain accrues to the

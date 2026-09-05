@@ -80,6 +80,7 @@ import { openAccount, openingCashOf, stashOpeningCash, stashSeedHouseholdLine, s
 import { newWireJournal, setActiveWireJournal, setActiveWireWorld, hasActiveWireJournal, summarizeWires } from '../ledger/wire';
 import { wireWorldOf } from '../ledger/wire-world';
 import { registerCompanyEquity, registerFundShares, seedIssuedSharesOf } from '../ledger/instrument-ledger';
+import { stashSeedCommitments, drainSeedCommitments } from '../ledger/contract-ledger';
 import { issuedSharesOf } from '../../engine2/instruments';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
@@ -385,6 +386,9 @@ function openSeededBooks(state: GameState): void {
     for (const e of state.institutionalEntities ?? []) {
       if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
     }
+    // §3.13-BOOK d4c-vi: the private funds' LP commitments, struck on the contract store now
+    // that every institution they name resolves.
+    drainSeedCommitments(v2, state.institutionalEntities ?? []);
     // §3.13-BOOK d3a — THE CENTRAL BANKS' BOOKS, opened by wire like every other holder's: each
     // bond the seed's close sized (`seedCentralBankBookOf`) is issued by the treasury to the
     // central bank at its face. The stash dies here; the rows are the book from now on.
@@ -1616,13 +1620,15 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         historicalPrices: [],
         peFund: {
           portfolioCompanyIds: portfolio.map(f => f.id),
-          lpCommitments: lps.map(e => ({
-            lpEntityId: e.id,
-            committedLocal: Math.round(committedLocal * (lpWeights.get(e.id)! / lpWeightSum)),
-            drawnLocal: Math.round(investedLocal * (lpWeights.get(e.id)! / lpWeightSum)),
-          })),
         },
       });
+      // §3.13-BOOK d4c-vi: the LPs' commitments are rows of the contract store, written by wire at
+      // `openSeededBooks` once the world they resolve against exists; the stash carries them there.
+      stashSeedCommitments(institutionalEntities[institutionalEntities.length - 1], lps.map(e => ({
+        fundId, lpEntityId: e.id, regionId,
+        committedLocal: Math.round(committedLocal * (lpWeights.get(e.id)! / lpWeightSum)),
+        drawnLocal: Math.round(investedLocal * (lpWeights.get(e.id)! / lpWeightSum)),
+      })));
       lps.forEach(e => {
         const interestLocal = Math.round(investedLocal * (lpWeights.get(e.id)! / lpWeightSum));
         if (interestLocal > 1) {

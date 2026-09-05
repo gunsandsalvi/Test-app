@@ -1,5 +1,5 @@
 import { V2World } from '../../../engine2/world';
-import { drawCommitment, returnCommitment } from '../../ledger/contract-ledger';
+import { drawCommitment, returnCommitment, lpCommitmentsOf } from '../../ledger/contract-ledger';
 import { registerCompanyEquity, setIssuedUnits } from '../../ledger/instrument-ledger';
 import { issuedSharesOf, marketCapAt } from '../../../engine2/instruments';
 import { bankCreditParty, companyParty } from '../../../domain/party';
@@ -153,14 +153,15 @@ const IPO_PREMIUM_OVER_ENTRY = 1.15;
  * capital a sponsor can deploy is what its named LPs have COMMITTED and not yet paid in, capped
  * by what those LPs can actually fund out of their own cash. Reading dry powder as the sponsor's
  * `cashLocal` instead measured 0.01B across every sponsor in the world and made an LBO structurally
- * impossible; HC4 built `lpCommitments` for exactly this and left the call to HC6.
+ * impossible; HC4 built the LP commitments for exactly this and left the call to HC6.
  */
 export function dryPowderLocal(
   v2: V2World,
   sponsor: InstitutionalEntity,
   lpById: ReadonlyMap<EntityId, InstitutionalEntity>
 ): number {
-  return (sponsor.peFund?.lpCommitments ?? []).reduce((sum, c) => {
+  // §3.13-BOOK d4c-vi: the commitments are the store's rows.
+  return (sponsor.peFund ? lpCommitmentsOf(v2, sponsor.id) : []).reduce((sum, c) => {
     const undrawnLocal = Math.max(0, c.committedLocal - c.drawnLocal);
     const lp = lpById.get(c.lpEntityId);
     return sum + Math.min(undrawnLocal, Math.max(0, lp ? entityCashOf(v2, lp) : 0));
@@ -199,7 +200,8 @@ function callCapitalLocal(
 ): number {
   const sponsor = ctx.updatedInstitutionalEntities.find((e) => e.id === sponsorId);
   if (!sponsor?.peFund || !(requestedLocal > 0)) return 0;
-  const capacity = sponsor.peFund.lpCommitments.map((c) => {
+  // §3.13-BOOK d4c-vi: the store's rows.
+  const capacity = lpCommitmentsOf(ctx.v2, sponsor.id).map((c) => {
     const lp = lpById.get(c.lpEntityId);
     // An LP's real budget is its cash PLUS what it has already committed to pay or is due
     // to receive at this week's settlement — the calls below are payments now, so without the
@@ -220,7 +222,7 @@ function callCapitalLocal(
   capacity.forEach((x) => {
     if (!(x.availableLocal > 0)) return;
     const shareLocal = calledLocal * (x.availableLocal / totalAvailableLocal);
-    drawCommitment(x.commitment, shareLocal); // §3.13-BOOK d4b: the contract ledger's door
+    drawCommitment(ctx.v2, x.commitment, shareLocal); // §3.13-BOOK d4b: the contract ledger's door
     // The call is a PAYMENT — LP to fund — where it used to be a bare debit of the LP
     // with no credit to anyone, so the buy side of every sponsor-to-sponsor deal paid twice and
     // one purchase price was destroyed per deal. Both legs live in the journal now.
@@ -243,7 +245,9 @@ function callCapitalLocal(
 function distributeToLps(ctx: WeeklyStepContext, sponsorId: EntityId, amountLocal: number): void {
   const sponsor = ctx.updatedInstitutionalEntities.find((e) => e.id === sponsorId);
   if (!sponsor?.peFund || !(amountLocal > 0)) return;
-  const totalDrawnLocal = sponsor.peFund.lpCommitments.reduce((a, c) => a + Math.max(0, c.drawnLocal), 0);
+  // §3.13-BOOK d4c-vi: the store's rows.
+  const commitments = lpCommitmentsOf(ctx.v2, sponsor.id);
+  const totalDrawnLocal = commitments.reduce((a, c) => a + Math.max(0, c.drawnLocal), 0);
   if (!(totalDrawnLocal > 0)) return;
   // A FUND DISTRIBUTES WHAT IT HAS. `callCapitalLocal` above already bounds a call by the LPs'
   // real cash — "a call that comes up short is a deal that does not close" — and the
@@ -264,10 +268,10 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: EntityId, amountLoca
   const sponsorBudgetLocal = institutionSpendableLocal(ctx, sponsor);
   const { payableLocal: paidLocal } = distributable(amountLocal, totalDrawnLocal, sponsorBudgetLocal);
   if (!(paidLocal > 0)) return;
-  sponsor.peFund.lpCommitments.forEach((c) => {
+  commitments.forEach((c) => {
     if (!(c.drawnLocal > 0)) return;
     const shareLocal = paidLocal * (c.drawnLocal / totalDrawnLocal);
-    returnCommitment(c, shareLocal); // §3.13-BOOK d4b: the contract ledger's door
+    returnCommitment(ctx.v2, c, shareLocal); // §3.13-BOOK d4b: the contract ledger's door
     // A distribution is a PAYMENT — fund to LP — not a pair of object rebuilds.
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: sponsorId },
