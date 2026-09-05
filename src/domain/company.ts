@@ -24,6 +24,8 @@ export interface ProductLine {
   subUnitId: string;
   category?: string;
   revenueShare: number;
+  /** §3.20d-ii — consecutive weeks this line neither made nor sold a unit; the exit clock. */
+  idleStreakWeeks?: number;
   categoryMarketShare: number;
   previousCategoryMarketShare?: number;
   categoryMarketShare13WeeksAgo?: number;

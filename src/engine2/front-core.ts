@@ -25,6 +25,8 @@
  * stage08-front.ts's inline pass; verification deferred to the end-of-build reckoning.
  */
 
+import { exitIdleLines } from '../domain/company-week/product-lines';
+import { patienceWeeksOf } from '../domain/preferences';
 import { Company, RegionId } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { isActiveCompany } from '../domain/company';
@@ -837,7 +839,14 @@ export function applyFrontPost(
         categoryMarketShare: O.plNewShare[p],
       };
     }
-    F.updatedProductLines[row] = updated;
+    // §3.20d-ii: a line that neither made nor sold a unit is idle; idle for the horizon the
+    // plant would be scrapped at (four of the management's), it is exited.
+    {
+      const wu = companyUpdates[comp.ticker];
+      const active = new Map<string, boolean>();
+      updated.forEach((l) => active.set(l.subUnitId, (wu?.producedUnitsBySubUnit?.[l.subUnitId] ?? 0) > 0 || (wu?.salesUnitsBySubUnit?.[l.subUnitId] ?? 0) > 0));
+      F.updatedProductLines[row] = exitIdleLines(updated, active, 4 * patienceWeeksOf(comp.management)).lines;
+    }
 
     // the industrial override, from the week's update record
     const ip = O.industrialLineAt[row];

@@ -64,6 +64,8 @@ export interface CompanyWeekUpdate {
   /** §5-PROD — units this firm STARTED making this week (experience accrues on making, not on
    *  selling); stage 08 folds it into the Wright's-law learning state. */
   producedUnitsThisWeek?: number;
+  /** §3.20d-ii — the same, per line, so a line's own idleness can be read. */
+  producedUnitsBySubUnit?: Record<string, number>;
   /** §5-PROD — the plant's structural weekly rate (capacity, unthrottled): the learning seed's
    *  anchor basis, so a throttled first week cannot under-seed the curve (§7.301). */
   plantCapacityUnitsThisWeek?: number;

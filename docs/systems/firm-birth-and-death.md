@@ -95,7 +95,7 @@ checked by `scripts/check-atlas.sh`.
 | B1 subject to `firm-fundamentals.md` from week one | `src/engine2/stage08-back.ts:runBackCoreA` | ✅ |
 | **B2 a young firm is more fragile** | `src/domain/company.ts:bornWeek` | ❌ |
 | B3 distress is observable before default | `src/domain/company-week/credit-standing.ts:creditMetrics` | ✅ |
-| B4 a distressed firm acts | `src/domain/company-week/credit-standing.ts:revolverDrawLocal` | ⚠️ |
+| B4 a distressed firm acts | `src/domain/company-week/credit-standing.ts:revolverDrawLocal` · `src/domain/company-week/product-lines.ts:exitIdleLines` | ⚠️ |
 | C1 a stated, observable definition | `src/domain/company-week/credit-standing.ts:isInDefault` | ⚠️ |
 | C2 a consequence of the firm's state | `src/domain/company-week/credit-standing.ts:isInDefault` | ✅ |
 | **C2.a FORBID no exogenous default event** | `src/engine/simulation/stages/bank-lending.ts:smePoolAnnualPd` | ⚠️ |
@@ -248,7 +248,9 @@ covenants, no acceleration, no observable event").
 
 B4's four actions: cutting costs is real (distress layoffs), drawing the line is real
 (`revolverDrawLocal`), cutting the dividend is real (`sustainableDividendWeeklyLocal` pays nothing on a
-loss). **Selling assets and raising expensive money are absent** — a distressed firm cannot
+loss); exiting a line that has made and sold nothing for four of the management's horizons is real
+since §9.20d-ii (`exitIdleLines`, its share to the firm's other lines, its category share back to
+the market). **Selling assets and raising expensive money are absent** — a distressed firm cannot
 voluntarily sell plant, and the primary market is a binary gate (`MARKET_ACCESS_DENIED` is `['D']`,
 i.e. shut only after it is already too late) rather than a price. Related to **§3 step 35** (there is
 no restructuring), which owns the negotiated half; the voluntary asset sale is new and small.

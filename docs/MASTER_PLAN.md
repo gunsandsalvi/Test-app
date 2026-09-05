@@ -549,21 +549,13 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-20d-ii. **A product line can be EXITED.** (20d — management is a state that decides — split per
-    rule 1.10: 20d-i the leverage policy is §9; risk appetite already IS the management's
+20d-iii. **Guidance is the management's own expectation, published.** (20d — management is a state that decides — split per
+    rule 1.10: 20d-i the leverage policy and 20d-ii line exit are §9; risk appetite already IS the management's
     `riskAversion` in every hurdle and buffer; growth-versus-margin orientation is the investment
     project's hurdle and horizon — 37-COSTOFCAPITAL, where it is noted; acquisition intent is
     the acquirer's own valuation — 37-MANDA, where it is noted; product-line entry is 20d-iv,
-    inserted after 37-COSTOFCAPITAL because entering a line is an investment project.) Today a
-    firm's `productLines` are fixed at the seed for life: a line whose plant has idled past the
-    management's horizon has its plant mothballed and, after a year, scrapped
-    (`capital-programme.ts:capacityRetirement`), but the LINE stays — it keeps its revenue
-    share, keeps posting offers at zero production, keeps a category market share. Exit is the
-    decision the retirement implies: when a line's plant is scrapped, the line goes with it —
-    its revenue share to the firm's other lines, its category share to the market — and a firm
-    whose last line goes is a firm with nothing to sell (`firm-birth-and-death.md` B4's
-    distressed firm, not a death by rule).
-20d-iii. **Guidance is the management's own expectation, published.** `stage08-back.ts` picks one
+    inserted after 37-COSTOFCAPITAL because entering a line is an investment project.)
+    `stage08-back.ts` picks one
     of three fixed prose snippets by the sign of the EPS surprise and `newsGenerator.ts` puts it
     in the headline as management's guidance. A management already HAS an expectation — the
     adaptive `expectedEbitdaLocal` it is judged on at review — and guidance is that number
@@ -1555,6 +1547,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20d-ii — A PRODUCT LINE CAN BE EXITED.** A firm's `productLines` were fixed at the seed for life:
+  the plant of an idle line was mothballed after the management's horizon and scrapped after four
+  (`capacityRetirement`), but the line kept its revenue share, kept posting offers at zero
+  production and kept a category share. Now the goods auction records what each line MADE
+  (`producedUnitsBySubUnit`, beside the sales it already recorded per sub-unit), a line that
+  neither made nor sold a unit in a week is idle (`ProductLine.idleStreakWeeks`, the line's own
+  clock), and `company-week/product-lines.ts:exitIdleLines` — run in stage 08's line write-back —
+  exits a line whose streak reaches the plant's own scrap horizon (4 × `patienceWeeks`): its
+  revenue share goes to the firm's other lines in proportion, its category share back to the
+  market, and a firm whose last line goes has nothing to sell (not a death by rule; the distress
+  path reaches it on its own books). Test: streaks count and reset, exit at the horizon,
+  shares renormalised, the last line can go. `firm-fundamentals.md` E1 and
+  `firm-birth-and-death.md` B4 re-cited. Gates green; no run.
 
 **20d-i — THE LEVERAGE POLICY IS THE MANAGEMENT'S.** Step 20d split per rule 1.10 (see 20d-ii's
   head for where each of its six decisions went). `decideCorporateFinancing` levered every firm

@@ -1152,6 +1152,7 @@ function buildRegionSupplyPlans(
     if (targetProductionUnits > 0) {
       const upl = wk.updateOf(comp);
       upl.producedUnitsThisWeek = (upl.producedUnitsThisWeek ?? 0) + targetProductionUnits;
+      (upl.producedUnitsBySubUnit ??= {})[subUnitId] = (upl.producedUnitsBySubUnit[subUnitId] ?? 0) + targetProductionUnits;
     }
     // The plant's STRUCTURAL weekly rate, for the learning curve's seed anchor only.
     // Seeding the anchor off the first nonzero PRODUCED week annualized under-seeded any firm

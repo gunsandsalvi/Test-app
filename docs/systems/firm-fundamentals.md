@@ -106,7 +106,7 @@ checked by `scripts/check-atlas.sh`.
 | D3 coverage is a read, and lenders look at it | `src/domain/company-week/credit-standing.ts:creditMetrics` | ✅ |
 | **D4 it can fail two ways, and they are different** | `src/domain/company-week/credit-standing.ts:isInDefault` | ⚠️ |
 | D5 when it cannot pay it defaults | `src/domain/company-week/credit-standing.ts:isInDefault` | ✅ |
-| E1 the price and quantity it offers | `src/engine/simulation/stages/05-unit-bidding.ts:runUnitBiddingStage` | ✅ |
+| E1 the price and quantity it offers | `src/engine/simulation/stages/05-unit-bidding.ts:runUnitBiddingStage` · `src/domain/company-week/product-lines.ts:exitIdleLines` | ✅ |
 | E2 how many people to employ | `src/domain/company-week/labor-demand.ts:employerWeekPosting` | ✅ |
 | E3 how much to invest | `src/domain/company-week/capital-programme.ts:planCapitalProgramme` | ⚠️ |
 | E4 how to fund itself, on what each costs | `src/engine/simulation/stages/corporate-financing.ts:decideCorporateFinancing` · `src/engine/simulation/stages/corporate-financing.ts:targetLeverageOf` | ✅ |
