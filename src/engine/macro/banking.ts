@@ -105,7 +105,7 @@ export function bankTotalAssetsLocal(sheet: BankingSector, cashLocal: number, fa
   // desks had owners it consumed nothing, which is precisely what let a book with no capital
   // behind it absorb any imbalance.
   return loanBooksOf(sheet, facilityBookLocal) + bookAssetsLocal
-    + Math.max(0, cashLocal) + (sheet.repoLentLocal ?? 0)
+    + Math.max(0, cashLocal) + (sheet.repoLentLocal)
     // §3.20b: an unsecured loan to another bank consumes the leverage ratio like any loan.
     + (sheet.interbankLentLocal ?? 0)
     // CAL: a coupon earned and not yet paid is an asset the bank holds against the treasury.
@@ -311,10 +311,10 @@ export function evolveBankingSector(
   // are not zero, and everything downstream — the funding residual, the leverage ratio, the
   // identity — has to see them. The repo session overwrites all three from the region's book.
   const survivingSecuredLocal = Math.max(0,
-    (prevBanking.repoBorrowedLocal ?? 0) + (prevBanking.srfBorrowingLocal ?? 0) - maturingRepoBorrowPrincipalLocal);
-  const survivingSrfLocal = Math.min(survivingSecuredLocal, Math.max(0, prevBanking.srfBorrowingLocal ?? 0));
+    (prevBanking.repoBorrowedLocal) + (prevBanking.srfBorrowingLocal) - maturingRepoBorrowPrincipalLocal);
+  const survivingSrfLocal = Math.min(survivingSecuredLocal, Math.max(0, prevBanking.srfBorrowingLocal));
   const survivingRepoBorrowedLocal = survivingSecuredLocal - survivingSrfLocal;
-  const survivingRepoLentLocal = Math.max(0, (prevBanking.repoLentLocal ?? 0) - maturingRepoLendPrincipalLocal);
+  const survivingRepoLentLocal = Math.max(0, (prevBanking.repoLentLocal) - maturingRepoLendPrincipalLocal);
   // CASH: the P&L is this bank's own and is booked here; the MONEY moves through the settlement
   // layer, posted by the repo session as instructions between the two named counterparties. The
   // cash legs used to be taken here and credited to the lender in another stage — two direct

@@ -72,7 +72,7 @@ export function closeSeedMoney(
       const lines = depositLinesAt(v2, companies, institutionalEntities, b);
       const otherDepositsLocal = Math.round(Math.max(0, lines.corporateLocal)) + Math.round(Math.max(0, lines.institutionalLocal))
         + Math.max(0, lines.smeLocal) + Math.max(0, lines.ccpLocal) + Math.max(0, s.centralBankLoanLocal ?? 0) + swapLineDrawnLocal(s, currencyOf(regionId), v2.fx);
-      const needLocal = bankTotalAssetsLocal(s, openingCashOf(s), facilityBookOf(v2, b.id), seedBankBookLocalOf(s)) - s.bankEquityLocal - (s.repoBorrowedLocal ?? 0) - (s.srfBorrowingLocal ?? 0) - otherDepositsLocal;
+      const needLocal = bankTotalAssetsLocal(s, openingCashOf(s), facilityBookOf(v2, b.id), seedBankBookLocalOf(s)) - s.bankEquityLocal - (s.repoBorrowedLocal) - (s.srfBorrowingLocal) - otherDepositsLocal;
       let lineLocal = 0;
       if (needLocal >= 0) {
         lineLocal = Math.round(needLocal);
@@ -91,7 +91,7 @@ export function closeSeedMoney(
     // The seed's provisional sizing of the sector's deposits (macro/initialization.ts) is what
     // net worth was struck on; the residual replaces it and net worth moves by the difference.
     const priorHouseholdDepositsLocal = openingCashOf(hs);
-    hs.netWorthLocal = Math.round((hs.netWorthLocal ?? 0) + (Math.round(householdDepositsLocal) - priorHouseholdDepositsLocal));
+    hs.netWorthLocal = Math.round((hs.netWorthLocal) + (Math.round(householdDepositsLocal) - priorHouseholdDepositsLocal));
 
     // ---- 2. The central bank's book backs reserves and the treasury's account exactly. ----
     const reservesLocal = banks.reduce((a, b) => a + openingCashOf(b.bankBalanceSheet!), 0);
@@ -145,7 +145,7 @@ export function closeSeedMoney(
     banks.forEach((b) => Object.entries(seedBankBookOf(b.bankBalanceSheet!)).forEach(([id, v]) => add(id, Number(v) || 0)));
     institutionalEntities.forEach((e) => {
       if (e.isDefaulted) return;
-      (e.itemizedHoldings ?? []).forEach((h) => { if (holdingClassOf(h.instrumentType) === 'SOVEREIGN' && h.issuerRegion === regionId) add(h.instrumentId, h.quantityOrNotionalLocal ?? 0); });
+      (e.itemizedHoldings).forEach((h) => { if (holdingClassOf(h.instrumentType) === 'SOVEREIGN' && h.issuerRegion === regionId) add(h.instrumentId, h.quantityOrNotionalLocal); });
     });
     // §3.13-BOOK d3c/d3e: no company is seeded a treasury book and no desk is seeded a position —
     // a firm's bills and a desk's inventory are what the books fill from week 1, on the register.
@@ -223,7 +223,7 @@ export function seedOpeningCreditPrices(
       const marginBps = Number.isNaN(TS.floatingMarginBps[tr]) ? 0 : TS.floatingMarginBps[tr];
       const price = priceFromSpreadBps({
         annualCouponRate: floating
-          ? (reg.policyRate ?? 0) + marginBps / 10000
+          ? (reg.policyRate) + marginBps / 10000
           : (Number.isNaN(TS.couponRate[tr]) ? 0 : TS.couponRate[tr]),
         periodWeeks: trancheScheduleOf(TS, tr).periodWeeks,
         weeksToMaturity,
@@ -252,7 +252,7 @@ export function seedOpeningAccruals(
         ? (Number.isNaN(TS.floatingMarginBps[tr]) ? TRANCHE_DEFAULT_MARGIN_BPS : TS.floatingMarginBps[tr]) / 10000
         : (Number.isNaN(TS.couponRate[tr]) ? TRANCHE_DEFAULT_COUPON : TS.couponRate[tr]);
       // A floater's coupon is policy + margin; at the seed the policy rate is the region's own.
-      const policyRate = floating ? (regions[c.region]?.policyRate ?? 0) : 0;
+      const policyRate = floating ? (regions[c.region].policyRate) : 0;
       // §3.13b: `accruedPerFace` is the one owner of "what has accrued on a unit of face" — the
       // same read the weekly accrual and the buyer-pays-seller leg take, so the three cannot
       // disagree about a tranche's position in its own period.

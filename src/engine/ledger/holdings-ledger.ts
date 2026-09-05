@@ -464,7 +464,7 @@ export function seedBook(
       instrumentType: h.instrumentType,
       instrumentId: h.instrumentId,
       issuerRegion: h.issuerRegion,
-      valueLocal: h.quantityOrNotionalLocal ?? 0,
+      valueLocal: h.quantityOrNotionalLocal,
       shares: h.quantityShares,
       // §9.13-CREDIT row 5: an opening position states its QUANTITY like any other, so the wire
       // carries a real price and the row opens with the face it holds.

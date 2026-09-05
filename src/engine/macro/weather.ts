@@ -208,7 +208,7 @@ export function evolveRegionalWeather(
 export function weatherYieldLossShareOf(weather: WeatherAnomaly, commodityId: string): number {
   if (weather.affectedCommodityId !== commodityId) return 0;
   const decay = Math.pow(0.55, Math.max(0, (weather.weeksActive || 0) - 1));
-  return Math.max(0, Math.min(1, (weather.yieldImpactPct ?? 0) * decay));
+  return Math.max(0, Math.min(1, (weather.yieldImpactPct) * decay));
 }
 
 /**

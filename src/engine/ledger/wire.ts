@@ -204,7 +204,7 @@ export function wire(instruction: WireInstruction, internReasonId: (reason: stri
     defect(`wire ${instruction.kind} ${instruction.asset} (${partyDesc(instruction.from)} -> ${partyDesc(instruction.to)}) names an instrument no store holds :: ${instruction.reason}`);
   }
   // WIRE_TRACE=<asset substring>: print every non-money wire naming that asset (a probe's instrument).
-  if (typeof process !== 'undefined' && process.env?.WIRE_TRACE && instruction.kind !== 'MONEY' && instruction.asset.includes(process.env.WIRE_TRACE)) {
+  if (typeof process !== 'undefined' && process.env.WIRE_TRACE && instruction.kind !== 'MONEY' && instruction.asset.includes(process.env.WIRE_TRACE)) {
     const who = (p: PartyRef) => { const q = p as { kind: string; ticker?: string; id?: string; region?: string }; return `${q.kind}:${q.ticker ?? q.id ?? q.region ?? ''}`; };
     console.log(`  [wire] w${j.week} ${instruction.kind} ${instruction.asset} ${who(instruction.from)} -> ${who(instruction.to)} ${(instruction.quantity * instruction.priceLocal / 1e6).toFixed(1)}M :: ${instruction.reason}`);
   }
@@ -218,8 +218,9 @@ export function wire(instruction: WireInstruction, internReasonId: (reason: stri
 /** The week's wires, summarised for the state and the audit. */
 interface WireSummary {
   count: number;
-  byKind: Record<string, number>;
-  valueUSDByKind: Record<string, number>;
+  /** Per kind wired this week — SPARSE: a kind nobody wired has no entry. */
+  byKind: Partial<Record<string, number>>;
+  valueUSDByKind: Partial<Record<string, number>>;
   /** Money wires recorded after the last pass — they settle next week (N: dated wires). */
   moneyPendingLocal: number;
   /** §3.13c — the same money wires PER CURRENCY, in that currency's own units. The identity
@@ -277,19 +278,19 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
   const byKind: Record<string, number> = {}; const valueUSDByKind: Record<string, number> = {};
   const moneyByCurrency: Record<string, number> = {};
   const houseNetUSDByKey: Record<string, number> = {};
-  const w2Trace = typeof process !== 'undefined' && process.env?.W2_TRACE === '1';
+  const w2Trace = typeof process !== 'undefined' && process.env.W2_TRACE === '1';
   const houseNetUSDByAsset: Record<string, number> | undefined = w2Trace ? {} : undefined;
   const issuerNetUSDByKey: Record<string, number> = {};
-  const trace = typeof process !== 'undefined' && process.env?.LADDER_TRACE === '1';
+  const trace = typeof process !== 'undefined' && process.env.LADDER_TRACE === '1';
   const issuerNetUSDByTicker: Record<string, number> | undefined = trace ? {} : undefined;
   const goodsNetUnitsByKey: Record<string, number> = {};
   const plantNetCostByCompany: Record<string, number> = {};
   const queueNetCostByCompany: Record<string, number> = {};
   const dwellingNetUnitsByRegion: Record<string, number> = {};
   const registerNetQtyByKind: Record<string, number> = {};
-  const w5Trace = typeof process !== 'undefined' && process.env?.W5_TRACE === '1';
+  const w5Trace = typeof process !== 'undefined' && process.env.W5_TRACE === '1';
   const registerNetQtyByHolder: Record<string, number> | undefined = w5Trace ? {} : undefined;
-  const goodsTrace = typeof process !== 'undefined' && process.env?.GOODS_TRACE === '1';
+  const goodsTrace = typeof process !== 'undefined' && process.env.GOODS_TRACE === '1';
   const goodsOutUnitsByKey: Record<string, number> | undefined = goodsTrace ? {} : undefined;
   const goodsInUnitsByKey: Record<string, number> | undefined = goodsTrace ? {} : undefined;
   const goodsInByTicker: Record<string, number> | undefined = goodsTrace ? {} : undefined;

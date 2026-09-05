@@ -739,7 +739,7 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     if (regionBanks.length === 0) { openRow(s, hh, AT_NOWHERE, 'HOUSEHOLD', money, householdDepositsOf(ctx.v2, region)); hhSplit.push(1); }
     s.splitOfParty.set(hh, Float64Array.from(hhSplit));
     // The pools: a CARRIED row at each bank (A3.3); a leg splits across them by market share.
-    (reg.smePools ?? []).forEach((seg) => {
+    (reg.smePools).forEach((seg) => {
       const party: PartyRef = { kind: 'SEGMENT', region, industry: seg.industry };
       const p = partyId(party);
       const split: number[] = [];
@@ -959,7 +959,7 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((region) => {
     const reg = ctx.updatedRegions[region];
     landSectorRows({ kind: 'HOUSEHOLD', region });
-    (reg.smePools ?? []).forEach((seg) => landSectorRows({ kind: 'SEGMENT', region, industry: seg.industry }));
+    (reg.smePools).forEach((seg) => landSectorRows({ kind: 'SEGMENT', region, industry: seg.industry }));
     landSectorRows(ccpParty(region));
   });
   ctx.updatedCompanies.forEach((c) => {

@@ -137,7 +137,7 @@ export const SME_WAGE_GAP = 0.22;
 /** The named tier's baseline EBITDA margin for a sector — the SME pools read this too, so one
  *  table serves both tiers. */
 export function sectorBaselineMarginPct(sector: Sector): number {
-  return SECTOR_PROFILE[sector]?.margin ?? 0.20;
+  return SECTOR_PROFILE[sector].margin;
 }
 
 /**
@@ -258,7 +258,7 @@ function buildTemplate(
   // the same `determineCreditRating` the weekly stage uses (§7.4: one rater, seed and week).
   const unleveredLeverage = profile.leverage * (1 + (1 - scale) * 0.5);
   const unleveredRating = ratingFor(revBase, ebitdaMargin, revBase * ebitdaMargin * unleveredLeverage);
-  const covenantCeiling = COVENANT_LEVERAGE_CEILING[unleveredRating] ?? 4.0;
+  const covenantCeiling = COVENANT_LEVERAGE_CEILING[unleveredRating];
   const leverageTakeup = MIN_COVENANT_TAKEUP + random() * (1 - MIN_COVENANT_TAKEUP);
   const debtBase = Math.round(revBase * ebitdaMargin * covenantCeiling * leverageTakeup);
   const cashBase = Math.round(revBase * ebitdaMargin * profile.cashToEbitda);

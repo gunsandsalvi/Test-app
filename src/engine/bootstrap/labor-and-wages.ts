@@ -132,7 +132,7 @@ export function weeklyWageBillLocal(
   const annualPerWorkerLocal = (Object.keys(occupationMix) as OccupationType[]).reduce((sum, occ) => {
     const share = occupationMix[occ] ?? 0;
     if (share <= 0) return sum;
-    return sum + share * (baseAnnualWageLocal[occ] ?? 0) * (occupationPools[occ]?.wageIndex ?? 1);
+    return sum + share * (baseAnnualWageLocal[occ]) * (occupationPools[occ].wageIndex);
   }, 0);
   return (headcount * annualPerWorkerLocal * wageMultiplier) / 52;
 }

@@ -41,7 +41,7 @@ function getCategoryDemandSeedLocal(
   // random stream spent on immediately-discarded objects.
   initialRegions: Record<RegionId, import('../types').Region> = getInitialRegions()
 ): number {
-  const income = initialRegions[region]?.estimatedHouseholdIncomeLocal ?? 10_000_000_000_000;
+  const income = initialRegions[region].estimatedHouseholdIncomeLocal;
   const consumption = income * 0.95;
   const govBase = income * 0.18;
   const corpBase = income * 0.08;
@@ -329,9 +329,9 @@ function seedAgeFraction(trancheId: string): number {
 }
 
 export function generateDebtTranches(ticker: Ticker, debtBase: number, initialRating: CreditRating, policyRate: number = 0.045, rank: number = 0): DebtTranche[] {
-  const fixedShare = FIXED_SHARE_BY_RATING[initialRating] ?? 0.5;
+  const fixedShare = FIXED_SHARE_BY_RATING[initialRating];
   const { weights: trancheWeights, maturityWeeks } = debtLadderShape(rank);
-  const baseSpreadBps = RATING_OAS_SPREADS[initialRating]?.baseBps ?? 150;
+  const baseSpreadBps = RATING_OAS_SPREADS[initialRating].baseBps;
   const basePolicyRate = policyRate;
   let cumulativePrincipalAssigned = 0;
   return maturityWeeks.map((tenorWeeks, i) => {
@@ -405,7 +405,7 @@ export function generateInitialCompanies(
   const existingSeedNames = new Set<string>();
 
   regions.forEach((region) => {
-    const regionPolicyRate = initialRegions[region]?.policyRate ?? 0.045;
+    const regionPolicyRate = initialRegions[region].policyRate;
     const regionProductivityPerCapita = getRegionProductivityPerCapitaLocal(region);
     const templates: FirmSeedTemplate[] = generateFirmSeeds(region, existingSeedTickers, existingSeedNames);
 
@@ -761,7 +761,7 @@ export function generateInitialCompanies(
         // so 792 tranches were named for another firm), and its ladder is scaled with the rest
         // of its balance sheet (the principals used to be the parent's, unscaled, and the
         // ladder sum overwrote the clone's scaled debt at week 1).
-        debtTranches: (parent.debtTranches ?? []).map((t) => ({
+        debtTranches: (parent.debtTranches).map((t) => ({
           ...t,
           // §3.13-BOOK slice (a): a clone's rung keeps the PARENT's id SHAPE with the clone's
           // own name substituted in — a re-key, not a new grammar, which is why it is an
@@ -842,7 +842,7 @@ export function generateInitialCompanies(
   // so far, and dealt AGAIN by `simulation/initialization.ts` once the authoritative demand
   // vector (real procurement, real firm capex) exists. See the function's own doc.
   dealProductLinesAndHeadcount(companies, (region, unitId) =>
-    Number(initialRegions[region]?.categoryDemand[unitId]?.demandLevelAnnualLocal) || 0);
+    Number(initialRegions[region].categoryDemand[unitId]?.demandLevelAnnualLocal) || 0);
 
   return companies;
 }
@@ -1052,7 +1052,8 @@ export function dealProductLinesAndHeadcount(
       // in the registry gets producers with no generator edit. Deterministic greedy: each firm
       // (largest first) takes the sub-units its sector currently under-serves most, so every
       // category's producer base converges to its demand share and coverage is an outcome.
-      const sectorSubUnits = (subUnitsByProducingSector()[sector as ProducingSector] ?? [])
+      // A sector that produces nothing has no sub-units to seed — the cast says otherwise, so ask first.
+      const sectorSubUnits = (Object.hasOwn(subUnitsByProducingSector(), sector) ? subUnitsByProducingSector()[sector as ProducingSector] : [])
         .map(({ industry, su }) => ({
           industry, unitId: su.unitId,
           weightLocal: Math.max(0, demandLevelAnnualLocal(_regionId as RegionId, su.unitId)),
@@ -1128,7 +1129,7 @@ export function dealProductLinesAndHeadcount(
       const targetLocal = new Map<string, number>();
       categories.forEach((unitId) => {
         const industry = industryOfSubUnit(unitId);
-        const smeShare = industry ? (INDUSTRY_REGISTRY[industry]?.smeShareOfActivity ?? 0) : 0;
+        const smeShare = industry ? (INDUSTRY_REGISTRY[industry].smeShareOfActivity) : 0;
         const demandLocal = Math.max(0, demandLevelAnnualLocal(_regionId as RegionId, unitId));
         const smeLocal = smeRevenueForSubUnitLocal
           ? Math.max(0, smeRevenueForSubUnitLocal(_regionId as RegionId, unitId))
@@ -1204,7 +1205,7 @@ export function dealProductLinesAndHeadcount(
       if (lines.length > 0) {
         const productivityPerWorkerLocal = getRegionProductivityPerCapitaLocal(_regionId as RegionId);
         const valueAddedLocal = lines.reduce((sum, line) =>
-          sum + c.annualRevenue * (line.revenueShare ?? 1) * (1 - recipeIntensityOf(line.subUnitId)), 0);
+          sum + c.annualRevenue * (line.revenueShare) * (1 - recipeIntensityOf(line.subUnitId)), 0);
         c.employeeCount = Math.max(100, Math.round(valueAddedLocal / Math.max(1, productivityPerWorkerLocal)));
         c.baselineEmployeeCount = c.employeeCount;
       }

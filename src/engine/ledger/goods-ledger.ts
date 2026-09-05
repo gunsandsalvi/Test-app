@@ -54,7 +54,7 @@ export function receiveInputLot(
 ): void {
   if (!(units > 0.0001)) return;
   if (wireNo < 0) defect(`input lot of ${units} ${subUnitId} for ${buyerId} lands with no wire`);
-  if (typeof process !== 'undefined' && process.env?.GOODS_TRACE === '1') {
+  if (typeof process !== 'undefined' && process.env.GOODS_TRACE === '1') {
     const j = activeWireJournal() as unknown as { lotReceipts?: Record<string, number> };
     const key = `${buyerId}|${subUnitId}`;
     (j.lotReceipts ??= {})[key] = (j.lotReceipts[key] ?? 0) + units;
@@ -87,7 +87,7 @@ export function settleOutputInventory(
 ): void {
   const storable = isStorable(subUnitId);
   const deliveredUnits = contractUnits + marketUnits;
-  if (typeof process !== 'undefined' && process.env?.GOODS_TRACE === '1') {
+  if (typeof process !== 'undefined' && process.env.GOODS_TRACE === '1') {
     const j = activeWireJournal(); const key = `${region}|${subUnitId}`;
     (j.goodsDelivered ??= {})[key] = (j.goodsDelivered[key] ?? 0) + deliveredUnits;
   }

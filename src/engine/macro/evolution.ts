@@ -31,7 +31,6 @@ import { BufferBand, bufferMonthsOf, joinCreditTiersToBalanceSheets, delinquency
 import { smePoolLinkedCommodities } from '../../domain/industry-registry';
 import { localToUsd, FxToUsd } from '../../domain/currency';
 import { evolveRegionalWeather } from './weather';
-import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
 import {
   weeklyInterestExpenseLocal, governmentPayrollWeeklyLocal, governmentObligationsWeeklyLocal,
@@ -89,7 +88,7 @@ function sovereignDeficitPctGdp(region: Region): number {
 }
 
 function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
-  return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
+  return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType].wageGrowthAnnual) * (share), 0);
 }
 
 
@@ -246,7 +245,7 @@ export function evolveRegionMacro(
   const newNeutralRate = Number((region.neutralRate + potentialGdpDelta).toFixed(4));
 
   const isHighUnemp = region.unemploymentRate > region.nairu + 0.005;
-  const weeksAboveNairu = isHighUnemp ? (region.weeksAboveNairu ?? 0) + 1 : Math.max(0, (region.weeksAboveNairu ?? 0) - 2);
+  const weeksAboveNairu = isHighUnemp ? (region.weeksAboveNairu) + 1 : Math.max(0, (region.weeksAboveNairu) - 2);
   // §3.18-i: the 1.5% cap on hysteresis is gone (rule 6); the drift is what the weeks above say.
   const hysteresis = weeksAboveNairu * 0.00005;
   const hysteresisDelta = isHighUnemp ? hysteresis / 52 : -hysteresis / 104;
@@ -308,7 +307,7 @@ export function evolveRegionMacro(
   // exists to make vary. A population cannot go negative; that is arithmetic and stays below.
   // The signal reads what it always encoded: real wage growth, which is what draws people in.
   const migrationAttractivenessSignal = (newWageGrowth - region.inflation) * 0.0006;
-  const birthRate = region.birthRateAnnual ?? 0.010;
+  const birthRate = region.birthRateAnnual;
   // DEM: mortality follows the share of the population that is old, which drifts every week, so
   // an ageing region's death rate rises on its own rather than sitting at a seeded constant.
   // DEM — THE DEATH RATE IS THE AGE STRUCTURE'S OWN, not a linear proxy off the retired share.
@@ -321,7 +320,7 @@ export function evolveRegionMacro(
     ? region.ageDistribution
     : stationaryAgeDistribution(birthRate);
   const deathRate = agesForDeaths.reduce((a, w, age) => a + w * mortalityHazardAnnual(age), 0);
-  const migrationRate = region.netMigrationRateAnnual ?? 0;
+  const migrationRate = region.netMigrationRateAnnual;
   const netAnnualGrowthRate = birthRate - deathRate + migrationRate + migrationAttractivenessSignal;
   const netPopulationGrowthRate = netAnnualGrowthRate / 52;
   const newTotalPopulation = Math.max(1, Math.round(region.totalPopulation * (1 + netPopulationGrowthRate)));
@@ -433,8 +432,8 @@ export function evolveRegionMacro(
     return a + tierWealthMpc(tier) * (tier.shareOfNetWorthLocal - tier.priorNetWorthLocal);
   }, 0);
   const anyTierMarked = WEALTH_TIERS
-    .some((t) => region.wealthDistribution?.[t]?.priorNetWorthLocal !== undefined);
-  const wealthChangeLocal = (prevHS.netWorthLocal ?? 0) - (prevHS.priorNetWorthLocal ?? prevHS.netWorthLocal ?? 0);
+    .some((t) => region.wealthDistribution[t].priorNetWorthLocal !== undefined);
+  const wealthChangeLocal = (prevHS.netWorthLocal) - (prevHS.priorNetWorthLocal);
   const balanceSheetWealthEffect = (anyTierMarked
     ? tierWealthEffectLocal
     : WEALTH_MARGINAL_PROPENSITY_TO_CONSUME * wealthChangeLocal) / Math.max(1, region.estimatedHouseholdIncomeLocal);
@@ -462,7 +461,7 @@ export function evolveRegionMacro(
   // and the rate is now their output, so it reads the most recent one that exists. A lag here is
   // right anyway: what a household spends out of a real wage gain this week is governed by the
   // saving behaviour it already had, not by the one this week's budgets will turn out to imply.
-  const priorSavingsRate = prevHS.savingsRate ?? 0.06;
+  const priorSavingsRate = prevHS.savingsRate;
   const realWageGainEffect = (1 - priorSavingsRate) * (laggedWageGrowth - region.inflation - 0.005);
   const newRealConsumptionGrowth = trendConsumptionGrowth
     + realWageGainEffect
@@ -506,7 +505,7 @@ export function evolveRegionMacro(
     interestWeeklyLocal: govInterestWeeklyLocal,
     payrollWeeklyLocal: newGovernmentPayrollWeeklyLocal,
     unemploymentBenefitsWeeklyLocal: unemploymentBenefitsLocal / 52,
-    retiredPopulation: newTotalPopulation * (region.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0),
+    retiredPopulation: newTotalPopulation * (region.lifeCycleDistribution.RETIRED.shareOfPopulation),
     averageAnnualWageLocal: totalEmployedForWages > 0 ? totalWageIncomeLocal / totalEmployedForWages : 0,
     fiscalStanceScore: newFiscalStanceScore,
   });
@@ -583,25 +582,25 @@ export function evolveRegionMacro(
     // DEM/DIST — the life-cycle saving rate, read off the real age structure (§7.181). Last
     // week's, because the cohorts are built before this week's ages are advanced; a week's lag on
     // a demographic share is not a lag anyone can measure.
-    retiredShareOfPopulation: region.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0.20,
+    retiredShareOfPopulation: region.lifeCycleDistribution.RETIRED.shareOfPopulation,
     weeklyDebtServiceLocal: prevHS.weeklyDebtServiceLocal ?? 0,
     measuredDisposableIncomeLocal: newEstimatedHouseholdIncomeLocal,
     annualCapitalReceiptsLocal,
-    wealthDistribution: region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeLocal),
+    wealthDistribution: region.wealthDistribution,
     // DIST — the employers' own wage premia, weighted by whom they employ. With the tenure
     // strata this is what derives the tier wage multiplier instead of stating it (§7.173-174).
     firmWagePremiums: allCompanies
-      .filter((c) => c.region === region.id && (c.employeeCount ?? 0) > 0 && (c.offeredWageIndex ?? 0) > 0)
+      .filter((c) => c.region === region.id && (c.employeeCount) > 0 && (c.offeredWageIndex ?? 0) > 0)
       .map((c) => ({ shareOfWorkers: c.employeeCount, premium: c.offeredWageIndex! })),
   });
 
   // DIST/MAC — THE SAVINGS RATE, MEASURED. Every tier decided its own saving against its own
   // buffer; this is what those decisions add up to, over the income they were taken out of. It
   // is an outcome now (rule 2), and nothing normalises the parts to it.
-  const measuredSavingsLocal = WEALTH_TIERS.reduce((a, t) => a + (cohortResult.tierSavingsLocal[t] ?? 0), 0);
+  const measuredSavingsLocal = WEALTH_TIERS.reduce((a, t) => a + (cohortResult.tierSavingsLocal[t]), 0);
   const newSavingsRate = cohortResult.totalDisposableIncomeLocal > 0
     ? measuredSavingsLocal / cohortResult.totalDisposableIncomeLocal
-    : (prevHS.savingsRate ?? 0.06);
+    : (prevHS.savingsRate);
 
   // HH4: the spend shares are DERIVED — each tier's consumption budget times its real spend
   // mix, summed. The old form walked `luxurySpendShare` by a wealth-signal drift that no stage
@@ -671,7 +670,7 @@ export function evolveRegionMacro(
   // update has not run yet and a file does not know about it either.
   const priorWealth = region.wealthDistribution;
   const bufferBands: BufferBand[] = (Object.keys(priorWealth) as WealthTier[]).map((wt) => ({
-    shareOfHouseholds: Math.max(0, priorWealth[wt].shareOfHouseholds ?? 0),
+    shareOfHouseholds: Math.max(0, priorWealth[wt].shareOfHouseholds),
     bufferMonths: bufferMonthsOf(priorWealth[wt]),
     debtLocal: Math.max(0, priorWealth[wt].debtLocal ?? 0),
   }));
@@ -826,7 +825,7 @@ export function evolveRegionMacro(
   const smoothedTargetRate = taylorTarget; // Used for dot plot and curve parameters
 
   // --- DIAGNOSTIC TELEMETRY OUTPUT ---
-  const capexBps = Math.round((microFeedback.capexGdpContribution ?? 0) * 10000);
+  const capexBps = Math.round((microFeedback.capexGdpContribution) * 10000);
   const outGapBps = Math.round(output_gap * 10000);
   const infGapBps = Math.round(inflation_gap * 10000);
   
@@ -907,13 +906,13 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
   // Housing market evolution as a real asset class
-  const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeLocal, region.totalPopulation);
+  const prevHousing = region.housingMarket;
   // S8: housing supply is the real cleared OUTPUT of the residential_construction auction, not
   // its warehouse stock — the pool's row (§3.13-BOOK f5) is written by 04 for input categories only,
   // so the ratio below was a constant pretending to be a market signal and house prices drifted
   // on a number that never changed. Units cleared this week x the cleared price is the real
   // weekly supply, against the same week's real demand.
-  const resCat = region.categoryDemand?.['residential_construction'];
+  const resCat = region.categoryDemand['residential_construction'];
   const resSupplyUnits = resCat?.totalUnitsSuppliedThisWeek ?? 0;
   // ---- HSG: THE HOUSE PRICE CLEARS. It was a walked index and every term in it was stated. ----
   //
@@ -934,14 +933,14 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // each priced off its own book (`bank-lending.ts`). The flat spread over the 10Y that stood here
   // is the SEED's opening quote only, used until the first bank pass has run (§7.4).
   const mortgageRateForPricing = Math.max(0.005,
-    region.housingMarket?.bestMortgageRateAnnual
-    ?? ((region.zeroRates?.tenor10Y ?? newPolicyRate) + MORTGAGE_SEED_SPREAD_OVER_10Y_BPS / 10000));
+    region.housingMarket.bestMortgageRateAnnual
+    ?? ((region.zeroRates.tenor10Y) + MORTGAGE_SEED_SPREAD_OVER_10Y_BPS / 10000));
   const rWeekly = mortgageRateForPricing / 52;
   const annuityFactorForPricing = levelPaymentFactor(rWeekly, MORTGAGE_TERM_WEEKS);
   const affordabilityByTier = WEALTH_TIERS.map((t) => {
-    const tier = region.wealthDistribution?.[t];
-    const tierHouseholds = Math.max(1, householdsCount * Math.max(0, tier?.shareOfHouseholds ?? 0.25));
-    const weeklyIncomePerHouseholdLocal = Math.max(0, tier?.shareOfIncomeLocal ?? 0) / 52 / tierHouseholds;
+    const tier = region.wealthDistribution[t];
+    const tierHouseholds = Math.max(1, householdsCount * Math.max(0, tier.shareOfHouseholds));
+    const weeklyIncomePerHouseholdLocal = Math.max(0, tier.shareOfIncomeLocal) / 52 / tierHouseholds;
     const affordableLoanLocal = (weeklyIncomePerHouseholdLocal * MORTGAGE_DSTI_LIMIT) / annuityFactorForPricing;
     return { households: tierHouseholds, priceLocal: affordableLoanLocal / MORTGAGE_LTV_AT_ORIGINATION };
   }).sort((a, b) => b.priceLocal - a.priceLocal);
@@ -985,7 +984,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     historicalPrices: histPrices,
     // HSG — what the banks actually originated, summed by the bank pass. The 5%-of-income x a
     // credit nudge this replaces was a statistic beside the real lending, not a measure of it.
-    mortgageOriginationVolumeLocal: Math.round((region.housingMarket?.mortgageOriginationVolumeLocal ?? 0)),
+    mortgageOriginationVolumeLocal: Math.round((region.housingMarket.mortgageOriginationVolumeLocal)),
   };
 
   // ---- DEM: PEOPLE AGE. The age structure is a real stock now, not four drifting shares. ----
@@ -1016,7 +1015,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const bandShare = (from: number, to: number) =>
     newAgeDistribution.slice(from, to).reduce((x, y) => x + y, 0);
 
-  const prevLifeCycle = region.lifeCycleDistribution ?? createLifeCycleDistribution();
+  const prevLifeCycle = region.lifeCycleDistribution;
   const updatedLifeCycle = { ...prevLifeCycle };
   // The two boundaries that are POLICY — workforce entry and retirement age — are named; the two
   // inside the working span split it evenly, because nothing in the model distinguishes them.
@@ -1034,7 +1033,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   updatedLifeCycle.RETIRED = { ...prevLifeCycle.RETIRED, shareOfPopulation: retShare / totalLifeCycleShare };
 
   // Household wealth and income distribution segmentation
-  const prevWealthDist = region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeLocal);
+  const prevWealthDist = region.wealthDistribution;
   const updatedWealthDist = { ...prevWealthDist };
 
   // HH4: the tier→occupation membership matrix moved to macro/household-cohorts.ts — one
@@ -1052,7 +1051,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     // cohorts already measure what each tier saved this week; this is the stock that flow builds.
     // A tier that saves more now gets richer, which is the mechanism the stated split replaced.
     const priorAccumulated = updatedWealthDist[t].accumulatedSavingsLocal;
-    const savedThisWeekLocal = (cohortResult.tierSavingsLocal[t] ?? 0) / 52;
+    const savedThisWeekLocal = (cohortResult.tierSavingsLocal[t]) / 52;
 
     // COH1 — THE SAVING IS ALLOCATED AS IT ARRIVES, and dissaving draws the buffer first.
     //
@@ -1072,13 +1071,13 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     // as an entitlement (`insurance-and-pensions.ts` collects exactly this number). Splitting the
     // flow by `equityExposureShare` instead was a portfolio weight standing in for a decision the
     // model already makes.
-    const exposure = Math.max(0, Math.min(1, updatedWealthDist[t].equityExposureShare ?? 0.25));
+    const exposure = Math.max(0, Math.min(1, updatedWealthDist[t].equityExposureShare));
     let liquidLocal = Math.max(0, updatedWealthDist[t].liquidSavingsLocal
       ?? Math.max(0, priorAccumulated ?? 0) * (1 - exposure));
     let investedLocal = Math.max(0, updatedWealthDist[t].investedSavingsLocal
       ?? Math.max(0, priorAccumulated ?? 0) * exposure);
     const lifeCycleThisWeekLocal = Math.max(0,
-      Math.min(savedThisWeekLocal, (cohortResult.tierLifeCycleSavingLocal[t] ?? 0) / 52));
+      Math.min(savedThisWeekLocal, (cohortResult.tierLifeCycleSavingLocal[t]) / 52));
     // COH4 — WHERE THE WEEK'S SAVING ACTUALLY GOES, measured. `HOUSEHOLD_SAVINGS_TO_DEPOSITS_
     // SHARE = 0.3` stated it, and its own comment convicted it: where a household's saving goes
     // is a portfolio choice it makes, and COH2 already makes it — by MOTIVE, which is exactly the
@@ -1100,7 +1099,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     }
     updatedWealthDist[t] = {
       ...updatedWealthDist[t],
-      shareOfIncomeLocal: Math.round(Math.max(1000, cohortResult.tierDisposableLocal[t] ?? updatedWealthDist[t].shareOfIncomeLocal)),
+      shareOfIncomeLocal: Math.round(Math.max(1000, cohortResult.tierDisposableLocal[t])),
       liquidSavingsLocal: Math.round(liquidLocal),
       investedSavingsLocal: Math.round(investedLocal),
       // Their SUM, kept as the one number readers that want the whole stock should use (rule 4:
@@ -1155,12 +1154,12 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     occupationPools: newOccupationPools,
     occupationLaborForceShare: newLaborForceShares,
     estimatedNominalGdpLocal: newEstimatedNominalGdpLocal,
-    derivedNominalGdpLocal: region.derivedNominalGdpLocal ?? newEstimatedNominalGdpLocal,
-    gdpGrowthBottomUp: region.gdpGrowthBottomUp ?? 0,
-    nominalGdpHistory: region.nominalGdpHistory ?? [],
-    lastWeekNominalGdpLocal: region.lastWeekNominalGdpLocal ?? (region.derivedNominalGdpLocal || newEstimatedNominalGdpLocal),
-    consumptionComponentLocal: region.consumptionComponentLocal ?? 0,
-    investmentComponentLocal: region.investmentComponentLocal ?? 0,
+    derivedNominalGdpLocal: region.derivedNominalGdpLocal,
+    gdpGrowthBottomUp: region.gdpGrowthBottomUp,
+    nominalGdpHistory: region.nominalGdpHistory,
+    lastWeekNominalGdpLocal: region.lastWeekNominalGdpLocal,
+    consumptionComponentLocal: region.consumptionComponentLocal,
+    investmentComponentLocal: region.investmentComponentLocal,
     effectiveTaxRate: newEffectiveTaxRate,
     governmentRevenueLocal: newGovernmentRevenueLocal,
     governmentSpendingWeeklyLocal: newGovernmentSpendingLocal,
@@ -1184,15 +1183,15 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       netWorthLocal: newNetWorthLocal,
       equityHoldingsLocal: newEquityHoldingsLocal,
       // Carried forward untouched; `stages/etf-flows.ts` marks them against this week's clears.
-      directEquityLocal: prevHS.directEquityLocal ?? 0,
+      directEquityLocal: prevHS.directEquityLocal,
       // Marked in `stages/household-balance-sheet.ts` against this week's home price.
-      housingStockLocal: prevHS.housingStockLocal ?? 0,
-      priorNetWorthLocal: prevHS.priorNetWorthLocal ?? 0,
-      homeEquityLocal: prevHS.homeEquityLocal ?? 0,
-      institutionalClaims: prevHS.institutionalClaims ?? [],
-      institutionalClaimsLocal: prevHS.institutionalClaimsLocal ?? 0,
-      etfShares: prevHS.etfShares ?? [],
-      etfHoldingsLocal: prevHS.etfHoldingsLocal ?? 0,
+      housingStockLocal: prevHS.housingStockLocal,
+      priorNetWorthLocal: prevHS.priorNetWorthLocal,
+      homeEquityLocal: prevHS.homeEquityLocal,
+      institutionalClaims: prevHS.institutionalClaims,
+      institutionalClaimsLocal: prevHS.institutionalClaimsLocal,
+      etfShares: prevHS.etfShares,
+      etfHoldingsLocal: prevHS.etfHoldingsLocal,
       // §7.41's trap, third time: this rebuild takes a FIXED FIELD LIST, so anything not named
       // here is dropped weekly. `mmfSharesLocal` was not named, so the household's money-fund claim
       // was destroyed every week and recreated from that week's diversion alone — while the fund
@@ -1204,7 +1203,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       // reserves had left and no bank ever received them — money destroyed when households were
       // net receivers after the bank pass, created when they were net payers (±5–8B a week,
       // the whole of M1's periodic residual after C5).
-      privateBusinessEquityLocal: prevHS.privateBusinessEquityLocal ?? 0,
+      privateBusinessEquityLocal: prevHS.privateBusinessEquityLocal,
       // HH4: this week's cohort decomposition — the cross-section the aggregates above sum from.
       cohorts: cohortResult.cohorts,
       // COH2: the life-cycle half of the saving flow, which the pension stage collects as the
@@ -1225,9 +1224,9 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     estimatedHouseholdIncomeLocal: newEstimatedHouseholdIncomeLocal,
     dotPlot1Y,
     dotPlot2Y,
-    exportsLocal: region.exportsLocal ?? 0,
-    importsLocal: region.importsLocal ?? 0,
-    tradeBalance: region.tradeBalance ?? 0,
+    exportsLocal: region.exportsLocal,
+    importsLocal: region.importsLocal,
+    tradeBalance: region.tradeBalance,
     yieldCurveParams: newCurveParams,
     zeroRates: newZeroRates,
     sovereignCurve: region.sovereignCurve,

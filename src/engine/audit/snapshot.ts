@@ -37,7 +37,7 @@ export function snapshotOf(state: GameState): AuditSnapshot {
   const out: AuditSnapshot = { moneyPendingLocal: state.lastWires?.moneyPendingLocal ?? 0, moneyPendingByCurrency: state.lastWires?.moneyPendingByCurrency ?? {}, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined, goodsUnitsByKey: goodsUnitsByKey(state), registerQtyByKind: registerQtyByKind(state), registerQtyByHolder: process.env.W5_TRACE === '1' ? registerQtyByHolder(state) : undefined, plantCostByCompany: plantCostByCompany(state), queueCostByCompany: queueCostByCompany(state), dwellingUnitsByRegion: dwellingUnitsByRegion(state) };
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    const cb = reg?.centralBankSheet;
+    const cb = reg.centralBankSheet;
     if (!cb) return;
     const banks = banksOf(state.companies, r);
     out[r] = {
@@ -103,7 +103,7 @@ export function registerQtyByKind(state: GameState, byHolder?: Record<string, nu
   const out: Record<string, number> = {};
   const v2 = state.v2 as V2World | undefined;
   if (!v2) return out;
-  for (const e of state.institutionalEntities ?? []) {
+  for (const e of state.institutionalEntities) {
     for (const h of materializeBook(v2, e.id)) {
       if (!heldInShares(h.instrumentType) || !isOwnAssetKind(h.instrumentType)) continue;
       const q = h.quantityShares;
@@ -135,10 +135,10 @@ export function goodsUnitsByKey(state: GameState, parts?: Record<string, [number
     // §3.13-BOOK f3: a firm's input lots are its GOOD rows on the register.
     if (v2) for (const g of goodsHeldBy(v2, c.id)) add(c.region, g.subUnitId, g.units, 1);
   }
-  const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+  const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities);
   // A consignment is stock in its NAMED carrier's region; one the transport pool carries (no
   // ticker) passed through a source-and-sink and reappears at arrival from it.
-  for (const sh of state.goodsInTransit ?? []) {
+  for (const sh of state.goodsInTransit) {
     if (!sh.carrierId) continue;
     const region = sh.carrierRegion ?? companyById.get(sh.carrierId)?.region;
     if (region) add(region, sh.subUnitId, sh.units, 2);
@@ -151,7 +151,7 @@ export function goodsUnitsByKey(state: GameState, parts?: Record<string, [number
 export function plantCostByCompany(state: GameState): Record<string, number> {
   const out: Record<string, number> = {};
   for (const c of state.companies) {
-    const g = plantGrossLocal(c.plant ?? [], state.currentWeek);
+    const g = plantGrossLocal(c.plant, state.currentWeek);
     if (g) out[c.id] = g;
   }
   return out;
@@ -171,7 +171,7 @@ export function queueCostByCompany(state: GameState): Record<string, number> {
 export function dwellingUnitsByRegion(state: GameState): Record<string, number> {
   const out: Record<string, number> = {};
   REGION_IDS.forEach((r) => {
-    const u = state.regions[r]?.housingMarket?.ownerOccupiedUnits;
+    const u = state.regions[r].housingMarket.ownerOccupiedUnits;
     if (u) out[r] = u;
   });
   return out;

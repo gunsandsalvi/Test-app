@@ -287,7 +287,7 @@ function buildCarrierCompany(
   const depreciation = plantDepreciationAnnualLocal(plant, openingWeek);
   const ebit = ebitda - depreciation;
 
-  const policyRate = regions[region].policyRate ?? 0.045;
+  const policyRate = regions[region].policyRate;
   // A ship is collateral, so the fleet is financed the way real tonnage is: against the asset, at
   // the loan-to-value a lender will advance against a hull. But a lender lends against the CASH
   // FLOW too, and whichever binds is the constraint — so the fleet's debt is also capped by the

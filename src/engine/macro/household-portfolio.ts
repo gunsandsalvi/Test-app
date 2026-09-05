@@ -96,7 +96,7 @@ export function householdEtfHoldingsLocal(
   hs: Pick<HouseholdState, 'etfShares'>,
   entities: InstitutionalEntity[]
 ): number {
-  if (!hs.etfShares?.length) return 0;
+  if (!hs.etfShares.length) return 0;
   const H = v2.holdings;
   const fundById = new Map(entities.filter((e) => e.entityType === 'ETF' && e.etf).map((e) => [e.id, e]));
   return hs.etfShares.reduce((sum, holding) => {

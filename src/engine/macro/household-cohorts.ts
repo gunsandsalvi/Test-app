@@ -160,7 +160,7 @@ function tierShareOfMeasured(
   const raw = {} as Record<WealthTier, number>;
   let total = 0;
   WEALTH_TIERS.forEach((t) => {
-    const v = Math.max(0, wealthDistribution[t]?.[field] ?? 0);
+    const v = Math.max(0, wealthDistribution[t][field] ?? 0);
     raw[t] = v;
     total += v;
   });
@@ -169,9 +169,9 @@ function tierShareOfMeasured(
     return raw;
   }
   let incomeTotal = 0;
-  WEALTH_TIERS.forEach((t) => { incomeTotal += Math.max(0, wealthDistribution[t]?.shareOfIncomeLocal ?? 0); });
+  WEALTH_TIERS.forEach((t) => { incomeTotal += Math.max(0, wealthDistribution[t].shareOfIncomeLocal); });
   WEALTH_TIERS.forEach((t) => {
-    raw[t] = incomeTotal > 0 ? Math.max(0, wealthDistribution[t]?.shareOfIncomeLocal ?? 0) / incomeTotal : 0.25;
+    raw[t] = incomeTotal > 0 ? Math.max(0, wealthDistribution[t].shareOfIncomeLocal) / incomeTotal : 0.25;
   });
   return raw;
 }
@@ -345,7 +345,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     const raw = {} as Record<WealthTier, number>;
     let total = 0;
     WEALTH_TIERS.forEach((t) => {
-      const w = (wealthDistribution[t]?.shareOfHouseholds ?? 0.25) * (TIER_OCCUPATION_MIXES[t][occ] ?? 0);
+      const w = (wealthDistribution[t].shareOfHouseholds) * (TIER_OCCUPATION_MIXES[t][occ] ?? 0);
       raw[t] = w; total += w;
     });
     WEALTH_TIERS.forEach((t) => { raw[t] = total > 0 ? raw[t] / total : 0.25; });
@@ -361,7 +361,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   OCCUPATIONS.forEach((occ) => {
     const pool = occupationPools[occ];
     const weights = tierWeightInOcc(occ);
-    const unemployedInPool = Math.max(0, (laborForceByOccupation[occ] ?? 0) - pool.employed);
+    const unemployedInPool = Math.max(0, (laborForceByOccupation[occ]) - pool.employed);
     const occWage = baseAnnualWageLocal[occ] * pool.wageIndex;
     // DIST: what each tier's earners make inside THIS occupation, measured off the two
     // cross-sections that produce wage dispersion — the firm's premium and the worker's own
@@ -410,13 +410,13 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   cells.forEach((c) => { earnersByTier[c.tier] += c.employed + c.unemployed; });
   const transferNorm = WEALTH_TIERS.reduce((a, t) => a + earnersByTier[t] * TIER_TRANSFER_WEIGHT[t], 0) || 1;
   const capitalNorm = WEALTH_TIERS.reduce(
-    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthLocal ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25),
+    (a, t) => a + Math.max(0, wealthDistribution[t].shareOfNetWorthLocal) * (wealthDistribution[t].equityExposureShare),
     0
   ) || 1;
   const tierCapitalLocal = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => {
     tierCapitalLocal[t] = totalCapitalLocal
-      * (Math.max(0, wealthDistribution[t]?.shareOfNetWorthLocal ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25)) / capitalNorm;
+      * (Math.max(0, wealthDistribution[t].shareOfNetWorthLocal) * (wealthDistribution[t].equityExposureShare)) / capitalNorm;
   });
 
   // ---- 4. Progressive tax, renormalized to the flat aggregate rate to the dollar. ----
@@ -501,7 +501,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   // this week; a house and a pension are not it, and using the total made every tier look as
   // liquid as its saving history rather than as its portfolio.
   const liquidOf = (t: WealthTier): number => Math.max(0,
-    wealthDistribution[t]?.liquidSavingsLocal ?? wealthDistribution[t]?.accumulatedSavingsLocal ?? 0);
+    wealthDistribution[t].liquidSavingsLocal ?? wealthDistribution[t].accumulatedSavingsLocal ?? 0);
   const accumulatedNorm = WEALTH_TIERS.reduce((a, t) => a + liquidOf(t), 0);
   // Who holds the liquid assets is whose saving accumulated (§7.144's own finding). Before any
   // saving has accumulated there is nothing to split by, so it follows income — which is what
@@ -511,10 +511,10 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   // was the actual cause of §7.158's blow-up: a 346B liquid stock multiplied by a 1.5e11
   // "share", which is a units error of the §7.149 family and not the story that record told.
   const incomeNorm = WEALTH_TIERS.reduce(
-    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfIncomeLocal ?? 0), 0);
+    (a, t) => a + Math.max(0, wealthDistribution[t].shareOfIncomeLocal), 0);
   const tierLiquidShare = (t: WealthTier): number => accumulatedNorm > 0
     ? liquidOf(t) / accumulatedNorm
-    : (incomeNorm > 0 ? Math.max(0, wealthDistribution[t]?.shareOfIncomeLocal ?? 0) / incomeNorm : 0.25);
+    : (incomeNorm > 0 ? Math.max(0, wealthDistribution[t].shareOfIncomeLocal) / incomeNorm : 0.25);
   const tierIncomeLocal = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => { tierIncomeLocal[t] = 0; });
   preliminary.forEach((x) => { tierIncomeLocal[x.c.tier] += x.dispLocal; });
@@ -552,16 +552,16 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   WEALTH_TIERS.forEach((t) => { tierDisposableLocal[t] = 0; tierSavingsLocal[t] = 0; tierLifeCycleSavingLocal[t] = 0; });
 
   const exposureNorm = WEALTH_TIERS.reduce(
-    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthLocal ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25),
+    (a, t) => a + Math.max(0, wealthDistribution[t].shareOfNetWorthLocal) * (wealthDistribution[t].equityExposureShare),
     0
   ) || 1;
   const netWorthNorm = WEALTH_TIERS.reduce(
-    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthLocal ?? 0), 0
+    (a, t) => a + Math.max(0, wealthDistribution[t].shareOfNetWorthLocal), 0
   ) || 1;
   const tierReceiptsLocal = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => {
-    const nw = Math.max(0, wealthDistribution[t]?.shareOfNetWorthLocal ?? 0);
-    const exp = wealthDistribution[t]?.equityExposureShare ?? 0.25;
+    const nw = Math.max(0, wealthDistribution[t].shareOfNetWorthLocal);
+    const exp = wealthDistribution[t].equityExposureShare;
     tierReceiptsLocal[t] =
       Math.max(0, inputs.annualCapitalReceiptsLocal.depositInterestLocal) * (nw / netWorthNorm)
       + Math.max(0, inputs.annualCapitalReceiptsLocal.dividendsLocal) * ((nw * exp) / exposureNorm);

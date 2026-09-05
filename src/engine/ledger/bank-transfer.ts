@@ -28,12 +28,12 @@ export function absorbBankSheet(v2: V2World, acquirerId: EntityId, targetId: Ent
   // §3.17b-v / §3.20-LLR-b: the swap-line draws are assumed whole — the rows re-seat at the
   // caller (`reseatSwapLines`) and the sheets' lines are re-read from the book there.
   // Secured lines and the paper behind them.
-  acquirer.srfBorrowingLocal = (acquirer.srfBorrowingLocal ?? 0) + (target.srfBorrowingLocal ?? 0); target.srfBorrowingLocal = 0;
-  acquirer.repoBorrowedLocal = (acquirer.repoBorrowedLocal ?? 0) + (target.repoBorrowedLocal ?? 0); target.repoBorrowedLocal = 0;
-  acquirer.repoLentLocal = (acquirer.repoLentLocal ?? 0) + (target.repoLentLocal ?? 0); target.repoLentLocal = 0;
+  acquirer.srfBorrowingLocal = (acquirer.srfBorrowingLocal) + (target.srfBorrowingLocal); target.srfBorrowingLocal = 0;
+  acquirer.repoBorrowedLocal = (acquirer.repoBorrowedLocal) + (target.repoBorrowedLocal); target.repoBorrowedLocal = 0;
+  acquirer.repoLentLocal = (acquirer.repoLentLocal) + (target.repoLentLocal); target.repoLentLocal = 0;
   acquirer.interbankLentLocal = (acquirer.interbankLentLocal ?? 0) + (target.interbankLentLocal ?? 0); target.interbankLentLocal = 0;
   acquirer.interbankBorrowedLocal = (acquirer.interbankBorrowedLocal ?? 0) + (target.interbankBorrowedLocal ?? 0); target.interbankBorrowedLocal = 0;
-  acquirer.onRrpLendingLocal = (acquirer.onRrpLendingLocal ?? 0) + (target.onRrpLendingLocal ?? 0); target.onRrpLendingLocal = 0;
+  acquirer.onRrpLendingLocal = (acquirer.onRrpLendingLocal) + (target.onRrpLendingLocal); target.onRrpLendingLocal = 0;
   // The credit books.
   acquirer.businessLoans = [...acquirer.businessLoans, ...target.businessLoans];
   target.businessLoans = [];

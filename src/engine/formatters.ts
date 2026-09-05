@@ -59,18 +59,18 @@ export function formatCurrency(
 
   if (options?.compact) {
     if (abs >= 1_000_000_000) {
-      const precision = options?.precision ?? 2;
+      const precision = options.precision ?? 2;
       return `${sign}${symbol}${(abs / 1_000_000_000).toFixed(precision)}B`;
     }
     if (abs >= 1_000_000) {
-      const precision = options?.precision ?? 2;
+      const precision = options.precision ?? 2;
       return `${sign}${symbol}${(abs / 1_000_000).toFixed(precision)}M`;
     }
     if (abs >= 1_000) {
-      const precision = options?.precision ?? 1;
+      const precision = options.precision ?? 1;
       return `${sign}${symbol}${(abs / 1_000).toFixed(precision)}K`;
     }
-    return `${sign}${symbol}${abs.toFixed(options?.precision ?? 2)}`;
+    return `${sign}${symbol}${abs.toFixed(options.precision ?? 2)}`;
   }
 
   // Exact thousand-separated currency

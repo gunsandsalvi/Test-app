@@ -556,9 +556,13 @@ written from here):
 29-iv. **The defensive reads.** The 997 `??` (649) and `?.` (348) on values the types say are never
     nullish are the same choice per site: a fallback that cannot run (delete it — a `?? 0` that
     never fires is a stated number with no owner, rule 2) or a type that lies (fix it, as 29-iii
-    fixed sixteen sparse stores). **a** domain, engine2, test and `App.tsx` (61) is DONE; by
-    directory what stands: the simulation 376, the engine outside it 235, the UI 182, the harness
-    143. One directory at a time (rule 10), the budget falling with each.
+    fixed sixteen sparse stores). **a** domain, engine2, test and `App.tsx` (61) and **b** the
+    engine outside the simulation (232) are DONE; what stands: **c** the simulation 376, **d** the
+    UI 182 and the harness 143. One directory at a time (rule 10), the budget falling with each.
+    The rewrite is mechanical once the sparse stores are honest — a `??` whose left side the type
+    checker proves non-nullish loses its right side, a `?.` on a proven value loses its `?` — and
+    the review each group needs is of the INDEX reads: a `record[key] ?? 0` on a store built
+    sparsely is right, and its declaration is what changes.
 
 28b. **The units sweep, once, at the source.** Rule 9 is a rule with no sweep behind it. Walk
     every rate, flow and index at the point it is WRITTEN, establish its periodicity and unit, and
@@ -1199,7 +1203,7 @@ none of them steps a week of the simulation. Green before every commit.
 | Command | Note |
 |---|---|
 | `npx tsc --noEmit` | |
-| `npx eslint src scripts test --no-warn-ignored --max-warnings 936` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
+| `npx eslint src scripts test --no-warn-ignored --max-warnings 704` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
 | `npm test` | the unit suite: contracts and arithmetic, never a run |
 | `bash scripts/check-hygiene.sh` | carries `check-atlas.sh` and the stated-literal ratchets |
 | `npm run build` | |
@@ -1326,6 +1330,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**29-iv-b — THE DEFENSIVE READS IN THE ENGINE OUTSIDE THE SIMULATION.** Two hundred and
+  thirty-two, in the audit, the macro walk, the cohorts, the seed and the ledgers, rewritten by
+  position from the type checker's own report: a `??` whose left side is proven non-nullish keeps
+  its left side, a `?.` on a proven value becomes `.`. Reviewed first for the index reads, where a
+  guard can be right and the type wrong: the wire summary's `byKind` and `valueUSDByKind` are
+  sparse (a kind nobody wired has no entry) and are `Partial<Record>` now, so W1–W5's `?? 0` on
+  them stay; every other indexed table — ratings, sectors, occupations, wealth tiers, regions,
+  the seed's spread table — is total, and the defaults its reads carried (`?? 0.045`, `?? 150`,
+  `?? 4.0`, `?? 0.25`) were stated numbers nobody owned that could never run. Three
+  seed-constructor fallbacks in the macro walk (`?? createHousingMarket()` and kin) went with
+  their imports; a producing-sector lookup typed by a cast asks `Object.hasOwn` first. 936 → 704.
+  Gates green; no run (rule 11).
 
 **29-iv-a — THE DEFENSIVE READS IN DOMAIN, ENGINE2 AND TEST.** Sixty-one `??` and `?.` on values
   that cannot be nullish. Most were `?? 0` on a number the sheet always carries — the bank's repo

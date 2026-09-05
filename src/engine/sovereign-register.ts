@@ -70,7 +70,7 @@ export function forEachSovereignPosition(
   const activeCompanies = state.companies.filter((c) => isActiveCompany(c));
   const tickerById = new Map(activeCompanies.map((c) => [c.id as string, c.ticker as string]));
   if (govRef >= 0 && regRef >= 0) {
-    registerBooks((state.institutionalEntities ?? []).filter((e) => !e.isDefaulted).map((e) => e.id), activeCompanies)
+    registerBooks((state.institutionalEntities).filter((e) => !e.isDefaulted).map((e) => e.id), activeCompanies)
       .forEach((b) => {
         const holderClass: SovereignHolderClass = b.payee.kind === 'CENTRAL_BANK' ? 'CENTRAL_BANK' : b.payee.kind === 'BANK' ? 'BANK' : b.payee.kind === 'BANK_SECURITIES' ? 'DESK' : b.payee.kind === 'COMPANY' ? 'TREASURY' : 'REGISTER';
         // A bank's and a desk's book report under the bank's TICKER (a desk's book id is the

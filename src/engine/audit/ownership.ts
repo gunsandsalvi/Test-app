@@ -48,7 +48,7 @@ const AUDIT_PARTY_INDEX = new WeakMap<GameState, EntityIndex>();
 function partyIndexOfState(state: GameState): EntityIndex {
   const hit = AUDIT_PARTY_INDEX.get(state);
   if (hit) return hit;
-  const index = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+  const index = buildEntityIndex(state.companies, state.institutionalEntities);
   AUDIT_PARTY_INDEX.set(state, index);
   return index;
 }
@@ -209,7 +209,7 @@ function o3(state: GameState, week: number): AuditFinding[] {
     const book = materializeBook(v2o3, e.id); // §3.13-READ C5: the rows
     if (e.isDefaulted) { if (book.length) deadHolders++; return; }
     book.forEach((h) => {
-      const v = h.quantityOrNotionalLocal ?? 0;
+      const v = h.quantityOrNotionalLocal;
       // §3.13-SOV row 3: a sovereign row names a bond on a GOVERNMENT's ladder, and this check
       // resolves an issuer against `state.companies`, where no government sits. O11 owns those
       // rows and holds them to the same standard against the government ladders. This used to be
@@ -243,7 +243,7 @@ function o4(state: GameState, week: number): AuditFinding[] {
   const S = v2.tranches;
   const { companyById: byId } = partyIndexOfState(state);
   const bankById = new Map(state.companies.filter((c) => c.isBankEntity).map((c) => [c.id, c]));
-  const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
+  const openEstates = new Set((state.estates).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   let orphanLoans = 0, orphanLocal = 0, lenderless = 0, lenderlessLocal = 0;
   for (let r = 0; r < S.used; r++) {
     if (!(S.flags[r] & TR_FACILITY) || S.bankRef[r] < 0 || S.issuerRef[r] < 0 || !(S.principalLocal[r] > 0.01)) continue;
@@ -434,12 +434,12 @@ function o8(state: GameState, week: number): AuditFinding[] {
       if (!institutionById.has(asEntityId(l.fundId))) bump('prime-brokerage funds');
     });
   });
-  (state.estates ?? []).forEach((e) => e.claims.forEach((cl) => { if (!partyExists(cl.holder)) bump('estate claim holders'); }));
+  (state.estates).forEach((e) => e.claims.forEach((cl) => { if (!partyExists(cl.holder)) bump('estate claim holders'); }));
   tradeInvoicesOf(ensureV2(state)).forEach((inv) => {
     if (!entityExists(inv.buyerId)) bump('invoice buyers');
     if (!entityExists(inv.sellerId)) bump('invoice sellers');
   });
-  (state.goodsInTransit ?? []).forEach((sh) => {
+  (state.goodsInTransit).forEach((sh) => {
     if (!entityExists(sh.buyerId)) bump('consignment buyers');
     if (sh.carrierId !== undefined && !companyById.has(sh.carrierId)) bump('consignment carriers');
   });
@@ -473,7 +473,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
       // interest is keyed by the fund ENTITY on the register, so an instrument id that names
       // nothing else is checked against the entity table. Slice (d)'s index ends the guessing.
       const known = isTrancheId(v2, id) || companyIds.has(equityIssuerId(id)) || entityIds.has(asEntityId(id));
-      if (!known) { unresolvable++; unresolvableLocal += h.quantityOrNotionalLocal ?? 0; }
+      if (!known) { unresolvable++; unresolvableLocal += h.quantityOrNotionalLocal; }
     });
   });
   if (unresolvable > 0) out.push({ family: 'O', check: 'O8 one thing, one key: register rows', week, usd: unresolvableLocal, message: `${unresolvable} register rows worth ${B(unresolvableLocal)} name an id that is no tranche, company or fund — a key that resolves in no store` });
@@ -485,7 +485,7 @@ function o5(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const { companyByTicker: tickers, companyById: byId5, institutionById: ents } = partyIndexOfState(state);
   // A dead firm with an OPEN estate is still a party: its receiver collects what it is owed.
-  const openEstates = new Set((state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
+  const openEstates = new Set((state.estates).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   // §3.13-BOOK d4c-vi: ONE liveness check over every kind on the contract store — a derivative,
   // a repo, a stock loan, a prime-brokerage line, a trade invoice, a capital commitment — each
   // as its two parties. §3.13-BOOK d4a: a party is a `PartyRef` arm keyed by ENTITY id
@@ -510,10 +510,10 @@ function o5(state: GameState, week: number): AuditFinding[] {
     out.push({ family: 'O', check: 'O5 contracts have two live parties', week, usd: d.usd, message: `${d.n} ${kind} contracts (${B(d.usd)}) have a dead or missing party` });
   });
   let overRecovered = 0;
-  (state.estates ?? []).forEach((e) => { e.claims.forEach((c) => { if (c.recoveredLocal - c.principalLocal > floatDustLocal(c.recoveredLocal + c.principalLocal, 2)) overRecovered++; }); });
+  (state.estates).forEach((e) => { e.claims.forEach((c) => { if (c.recoveredLocal - c.principalLocal > floatDustLocal(c.recoveredLocal + c.principalLocal, 2)) overRecovered++; }); });
   if (overRecovered) out.push({ family: 'O', check: 'O5 recovered ≤ owed', week, usd: overRecovered, message: `${overRecovered} estate claims recovered more than they were owed` });
   let badIndex = 0;
-  (state.marketIndexes ?? []).forEach((x) => { const w = sum(x.constituents, (c) => c.weight); if (x.constituents.length && Math.abs(w - 1) > floatDust(1 + sum(x.constituents, (c) => Math.abs(c.weight)), x.constituents.length)) badIndex++; });
+  (state.marketIndexes).forEach((x) => { const w = sum(x.constituents, (c) => c.weight); if (x.constituents.length && Math.abs(w - 1) > floatDust(1 + sum(x.constituents, (c) => Math.abs(c.weight)), x.constituents.length)) badIndex++; });
   if (badIndex) out.push({ family: 'O', check: 'O5 index weights sum to one', week, usd: badIndex, message: `${badIndex} indices' weights do not sum to one` });
   // The two halves are counted apart, because they are not the same finding. A dead BUYER is a
   // consignment that will be scrapped on arrival rather than landed on nobody, so what it
@@ -526,10 +526,10 @@ function o5(state: GameState, week: number): AuditFinding[] {
   // second try was a full scan of every company PER SHIPMENT; it is the index's other half.
   const idOrTicker = (key: string) => tickers.get(asTicker(key)) ?? byId5.get(asEntityId(key));
   // A dead buyer with an OPEN estate still takes delivery — the receiver liquidates it.
-  const estateOf = new Map((state.estates ?? []).map((e) => [e.companyId, e]));
+  const estateOf = new Map((state.estates).map((e) => [e.companyId, e]));
   const why = new Map<string, number>();
   const bump = (k: string) => why.set(k, (why.get(k) ?? 0) + 1);
-  (state.goodsInTransit ?? []).forEach((g) => {
+  (state.goodsInTransit).forEach((g) => {
     const b = byId5.get(g.buyerId);
     if (!b || !(isActiveCompany(b) || openEstates.has(b.id))) {
       deadBuyerShip++;
@@ -711,8 +711,8 @@ function o10(state: GameState, week: number): AuditFinding[] {
     const bs = c.historicalFundamentals.at(-1)?.balanceSheet;
     if (!bs) return;
     filed++;
-    receivableLocal += bs.accountsReceivable ?? 0;
-    payableLocal += bs.accountsPayable ?? 0;
+    receivableLocal += bs.accountsReceivable;
+    payableLocal += bs.accountsPayable;
   });
   const gap = receivableLocal - payableLocal;
   if (filed > 0 && Math.abs(gap) > 1e6) {

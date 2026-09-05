@@ -106,15 +106,15 @@ const getCapWeightedAvgPrice = (capOf: (c: Company) => number, firms: Company[])
   const energyChange = getCapWeightedAvgPrice(capOf, energyFirms);
   const indChange = getCapWeightedAvgPrice(capOf, indFirms);
 
-  const prevUS = prevIndices?.usaComposite?.value ?? regionIndexBase('USA');
-  const prevEU = prevIndices?.eurComposite?.value ?? regionIndexBase('EUR');
-  const prevUK = prevIndices?.ukComposite?.value ?? regionIndexBase('UK');
-  const prevJP = prevIndices?.jpnComposite?.value ?? regionIndexBase('JPN');
+  const prevUS = prevIndices?.usaComposite.value ?? regionIndexBase('USA');
+  const prevEU = prevIndices?.eurComposite.value ?? regionIndexBase('EUR');
+  const prevUK = prevIndices?.ukComposite.value ?? regionIndexBase('UK');
+  const prevJP = prevIndices?.jpnComposite.value ?? regionIndexBase('JPN');
 
-  const prevTech = prevIndices?.techIndex?.value ?? 1000;
-  const prevFin = prevIndices?.financialsIndex?.value ?? 1000;
-  const prevEnergy = prevIndices?.energyIndex?.value ?? 1000;
-  const prevInd = prevIndices?.industrialsIndex?.value ?? 1000;
+  const prevTech = prevIndices?.techIndex.value ?? 1000;
+  const prevFin = prevIndices?.financialsIndex.value ?? 1000;
+  const prevEnergy = prevIndices?.energyIndex.value ?? 1000;
+  const prevInd = prevIndices?.industrialsIndex.value ?? 1000;
 
   const newUS = Number((prevUS * (1 + (prevIndices ? usChange : 0))).toFixed(1));
   const newEU = Number((prevEU * (1 + (prevIndices ? euChange : 0))).toFixed(1));
@@ -178,7 +178,7 @@ const getCapWeightedAvgPrice = (capOf: (c: Company) => number, firms: Company[])
   );
 
   // 5. Global Commodity Composite Index
-  const prevGsci = prevIndices?.commodityComposite?.value ?? INDEX_BASE_UNIT;
+  const prevGsci = prevIndices?.commodityComposite.value ?? INDEX_BASE_UNIT;
   let commChange = 0;
   if (commodities && commodities.length > 0) {
     commChange = commodities.reduce((sum, c) => {

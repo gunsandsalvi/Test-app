@@ -27,7 +27,7 @@ function m1(state: GameState, week: number): AuditFinding[] {
   const fx = ensureV2(state).fx;
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    const cb = reg?.centralBankSheet;
+    const cb = reg.centralBankSheet;
     if (!cb) return;
     const v2 = ensureV2(state);
     const reserves = sum(banksOf(state.companies, r), (b) => bankReservesOf(v2, b.id));
@@ -43,13 +43,13 @@ function m1(state: GameState, week: number): AuditFinding[] {
     // CUMULATIVE, so the week a leak is MADE is invisible in the weeks it finally breaches —
     // only the week-on-week deltas of the parts can name it.
     if (process.env.CB_TRACE) {
-      console.log(`  [cb-trace] w${week} ${r} residual ${M(residual)} | reserves ${M(reserves)} tga ${M(tga)} currency ${M(cb.currencyInCirculationLocal)} rrp ${M(cb.reverseRepoBorrowedLocal ?? 0)} | sovereign ${M(sovereignBookLocal)} accrued ${M(sovereignAccruedLocal)} fx ${M(centralBankFxReservesLocal(cb))} loans ${M(cb.loansToBanksLocal ?? 0)} foreign ${M(cb.foreignOfficialClaimsUSD ?? 0)} window ${M(cb.standingFacilityLentLocal ?? 0)} advance ${M(wam)} | coupon ${M(cb.lastCouponIncomeLocal ?? 0)} accretion ${M(cb.lastBillAccretionLocal ?? 0)} loanInt ${M(cb.lastLoanInterestLocal ?? 0)} sfInt ${M(cb.lastStandingFacilityInterestLocal ?? 0)} - ior ${M(cb.lastInterestOnReservesLocal ?? 0)} rrpInt ${M(cb.lastReverseRepoInterestLocal ?? 0)} = remit ${M(cb.lastRemittanceLocal ?? 0)}`);
+      console.log(`  [cb-trace] w${week} ${r} residual ${M(residual)} | reserves ${M(reserves)} tga ${M(tga)} currency ${M(cb.currencyInCirculationLocal)} rrp ${M(cb.reverseRepoBorrowedLocal)} | sovereign ${M(sovereignBookLocal)} accrued ${M(sovereignAccruedLocal)} fx ${M(centralBankFxReservesLocal(cb))} loans ${M(cb.loansToBanksLocal)} foreign ${M(cb.foreignOfficialClaimsUSD)} window ${M(cb.standingFacilityLentLocal)} advance ${M(wam)} | coupon ${M(cb.lastCouponIncomeLocal ?? 0)} accretion ${M(cb.lastBillAccretionLocal ?? 0)} loanInt ${M(cb.lastLoanInterestLocal ?? 0)} sfInt ${M(cb.lastStandingFacilityInterestLocal ?? 0)} - ior ${M(cb.lastInterestOnReservesLocal ?? 0)} rrpInt ${M(cb.lastReverseRepoInterestLocal ?? 0)} = remit ${M(cb.lastRemittanceLocal)}`);
     }
     if (Math.abs(residual) > floatDustLocal(Math.abs(assets) + Math.abs(liabilities), banksOf(state.companies, r).length + 12)) {
       // Every component by name on both sides: the residual is cumulative, so the only way to
       // find the week it was made is to difference the parts across the weeks that print.
-      const liab = `reserves ${M(reserves)} + TGA ${M(tga)} + currency ${M(cb.currencyInCirculationLocal)} + reverse repo ${M(cb.reverseRepoBorrowedLocal ?? 0)}`;
-      const asst = `sovereign ${M(sovereignBookLocal)} + accrued coupon ${M(sovereignAccruedLocal)} + fx ${M(centralBankFxReservesLocal(cb))} + loans ${M(cb.loansToBanksLocal ?? 0)} + foreign claims ${M(cb.foreignOfficialClaimsUSD ?? 0)} + window ${M(cb.standingFacilityLentLocal ?? 0)} + advance ${M(wam)}`;
+      const liab = `reserves ${M(reserves)} + TGA ${M(tga)} + currency ${M(cb.currencyInCirculationLocal)} + reverse repo ${M(cb.reverseRepoBorrowedLocal)}`;
+      const asst = `sovereign ${M(sovereignBookLocal)} + accrued coupon ${M(sovereignAccruedLocal)} + fx ${M(centralBankFxReservesLocal(cb))} + loans ${M(cb.loansToBanksLocal)} + foreign claims ${M(cb.foreignOfficialClaimsUSD)} + window ${M(cb.standingFacilityLentLocal)} + advance ${M(wam)}`;
       out.push({ family: 'M', check: 'M1 central bank closes', week, usd: residual, message: `${r}: ${liab} exceed ${asst} by ${B(residual)} — bank money nothing was bought against` });
     }
   });
@@ -57,8 +57,8 @@ function m1(state: GameState, week: number): AuditFinding[] {
   // They are carried in the NUMÉRAIRE on both sides (see `foreignOfficialClaimsUSD`), so this is
   // an exact sum: booking each side in its own money left the total non-zero by an exchange rate
   // whenever a rate moved after the flow, which is a revaluation and not a missing leg.
-  const claims = sum(REGION_IDS, (r) => state.regions[r]?.centralBankSheet?.foreignOfficialClaimsUSD ?? 0);
-  if (Math.abs(claims) > floatDustLocal(sum(REGION_IDS, (r) => Math.abs(state.regions[r]?.centralBankSheet?.foreignOfficialClaimsUSD ?? 0)), REGION_IDS.length)) out.push({ family: 'M', check: 'M1 foreign official claims net to zero', week, usd: claims, message: `the central banks' claims on each other sum to ${B(claims)}, not zero — a cross-border leg with one side missing` });
+  const claims = sum(REGION_IDS, (r) => state.regions[r].centralBankSheet?.foreignOfficialClaimsUSD ?? 0);
+  if (Math.abs(claims) > floatDustLocal(sum(REGION_IDS, (r) => Math.abs(state.regions[r].centralBankSheet?.foreignOfficialClaimsUSD ?? 0)), REGION_IDS.length)) out.push({ family: 'M', check: 'M1 foreign official claims net to zero', week, usd: claims, message: `the central banks' claims on each other sum to ${B(claims)}, not zero — a cross-border leg with one side missing` });
   return out;
 }
 
@@ -67,11 +67,11 @@ function m2(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    const cb = reg?.centralBankSheet;
+    const cb = reg.centralBankSheet;
     if (!cb) return;
     if (Math.abs(cb.currencyInCirculationLocal) > floatDustLocal(Math.abs(cb.currencyInCirculationLocal), 1)) out.push({ family: 'M', check: 'M2 currency plug', week, usd: cb.currencyInCirculationLocal, message: `${r}: currency in circulation ${B(cb.currencyInCirculationLocal)} is a residual nobody issued` });
     const cbLoans = sum(banksOf(state.companies, r), (b) => b.bankBalanceSheet!.centralBankLoanLocal ?? 0);
-    if (Math.abs(cbLoans - (cb.loansToBanksLocal ?? 0)) > floatDustLocal(Math.abs(cbLoans) + Math.abs(cb.loansToBanksLocal ?? 0), banksOf(state.companies, r).length + 1)) out.push({ family: 'M', check: 'M2 central bank loans = banks\' borrowing', week, usd: cbLoans - (cb.loansToBanksLocal ?? 0), message: `${r}: banks owe the central bank ${B(cbLoans)}, its book says ${B(cb.loansToBanksLocal ?? 0)}` });
+    if (Math.abs(cbLoans - (cb.loansToBanksLocal)) > floatDustLocal(Math.abs(cbLoans) + Math.abs(cb.loansToBanksLocal), banksOf(state.companies, r).length + 1)) out.push({ family: 'M', check: 'M2 central bank loans = banks\' borrowing', week, usd: cbLoans - (cb.loansToBanksLocal), message: `${r}: banks owe the central bank ${B(cbLoans)}, its book says ${B(cb.loansToBanksLocal)}` });
     // §3.17b-v: the same two-sidedness for the swap lines — what the banks drew is what the
     // central bank on-lent, per foreign money.
     const drawn: Record<string, number> = {};
@@ -84,7 +84,7 @@ function m2(state: GameState, week: number): AuditFinding[] {
     // parked is what the central bank says it has taken. A lender that leaves the world with cash
     // still parked would otherwise leave the borrowing on the book with nobody to return it to.
     const parked = sum(state.institutionalEntities.filter((e) => e.region === r), (e) => e.rrpLentLocal ?? 0);
-    if (Math.abs(parked - (cb.reverseRepoBorrowedLocal ?? 0)) > floatDustLocal(Math.abs(parked) + Math.abs(cb.reverseRepoBorrowedLocal ?? 0), state.institutionalEntities.length + 1)) out.push({ family: 'M', check: 'M2 reverse repo book = lenders\' parked cash', week, usd: parked - (cb.reverseRepoBorrowedLocal ?? 0), message: `${r}: lenders have ${B(parked)} parked at the window, its book says ${B(cb.reverseRepoBorrowedLocal ?? 0)}` });
+    if (Math.abs(parked - (cb.reverseRepoBorrowedLocal)) > floatDustLocal(Math.abs(parked) + Math.abs(cb.reverseRepoBorrowedLocal), state.institutionalEntities.length + 1)) out.push({ family: 'M', check: 'M2 reverse repo book = lenders\' parked cash', week, usd: parked - (cb.reverseRepoBorrowedLocal), message: `${r}: lenders have ${B(parked)} parked at the window, its book says ${B(cb.reverseRepoBorrowedLocal)}` });
   });
   const s = state.lastSettlement;
   if (s) {
@@ -121,12 +121,12 @@ function m4(state: GameState, week: number): AuditFinding[] {
   const negCorp = state.companies.filter((c) => !c.isBankEntity && isActiveCompany(c) && overdrawn(cashOf(v2, c)));
   if (negCorp.length) out.push({ family: 'M', check: 'M4 overdrawn firms', week, usd: sum(negCorp, (c) => cashOf(v2, c)), message: `${negCorp.length} firms overdrawn, ${B(sum(negCorp, (c) => cashOf(v2, c)))} in all (worst ${negCorp.sort((a, b) => cashOf(v2, a) - cashOf(v2, b))[0].ticker} ${M(cashOf(v2, negCorp[0]))})` });
   const negInst = state.institutionalEntities.filter((e) => !e.isDefaulted && overdrawn(entityCashOf(v2, e)));
-  if (negInst.length) { const worst = [...negInst].sort((a, b) => entityCashOf(v2, a) - entityCashOf(v2, b))[0]; out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => entityCashOf(v2, e)), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => entityCashOf(v2, e)))} (worst ${worst.ticker ?? worst.id} ${worst.entityType} ${M(entityCashOf(v2, worst))})` }); }
+  if (negInst.length) { const worst = [...negInst].sort((a, b) => entityCashOf(v2, a) - entityCashOf(v2, b))[0]; out.push({ family: 'M', check: 'M4 overdrawn funds', week, usd: sum(negInst, (e) => entityCashOf(v2, e)), message: `${negInst.length} funds overdrawn, ${B(sum(negInst, (e) => entityCashOf(v2, e)))} (worst ${worst.ticker} ${worst.entityType} ${M(entityCashOf(v2, worst))})` }); }
   const negBank = banksOf(state.companies).filter((b) => overdrawn(bankReservesOf(v2, b.id)));
   if (negBank.length) out.push({ family: 'M', check: 'M4 negative reserves', week, usd: sum(negBank, (b) => bankReservesOf(v2, b.id)), message: `${negBank.map((b) => b.ticker).join(' ')} hold negative reserves` });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    const negPools = (reg.smePools ?? []).filter((p) => overdrawn(poolCashOf(v2, r, p.industry)));
+    const negPools = (reg.smePools).filter((p) => overdrawn(poolCashOf(v2, r, p.industry)));
     if (negPools.length) out.push({ family: 'M', check: 'M4 overdrawn pools', week, usd: sum(negPools, (p) => poolCashOf(v2, r, p.industry)), message: `${r}: ${negPools.length} pools overdrawn ${B(sum(negPools, (p) => poolCashOf(v2, r, p.industry)))}` });
     const hh = householdDepositsOf(v2, r);
     if (overdrawn(hh)) out.push({ family: 'M', check: 'M4 overdrawn households', week, usd: hh, message: `${r}: household deposits ${B(hh)}` });
@@ -142,11 +142,11 @@ function m5(state: GameState, week: number): AuditFinding[] {
     const bs = b.bankBalanceSheet!;
     const sov = bankSovereignBookLocal(ensureV2(state), b.id); // §3.13-BOOK d3b: register rows
     const desks = deskSignedLocal(ensureV2(state), b.id); // §3.13-BOOK d3d: register rows, signed
-    const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.id)) + sov + bankReservesOf(ensureV2(state), b.id) + (bs.repoLentLocal ?? 0) + (bs.interbankLentLocal ?? 0) + (bs.sovereignAccruedCouponLocal ?? 0) + desks + (bs.primeBrokerageLoansLocal ?? 0);
-    const liabilities = depositsOf(bs, stateDepositLines(state, b)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal ?? 0) + (bs.interbankBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0) + swapLineDrawnLocal(bs, currencyOf(b.region), ensureV2(state).fx);
+    const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.id)) + sov + bankReservesOf(ensureV2(state), b.id) + (bs.repoLentLocal) + (bs.interbankLentLocal ?? 0) + (bs.sovereignAccruedCouponLocal ?? 0) + desks + (bs.primeBrokerageLoansLocal ?? 0);
+    const liabilities = depositsOf(bs, stateDepositLines(state, b)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal) + (bs.interbankBorrowedLocal ?? 0) + (bs.srfBorrowingLocal) + swapLineDrawnLocal(bs, currencyOf(b.region), ensureV2(state).fx);
     const residual = assets - liabilities - bs.bankEquityLocal;
     // What the two sums above added: the rows of each loan book, the five deposit classes, and the scalar lines.
-    const terms = 16 + (bs.businessLoans?.length ?? 0) + (bs.householdLoans?.length ?? 0) + 5;
+    const terms = 16 + (bs.businessLoans.length) + (bs.householdLoans.length) + 5;
     if (Math.abs(residual) > floatDustLocal(Math.abs(assets) + Math.abs(liabilities) + Math.abs(bs.bankEquityLocal), terms)) out.push({ family: 'M', check: 'M5 bank sheet closes', week, usd: residual, message: `${b.region}:${b.ticker} assets ${B(assets)} − liabilities ${B(liabilities)} − equity ${B(bs.bankEquityLocal)} = ${B(residual)}` });
   });
   return out;
@@ -160,7 +160,7 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
   REGION_IDS.forEach((r) => {
     const before = prev[r];
     const reg = state.regions[r];
-    const cb = reg?.centralBankSheet;
+    const cb = reg.centralBankSheet;
     if (!before || !cb) return;
     // Money is the bank lines and the treasury's account (nothing is in transit).
     const now = sum(banksOf(state.companies, r), (b) => depositsOf(b.bankBalanceSheet!, stateDepositLines(state, b))) + treasuryAccountOf(ensureV2(state), r);
@@ -169,10 +169,10 @@ function m6(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
     // bank issued, what the banks paid out of their own account, money from other regions), the
     // household books' deposit writes, the interest the banks credited to deposits, and the
     // central bank's advance to the treasury. Everything else is a transfer and nets to zero.
-    const credit = ls?.creditCreatedByRegion?.[r] ?? 0;
-    const issued = ls?.centralBankIssuanceByRegion?.[r] ?? 0;
-    const ownAccount = -(ls?.bankOwnAccountByRegion?.[r] ?? 0);
-    const crossBorder = ls?.crossBorderByRegion?.[r] ?? 0;
+    const credit = ls?.creditCreatedByRegion[r] ?? 0;
+    const issued = ls?.centralBankIssuanceByRegion[r] ?? 0;
+    const ownAccount = -(ls?.bankOwnAccountByRegion[r] ?? 0);
+    const crossBorder = ls?.crossBorderByRegion[r] ?? 0;
     const book = reg.householdBookDepositFlowWeeklyLocal ?? 0;
     const depositInterest = reg.householdDepositInterestWeeklyLocal ?? 0;
     const advance = waysAndMeansOf(ensureV2(state), r) - before.waysAndMeansLocal;

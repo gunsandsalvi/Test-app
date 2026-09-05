@@ -405,7 +405,7 @@ function buildRegion(regionId: RegionId): Region {
     interestWeeklyLocal: seedInterestWeeklyLocal,
     payrollWeeklyLocal: seedPayrollWeeklyLocal,
     unemploymentBenefitsWeeklyLocal: initialUnemploymentBenefitsLocal / 52,
-    retiredPopulation: totalPopulation * (seedLifeCycle.RETIRED?.shareOfPopulation ?? 0),
+    retiredPopulation: totalPopulation * (seedLifeCycle.RETIRED.shareOfPopulation),
     averageAnnualWageLocal: seedAvgAnnualWageLocal,
     fiscalStanceScore: 0,
   });
@@ -452,7 +452,7 @@ function buildRegion(regionId: RegionId): Region {
   // the income-ranked 15/45/25/15 shape the raw seed carried was a different ranking (income
   // deciles) misapplied to wealth tiers, and week 1 would overwrite it anyway.
   (Object.keys(seedWealthDistribution) as WealthTier[]).forEach((t) => {
-    seedWealthDistribution[t].shareOfIncomeLocal = Math.round((seedCohorts.tierDisposableLocal[t] ?? 0));
+    seedWealthDistribution[t].shareOfIncomeLocal = Math.round((seedCohorts.tierDisposableLocal[t]));
   });
 
   const netInterestMarginPct = Number(Math.max(NIM_FLOOR, policyRate * NIM_TO_POLICY_RATE_RATIO + 0.005).toFixed(4));

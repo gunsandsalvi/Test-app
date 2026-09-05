@@ -22,7 +22,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
   // pay nothing when they are off, and they now agree on who a firm is.
   let entityIndex: EntityIndex | undefined;
   const entities = (): EntityIndex =>
-    (entityIndex ??= buildEntityIndex(state.companies, state.institutionalEntities ?? []));
+    (entityIndex ??= buildEntityIndex(state.companies, state.institutionalEntities));
   const w = state.lastWires; const s = state.lastSettlement;
   // §3.37-SEED: week 0 is the OPENING STATE and no week has elapsed, so there is no journal to
   // find and its absence is not a finding. Every check below this line asks what MOVED, which is
@@ -151,7 +151,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
           Object.entries((state as { lotReceiptsTrace?: Record<string, number> }).lotReceiptsTrace ?? {}).forEach(([k, u]) => { const [cid, s2] = k.split('|'); if (s2 !== sb) return; const c = byId.get(asEntityId(cid)); if (c?.region === rg) recBy[c.ticker] = (recBy[c.ticker] ?? 0) + u; });
           const rows = Object.keys({ ...inBy, ...recBy }).map((tk) => [tk, (inBy[tk] ?? 0) - (recBy[tk] ?? 0)] as [string, number]).filter(([, d]) => Math.abs(d) > 1).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
           const kinds = Object.entries(w.goodsInByTicker ?? {}).filter(([k]) => k.startsWith(`${rg}|${sb}|KIND:`)).map(([k, u]) => `${k.split('KIND:')[1]} ${u.toFixed(1)}`).join(', ');
-          console.log(`  [goods-kind-trace] in by holder kind: ${kinds}; in transit now: ${(state.goodsInTransit ?? []).filter((s2) => s2.subUnitId === sb).length} consignments`);
+          console.log(`  [goods-kind-trace] in by holder kind: ${kinds}; in transit now: ${(state.goodsInTransit).filter((s2) => s2.subUnitId === sb).length} consignments`);
           console.log(`  [goods-firm-trace] ${rows.length} firms off: ` + rows.slice(0, 6).map(([tk, d]: [string, number]) => `${tk} ${d.toFixed(1)} in ${(inBy[tk] ?? 0).toFixed(1)} rec ${(recBy[tk] ?? 0).toFixed(1)} [${[...(reasonsBy[tk] ?? [])].join(',')}] ${byTicker.get(asTicker(tk))?.isDefaulted ? 'DEAD' : ''}${byTicker.get(asTicker(tk))?.sector ?? ''}`).join(' | '));
         }
         console.log(`  [goods-trace] w${week} ${key.replace('|', ' ')}: wires in ${(w.goodsInUnitsByKey?.[key] ?? 0).toFixed(1)} out ${(w.goodsOutUnitsByKey?.[key] ?? 0).toFixed(1)} delivered ${(w.goodsDeliveredByKey?.[key] ?? 0).toFixed(1)} | lot receipts ${receipts.toFixed(1)} | gap ${g.toFixed(1)} | stock prev ${(prev.goodsUnitsByKey![key] ?? 0).toFixed(1)} now ${(now[key] ?? 0).toFixed(1)} (out ${pn[0].toFixed(1)} lots ${pn[1].toFixed(1)} transit ${pn[2].toFixed(1)}) | produced ${(f?.producedUnits ?? 0).toFixed(1)} consumed ${(f?.consumedUnits ?? 0).toFixed(1)} scrapped ${(f?.scrappedUnits ?? 0).toFixed(1)} | wires net ${(nets[key] ?? 0).toFixed(1)}`);
@@ -167,7 +167,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
   // entered service less what wore out, was scrapped or abandoned, plus what a birth minted, plus
   // the vintages the wires brought in less those they took out; and the construction queue's
   // change is what arrived less what entered service, plus its own wires.
-  if (prev?.plantCostByCompany && prev?.queueCostByCompany) {
+  if (prev?.plantCostByCompany && prev.queueCostByCompany) {
     const gaps = plantIdentityGaps(
       prev.plantCostByCompany, prev.queueCostByCompany, plantCostByCompany(state), queueCostByCompany(state),
       w.plantFlowByCompany ?? {}, w.plantNetCostByCompany ?? {}, w.queueNetCostByCompany ?? {});
@@ -218,12 +218,12 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
         if (Math.abs(d) > 1e-3) rows.push([hk, d]);
       });
       rows.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
-      const byId = new Map((state.institutionalEntities ?? []).map((e) => [e.id, e]));
+      const byId = new Map((state.institutionalEntities).map((e) => [e.id, e]));
       const sumGaps = rows.reduce((a, [, d]) => a + d, 0);
       const grossGaps = rows.reduce((a, [, d]) => a + Math.abs(d), 0);
       console.log(`  [w5-trace] w${week}: ${rows.length} books off their wires, net ${sumGaps.toFixed(1)} vs the kind-level ${gaps.map(([k, g]) => `${k} ${g.toFixed(1)}`).join(',')}, gross ${grossGaps.toFixed(0)} — ` + rows.slice(0, 6).map(([hk, d]) => {
         const id = asEntityId(hk.split('|')[0]); const e = byId.get(id); // key is `<holder>|<kind>`
-        return `${e ? `${e.entityType}:${e.ticker ?? id}` : `GONE:${id}`} ${d.toFixed(1)}`;
+        return `${e ? `${e.entityType}:${e.ticker}` : `GONE:${id}`} ${d.toFixed(1)}`;
       }).join(' | '));
     }
     if (gaps.length > 0) {

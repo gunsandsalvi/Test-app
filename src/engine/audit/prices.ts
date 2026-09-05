@@ -203,7 +203,7 @@ function x1(state: GameState, week: number): AuditFinding[] {
       const fwd = (r1 * t1 - r0 * t0) / (t1 - t0);
       if (fwd < -floatDust(Math.abs(r1 * t1) + Math.abs(r0 * t0), 4) / (t1 - t0)) out.push({ family: 'X', check: 'X1 forward rates non-negative', week, usd: fwd, message: `${r}: the ${t0}y→${t1}y forward is ${pct(fwd)}` });
     }
-    const repoBps = (reg.repoRateAnnual ?? reg.policyRate) * 10000;
+    const repoBps = (reg.repoRateAnnual) * 10000;
     const { floorBps, ceilingBps } = repoCorridorBps(reg.policyRate);
     if (repoBps > ceilingBps + floatDust(Math.abs(repoBps) + Math.abs(ceilingBps), 2) || repoBps < floorBps - floatDust(Math.abs(repoBps) + Math.abs(floorBps), 2)) out.push({ family: 'X', check: 'X1 repo inside the corridor', week, usd: repoBps / 10000 - reg.policyRate, message: `${r}: repo ${pct(repoBps / 10000)} outside the corridor [${pct(floorBps / 10000)}, ${pct(ceilingBps / 10000)}] the facilities post around policy ${pct(reg.policyRate)}` });
     const banks = banksOf(state.companies, r);
@@ -266,7 +266,7 @@ function x2(state: GameState, week: number): AuditFinding[] {
   let badBasis = 0; const basisExamples: string[] = [];
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    const carry = reg?.bondBasisCarryBps;
+    const carry = reg.bondBasisCarryBps;
     if (reg.bondFuturesBasis === undefined || reg.bondFuturesDeliverableId === undefined || !carry || carry.week !== state.currentWeek) return;
     const cash = trancheClearedPricePerFace(v2, asInstrumentId(reg.bondFuturesDeliverableId));
     if (!(cash !== undefined && cash > 0)) return;

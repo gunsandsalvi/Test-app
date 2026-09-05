@@ -95,7 +95,7 @@ export function companyNetInvestmentRate(comp: Company, week: number): number {
   // §3.26-f-ii: the plant is the register, read at `week` — its net, and the one schedule's
   // year-rate on it.
   const netPPE = Math.max(1, plantNetLocal(comp.plant, week));
-  return ((comp.growthCapex ?? 0) - plantDepreciationAnnualLocal(comp.plant, week)) / netPPE;
+  return ((comp.growthCapex) - plantDepreciationAnnualLocal(comp.plant, week)) / netPPE;
 }
 
 /** Real book equity: the balance sheet's own shareholders' equity where a filing exists. */
@@ -151,7 +151,7 @@ export function companyFairValuePerShare(
     bookEquityLocal: companyBookEquityLocal(comp, cashLocal, totalDebtLocal, week),
     netInvestmentRate: companyNetInvestmentRate(comp, week),
     riskFreeRate,
-    beta: comp.beta ?? 1,
+    beta: comp.beta,
     holderRequiredReturn,
   });
 }

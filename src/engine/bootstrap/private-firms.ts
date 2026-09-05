@@ -54,7 +54,7 @@ export interface PrivateFirmSeed {
  * at 1.
  */
 export const UNIVERSE_SCALE: number = (() => {
-  const raw = Number((typeof process !== 'undefined' ? process.env?.UNIVERSE_SCALE : undefined) ?? 1);
+  const raw = Number((typeof process !== 'undefined' ? process.env.UNIVERSE_SCALE : undefined) ?? 1);
   return Number.isFinite(raw) && raw > 0 && raw <= 1 ? raw : 1;
 })();
 

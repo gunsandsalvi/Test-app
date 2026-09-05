@@ -34,7 +34,7 @@ function f2(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
   const flows = state.lastSettlement?.treasuryFlowsByRegion ?? {};
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    const cb = reg?.centralBankSheet;
+    const cb = reg.centralBankSheet;
     if (!cb) return;
     const byReason = flows[r] ?? {};
     const settled = sum(Object.values(byReason), (v) => v);
@@ -55,8 +55,8 @@ function f2(prev: AuditSnapshot | undefined, state: GameState, week: number): Au
 /** F3 — the region's accounts: exports of one region are imports of another. */
 function f3(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  const exports = sum(REGION_IDS, (r) => state.regions[r]?.exportsLocal ?? 0);
-  const imports = sum(REGION_IDS, (r) => state.regions[r]?.importsLocal ?? 0);
+  const exports = sum(REGION_IDS, (r) => state.regions[r].exportsLocal);
+  const imports = sum(REGION_IDS, (r) => state.regions[r].importsLocal);
   if (exports > 0 && Math.abs(exports - imports) > floatDustLocal(exports + imports, 2 * REGION_IDS.length)) out.push({ family: 'F', check: 'F3 world exports = world imports', week, usd: exports - imports, message: `world exports ${B(exports)} against imports ${B(imports)}` });
   return out;
 }
