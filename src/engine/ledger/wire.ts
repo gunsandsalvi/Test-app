@@ -14,14 +14,18 @@ import { CurrencyCode, CURRENCY_CODES } from '../../domain/geography';
 import { FxTable, PARITY_FX, toNumeraire } from '../../domain/currency';
 import { isVehicleClaim, type HoldingType } from '../../domain/assets';
 import { defect } from '../../domain/defect';
+import type { PlantFlow } from '../../domain/plant';
 
 /** §3.13-BOOK (e): what a wire moves — every kind the register or a ladder holds (a view of the
  *  one kind list), money, a good, a house, or a bilateral contract. */
-export type AssetKind = HoldingType | 'MONEY' | 'GOOD' | 'HOUSE' | 'CONTRACT';
+export type AssetKind = HoldingType | 'MONEY' | 'GOOD' | 'HOUSE' | 'CONTRACT' | 'PLANT';
 
 export const ASSET_KINDS: readonly AssetKind[] = [
   'MONEY', 'EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER',
   'ETF_SHARE', 'MMF_SHARE', 'BANK_FACILITY', 'GOOD', 'HOUSE', 'CONTRACT', 'PE_FUND_INTEREST',
+  // §3.26-f-iii: plant — vintages in service (`PLANT`) or capital not yet plant (`PLANT_QUEUE`),
+  // in units of COST. Appended last so the kind ids of every earlier journal are unchanged.
+  'PLANT',
 ];
 const kindIdOf = new Map<AssetKind, number>(ASSET_KINDS.map((k, i) => [k, i]));
 interface WireInstruction {
@@ -62,11 +66,13 @@ export interface WireJournal {
   goodsFlows: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>;
   /** GOODS_TRACE=1: units the sellers' settlements counted as delivered, per `region|subUnit`. */
   goodsDelivered?: Record<string, number>;
+  /** §3.26-f-iii W6: the week's plant transformations per firm (`ledger/plant-ledger.ts`). */
+  plantFlows: Record<string, PlantFlow>;
 }
 
 export function newWireJournal(base: number, week: number, cap = 1 << 14): WireJournal {
   return {
-    n: 0, base, week, goodsFlows: {},
+    n: 0, base, week, goodsFlows: {}, plantFlows: {},
     fromId: new Int32Array(cap), toId: new Int32Array(cap), kindId: new Int8Array(cap),
     assetRef: new Int32Array(cap), quantity: new Float64Array(cap), priceLocal: new Float64Array(cap),
     reasonId: new Int32Array(cap), settleWeek: new Int32Array(cap),
@@ -245,6 +251,11 @@ interface WireSummary {
   registerNetQtyByHolder?: Record<string, number>;
   /** §5-WIRES W4: the week's transformations per `region|subUnit`. */
   goodsFlowByKey: Record<string, { producedUnits: number; consumedUnits: number; scrappedUnits: number }>;
+  /** §3.26-f-iii W6: plant wires in minus out per holder firm, in units of cost — vintages in
+   *  service (`PLANT`) and the construction queue (`PLANT_QUEUE`) — and the week's transformations. */
+  plantNetCostByCompany: Record<string, number>;
+  queueNetCostByCompany: Record<string, number>;
+  plantFlowByCompany: Record<string, PlantFlow>;
   goodsOutUnitsByKey?: Record<string, number>;
   goodsInUnitsByKey?: Record<string, number>;
   goodsDeliveredByKey?: Record<string, number>;
@@ -268,6 +279,8 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
   const trace = typeof process !== 'undefined' && process.env?.LADDER_TRACE === '1';
   const issuerNetUSDByTicker: Record<string, number> | undefined = trace ? {} : undefined;
   const goodsNetUnitsByKey: Record<string, number> = {};
+  const plantNetCostByCompany: Record<string, number> = {};
+  const queueNetCostByCompany: Record<string, number> = {};
   const registerNetQtyByKind: Record<string, number> = {};
   const w5Trace = typeof process !== 'undefined' && process.env?.W5_TRACE === '1';
   const registerNetQtyByHolder: Record<string, number> | undefined = w5Trace ? {} : undefined;
@@ -300,6 +313,13 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
     valueUSDByKind[k] = (valueUSDByKind[k] ?? 0) + valueLocal;
     if (k === 'MONEY') continue;
     const from = partyOf(j.fromId[i]), to = partyOf(j.toId[i]);
+    if (k === 'PLANT') {
+      // A firm (or a bank) holds a register; a pool is a source (a birth's carve-out) and holds none.
+      const map = assetText(j.assetRef[i]) === 'PLANT_QUEUE' ? queueNetCostByCompany : plantNetCostByCompany;
+      if ('id' in from && from.kind !== 'INSTITUTION') map[from.id] = (map[from.id] ?? 0) - j.quantity[i];
+      if ('id' in to && to.kind !== 'INSTITUTION') map[to.id] = (map[to.id] ?? 0) + j.quantity[i];
+      continue;
+    }
     if (k === 'GOOD') {
       const asset = assetText(j.assetRef[i]);
       const rf = holderRegionOf(from), rt = holderRegionOf(to);
@@ -331,5 +351,5 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
       if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.id); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueLocal; if (issuerNetUSDByTicker) { const tk = `${to.id}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueLocal; } } }
     }
   }
-  return { count: j.n, byKind, valueUSDByKind, moneyPendingLocal, moneyByCurrency, moneyPendingByCurrency, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
+  return { count: j.n, byKind, valueUSDByKind, moneyPendingLocal, moneyByCurrency, moneyPendingByCurrency, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, plantNetCostByCompany, queueNetCostByCompany, plantFlowByCompany: j.plantFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
 }

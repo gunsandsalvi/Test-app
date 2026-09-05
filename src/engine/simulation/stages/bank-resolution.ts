@@ -15,6 +15,7 @@
  * The plan (domain/bank-resolution.ts) decides who eats the hole; this stage only executes it.
  */
 
+import { movePlant } from '../../ledger/plant-ledger';
 import { mergePlant } from '../../../domain/plant';
 import { reseatSwapLines } from './swap-lines';
 import { reseatCentralBankLoans } from './central-bank-loans';
@@ -200,7 +201,9 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     }
     rekeyBankLinks(state, ctx, regionId, bank, acquirer);
     // Premises and people go with the books: the branches open on Monday under the new name.
-    acquirer.plant = mergePlant(acquirer.plant, bank.plant); // §3.26-f-ii: vintage by vintage
+    // §3.26-f-ii/iii: vintage by vintage, and the move is a wire (the consideration is the books).
+    movePlant(bankParty(bank), bankParty(acquirer), bank.plant, 0, 'resolution: premises to the acquirer');
+    acquirer.plant = mergePlant(acquirer.plant, bank.plant);
     acquirer.employeeCount += bank.employeeCount;
     acquirer.annualRevenue += bank.annualRevenue;
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (bank.bankMarketShare ?? 0)).toFixed(6));

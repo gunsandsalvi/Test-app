@@ -7,7 +7,8 @@ import { GameState } from '../../types';
 import { instrumentIssuerOf } from '../../engine2/instruments';
 import { asInstrumentId } from '../../domain/ids';
 import { AuditFinding, B } from './types';
-import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey, registerQtyByKind } from './snapshot';
+import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey, registerQtyByKind, plantCostByCompany, queueCostByCompany } from './snapshot';
+import type { PlantFlow } from '../../domain/plant';
 import { isTrancheKind } from '../../domain/assets';
 import { ensureV2 } from '../../engine2/world';
 import { asEntityId, asTicker } from '../../domain/ids';
@@ -162,6 +163,20 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       out.push({ family: 'W', check: 'W4 wires reproduce the goods stock', week, usd: units, message: `${gaps.length} region-goods' stock moved by other than production, consumption and wires (${gaps.slice(0, 4).map(([k, g]) => `${k.replace('|', ' ')} ${g.toFixed(1)}u`).join(' | ')}${gaps.length > 4 ? ' | …' : ''}) — goods that moved with no wire, or were made or used with no record` });
     }
   }
+  // W6: the PLANT identity (§3.26-f-iii) — per firm, in units of COST, the register's change is what
+  // entered service less what wore out, was scrapped or abandoned, plus what a birth minted, plus
+  // the vintages the wires brought in less those they took out; and the construction queue's
+  // change is what arrived less what entered service, plus its own wires.
+  if (prev?.plantCostByCompany && prev?.queueCostByCompany) {
+    const gaps = plantIdentityGaps(
+      prev.plantCostByCompany, prev.queueCostByCompany, plantCostByCompany(state), queueCostByCompany(state),
+      w.plantFlowByCompany ?? {}, w.plantNetCostByCompany ?? {}, w.queueNetCostByCompany ?? {});
+    if (gaps.length > 0) {
+      const byId = entities().companyById;
+      const name = (id: string) => byId.get(asEntityId(id))?.ticker ?? id;
+      out.push({ family: 'W', check: 'W6 wires reproduce the plant', week, usd: gaps.reduce((a, g) => a + Math.abs(g.gapLocal), 0), message: `${gaps.length} firms' plant moved by other than commissioning, wear, scrap and wires (${gaps.slice(0, 4).map((g) => `${name(g.companyId)} ${g.side} ${B(g.gapLocal)}`).join(' | ')}${gaps.length > 4 ? ' | …' : ''}) — plant that moved with no wire, or entered or left service with no record` });
+    }
+  }
   // W5: the REGISTER's change is the replay of its wires — in the asset's own unit, shares, so
   // that a re-mark cannot move it. Only institutions hold register rows, so what the register
   // took in is what the wires delivered to an institution net of what they took away.
@@ -208,4 +223,34 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
     }
   }
   return out;
+}
+
+/**
+ * W6's arithmetic, pure so it can be asked without a world: per firm, the plant register's change
+ * against its explanation, and the construction queue's against its own. The tolerance is float
+ * dust on the GROSS flow — the sum of every term moved — never a share of the stock (W4's rule).
+ */
+export function plantIdentityGaps(
+  prevPlant: Record<string, number>, prevQueue: Record<string, number>,
+  nowPlant: Record<string, number>, nowQueue: Record<string, number>,
+  flows: Record<string, PlantFlow>, netPlant: Record<string, number>, netQueue: Record<string, number>
+): { companyId: string; side: 'plant' | 'queue'; gapLocal: number }[] {
+  const gaps: { companyId: string; side: 'plant' | 'queue'; gapLocal: number }[] = [];
+  const ids = new Set([...Object.keys(prevPlant), ...Object.keys(nowPlant), ...Object.keys(prevQueue), ...Object.keys(nowQueue),
+    ...Object.keys(flows), ...Object.keys(netPlant), ...Object.keys(netQueue)]);
+  ids.forEach((id) => {
+    const f = flows[id];
+    const commissioned = f?.commissionedLocal ?? 0, retired = f?.retiredLocal ?? 0, scrapped = f?.scrappedLocal ?? 0;
+    const abandoned = f?.abandonedLocal ?? 0, born = f?.bornLocal ?? 0, arrived = f?.arrivedLocal ?? 0;
+    const deltaP = (nowPlant[id] ?? 0) - (prevPlant[id] ?? 0);
+    const explainedP = commissioned - retired - scrapped - abandoned + born + (netPlant[id] ?? 0);
+    const grossP = commissioned + retired + scrapped + abandoned + born + Math.abs(netPlant[id] ?? 0) + Math.abs(deltaP);
+    if (Math.abs(deltaP - explainedP) > Math.max(1, grossP * 1e-6)) gaps.push({ companyId: id, side: 'plant', gapLocal: deltaP - explainedP });
+    const deltaQ = (nowQueue[id] ?? 0) - (prevQueue[id] ?? 0);
+    const explainedQ = arrived - commissioned + (netQueue[id] ?? 0);
+    const grossQ = arrived + commissioned + Math.abs(netQueue[id] ?? 0) + Math.abs(deltaQ);
+    if (Math.abs(deltaQ - explainedQ) > Math.max(1, grossQ * 1e-6)) gaps.push({ companyId: id, side: 'queue', gapLocal: deltaQ - explainedQ });
+  });
+  gaps.sort((a, b) => Math.abs(b.gapLocal) - Math.abs(a.gapLocal));
+  return gaps;
 }

@@ -53,6 +53,7 @@ export function wireWorldOf(
         case 'GOOD': return goods.has(asset);
         case 'MONEY': return currencies.has(asset);
         case 'HOUSE': return undefined;
+        case 'PLANT': return asset === 'PLANT' || asset === 'PLANT_QUEUE';
         case 'EQUITY': case 'ETF_SHARE': case 'MMF_SHARE': case 'PE_FUND_INTEREST': case 'CONTRACT':
         case 'CORP_BOND': case 'LEVERAGED_LOAN': case 'GOV_BOND': case 'COMMERCIAL_PAPER': case 'BANK_FACILITY': return undefined; // handled above
         default: return assertNever(kind, 'wireWorld.instrumentExists');

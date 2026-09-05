@@ -24,6 +24,17 @@
  * spin-off is a structuredClone of its parent and a shared array is how two books corrupt each other.
  */
 
+/** §3.26-f-iii — one firm's plant TRANSFORMATIONS in a week, recorded on the wire journal by
+ *  `ledger/plant-ledger.ts`; the moves between parties are wires. W6 closes the identity. */
+export interface PlantFlow {
+  commissionedLocal: number;
+  retiredLocal: number;
+  scrappedLocal: number;
+  abandonedLocal: number;
+  bornLocal: number;
+  arrivedLocal: number;
+}
+
 export interface PlantVintage {
   /** What it cost when it entered service — gross book, never revalued. */
   costLocal: number;

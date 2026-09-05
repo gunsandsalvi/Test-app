@@ -96,9 +96,9 @@ checked by `scripts/check-atlas.sh`.
 | C2 paid in cash, out of an account, in a currency | `src/engine2/stage08-back.ts:makeCashPoster` | ✅ |
 | C3 a lag between spend and capacity | `src/domain/industry-registry.ts:commissioningLeadWeeksOf` | ✅ |
 | C4 it is irreversible | `src/domain/company-week/capital-programme.ts:capacityRetirement` | ✅ |
-| D1 K′ = K + I − D, per firm | `src/domain/plant.ts:commissionVintage` · `src/domain/plant.ts:retireWornPlant` | ✅ |
+| D1 K′ = K + I − D, per firm | `src/domain/plant.ts:commissionVintage` · `src/domain/plant.ts:retireWornPlant` · `src/engine/audit/wires.ts:plantIdentityGaps` | ✅ |
 | D2 the aggregate stock is Σ(firms) | `src/engine/simulation/stages/estate-resolution.ts:regionalPpeAbsorptionWeeks` | ✅ |
-| D3 a failed firm's capital goes to somebody named | `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` | ✅ |
+| D3 a failed firm's capital goes to somebody named | `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` · `src/engine/ledger/plant-ledger.ts:movePlant` | ✅ |
 | **D4 capacity, output and utilisation reconcile** | — | ❌ |
 | E1 investment is a large, volatile component of demand | `src/engine/simulation/stages/05-unit-bidding.ts:capexPurchasesLocal` | ✅ |
 | E2 it employs people to build the capital | `src/domain/company-week/labor-demand.ts:employerWeekPosting` | ✅ |
@@ -222,6 +222,13 @@ Every writer is a vintage move: commissioning appends, a scrap retires the OLDES
 construction queue with it — the structuredClone had given both books the whole queue), a merger
 and a resolution concatenate (`mergePlant`, the queue too), and the estate's buyers take slices at
 the cleared price of book — the machines keep their age and life when they change hands.
+
+*2026-09-05 (§9.26-f-iii):* and every one of those moves is a WIRE (kind `PLANT`, in units of cost,
+`ledger/plant-ledger.ts:movePlant` / `movePlantQueue`), what is not a move — commissioning, wear-out,
+scrap, abandonment, an FDI birth's minting — a transformation on the same journal, and `audit/wires.ts`
+W6 closes the identity per firm every week (`plantIdentityGaps`): Δ(gross plant) = commissioned −
+retired − scrapped − abandoned + born + wires in − wires out, and the construction queue's own line.
+A pool carve-out's plant is a wire from the segment; an FDI subsidiary's is minted and says so.
 
 What A4 still lacks is a KIND. A vintage is specific in time (dated, lived) but carries no record of
 the capital good it was made from, so specificity across firms is still an accident of ownership:

@@ -19,6 +19,7 @@
  * its own inventory would have each write clobber the other.
  */
 
+import { arrivePlant } from '../../ledger/plant-ledger';
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
 import { bookTradeInvoices } from '../../ledger/contract-ledger';
 import { bankParty, companyParty, companyPartyOf } from '../../../domain/party';
@@ -237,6 +238,7 @@ function addInputInventory(v2: V2World, update: CompanyWeekUpdate, baseComp: Com
       valueLocal: addedValueLocal,
       entersServiceWeek: week + commissioningLeadWeeksOf(subUnitId),
     });
+    arrivePlant(baseComp.id, addedValueLocal); // §3.26-f-iii: W6's queue leg
     // W4: as GOODS the machine is consumed on receipt — it becomes plant, not stock.
     consumeGoods(baseComp.region, subUnitId, addedUnits);
     return;

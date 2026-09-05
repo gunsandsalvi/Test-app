@@ -10,6 +10,7 @@
  * engine2 columns (tranches first, then lots, then the firm scalars) without touching the stage.
  */
 
+import { commissionPlant, retirePlant, scrapPlant } from '../engine/ledger/plant-ledger';
 import type { PrimarySettlement } from '../engine/simulation/stages/context';
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
 import { equityInstrumentId } from '../domain/instrument-keys';
@@ -711,7 +712,11 @@ export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapi
   comp.mothballedPpeShare = cap.retirementWrites.mothballedPpeShare;
   comp.mothballedStreakWeeks = cap.retirementWrites.mothballedStreakWeeks;
   // §3.26-f-ii — the scrap retires the oldest vintages first, off the register.
-  if (cap.scrapWrites) comp.plant = scrapPlantShare(comp.plant, cap.scrapWrites.scrappedShare, nextWeek).plant;
+  if (cap.scrapWrites) {
+    const scrapped = scrapPlantShare(comp.plant, cap.scrapWrites.scrappedShare, nextWeek);
+    comp.plant = scrapped.plant;
+    scrapPlant(comp.id, scrapped.scrappedCostLocal); // §3.26-f-iii: a write-off is a recorded transformation
+  }
 }
 
 /** §7.325 W2 — the fields a worker STRIPS from its A result before postMessage (functions,
@@ -1920,6 +1925,10 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
   return (comp: Company, row: number, pre?: BackCoreOut): Company => {
     if (!isActiveCompany(comp)) {
+      // §3.26-f-iii — a firm that died this week keeps the capital that landed this week on its
+      // construction queue (the estate holds it); dropped here, it arrived and then never existed.
+      const landed = companyUpdates[d.backLanes.ticker[row]]?.capexUnderConstruction;
+      if (landed && landed.length > 0) comp.assetsUnderConstruction = [...(comp.assetsUnderConstruction ?? []), ...landed];
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
     }
     const core = pre ?? runBackCore(comp, row, d);
@@ -1930,7 +1939,12 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // §3.26-f-ii — THE REGISTER IS THE ROLL-FORWARD: what wore out this week leaves it, what
     // entered service joins it as this week's vintage at the firm's own life (the scrap, if any,
     // already landed through `applyCapCompWrites`). Gross, net and the charge are reads of it.
-    const newPlant = commissionVintage(retireWornPlant(comp.plant, nextWeek).plant, capexCommissionedThisWeekLocal, nextWeek, usefulLifeYearsOf(comp));
+    const worn = retireWornPlant(comp.plant, nextWeek);
+    const newPlant = commissionVintage(worn.plant, capexCommissionedThisWeekLocal, nextWeek, usefulLifeYearsOf(comp));
+    // §3.26-f-iii — both are transformations on the plant ledger, so W6 closes: what wore out
+    // left the register, what entered service left the queue and joined it.
+    retirePlant(comp.id, worn.retiredCostLocal);
+    commissionPlant(comp.id, capexCommissionedThisWeekLocal);
     const TS = v2.tranches;
     const update = weekUpdate;
     let buybacksThisWeek = buybacksFromCore;

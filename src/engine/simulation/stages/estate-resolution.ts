@@ -14,7 +14,8 @@
  * goods — and the discount a buyer takes is the return it needs for the time it is tied up.
  */
 
-import { plantNetLocal, slicePlant, mergePlant } from '../../../domain/plant';
+import { plantNetLocal, slicePlant, mergePlant, retireWornPlant } from '../../../domain/plant';
+import { movePlant, retirePlant, abandonPlant } from '../../ledger/plant-ledger';
 import { tradeInvoicesOf } from '../../ledger/contract-ledger';
 import { assertNever } from '../../../domain/defect';
 import { bankParty, bankSecuritiesParty, ccpParty, companyParty, companyPartyOf } from '../../../domain/party';
@@ -241,10 +242,21 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     const ppeWeeks = Math.max(1, regionalPpeAbsorptionWeeks(ctx, index, estate.regionId));
     // §3.26-f-ii — the estate's plant is the dead firm's register, re-read each week like its
     // stock and its invoices; what the programme's last week cannot sell is abandoned off it.
+    if (comp) {
+      // The dead firm's register still wears while the workout runs (no rebuild retires it):
+      // what wore out this week leaves it here, on the ledger, so W6 closes for an estate too.
+      const worn = retireWornPlant(comp.plant, ctx.nextWeek);
+      comp.plant = worn.plant;
+      retirePlant(comp.id, worn.retiredCostLocal);
+    }
     estate.assets.ppeLocal = comp ? plantNetLocal(comp.plant, ctx.nextWeek) : 0;
     const ppeOfferedLocal = estate.assets.ppeLocal / weeksLeft(ppeWeeks);
     const plant = sellPlantToBidders(ctx, estate, comp, ppeOfferedLocal);
-    if (weeksLeft(ppeWeeks) <= 1 && comp) comp.plant = [];
+    if (weeksLeft(ppeWeeks) <= 1 && comp) {
+      // §3.26-f-iii — abandoned, on the ledger: a scrap is not a sale to nobody.
+      abandonPlant(comp.id, comp.plant.reduce((a, v) => a + v.costLocal, 0));
+      comp.plant = [];
+    }
     estate.assets.ppeLocal = comp ? plantNetLocal(comp.plant, ctx.nextWeek) : 0;
     thisWeek.ppeSoldLocal += plant.soldLocal;
     thisWeek.plantPriceOfBook = plant.priceOfBook;
@@ -416,6 +428,8 @@ function sellPlantToBidders(
     // book; `takenLocal` is net book, the unit the auction cleared in.
     const remainingNetLocal = plantNetLocal(comp.plant, ctx.nextWeek);
     const split = slicePlant(comp.plant, remainingNetLocal > 0 ? Math.min(1, takenLocal / remainingNetLocal) : 0);
+    // §3.26-f-iii — the move is a PLANT wire at the price of book it cleared at.
+    movePlant(companyPartyOf(estate.companyId), companyParty(peer), split.taken, takenLocal * price, 'estate plant sold at auction');
     peer.plant = mergePlant(peer.plant, split.taken);
     comp.plant = split.kept;
     estate.lastWeek?.buyerIds.push(peer.id);

@@ -551,16 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-f-iii. **THE PLANT WIRE, and W6.** *(the wire follows the decision.)* A `PLANT` asset kind in
-    `ASSET_KINDS` (`wire.ts:22` carries `HOUSE` and no plant); every move of a vintage between
-    parties — the estate's sale, a merger, a spin-off, a resolution — is a wire of that kind at
-    the price it was struck, and commissioning, wear-out and scrap are TRANSFORMATIONS recorded
-    on the journal the way `goods-ledger.ts` records production and scrappage. `W6 wires
-    reproduce the plant` (`audit/wires.ts`): per firm, Δ(gross plant) = commissioned − retired −
-    scrapped + wires in − wires out, at W4's dust rule (a share of the gross flow, never of the
-    stock) — and the construction queue is capital not yet plant, so a lot that arrives, moves at
-    a merger or a spin-off (26-f-ii moves it), or is commissioned is a leg of the same identity.
-    Closes 11e's "the seed and every birth assign `grossPPELocal` with no wire".
 26-f-iv. **A VINTAGE HAS A KIND.** (the-capital-programme A4, A5.) A vintage is specific in
     time — dated, lived — and in nothing else: `PlantVintage` carries no record of the capital
     good it was made from, so a merger moves a steel mill's vintages into a software firm and
@@ -1372,6 +1362,31 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-f-iii — THE PLANT WIRE, AND W6.** The wire follows the decision. `ASSET_KINDS` carries
+  `PLANT` (appended last, so every earlier journal's kind ids stand): a move of plant between two
+  parties is a numbered wire in units of COST — the asset `PLANT` for vintages in service,
+  `PLANT_QUEUE` for capital that has arrived and is not yet plant — at the money per unit of cost
+  it was struck at (`ledger/plant-ledger.ts:movePlant`, `movePlantQueue`; `wire-world.ts`
+  resolves the two assets). Every move 26-f-ii made is one: the estate's sale at the cleared price
+  of book, a spin-off's carve-out (after the spin-off is admitted as a party), a merger's and a
+  bank resolution's transfer, and a birth's carve-out from its pool (a `SEGMENT` → firm wire, the
+  same shape as its opening balance — 11e's "every birth assigns plant with no wire"). What is not
+  a move is a TRANSFORMATION on the same journal per firm (`plantFlows`): commissioning and
+  wear-out at the rebuild, the scrap in `applyCapCompWrites`, a workout's abandonment and the dead
+  firm's weekly wear (the estate stage retires it — no rebuild does), a capital good's landing
+  (`05-unit-bidding.ts`, `goods-arrival.ts`), and an FDI subsidiary's MINTED opening plant
+  (`bornPlant`: no party held it, so the minting is recorded and stays visible — a greenfield build
+  should buy its plant, 20d-iv's shape). `summarizeWires` nets the wires per firm
+  (`plantNetCostByCompany`, `queueNetCostByCompany`) and carries the flows; the audit's snapshot
+  reads every firm's gross plant and queue in cost (`plantCostByCompany`, `queueCostByCompany`);
+  `audit/wires.ts` W6 closes both lines per firm every week (`plantIdentityGaps`, pure):
+  Δ(gross plant) = commissioned − retired − scrapped − abandoned + born + wires in − wires out, and
+  Δ(queue) = arrived − commissioned + queue wires, at W4's dust rule. A firm that dies this week
+  keeps the capital that landed this week on its queue (the rebuild's early return dropped it:
+  arrived, then never existed). the-capital-programme D1/D3 re-cited; money-and-settlement W1–W6.
+  `test/plant-ledger.test.ts` (the nets and the flows reach the summary; the identity closes on
+  them and names the firm and the side when it does not). Gates green; no run (rule 11).
 
 **26-f-ii — PLANT IS DATED VINTAGES, AND THE SHEET READS THEM.** The decision 26-f asked for.
   `Company.plant: PlantVintage[]` (`domain/plant.ts`): one vintage per commissioning — what it

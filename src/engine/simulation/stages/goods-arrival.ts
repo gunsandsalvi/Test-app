@@ -12,6 +12,7 @@
  * whose inputs have not arrived is constrained by the machinery stage 08 already has.
  */
 
+import { arrivePlant } from '../../ledger/plant-ledger';
 import { GameState } from '../../../types';
 import { asTicker } from '../../../domain/ids';
 import { companyParty, companyPartyOf } from '../../../domain/party';
@@ -125,6 +126,7 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
           valueLocal: shipment.units * shipment.landedCostPerUnit,
           entersServiceWeek: ctx.nextWeek + commissioningLeadWeeksOf(shipment.subUnitId),
         });
+        arrivePlant(buyer.id, shipment.units * shipment.landedCostPerUnit); // §3.26-f-iii: W6's queue leg
       }
       arrivedUnits += shipment.units;
       // A machine becomes plant and an operating purchase is used on landing —

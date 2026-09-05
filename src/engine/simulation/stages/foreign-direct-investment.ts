@@ -24,6 +24,8 @@
  * triggered the FDI is the mechanism that completes it.
  */
 
+import { bornPlant } from '../../ledger/plant-ledger';
+import { plantGrossLocal } from '../../../domain/plant';
 import { riskAversionOf } from '../../../domain/preferences';
 import { registerCompanyEquity } from '../../ledger/instrument-ledger';
 import { companyParty } from '../../../domain/party';
@@ -159,6 +161,10 @@ export function runForeignDirectInvestment(
       // the instrument index, before its first wire.
       admitParty(companyParty(sub));
       registerCompanyEquity(ctx.v2, sub);
+      // §3.26-f-iii — the subsidiary's opening plant is MINTED: no party held it before, and the
+      // parent's money only funds the balance. Recorded as born, so W6 closes and the minting
+      // stays visible; a greenfield build should buy its plant (§3 20d-iv's shape).
+      bornPlant(sub.id, plantGrossLocal(sub.plant, nextWeek));
       pay(ctx, {
         payer: companyParty(comp),
         payee: companyParty(sub),

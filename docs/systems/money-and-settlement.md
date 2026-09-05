@@ -153,7 +153,7 @@ checked by `scripts/check-atlas.sh`.
 ## 3. THE DIFF
 
 The tree's own header says to judge this layer on D, E and F. **D is clean** — every asset move is
-a numbered wire, `activeWireJournal()` throws when there is none, and W1–W5 reconcile the four
+a numbered wire, `activeWireJournal()` throws when there is none, and W1–W6 reconcile the four
 stores against the journal. **F is clean.** The findings are all in E, and they are one finding.
 
 ### ❌ E1 / ⚠️ E1.a / B3.a / B3.b — NOBODY CAN FAIL TO PAY, BECAUSE CREDIT IS UNCONDITIONAL
