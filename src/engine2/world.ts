@@ -103,6 +103,11 @@ export interface PersistentAccounts {
   keyRef: RefColumn<AccountRef>;
   /** The row's balance, IN THE ROW'S OWN CURRENCY. */
   balance: Float64Array;
+  /** §3.13-BOOK d5b — the part of this row's balance under a LIEN: cash the party only HOLDS —
+   *  stock-loan collateral it must hand back when the shares do. Written by the loan book's
+   *  publish (`contract-ledger.ts:publishSecurityLoanBook`), counted out of every spendable
+   *  read. 0 = the whole balance is the party's own. */
+  lien: Float64Array;
   /** Which money this row holds, as an index into CURRENCY_CODES. */
   currencyId: Int8Array;
   rowByKeyRef: Map<AccountRef, number>;
@@ -141,7 +146,7 @@ export type ReadonlyAccounts = {
 export function newPersistentAccounts(): PersistentAccounts {
   const cap = 1 << 12;
   return {
-    n: 0, keyRef: newRefColumn<AccountRef>(cap), balance: new Float64Array(cap), currencyId: new Int8Array(cap),
+    n: 0, keyRef: newRefColumn<AccountRef>(cap), balance: new Float64Array(cap), lien: new Float64Array(cap), currencyId: new Int8Array(cap),
     rowByKeyRef: new Map<AccountRef, number>(), rowsByPartyRef: new Map<PartyKeyRef, number[]>(), homeByPartyRef: new Map<PartyKeyRef, number>(), bankRowsByParty: new Map<PartyKeyRef, Map<string, number>>(),
   };
 }

@@ -30,7 +30,6 @@
  */
 
 import { RegionId } from '../../../types';
-import { securityLoanBookOf } from '../../ledger/contract-ledger';
 import { buildAccountMirror, applySettledRow, projectBooks, settledTallies, entityCashOf } from '../../ledger/accounts';
 import { WeeklyStepContext } from './context';
 
@@ -45,7 +44,7 @@ import { activeWireJournal, wirePush, MONEY_ASSET_ID_BY_CURRENCY, ASSET_KINDS } 
 import { CurrencyCode, NUMERAIRE, currencyOf } from '../../../domain/geography';
 import { convert } from '../../../domain/currency';
 import { CURRENCY_ID, currencyOfId } from '../../../engine2/world';
-import { homeCurrencyOf } from '../../ledger/accounts';
+import { homeCurrencyOf, partyLienLocal } from '../../ledger/accounts';
 const MONEY_KIND_ID = ASSET_KINDS.indexOf('MONEY');
 import { PaymentCategory, categoryOfReason } from '../../ledger/payment-category';
 import { banksOf } from '../../../domain/company';
@@ -350,31 +349,15 @@ export function pendingSettlementLocal(ctx: WeeklyStepContext, party: PartyRef):
 
 /**
  * STOCK-LOAN COLLATERAL A LENDER HOLDS IS NOT ITS MONEY TO SPEND. A fund that lends
- * shares receives the borrower's cash and must hand it back when the shares return; it sits in
- * `cashLocal` beside the fund's own balance, and every book that sized a bid on `cash + pending`
+ * shares receives the borrower's cash and must hand it back when the shares return; it sits on
+ * the fund's account beside its own balance, and every book that sized a bid on `cash + pending`
  * spent it — the small-cap ETF bought equity with it, redeemed it away in kind, and then ran
- * ~10M under for fifteen weeks returning collateral it no longer had. Memoised per loan-book
- * array (the lending stage rebuilds the array when it writes).
+ * ~10M under for fifteen weeks returning collateral it no longer had. §3.13-BOOK d5b: the account
+ * row itself says what of its balance is only held (`accounts.ts:partyLienLocal`) — the loan
+ * book's publish writes the lien, and this read no longer sums the book after the fact.
  */
-const collateralHeldByBook = new WeakMap<object, Map<string, number>>();
 export function stockLoanCollateralHeldLocal(ctx: WeeklyStepContext, entityId: EntityId): number {
-  let heldLocal = 0;
-  // §3.13-BOOK d4c-iii: the store's rows, memoised per epoch — the array identity keys the memo.
-  for (const regionId of Object.keys(ctx.updatedRegions) as RegionId[]) {
-    const book = securityLoanBookOf(ctx.v2, regionId);
-    if (book.length === 0) continue;
-    let byLender = collateralHeldByBook.get(book);
-    if (!byLender) {
-      byLender = new Map<string, number>();
-      for (const loan of book) {
-        if (loan.lender.kind !== 'INSTITUTION') continue;
-        byLender.set(loan.lender.id, (byLender.get(loan.lender.id) ?? 0) + Math.max(0, loan.collateralLocal));
-      }
-      collateralHeldByBook.set(book, byLender);
-    }
-    heldLocal += byLender.get(entityId) ?? 0;
-  }
-  return heldLocal;
+  return partyLienLocal(ctx.v2, { kind: 'INSTITUTION', id: entityId });
 }
 
 /** What an institution can put behind a bid this week: its balance, plus what settlement already

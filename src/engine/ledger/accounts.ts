@@ -67,6 +67,7 @@ function growPersistent(a: PersistentAccounts): void {
   const cap = a.keyRef.length * 2;
   const k = newRefColumn<AccountRef>(cap); k.set(a.keyRef); a.keyRef = k;
   const b = new Float64Array(cap); b.set(a.balance); a.balance = b;
+  const l = new Float64Array(cap); l.set(a.lien); a.lien = l;
   const c = new Int8Array(cap); c.set(a.currencyId); a.currencyId = c;
 }
 
@@ -171,6 +172,35 @@ export function heldCurrenciesOf(v2: V2World, party: PartyRef): { currency: Curr
   const rows = ref < 0 ? undefined : v2.accounts.rowsByPartyRef.get(ref);
   if (!rows) return [];
   return rows.map((r) => ({ currency: currencyOfId(v2.accounts.currencyId[r]), balance: v2.accounts.balance[r] }));
+}
+
+/**
+ * §3.13-BOOK d5b — THE LIEN ON AN ACCOUNT. What of a row's balance the party only holds: the
+ * stock-loan collateral it received and must return. One writer — the loan book's publish sets
+ * every lender's lien, per currency, to the collateral its open loans carry — and one read every
+ * spendable figure subtracts (`settlement.ts:stockLoanCollateralHeldLocal`).
+ */
+export function accountLienOf(v2: V2World, party: PartyRef, currency: CurrencyCode): number {
+  const r = accountRowOf(v2, party, currency);
+  return r >= 0 ? v2.accounts.lien[r] : 0;
+}
+
+/** Set the lien on the party's row in one currency; a lien on a money the party has never held
+ *  opens the row at zero, the way the first payment in that money would. */
+export function setAccountLien(v2: V2World, party: PartyRef, currency: CurrencyCode, amount: number): void {
+  if (!(amount >= 0) || !Number.isFinite(amount)) throw new Error(`ENGINE DEFECT: lien of ${amount} on ${accountKey(party, currency)}`);
+  const r = amount > 0 ? ensureAccount(v2, party, currency) : accountRowOf(v2, party, currency);
+  if (r >= 0) mutableAccounts(v2).lien[r] = amount;
+}
+
+/** Every lien on the party's rows, summed in each row's own units — what its spendable reads net. */
+export function partyLienLocal(v2: V2World, party: PartyRef): number {
+  const ref = partyKeyRefOf(v2, partyKey(party));
+  const rows = ref < 0 ? undefined : v2.accounts.rowsByPartyRef.get(ref);
+  if (!rows) return 0;
+  let total = 0;
+  for (const r of rows) total += v2.accounts.lien[r];
+  return total;
 }
 
 /** What the party holds, in the money it keeps its books in. */

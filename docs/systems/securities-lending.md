@@ -93,7 +93,7 @@ checked by `scripts/check-atlas.sh`.
 | C2 both sides marked, and the difference is posted | `src/engine/simulation/stages/securities-lending.ts:marginCallLocal` | ✅ |
 | C2.a the margin flow is real money between named parties | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
 | C3 cash collateral is reinvested, and that is a position | `src/engine/simulation/stages/repo-clearing.ts:CASH_SLEEVE_OVERNIGHT_SHARE` | ⚠️ |
-| C4 FORBID no collateral that is not held | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
+| C4 FORBID no collateral that is not held | `src/engine/simulation/stages/settlement.ts:pay` · `src/engine/ledger/accounts.ts:setAccountLien` · `src/engine/simulation/stages/settlement.ts:stockLoanCollateralHeldLocal` | ✅ |
 | **C5 rehypothecation, and the chain must be traceable** | — | ❌ |
 | D1 the borrower can fail to return; the lender keeps the collateral | `src/engine/simulation/stages/securities-lending.ts:buyInSharesByBorrower` | ⚠️ |
 | D2 a squeeze is possible | `src/engine/simulation/stages/07e-equity-clearing.ts:buyInShares` | ✅ |

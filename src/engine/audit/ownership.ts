@@ -1,7 +1,9 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
-import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf, liveObligationPartiesOf } from '../ledger/contract-ledger';
+import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf, liveObligationPartiesOf, securityLoanBookOf } from '../ledger/contract-ledger';
+import { accountLienOf, heldCurrenciesOf } from '../ledger/accounts';
+import type { CurrencyCode } from '../../domain/geography';
 import { deskRowsOf } from '../desk-register';
 import { deskBankIdOf } from '../ledger/holdings-ledger';
 import { issuedSharesOf, marketCapAt } from '../../engine2/instruments';
@@ -581,8 +583,38 @@ function o12(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
+/**
+ * O13 — §3.13-BOOK d5b. AN ACCOUNT LIEN IS WHAT THE LOAN BOOK'S COLLATERAL SAYS. Per lender and
+ * currency, the lien on the lender's account equals the collateral its open stock loans carry:
+ * the loan book is the one writer of the liens, so a gap is a write that bypassed it.
+ */
+function o13(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const v2 = ensureV2(state);
+  const heldByLender = new Map<string, Map<CurrencyCode, number>>();
+  REGION_IDS.forEach((r) => securityLoanBookOf(v2, r).forEach((l) => {
+    if (l.lender.kind !== 'INSTITUTION') return;
+    const byCurrency = heldByLender.get(l.lender.id) ?? new Map<CurrencyCode, number>();
+    byCurrency.set(l.currency, (byCurrency.get(l.currency) ?? 0) + Math.max(0, l.collateralLocal));
+    heldByLender.set(l.lender.id, byCurrency);
+  }));
+  let off = 0, offLocal = 0;
+  (state.institutionalEntities ?? []).forEach((e) => {
+    const held = heldByLender.get(e.id) ?? new Map<CurrencyCode, number>();
+    // Every money the lender holds a lien in, and every money the book says it should.
+    const currencies = new Set<CurrencyCode>(held.keys());
+    heldCurrenciesOf(v2, { kind: 'INSTITUTION', id: e.id }).forEach((row) => currencies.add(row.currency));
+    currencies.forEach((currency) => {
+      const gap = Math.abs(accountLienOf(v2, { kind: 'INSTITUTION', id: e.id }, currency) - (held.get(currency) ?? 0));
+      if (gap > 1) { off++; offLocal += gap; }
+    });
+  });
+  if (off) out.push({ family: 'O', check: 'O13 account liens equal collateral held', week, usd: offLocal, message: `${off} lender accounts (${B(offLocal)}) carry a lien that disagrees with the stock-loan book's collateral` });
+  return out;
+}
+
 export function auditOwnership(state: GameState, week: number): AuditFinding[] {
-  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week)];
+  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week), ...o13(state, week)];
 }
 export type { RegionId };
 

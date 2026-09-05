@@ -20,6 +20,8 @@ import type { WeeklyStepContext } from '../simulation/stages/context';
 import type { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
 import { type RepoContract, encumberedFaceByBond } from '../../domain/repo';
 import { setLien } from './holdings-ledger';
+import { setAccountLien } from './accounts';
+import { REGION_IDS, type CurrencyCode } from '../../domain/geography';
 import type { SecurityLoan } from '../../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../../domain/prime-brokerage';
 import { bankPartyOf, companyPartyOf } from '../../domain/party';
@@ -164,8 +166,22 @@ export function securityLoanBookOf(v2: V2World, regionId: RegionId): SecurityLoa
   return book;
 }
 
-/** The region's stock-loan book, as the session leaves it. */
+/** §3.13-BOOK d5b — the collateral each lender holds, by currency, as a book states it. */
+function collateralByLender(book: readonly SecurityLoan[], into = new Map<string, Map<CurrencyCode, number>>()): Map<string, Map<CurrencyCode, number>> {
+  book.forEach((l) => {
+    if (l.lender.kind !== 'INSTITUTION') return;
+    const byCurrency = into.get(l.lender.id) ?? new Map<CurrencyCode, number>();
+    byCurrency.set(l.currency, (byCurrency.get(l.currency) ?? 0) + Math.max(0, l.collateralLocal));
+    into.set(l.lender.id, byCurrency);
+  });
+  return into;
+}
+
+/** The region's stock-loan book, as the session leaves it. §3.13-BOOK d5b: the publish is the one
+ *  writer of the lenders' ACCOUNT liens — every lender the old or the new book names has its rows'
+ *  liens set to the collateral its open loans, in every region, now carry in each money. */
 export function publishSecurityLoanBook(v2: V2World, regionId: RegionId, book: SecurityLoan[]): void {
+  const before = collateralByLender(securityLoanBookOf(v2, regionId));
   const rows = book.map((l) => {
     if (l.regionId !== regionId) return defect(`stock loan ${l.id} of ${l.regionId} published on ${regionId}'s book`);
     resolvePartyRef(l.lender, `stock loan ${l.id} lender`); resolvePartyRef(l.borrower, `stock loan ${l.id} borrower`);
@@ -175,6 +191,14 @@ export function publishSecurityLoanBook(v2: V2World, regionId: RegionId, book: S
     return r;
   });
   relinkKindInRegion(v2, 'STOCK_LOAN', regionId, rows);
+  const touched = new Set([...before.keys(), ...collateralByLender(book).keys()]);
+  if (touched.size === 0) return;
+  const now = new Map<string, Map<CurrencyCode, number>>();
+  REGION_IDS.forEach((r) => collateralByLender(securityLoanBookOf(v2, r), now));
+  touched.forEach((lenderId) => {
+    const was = before.get(lenderId) ?? new Map<CurrencyCode, number>(), is = now.get(lenderId) ?? new Map<CurrencyCode, number>();
+    new Set([...was.keys(), ...is.keys()]).forEach((currency) => setAccountLien(v2, { kind: 'INSTITUTION', id: lenderId as EntityId }, currency, is.get(currency) ?? 0));
+  });
 }
 
 /**

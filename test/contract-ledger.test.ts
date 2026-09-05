@@ -12,6 +12,7 @@ import { governmentIssuer } from '../src/domain/entity-keys';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { issueHolding, transferHolding, retireHolding, lienUnitsOf } from '../src/engine/ledger/holdings-ledger';
 import { bankPartyOf } from '../src/domain/party';
+import { accountLienOf, partyLienLocal } from '../src/engine/ledger/accounts';
 import { bookTradeInvoices, tradeInvoicesOf, settleTradeInvoices, commitCapital, lpCommitmentsOf, drawCommitment, returnCommitment, liveObligationPartiesOf, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, publishPrimeBrokerageBook, primeBrokerageBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
 import type { WeeklyStepContext } from '../src/engine/simulation/stages/context';
 import type { DerivativeContract } from '../src/domain/derivatives/contract';
@@ -121,10 +122,22 @@ test('§3.13-BOOK d4c-iii: a stock loan is a row of the contract store, recall w
     };
     publishSecurityLoanBook(v2, 'USA', [loan]);
     assert.deepEqual(securityLoanBookOf(v2, 'USA'), [loan]);
+    // §3.13-BOOK d5b: the collateral the lender holds is a lien on its account in the loan's money.
+    assert.equal(accountLienOf(v2, lender, 'USD'), 20_000);
+    assert.equal(partyLienLocal(v2, lender), 20_000);
+    assert.equal(partyLienLocal(v2, borrower), 0, 'the borrower posted it; nothing of its own is bound');
     const recalled: SecurityLoan = { ...loan, id: `${loan.id}-R`, shares: 400, collateralLocal: 8_000, recalledWeek: 3 };
     const rest: SecurityLoan = { ...loan, shares: 600, collateralLocal: 12_000 };
     publishSecurityLoanBook(v2, 'USA', [recalled, rest]);
     assert.deepEqual(securityLoanBookOf(v2, 'USA'), [recalled, rest]);
+    assert.equal(accountLienOf(v2, lender, 'USD'), 20_000, 'two loans, one lien: their collateral summed');
+    // A second region's loan in another money is a second lien; closing one leaves the other.
+    publishSecurityLoanBook(v2, 'EUR', [{ ...loan, id: 'EUR-SBL-1', regionId: 'EUR', instrumentId: asInstrumentId('EUR_ACME'), currency: 'EUR', collateralLocal: 5_000 }]);
+    assert.equal(accountLienOf(v2, lender, 'EUR'), 5_000);
+    assert.equal(partyLienLocal(v2, lender), 25_000);
+    publishSecurityLoanBook(v2, 'USA', []);
+    assert.equal(accountLienOf(v2, lender, 'USD'), 0, 'the loans returned; the collateral is the lender\'s to spend no longer — it went back');
+    assert.equal(accountLienOf(v2, lender, 'EUR'), 5_000, 'another region\'s book is untouched');
     assert.throws(() => publishSecurityLoanBook(v2, 'USA', [{ ...loan, id: 'x', borrower: { kind: 'INSTITUTION', id: asEntityId('INST-GHOST') } }]), /no entity, region or bank/);
   } finally {
     setActiveWireWorld(undefined);

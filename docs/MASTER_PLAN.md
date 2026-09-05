@@ -514,11 +514,9 @@ written from here):
        `UnitOfMeasure` without money) is in §9. What is left, in order:
     d5. **A CLAIM ON A POSITION IS A LIEN ON A LOT** (added 2026-09-04; split 2026-09-05, found
         writing it: the three claims bind three different stores, and only the first binds a
-        register row). d5a (repo pledges are liens on the sovereign rows) is in §9. Depends on
-        (f)'s lots for identified assets; fungible ones carry it now. What is left, in order:
-    d5b. **STOCK-LOAN CASH COLLATERAL IS A LIEN ON THE LENDER'S ACCOUNT.**
-        `settlement.ts:stockLoanCollateralHeldLocal` sums the loan book and every spendable read
-        nets it after the fact; the account row itself says what of its balance is only held.
+        register row). d5a (repo pledges are liens on the sovereign rows) and d5b (stock-loan
+        collateral is a lien on the lender's account) are in §9. Depends on (f)'s lots for
+        identified assets; fungible ones carry it now. What is left:
     d5c. **POSTED INITIAL MARGIN IS A LIEN ON THE ACCOUNT THAT HOLDS IT.**
         `fxDealerBook.initialMarginHeldLocal` is a scalar on the desk; the margin it holds is a
         lien on its securities account, so `the-derivative-layer.md` D3 ("held, not consumed") is
@@ -1709,6 +1707,15 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d5b — STOCK-LOAN CASH COLLATERAL IS A LIEN ON THE LENDER'S ACCOUNT.** The account
+store gained one column (`world.ts:PersistentAccounts.lien`): the part of a row's balance the
+party only holds. The loan book is its one writer — `publishSecurityLoanBook` sets every lender
+the old or new book names to the collateral its open loans carry, per money, across every
+region's book — and `settlement.ts:stockLoanCollateralHeldLocal` reads the lender's rows
+(`accounts.ts:partyLienLocal`) instead of summing the book after the fact and memoising the sum
+on the array. Its thirty-six callers (every spendable, budget and overdraft read) are unchanged.
+`O13` checks lien = collateral per lender and currency. Byte-identical. Gates green; no run.
 
 **13-BOOK d5a — A REPO PLEDGE IS A LIEN ON THE ROW IT BINDS.** The register gained one column
 (`holdings.ts:lienUnits`): the units of a row under a lien. The repo book is its one writer —
