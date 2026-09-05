@@ -34,9 +34,12 @@ export function generateWeeklyNews(
     const surpriseSign = surprisePctVal > 0 ? '+' : '';
     const surpriseStr = `${surpriseSign}${(surprisePctVal * 100).toFixed(1)}%`;
 
-    // Headline format explicitly requested:
-    // [EARNINGS] {Ticker} reports EPS of ${ActualEPS} vs. ${ConsensusEPS} est. ({Surprise > 0 ? '+' : ''}{SurprisePercent}%) - {GuidanceSnippet}
-    const headline = `[EARNINGS] ${er.ticker} reports EPS of $${er.actualEps.toFixed(2)} vs. $${er.consensusEps.toFixed(2)} est. (${surpriseStr}) - ${er.guidanceSnippet}`;
+    // §3.20d-iii: the guidance in the headline is the management's own number — what it
+    // delivered against what it guided, and what it guides now.
+    const guidanceText = `margin ${(er.deliveredEbitdaMargin * 100).toFixed(1)}%`
+      + (er.guidedEbitdaMargin !== undefined ? ` vs ${(er.guidedEbitdaMargin * 100).toFixed(1)}% guided` : '')
+      + (er.nextGuidedEbitdaMargin !== undefined ? `; guides ${(er.nextGuidedEbitdaMargin * 100).toFixed(1)}%` : '');
+    const headline = `[EARNINGS] ${er.ticker} reports EPS of $${er.actualEps.toFixed(2)} vs. $${er.consensusEps.toFixed(2)} est. (${surpriseStr}) - ${guidanceText}`;
 
     const tradeShortcut: TradeableInstrument | undefined = comp
       ? {
@@ -58,7 +61,7 @@ export function generateWeeklyNews(
       id: `earn_${week}_${er.ticker}`,
       week,
       title: headline,
-      description: `${er.name} (${er.sector}, ${er.region}) reported quarterly results. ${er.guidanceSnippet}`,
+      description: `${er.name} (${er.sector}, ${er.region}) reported quarterly results: ${guidanceText}.`,
       category: 'EARNINGS',
       impactBadge: isBeat ? '[EARNINGS BEAT]' : isMiss ? '[EARNINGS MISS]' : '[EARNINGS IN-LINE]',
       impactRegion: er.region,

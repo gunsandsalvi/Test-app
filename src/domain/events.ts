@@ -38,7 +38,14 @@ export interface EarningsReport {
   actualEps: number;
   consensusEps: number;
   surprisePct: number;
-  guidanceSnippet: string;
+  /** §3.20d-iii — GUIDANCE IS THE MANAGEMENT'S OWN EXPECTATION, SAID OUT LOUD. The EBITDA margin
+   *  it delivered this quarter, the margin it guided at the last report (undefined at a first
+   *  report), the surprise against that guidance, and the margin it guides now — its adaptive
+   *  expectation of its own earnings over what it sells, the number the board judges it on. */
+  deliveredEbitdaMargin: number;
+  guidedEbitdaMargin?: number;
+  guidanceSurprisePct?: number;
+  nextGuidedEbitdaMargin?: number;
   sector: Sector;
   region: RegionId;
 }

@@ -1956,6 +1956,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       && !Number.isNaN(L8.earningsWeekModulo[row]) && L8.earningsWeekModulo[row] === currentWeekMod13;
     let lastEarningsSurprisePct = comp.lastEarningsSurprisePct;
     let lastManagementCommentary = comp.lastManagementCommentary;
+    let newGuidedEbitdaMargin = comp.guidedEbitdaMargin;
 
     let updatedConsensus = comp.dealerConsensus;
 
@@ -1973,18 +1974,21 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       const rawSurprise = epsDiff / Math.max(Math.abs(consensusEps), Math.abs(actualEps), 1.0);
       lastEarningsSurprisePct = round3(rawSurprise);
 
-      // Management commentary & guidance snippet generation
-      let guidanceSnippet: string;
-      if (lastEarningsSurprisePct > 0.05) {
-        guidanceSnippet = 'Management raises FY CapEx and operating margin guidance on strong forward demand.';
-        lastManagementCommentary = `CEO affirmed record operational throughput and upgraded full-year EPS guidance (+${(lastEarningsSurprisePct * 100).toFixed(1)}% surprise).`;
-      } else if (lastEarningsSurprisePct < -0.05) {
-        guidanceSnippet = 'Management moderates full-year revenue outlook and tightens working capital due to input cost pressures.';
-        lastManagementCommentary = `Management cited sector supply headwinds and moderated CapEx plans (${(lastEarningsSurprisePct * 100).toFixed(1)}% miss).`;
-      } else {
-        guidanceSnippet = 'Management reaffirms FY baseline guidance with stable unit economics and operating backlog.';
-        lastManagementCommentary = `In-line quarterly results with steady gross margins and stable backlog demand.`;
-      }
+      // §3.20d-iii: guidance is the management's own expectation, said out loud. What it
+      // delivered, against what it guided last time; and what it guides now — its adaptive
+      // expectation of its earnings (the labour stage's, the number the board judges it on)
+      // over what it sells. The three fixed snippets that stood in for this are gone.
+      const deliveredEbitdaMargin = newRevenue > 0 ? newEbitda / newRevenue : 0;
+      const guidedEbitdaMargin = comp.guidedEbitdaMargin;
+      const guidanceSurprisePct = guidedEbitdaMargin !== undefined
+        ? round3((deliveredEbitdaMargin - guidedEbitdaMargin) / Math.max(Math.abs(guidedEbitdaMargin), Math.abs(deliveredEbitdaMargin), 0.01))
+        : undefined;
+      const expectedLocal = L8.expectedEbitdaLocal[row];
+      const nextGuidedEbitdaMargin = Number.isFinite(expectedLocal) && newRevenue > 0 ? round3(expectedLocal / newRevenue) : undefined;
+      newGuidedEbitdaMargin = nextGuidedEbitdaMargin;
+      lastManagementCommentary = `Delivered an EBITDA margin of ${(deliveredEbitdaMargin * 100).toFixed(1)}%`
+        + (guidedEbitdaMargin !== undefined ? ` against the ${(guidedEbitdaMargin * 100).toFixed(1)}% it guided` : '')
+        + (nextGuidedEbitdaMargin !== undefined ? `; guides ${(nextGuidedEbitdaMargin * 100).toFixed(1)}% ahead.` : '.');
 
       ctx.earningsReportedThisTurn.push({
         ticker: L8.ticker[row],
@@ -1992,7 +1996,10 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         actualEps,
         consensusEps,
         surprisePct: lastEarningsSurprisePct,
-        guidanceSnippet,
+        deliveredEbitdaMargin: round3(deliveredEbitdaMargin),
+        guidedEbitdaMargin,
+        guidanceSurprisePct,
+        nextGuidedEbitdaMargin,
         sector: L8.sector[row],
         region: L8.region[row],
       });
@@ -2289,6 +2296,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // named here is silently dropped (which is exactly what happened first time).
     comp.offeredWageIndex = weekUpdate?.offeredWageIndex ?? comp.offeredWageIndex ?? 1.0;
     comp.expectedEbitdaLocal = weekUpdate?.expectedEbitdaLocal ?? comp.expectedEbitdaLocal;
+    comp.guidedEbitdaMargin = newGuidedEbitdaMargin;
     // §7.345 — last week's sales by line, for next week's production decision (no update = no sales).
     comp.lastWeekSalesUnitsBySubUnit = weekUpdate?.salesUnitsBySubUnit ?? {};
 

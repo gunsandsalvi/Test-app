@@ -218,8 +218,11 @@ derivation (called from `11-fiscal:781`) and writes claims the state does not su
   metrics, higher debt refinancing costs, and weakening operational EBITDA margins"*, for every
   downgrade, whatever caused it. `news-derivation.ts:150` writes the same event with the issuer's
   actual leverage, coverage, cash and cleared spread.
-- `stage08-back.ts:1943-1951` picks one of three fixed `guidanceSnippet` strings by surprise sign
-  and `newsGenerator:44` puts it in the headline as management's guidance.
+- *(closed 2026-09-05, §9.20d-iii)* `stage08-back.ts` picked one of three fixed `guidanceSnippet`
+  strings by surprise sign and `newsGenerator` put it in the headline as management's guidance.
+  Guidance is now the management's own number: the EBITDA margin it delivered against the one it
+  guided at its last report, and the one it guides now (`EarningsReport.nextGuidedEbitdaMargin`,
+  its adaptive expectation over what it sells — the number the board judges it on).
 
 Every one of these is a duplicate of a story the derivation already tells from the state — rule 4,
 and the stated version is the wrong one. **Step 15b (News slice 2)** is the natural home

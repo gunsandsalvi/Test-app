@@ -396,6 +396,8 @@ export interface Company {
   dealerConsensus?: ConsensusForecast;
   lastEarningsSurprisePct?: number;
   lastManagementCommentary?: string;
+  /** §3.20d-iii — the EBITDA margin management guided at its last report: its own expectation then. */
+  guidedEbitdaMargin?: number;
 
   /**
    * S5: last week's cash walk as an explicit ledger — every real dollar in or out of `cash`,

@@ -549,20 +549,6 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-20d-iii. **Guidance is the management's own expectation, published.** (20d — management is a state that decides — split per
-    rule 1.10: 20d-i the leverage policy and 20d-ii line exit are §9; risk appetite already IS the management's
-    `riskAversion` in every hurdle and buffer; growth-versus-margin orientation is the investment
-    project's hurdle and horizon — 37-COSTOFCAPITAL, where it is noted; acquisition intent is
-    the acquirer's own valuation — 37-MANDA, where it is noted; product-line entry is 20d-iv,
-    inserted after 37-COSTOFCAPITAL because entering a line is an investment project.)
-    `stage08-back.ts` picks one
-    of three fixed prose snippets by the sign of the EPS surprise and `newsGenerator.ts` puts it
-    in the headline as management's guidance. A management already HAS an expectation — the
-    adaptive `expectedEbitdaLocal` it is judged on at review — and guidance is that number
-    said out loud: the report carries the margin management guided and the margin it delivered,
-    the surprise is against the guidance as well as the dealers' consensus, and the three
-    snippets go. Small; 37-SURFACE then moves the story into the derivation with the rest.
-
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
 20-LLR-a. **THE CENTRAL BANK'S CLAIMS ON ITS BANKS ARE A BOOK, NOT SCALARS** (user, 2026-09-05:
@@ -1547,6 +1533,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20d-iii — GUIDANCE IS THE MANAGEMENT'S OWN EXPECTATION, PUBLISHED.** Step 20d is closed with this
+  (its six decisions, per rule 1.10: 20d-i, 20d-ii and this are §9; risk appetite already IS the management's
+  `riskAversion` in every hurdle and buffer; growth-versus-margin orientation is the investment
+  project's hurdle and horizon — 37-COSTOFCAPITAL, where it is noted; acquisition intent is
+  the acquirer's own valuation — 37-MANDA, where it is noted; product-line entry is 20d-iv, inserted after 37-COSTOFCAPITAL because entering a line is an investment project.) `stage08-back.ts` picked one of
+  three fixed prose snippets by the sign of the EPS surprise and `newsGenerator.ts` put it in the
+  headline as management's guidance. Now the report (`EarningsReport`) carries the EBITDA margin
+  the management delivered, the margin it guided at its last report (`Company.guidedEbitdaMargin`),
+  the surprise against that guidance, and the margin it guides ahead — `expectedEbitdaLocal`, its
+  own adaptive expectation of its earnings over what it sells, the number the board already judges
+  it on at review — and the commentary and headline say those numbers; the three snippets are
+  gone. `news-and-the-player-surface.md`'s bullet closed. Gates green; no run.
 
 **20d-ii — A PRODUCT LINE CAN BE EXITED.** A firm's `productLines` were fixed at the seed for life:
   the plant of an idle line was mothballed after the management's horizon and scrapped after four
