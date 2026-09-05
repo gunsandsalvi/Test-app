@@ -1193,6 +1193,12 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       institutionalClaimsLocal: prevHS.institutionalClaimsLocal,
       etfShares: prevHS.etfShares,
       etfHoldingsLocal: prevHS.etfHoldingsLocal,
+      // §3.13 C2.a — the direct-equity announcements etf-flows makes for NEXT week's 07e session.
+      // §7.41's trap, fourth time: the sale (§7.281) was announced at the end of one week and
+      // dropped here at the start of the next, before the session that executes it ever read it
+      // — read from the code, the household sector has never sold a share through that channel.
+      pendingDirectEquitySaleLocal: prevHS.pendingDirectEquitySaleLocal,
+      pendingDirectEquityPurchaseLocal: prevHS.pendingDirectEquityPurchaseLocal,
       // §7.41's trap, third time: this rebuild takes a FIXED FIELD LIST, so anything not named
       // here is dropped weekly. `mmfSharesLocal` was not named, so the household's money-fund claim
       // was destroyed every week and recreated from that week's diversion alone — while the fund

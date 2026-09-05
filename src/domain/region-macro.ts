@@ -251,6 +251,13 @@ export interface HouseholdState {
    * rhythm every ETF flow already follows. Zero (or absent) = nothing to sell.
    */
   pendingDirectEquitySaleLocal?: number;
+  /**
+   * §3.13 C2.a — THE DIRECT-EQUITY BUY CHANNEL's announcement, the sale's other half: the slice
+   * of this week's equity saving the sector puts into its own book (`domain/household-equity.ts`
+   * says how it is split), announced by etf-flows and bid by the next week's 07e session as an
+   * indexer, bounded there by the deposits above the buffer floor. Zero (or absent) = nothing.
+   */
+  pendingDirectEquityPurchaseLocal?: number;
   /** Marked value of the above, carried so net worth does not have to reach into the fund list. */
   etfHoldingsLocal: number;
   /**

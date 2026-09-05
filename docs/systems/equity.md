@@ -123,7 +123,7 @@ checked by `scripts/check-atlas.sh`.
 | C1.a VERIFY Σ held = shares outstanding | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | C1.b the free float is what is genuinely tradeable | `src/engine/simulation/stages/07e-equity-clearing.ts:heldByInstitutionsShares` | ✅ |
 | C2 holder classes hold for different reasons | `src/domain/institution-profiles.ts:INSTITUTION_PROFILES` | ✅ |
-| C2.a households, directly | `src/engine/ledger/holdings-ledger.ts:householdBookId` | ⚠️ |
+| C2.a households, directly | `src/engine/ledger/holdings-ledger.ts:householdBookId` · `src/domain/household-equity.ts:householdDirectPurchaseShares` · `src/engine/simulation/stages/07e-equity-clearing.ts:householdParticipant` | ✅ |
 | C2.b institutions with mandates | `src/domain/cross-border.ts:mandateWeightForIssuer` | ✅ |
 | C2.c index funds, which do not price | `src/engine/simulation/stages/etf-demand.ts:indexFundDemand` | ✅ |
 | **C2.d the issuer itself, via treasury shares** | — | ❌ |
@@ -253,21 +253,30 @@ one level out: `publicComparableEvMultiple` takes the median of `(marketCap + de
 across cleared names and then SETS the price of every private company, every LBO and every
 sponsor-to-sponsor sale. That is `private-equity.md` C5.a's finding and is recorded there.
 
-### ⚠️ A3 / C2.a / C5.a — READS THAT EXIST BUT ARE NOT THE ONE THE NODE ASKS FOR
+### ✅ C2.a — HOUSEHOLDS HOLD, SELL AND BID
 
-**A3**: a share's currency is its issuer's region's, read through `currencyOf(comp.region)` at
-every payment site — never a field on the instrument. That is §3 step 13c's subject exactly
-(*"an asset declares … `quoteCurrency`"`*), and it is **Already §3 step 13c**.
-**C2.a**: households now HOLD their listed equity — a register book per region
+Households HOLD their listed equity — a register book per region
 (`holdings-ledger.ts:householdBookId`), opened by wire at the seed with exactly the shares no named
 book held and moved only by trade since, walked by the corporate actions, consolidated and marked
 like anyone else's, and shown as a holder in the UI (§9.13-EQUITY). What it replaced was the
 register's RESIDUAL: `liveShares` minus what institutions and desks hold, recomputed from scratch
 by two different routes that could disagree, paid its dividends under a second name ("the public
-float"), and — being nobody's rows — invisible to every walk that scales or pays a holder. The node
-stays ⚠️ for the half that is left: households still have **no buy schedule**, so the largest
-holder class in the model is a one-way participant that can be forced to sell (§7.281) and can
-never bid. That is a mechanism, not a representation, and it is what C2.a will close on.
+float"), and — being nobody's rows — invisible to every walk that scales or pays a holder. And
+since §9.13 C2.a they BID: the equity slice of the week's saving splits between the broad fund and
+the sector's own book by the mix it already holds (`household-equity.ts:directShareOfEquitySaving`,
+a read of the register), the direct slice is announced by `etf-flows` and bid by the next 07e
+session as the indexer the coverage rule makes a household — no reservation, the budget across the
+float by value, bounded by the deposits above the buffer floor — and the fills move by
+`transferHolding` against the house in both directions with the cash leg settled on the HOUSEHOLD
+party. The sale channel (§7.281) is the same seat's other half, and the same commit found its
+announcement had been dropped weekly by the macro rebuild's fixed field list before the session
+that executes it read it (§7.41's trap, fourth time): both announcements are carried now.
+
+### ⚠️ A3 / C5.a — READS THAT EXIST BUT ARE NOT THE ONE THE NODE ASKS FOR
+
+**A3**: a share's currency is its issuer's region's, read through `currencyOf(comp.region)` at
+every payment site — never a field on the instrument. That is §3 step 13c's subject exactly
+(*"an asset declares … `quoteCurrency`"`*), and it is **Already §3 step 13c**.
 **C5.a**: the margin call on a levered equity holder is real money (`prime-brokerage.ts:158`) but
 an unmet one has no consequence — see `prime-brokerage.md` C3/C5, which owns it.
 

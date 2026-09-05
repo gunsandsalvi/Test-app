@@ -111,7 +111,7 @@ checked by `scripts/check-atlas.sh`.
 | D2 liabilities, and they are somebody's asset | `src/engine/simulation/stages/bank-lending.ts:HouseholdLoanPool` | ✅ |
 | **D3 net worth is D1 − D2, a read and never stored** | `src/engine/simulation/stages/household-balance-sheet.ts:netWorthLocal` | ⚠️ |
 | D4 it revalues, and the revaluation is not income | `src/engine/simulation/stages/household-balance-sheet.ts:priorNetWorthLocal` | ✅ |
-| D5 the portfolio allocation is a decision | `src/engine/simulation/stages/etf-flows.ts:equityShareOfSaving` | ✅ |
+| D5 the portfolio allocation is a decision | `src/engine/simulation/stages/etf-flows.ts:equityShareOfSaving` · `src/domain/household-equity.ts:directShareOfEquitySaving` | ✅ |
 | D5.a deposit vs money fund vs bills is a real substitution | `src/engine/simulation/stages/money-market-fund.ts:hhSharesLocal` | ❌ |
 | E1 it borrows for reasons | `src/engine/simulation/stages/bank-lending.ts:affordableLoanLocal` | ✅ |
 | E2 a lender decides to lend, on affordability and collateral | `src/engine/simulation/stages/bank-lending.ts:grantedLocal` | ✅ |
@@ -181,7 +181,9 @@ performs one file away.
 D5 itself is genuinely present: `etf-flows.ts:212` sets the equity share of this week's saving
 from `(earningsYield − depositYield) / earningsYield` — a real yield substitution, with a real
 seller on the way down (`:238-249`, sell the buffer first, then fund shares, then announce a
-direct-equity sale). That is the mechanism D5 asks for.
+direct-equity sale), and since §9.13 C2.a a buyer on the way up on both rungs: the equity slice
+splits between the broad fund and the sector's own book by the mix it already holds
+(`household-equity.ts:directShareOfEquitySaving`). That is the mechanism D5 asks for.
 
 The *cash* leg of the same choice does not exist. `hs.mmfSharesLocal` is written in exactly two
 places: `evolution.ts:1240` carries it forward unchanged, and `money-market-fund.ts:283` credits

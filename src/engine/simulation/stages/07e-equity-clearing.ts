@@ -50,7 +50,9 @@ import { fairValuePerShare, companyBookEquityLocal, companyNetInvestmentRate } f
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
-import { cashOf } from '../../ledger/accounts';
+import { cashOf, householdDepositsOf } from '../../ledger/accounts';
+import { householdBufferFloorLocal } from '../../macro/household-cohorts';
+import { householdDirectBudgetLocal, householdDirectPurchaseShares } from '../../../domain/household-equity';
 import { equityInstrumentId } from '../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../domain/ids';
 import { typeRefOf } from '../../../engine2/world';
@@ -340,6 +342,46 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       }
     }
 
+    // §3.13 C2.a — THE HOUSEHOLD DIRECT-EQUITY BUY CHANNEL, the seat's other half. Last week's
+    // etf-flows announced the slice of the week's equity saving the sector puts into its own book
+    // (`pendingDirectEquityPurchaseLocal`; `domain/household-equity.ts` says how it is split and
+    // sized). This session bids it as the indexer the coverage rule says a household is: no
+    // research desk, so no reservation (`indexFundDemand`), the budget across the region's float
+    // by value, full size at the reference price, and never more money than the deposits standing
+    // above the buffer floor the saving decision keeps. The sector's book is read whole, and every
+    // name it holds carries a schedule that at least holds it — the engine sells a prior holding
+    // that posts no schedule, which is the sale channel's device and not this one's.
+    const hhBuyAnnouncedLocal = Math.max(0, reg.householdState.pendingDirectEquityPurchaseLocal ?? 0);
+    if (householdParticipant === undefined && hhBuyAnnouncedLocal > 1) {
+      const budgetLocal = householdDirectBudgetLocal({
+        announcedLocal: hhBuyAnnouncedLocal,
+        depositsLocal: householdDepositsOf(ctx.v2, regionId),
+        bufferFloorLocal: householdBufferFloorLocal(reg.estimatedHouseholdIncomeLocal),
+      });
+      if (budgetLocal > 1) {
+        const H = ctx.v2.holdings;
+        const equityRef = typeRefOf(ctx.v2, 'EQUITY');
+        for (let r = equityRef < 0 ? -1 : bookHeadOf(ctx.v2, householdBookId(regionId)); r >= 0; r = H.next[r]) {
+          if (H.typeRef[r] !== equityRef) continue;
+          const companyId = instrumentIdAt(ctx.v2, r);
+          const hhShares = Number.isNaN(H.shares[r]) ? 0 : H.shares[r];
+          if (!(hhShares > 0) || !ciById.has(companyId)) continue;
+          householdPriorShares.set(companyId, (householdPriorShares.get(companyId) ?? 0) + hhShares);
+        }
+        const buyShares = householdDirectPurchaseShares(budgetLocal, regionCompanies.map((c, ci) => ({
+          id: equityInstrumentId(c.id), refPrice: refPriceArr[ci], floatValueLocal: floatValueArr[ci],
+        })));
+        const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
+        householdPriorShares.forEach((held, companyId) => {
+          demandByInstrumentId.set(companyId, indexFundDemand(held + (buyShares.get(companyId) ?? 0), buyShares.get(companyId) ?? 0, 'PRICE_LIKE'));
+        });
+        buyShares.forEach((shares, companyId) => {
+          if (!demandByInstrumentId.has(companyId)) demandByInstrumentId.set(companyId, indexFundDemand(shares, shares, 'PRICE_LIKE'));
+        });
+        householdParticipant = { id: householdPid, currentHoldingsByInstrumentId: householdPriorShares, demandByInstrumentId };
+      }
+    }
+
     // ETF: the index funds tracking any equity index this book prices. They are ordinary holders
     // — real positions, real cash — but their schedule has no reservation level: a fund buys its
     // benchmark weight at whatever the market is asking. That is the one demand shape this engine
@@ -590,31 +632,38 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       netCashByEntityId.set(desk.id, cashDeltaLocal);
     });
     // §7.281: the households' cash leg, computed the same way — shares SOLD at the cleared
-    // print. The unsold remainder stays household-held
+    // print, and (§3.13 C2.a) shares BOUGHT at it. The unsold remainder stays household-held
     // (it simply rejoins the residual the register measures). The proceeds land on the
-    // HOUSEHOLD party at settlement below, which is the whole point of the channel.
+    // HOUSEHOLD party at settlement below, and a purchase is paid out of its deposits there.
     if (householdParticipant) {
       const hpi = piById.get(householdPid);
       let cashDeltaLocal = 0;
-      // Step 13 (W2): the shares the households sold go to the house by wire, at the print.
+      // Step 13 (W2): the shares the households sold go to the house by wire, at the print, and
+      // the shares they bought come from it the same way (the house holds no row: f4b).
       // §9.13-EQUITY: `transferHolding`, not `clearedBookDelta`. The household sector holds real
       // register rows now, and nothing rebuilds its book from a store write-back the way the
-      // institutions' is rebuilt — so the shares it sold have to LEAVE, not merely be wired.
-      householdPriorShares.forEach((prevShares, companyId) => {
+      // institutions' is rebuilt — so the shares it sold have to LEAVE and the shares it bought
+      // have to ARRIVE, not merely be wired.
+      const namesTouched = new Set<InstrumentId>([...householdPriorShares.keys(), ...householdParticipant.demandByInstrumentId.keys()]);
+      namesTouched.forEach((companyId) => {
         const comp = companyById.get(companyId);
         if (!comp) return;
         const ti = ciById.get(companyId);
-        const soldShares = Math.max(0, prevShares - (ti !== undefined ? holdAt(hpi, ti) : 0));
-        if (soldShares <= 0) return;
-        cashDeltaLocal += soldShares * comp.stockPrice;
-        transferHolding(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, { kind: 'CLEARING_HOUSE', region: regionId },
-          {
-            instrumentType: 'EQUITY', instrumentId: companyId, issuerRegion: regionId,
-            valueLocal: soldShares * comp.stockPrice, shares: soldShares, units: soldShares,
-          }, 'equity clearing fill');
+        const prevShares = householdPriorShares.get(companyId) ?? 0;
+        const deltaShares = (ti !== undefined ? holdAt(hpi, ti) : prevShares) - prevShares;
+        const movedLocal = Math.abs(deltaShares) * comp.stockPrice;
+        if (!(movedLocal >= 1)) return; // less than one unit of money either way: an honest no-op
+        cashDeltaLocal -= deltaShares * comp.stockPrice;
+        const spec = {
+          instrumentType: 'EQUITY' as const, instrumentId: companyId, issuerRegion: regionId,
+          valueLocal: movedLocal, shares: Math.abs(deltaShares), units: Math.abs(deltaShares),
+        };
+        if (deltaShares < 0) transferHolding(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, { kind: 'CLEARING_HOUSE', region: regionId }, spec, 'equity clearing fill');
+        else transferHolding(ctx.v2, { kind: 'CLEARING_HOUSE', region: regionId }, { kind: 'HOUSEHOLD', region: regionId }, spec, 'equity clearing fill');
       });
-      if (cashDeltaLocal > 0) netCashByEntityId.set(householdPid, cashDeltaLocal);
+      if (cashDeltaLocal !== 0) netCashByEntityId.set(householdPid, cashDeltaLocal);
       reg.householdState.pendingDirectEquitySaleLocal = 0;
+      reg.householdState.pendingDirectEquityPurchaseLocal = 0;
     }
 
     // And the inventory it was left holding, marked at this week's cleared price, onto the bank

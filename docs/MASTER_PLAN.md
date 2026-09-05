@@ -394,9 +394,6 @@ written from here):
     **inventory at cost versus price is the next class**, once 13-BOOK below is through. What they
     left OPEN, and nothing else:
 
-    · **`equity.md` C2.a — households have no BUY schedule.** They hold a register book per region
-      now (13-EQUITY), so the largest holder class in the model can be forced to SELL and can
-      never bid. A mechanism, not a representation, and it belongs with 07e.
     · **13-READ D13 — THE SEED'S REORDERING.** The seed's three house-bank passes share one
       assignment rule now, but they are still three passes: each feeds `applyBankFundingSplit` in
       its own scope, and the seed steps between them — the SME and household debt migrations, the
@@ -1332,6 +1329,25 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13 C2.a — HOUSEHOLDS BID.** The largest holder class in the model held a register book per
+  region (13-EQUITY) and could only ever sell it. Now the equity slice of the week's saving splits
+  between the broad fund and the sector's own book by the mix it already holds
+  (`domain/household-equity.ts:directShareOfEquitySaving` — a read of the register and the fund
+  shares, not a stated share, so a sector holding nothing directly stays the 100% indexer the
+  coverage rule makes it); `etf-flows` announces the direct slice (`pendingDirectEquityPurchaseLocal`,
+  the sale's other half) and the next 07e session bids it as an indexer — no reservation
+  (`indexFundDemand`), the budget across the region's float by value at the reference price
+  (`householdDirectPurchaseShares`), bounded by the deposits above the buffer floor the saving
+  decision keeps (`householdDirectBudgetLocal`; the floor has one owner now,
+  `household-cohorts.ts:householdBufferFloorLocal`). Every held name posts a schedule that at least
+  holds it, because the engine sells a prior holding with no schedule; the fills move by
+  `transferHolding` against the house in both directions and the cash leg settles on the HOUSEHOLD
+  party. **Found on the way (rule 12): the sale channel had never fired** — `evolution.ts` rebuilds
+  `householdState` from a fixed field list (§7.41's trap) and `pendingDirectEquitySaleLocal` was not
+  on it, so every announcement was dropped at the next week's 02 before 07e read it; both
+  announcements are carried now. Pinned in `test/household-equity.test.ts`; atlas equity C2.a ✅,
+  households D5 cites the split. Gates green; no run (rule 11).
 
 **28b-i — THE REGION'S RATES AND FLOWS NAME THEIR PERIOD AND THEIR MONEY.** Fifteen `Region`
   fields renamed at the source to say what their writers confirm — `policyRateAnnual`,

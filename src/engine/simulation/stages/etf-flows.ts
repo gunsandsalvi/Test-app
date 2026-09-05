@@ -41,8 +41,9 @@ import { INDEX_DEFINITIONS, IndexDefinition } from '../../../domain/indexes';
 import { apWeeklyCapacityLocal, basketAssemblyCostRate, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
 import { ItemizedHolding } from '../../../domain/banking';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
-import { householdEtfHoldingsLocal } from '../../macro/household-portfolio';
-import { BUFFER_TARGET_WEEKS } from '../../macro/household-cohorts';
+import { householdEtfHoldingsLocal, householdDirectEquityLocal } from '../../macro/household-portfolio';
+import { householdBufferFloorLocal } from '../../macro/household-cohorts';
+import { directShareOfEquitySaving } from '../../../domain/household-equity';
 import { measuredWeeklyMove, medianOf } from '../../../domain/volatility';
 import { ringFill, rowOf } from '../../../engine2/world';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
@@ -232,12 +233,23 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const weeklySavingLocal = (reg.estimatedHouseholdIncomeLocal * (hs.savingsRate)) / 52;
     let intoFundsLocal: number;
     if (weeklySavingLocal >= 0) {
-      intoFundsLocal = weeklySavingLocal * equityShareOfSaving;
+      // §3.13 C2.a: the equity slice of the week's saving splits between the broad fund and the
+      // sector's OWN direct book by the mix it already holds — a read of the register and the
+      // fund shares, not a stated share, so a sector holding nothing directly stays the 100%
+      // indexer it was. The direct slice is ANNOUNCED here and bid by next week's 07e session,
+      // the same one-week rhythm as the sale below and every other flow in this stage.
+      const equitySavingLocal = weeklySavingLocal * equityShareOfSaving;
+      const directShare = directShareOfEquitySaving(
+        householdDirectEquityLocal(ctx.v2, region),
+        householdEtfHoldingsLocal(ctx.v2, hs, ctx.updatedInstitutionalEntities));
+      hs.pendingDirectEquityPurchaseLocal = Math.round(equitySavingLocal * directShare);
+      intoFundsLocal = equitySavingLocal - equitySavingLocal * directShare;
       hs.pendingDirectEquitySaleLocal = 0;
     } else {
       // The floor is the SAME buffer the saving decision is taken against — it is the same
       // buffer, so it is the same number (rule 4).
-      const bufferFloorLocal = (reg.estimatedHouseholdIncomeLocal / 52) * BUFFER_TARGET_WEEKS;
+      const bufferFloorLocal = householdBufferFloorLocal(reg.estimatedHouseholdIncomeLocal);
+      hs.pendingDirectEquityPurchaseLocal = 0;
       const depositHeadroomLocal = Math.max(0, householdDepositsOf(ctx.v2, region) - bufferFloorLocal);
       // Sell only the part of the gap the cash cannot meet, and never more than is held.
       const heldLocal = householdEtfHoldingsLocal(ctx.v2, hs, ctx.updatedInstitutionalEntities);

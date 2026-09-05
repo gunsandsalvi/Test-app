@@ -15,6 +15,7 @@
  */
 
 import { drawPreferences, patienceWeeksOf, riskAversionOf, PATIENCE_MEDIAN_WEEKS } from '../../domain/preferences';
+import { weeklyOfAnnual } from '../../domain/units';
 import {
   OccupationType, WealthTier, WealthTierData, OccupationPool, HouseholdCohort,
   TenureStratum, RETURN_TO_EXPERIENCE_ANNUAL, OCCUPATION_TYPES } from '../../domain/region-macro';
@@ -238,6 +239,10 @@ const WEALTH_SPENDDOWN_YEARS = 8;
  * household wants a proportionally bigger one, and the ratio is what is stable across them.
  */
 export const BUFFER_TARGET_WEEKS = 12;
+/** The sector's buffer floor in money: that many weeks of its income. The one read the fund
+ *  purchase, the forced sale and the direct purchase (§3.13 C2.a) all take their headroom above. */
+export const householdBufferFloorLocal = (annualIncomeLocal: number): number =>
+  weeklyOfAnnual(annualIncomeLocal) * BUFFER_TARGET_WEEKS;
 
 export function tierWealthMpc(tier: WealthTierData | undefined): number {
   if (!tier) return 0;
