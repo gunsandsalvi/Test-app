@@ -22,7 +22,8 @@ import { NewsItem } from '../../../domain/events';
 import { WeeklyStepContext } from './context';
 import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { STANDARD_CORP_TENOR_YEARS } from '../../../domain/primary-market';
-import { partyId, partyOf, PartyRef } from '../../ledger/party';
+import { partyId, partyOf, partyFromKey, PartyRef } from '../../ledger/party';
+import { overdraftRunIsTold } from '../../../domain/banking';
 import { reasonText } from './settlement';
 import { isActiveCompany, banksOf } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
@@ -335,6 +336,42 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       materialityLocal: a.withdrawnLocal,
       impactRegion: rid,
       urgent: a.withdrawnLocal > 0.25 * a.offeredLocal,
+    });
+  });
+
+  // ---- 7d. §3.15b-iii: a party living on its bank. The close swept it into its bank's credit
+  // for the Nth week running — a firm's overdraft converted to a facility draw, a fund's to a
+  // prime-brokerage draw, a pool's to an SME facility draw. The RUN is the story: told the week
+  // it becomes one (three closes) and each time it doubles, never every week. ----
+  Object.entries(ctx.overdraftStreaks).forEach(([key, run]) => {
+    if (run.lastWeek !== week || !overdraftRunIsTold(run.weeks)) return;
+    const party = partyFromKey(key);
+    if (!party) return;
+    const c = party.kind === 'COMPANY' ? companyById.get(party.id) : undefined;
+    const fund = party.kind === 'INSTITUTION' ? ctx.updatedInstitutionalEntities.find((e) => e.id === party.id) : undefined;
+    const who = c ? c.name : fund ? fund.name : partyLabel(party);
+    const lender = c?.homeBankId ? companyById.get(c.homeBankId) : fund?.homeBankId ? companyById.get(fund.homeBankId) : undefined;
+    const how = party.kind === 'COMPANY' ? 'a facility draw at its house bank'
+      : party.kind === 'INSTITUTION' ? 'a draw on its prime broker'
+        : 'an SME facility draw at the region\'s banks';
+    const rid = 'region' in party ? party.region : (c?.region ?? fund?.region);
+    const refs: Ref[] = [];
+    const pr = partyRef(party, companyById);
+    if (pr) refs.push(pr);
+    if (rid) refs.push(region(rid));
+    if (lender) refs.push(company(lender));
+    push({
+      id: `overdraft-run-${key}-${week}`,
+      kind: 'living on its bank',
+      category: 'CREDIT',
+      title: `${who} closes a ${run.weeks === 3 ? 'third' : `${run.weeks}th`} week in overdraft`,
+      description: `${who} has ended ${run.weeks} weeks running with its account below zero at the close, each time converted to ${how}: ${M(run.drawnLocal)} this week, ${M(run.drawnRunLocal)} over the run`
+        + (c ? `. Cash ${M(cashOf(ctx.v2, c))} against ${M(c.annualRevenue)} of revenue; coverage ${c.interestCoverage.toFixed(2)}×, rated ${c.creditRating}.` : '.'),
+      cause: `Its payments at the close exceeded what its account held, ${run.weeks} weeks in a row.`,
+      refs,
+      materialityLocal: run.drawnRunLocal,
+      impactRegion: rid, affectedTicker: c?.ticker ?? fund?.ticker,
+      urgent: run.weeks >= 6,
     });
   });
 

@@ -73,6 +73,9 @@ export interface GameState {
   // whichever register book holds the bond; not a field.
   /** CASH — clamped negative balances, summed over the week's reconciliations. */
   lastCashOverdraftLocal?: number;
+  /** §3.15b-iii — the parties the close swept into their bank's credit, and for how many weeks
+   *  running, keyed by party key. Rolled by `overdraft-sweep.ts`; a clean close ends the run. */
+  overdraftStreaks?: Record<string, import('./banking').OverdraftStreak>;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   /** Signed consecutive-week bind streak per `book:id` (+ up, − down) — the adaptive damper's

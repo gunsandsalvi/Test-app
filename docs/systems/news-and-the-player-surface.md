@@ -297,7 +297,10 @@ left. §9.15b-ii: an under-subscribed auction is an event a reader can see — t
 the week's auction rung by rung (`region-macro.ts:lastAuction`, written by 07c and 07f through
 `government.ts:recordPrimaryOffering`), the story names the rungs that came up short and the
 account's state, the ladder view shows the last auction, and a failed CP roll's story carries the
-derived feed's refs, size and cause.
+derived feed's refs, size and cause. §9.15b-iii: a party living on its bank is a story that is a
+RUN — the close's overdraft sweep records who it swept (`banking.ts:rollOverdraftStreaks`, on
+`GameState.overdraftStreaks`), and the feed tells the run when it becomes one and each time it
+doubles, never the week.
 
 ### Also marked, briefly
 

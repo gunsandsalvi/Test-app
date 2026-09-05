@@ -547,16 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-15b. **News slice 2** — split 2026-09-05; 15b-i (a workout that develops) and 15b-ii (an
-    under-subscribed auction) are in §9. What is left:
-15b-iii. **Contract-break streaks.** No object here is called a contract break. The real thing
-    is a party that does not perform: the settlement pass's `[unresolved]` legs (a leg addressed
-    to a bank with no sheet), a derivative closed out on a counterparty's death
-    (`derivative-lifecycle.ts:closeOutDerivativesOfParty`), a CP roll the market refused. A
-    streak is the same party failing to perform in consecutive weeks. Record the week's
-    non-performances by party (the ledger has them; nothing keeps them), count the run, and tell
-    the run — not the week — as the story.
-
 16. **A tap, not a new facility** (user). An issuer that wants more of the same debt REOPENS an
     existing tranche: face is added at the week's clearing price, the proceeds are the price × the
     added face, and holders of record are unaffected. This replaces the proliferation the audit kept
@@ -1647,6 +1637,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**15b-iii — A PARTY LIVING ON ITS BANK IS A RUN.** The original list said "contract-break
+streaks" and no object here is called a contract break; the non-performance this model records
+at the close is the OVERDRAFT — a payer whose settled balance is below zero has spent its bank's
+money, and `overdraft-sweep.ts` names and prices it (a firm's revolver draw, a fund's
+prime-brokerage draw, a pool's SME facility draw). The sweep now records who it swept and for
+how much, `banking.ts:rollOverdraftStreaks` rolls the runs (swept again: the run extends; not
+swept: a clean close ends it) onto `GameState.overdraftStreaks` through the context, and
+`news-derivation.ts` 7d tells the run — "KRLN closes a third week in overdraft: 5.0M this week,
+12.0M over the run, converted to a facility draw at its house bank; cash …, coverage …" — the
+week it becomes one (three closes) and each time it doubles (`overdraftRunIsTold`), urgent from
+six, with the party, its region and its lender as refs and the run's draws as its size. With this
+15b is done; the fourth item of the original list (damper binds) is moot, step 19 deletes the
+damper. `test/overdraft-streak.test.ts`. Gates green; no run.
 
 **15b-ii — AN AUCTION THAT CAME IN UNDER-SUBSCRIBED IS AN EVENT.** 07c and 07f withdrew what the
 primary did not place and recorded nothing; the treasury's account ran lower in silence. The

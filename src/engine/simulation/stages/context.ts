@@ -315,6 +315,9 @@ export interface WeeklyStepContext {
   /** CASH — balances that are NEGATIVE and clamped to zero by the deposit reconciliation: a
    *  holder spending money it does not have, which the plug then hides. Not unrouted flow. */
   cashOverdraftLocal: number;
+  /** §3.15b-iii — the overdraft runs as of this week's sweep (`banking.ts:rollOverdraftStreaks`);
+   *  opened from the state's, replaced by the sweep, read by the news, written back by core. */
+  overdraftStreaks: Record<string, import('../../../domain/banking').OverdraftStreak>;
   pendingHolderAccrualLocal: Map<string, number>;
   /** CAL — the instruments whose coupon falls due this week: their accrued balances become cash. */
   pendingHolderAccrualPayout: Set<string>;
@@ -463,6 +466,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     tradeInvoicesBooked: [],
     estates: state.estates,
     cashOverdraftLocal: 0,
+    overdraftStreaks: state.overdraftStreaks ?? {},
     pendingHolderAccrualLocal: new Map(),
     pendingHolderAccrualPayout: new Set(),
     rrpIntendedByEntity: new Map(),

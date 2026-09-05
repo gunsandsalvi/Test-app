@@ -26,6 +26,8 @@ import { entityCashOf } from '../../ledger/accounts';
 import { overdraftFacilityTrancheId } from '../../../domain/instrument-keys';
 import { banksOf } from '../../../domain/company';
 import type { Ticker } from '../../../domain/ids';
+import { partyKey } from '../../ledger/party';
+import { rollOverdraftStreaks } from '../../../domain/banking';
 
 /** What a broker charges over its standing line for a balance it did not agree to fund. */
 export const OVERDRAFT_PENALTY_BPS = 200;
@@ -42,6 +44,8 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
   // house bank is a LOOKUP rather than `updatedCompanies.find(b => b.ticker === …)` — which was a
   // full scan of every company per overdrawn firm, and is where the O(firms x overdrafts) went.
   const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
+  // §3.15b-iii: who the close swept, and for how much — the week's non-performances, by party.
+  const swept = new Map<string, number>();
 
   // ---- 1. Firms: a revolver draw at the house bank (the 02b conversion, at the close). ----
   ctx.updatedCompanies.forEach((c) => {
@@ -65,6 +69,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       facilityBankId: homeBank.id,
     };
     issueTranche(v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
+    swept.set(partyKey(companyParty(c)), drawLocal);
     pay(ctx, {
       payer: bankCreditParty(homeBank),
       payee: companyParty(c),
@@ -92,6 +97,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       const balanceLocal = entityCashOf(ctx.v2, fund) + pendingLocal({ kind: 'INSTITUTION', id: fund.id });
       if (balanceLocal >= -1) return fund;
       const drawLocal = -balanceLocal;
+      swept.set(partyKey({ kind: 'INSTITUTION', id: fund.id }), drawLocal);
       const withinLineLocal = Math.min(fund.primeBrokerageAvailableLocal ?? 0, drawLocal);
       pay(ctx, {
         payer: bankSecuritiesParty(broker),
@@ -131,6 +137,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       const balanceLocal = poolCashOf(ctx.v2, regionId, seg.industry) + pendingLocal({ kind: 'SEGMENT', region: regionId, industry: seg.industry });
       if (balanceLocal >= -1 || !(totalShare > 0)) return;
       const drawLocal = -balanceLocal;
+      swept.set(partyKey({ kind: 'SEGMENT', region: regionId, industry: seg.industry }), drawLocal);
       banks.forEach((b) => {
         const shareLocal = drawLocal * ((b.bankMarketShare ?? 0) / totalShare);
         if (shareLocal <= 1) return;
@@ -171,4 +178,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       return { ...c, bankBalanceSheet: sheet };
     });
   });
+
+  // §3.15b-iii: the runs, rolled once — a party swept again extends its run, a clean close ends it.
+  ctx.overdraftStreaks = rollOverdraftStreaks(ctx.overdraftStreaks, swept, ctx.nextWeek);
 }

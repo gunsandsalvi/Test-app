@@ -575,3 +575,51 @@ export interface BankLoan {
   termWeeks: number;
   status: 'PERFORMING' | 'DEFAULTED';
 }
+
+/**
+ * §3.15b-iii — A PARTY THAT DOES NOT PERFORM, and the RUN of it. The one non-performance this
+ * model records at the close is an OVERDRAFT: a payer whose settled balance is below zero has
+ * spent its bank's money, and the sweep names and prices that as a facility draw, a prime-
+ * brokerage draw or an SME facility draw (`overdraft-sweep.ts`). A party swept in consecutive
+ * weeks is a party living on its bank, and the run — not the week — is the story.
+ */
+export interface OverdraftStreak {
+  /** Consecutive weeks swept, this week included. */
+  weeks: number;
+  lastWeek: number;
+  /** This week's draw, and the draws summed over the run. */
+  drawnLocal: number;
+  drawnRunLocal: number;
+}
+
+/** The streaks after this week's sweep: a party swept again extends its run, one swept for the
+ *  first time (or after a clean week) starts one, and one not swept drops out — a clean close
+ *  ends the run. Pure; the sweep calls it once. */
+export function rollOverdraftStreaks(
+  prev: Readonly<Record<string, OverdraftStreak>> | undefined,
+  sweptByParty: ReadonlyMap<string, number>,
+  week: number,
+): Record<string, OverdraftStreak> {
+  const out: Record<string, OverdraftStreak> = {};
+  sweptByParty.forEach((drawnLocal, key) => {
+    if (!(drawnLocal > 0)) return;
+    const p = prev?.[key];
+    const continues = p !== undefined && p.lastWeek === week - 1;
+    out[key] = {
+      weeks: continues ? p.weeks + 1 : 1,
+      lastWeek: week,
+      drawnLocal,
+      drawnRunLocal: (continues ? p.drawnRunLocal : 0) + drawnLocal,
+    };
+  });
+  return out;
+}
+
+/** When a run is told: the week it becomes a run (three closes), and each time it doubles
+ *  after that — a rule about the run's shape, so a long run is not a story every week. */
+export function overdraftRunIsTold(weeks: number): boolean {
+  if (weeks < 3) return false;
+  let w = 3;
+  while (w < weeks) w *= 2;
+  return w === weeks;
+}
