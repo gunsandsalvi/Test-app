@@ -80,7 +80,7 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 a statement about the state | `src/engine/audit/index.ts:auditWeek` | ✅ |
-| A1.a two independent reads that must agree | `src/engine/audit/types.ts:AuditFinding` | ⚠️ |
+| A1.a two independent reads that must agree | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | A2 it names WHO | `src/engine/audit/types.ts:AuditFinding` | ✅ |
 | A2.a a violation with no owner cannot be fixed | `src/engine/audit/money.ts:auditMoney` | ✅ |
 | A3 and HOW MUCH, in a unit | `src/engine/audit/types.ts:AuditFinding` | ⚠️ |
@@ -92,14 +92,14 @@ checked by `scripts/check-atlas.sh`.
 | B4 cross-market consistency | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
 | B5 accounts balance | `src/engine/audit/accounts.ts:auditAccounts` | ✅ |
 | B6 names resolve | `src/engine/audit/names.ts:auditNames` | ✅ |
-| **B7 wires are complete** | `src/engine/audit/wires.ts:auditWires` | ⚠️ |
+| **B7 wires are complete** | `src/engine/audit/wires.ts:auditWires` | ✅ |
 | B8 the families are independent | `src/engine/audit/index.ts:auditSummary` | ⚠️ |
 | C1 it runs where the state is meant to be consistent | `src/engine/audit/index.ts:auditWeek` | ✅ |
 | C2 every week | `src/engine/audit/index.ts:auditWeek` | ✅ |
 | C2.a the first week of a violation is evidence | `src/engine/audit/snapshot.ts:snapshotOf` | ✅ |
 | C3 the same invariants every week | `src/engine/audit/index.ts:auditWeek` | ✅ |
 | **C4 FORBID the audit never repairs** | `src/engine/audit/index.ts:auditWeek` | ✅ |
-| D1 a count by family | `src/engine/audit/index.ts:auditSummary` | ⚠️ |
+| D1 a count by family | `src/engine/audit/index.ts:auditSummary` | ✅ |
 | D2 the worst instances, with party and size | `src/engine/audit/index.ts:auditSummary` | ✅ |
 | D3 a run is reproducible | `src/engine/audit/snapshot.ts:AuditSnapshot` | ✅ |
 | D4 2 / 4 / 13 / 16 weeks tell different stories | `src/engine/audit/index.ts:auditSummary` | ✅ |
@@ -128,24 +128,24 @@ check's bound is that function of the sum it actually performed, the count read 
 O1 per region and bucket, O6 per key, O2 per issuer's rows, M5 its loan rows and five deposit
 classes, F2 its reason keys, W1–W7 the journal's `byKind`. Node A4 was rule 7 restated from the
 domain side, and A4.a is why it mattered: `max(5e7, o × 0.02)` and `max(1e7, assets × 2e-3)`
-forgave exactly the defects that scale. `AUDIT_BOOKS_TOLERANCE` is read by nobody and leaves the
-registry in §3.27-ii. Whatever fires now is a defect with a size, and the run's to find (rule 11).
+forgave exactly the defects that scale. `AUDIT_BOOKS_TOLERANCE` was read by nobody and left the
+registry in §9.27-ii. Whatever fires now is a defect with a size, and the run's to find (rule 11).
 
-### ⚠️ B7 / D1 — THE W FAMILY HAS NO SCOREBOARD LINE
+### ✅ B7 / D1 — CLOSED: THE W FAMILY IS ON THE SCOREBOARD (§9.27-ii)
 
-`index.ts:auditSummary` iterates `families = ['M','O','P','X','F','N']`. `auditWires` runs, its
-findings reach the violation count, and the summary has no `--- W · wires ---` section, so W1
-(money-wires = gross), W3 (ladders) and W4 (no unit sold that did not exist) are invisible in the
-one output anyone reads. **Already §3 step 27.** Node B7 is `⚠️` rather than `✅` for this reason
-alone — the checks exist and are correct.
+`index.ts:auditSummary` iterated a hand-written `['M','O','P','X','F','N']`, so `auditWires`'s
+findings reached the violation count and never the one output anyone reads. The families are now
+the keys of `FAMILY_WORDS`, typed over `AuditFinding['family']`: a family with no word is a compile
+error, and `--- W · wires ---` prints W1 (money-wires = gross) through W7 (dwellings) like the rest.
 
-### ⚠️ A1.a / B3 / B4 — CHECKS THAT CANNOT FIRE
+### ✅ A1.a / ⚠️ B3 / B4 — CHECKS THAT CANNOT FIRE
 
-`ownership.ts:70` compares `stockPrice × sharesOutstanding` against `marketCapOf`, which is defined
-as exactly that — node A1.a's failure mode written out: **a read of one thing against itself, which
-always passes.** `prices.ts:39,49,126` fire only above 5%/10%/25% breach quotas, so a minority of
-issuers may invert seniority with a clean board. Both are §3 step 27's, and A1.a is the domain-side
-statement of why they are wrong rather than merely weak.
+A1.a's witness is gone: `ownership.ts` O2 compared `stockPrice × issued` against `marketCapAt`,
+defined as exactly that — **a read of one thing against itself, which always passes** — and
+§9.27-ii deleted the line; every remaining check reads two things. B3 and B4 stay `⚠️` for
+§3.27-iii: `prices.ts` P1, P2 and X2 fire only above 5%/10%/25% breach quotas, so a minority of
+issuers may invert seniority with a clean board, and their bands are stated widths where the
+mechanism that sets each spread is the honest comparison.
 
 ### ⚠️ A3 — THE SIZE IS A NUMBER WITHOUT ITS CURRENCY
 

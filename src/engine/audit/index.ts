@@ -91,14 +91,16 @@ export function auditSeed(state: GameState): AuditFinding[] {
   return out;
 }
 
-const FAMILY_WORDS: Record<string, string> = { M: 'money', O: 'ownership', P: 'prices', X: 'cross-market', F: 'accounts', N: 'names', W: 'wires' };
+/** One word per family the finding type names — typed over that union, so a family the
+ *  scoreboard does not print is a compile error, not a silent omission (§3.27-ii: W had none). */
+const FAMILY_WORDS: Record<AuditFinding['family'], string> = { M: 'money', O: 'ownership', P: 'prices', X: 'cross-market', F: 'accounts', N: 'names', W: 'wires' };
 
 /** The scoreboard: per check, the weeks it failed, the worst size, the last message. */
 export function auditSummary(findings: AuditFinding[], weeks: number): string[] {
   const lines: string[] = ['=== THE AUDIT — the closed-model scoreboard ==='];
   const byCheck = new Map<string, AuditFinding[]>();
   findings.forEach((f) => { const k = `${f.family}|${f.check}`; byCheck.set(k, [...(byCheck.get(k) ?? []), f]); });
-  const families = ['M', 'O', 'P', 'X', 'F', 'N'];
+  const families = Object.keys(FAMILY_WORDS) as AuditFinding['family'][];
   families.forEach((fam) => {
     const checks = [...byCheck.entries()].filter(([k]) => k.startsWith(fam + '|')).sort((a, b) => a[0].localeCompare(b[0]));
     lines.push(`--- ${fam} · ${FAMILY_WORDS[fam]}: ${checks.length ? `${checks.length} checks failing` : 'clean'} ---`);

@@ -6,7 +6,7 @@ import { accountKey } from '../ledger/accounts';
 import { ccpOwnCapitalLocal } from '../../domain/clearing-house';
 import type { CurrencyCode } from '../../domain/geography';
 import { deskRowsOf } from '../desk-register';
-import { issuedSharesOf, marketCapAt } from '../../engine2/instruments';
+import { issuedSharesOf } from '../../engine2/instruments';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { AuditFinding, B, pct, sum, floatDust, floatDustLocal } from './types';
@@ -161,7 +161,7 @@ function o1(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
-/** O2 — shares: the register's count never exceeds the issue, and market cap is price × shares. */
+/** O2 — shares: the register's count never exceeds the issue. */
 function o2(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const heldShares = new Map<string, number>();
@@ -188,17 +188,15 @@ function o2(state: GameState, week: number): AuditFinding[] {
       });
     }
   }
-  let over = 0, overLocal = 0, capGap = 0, capN = 0;
+  let over = 0, overLocal = 0;
   state.companies.forEach((c) => {
     if (!isActiveCompany(c)) return;
     const hs = heldShares.get(c.id) ?? 0;
     // §3.13-BOOK dIV: the issued side is the instrument index's count — B2's real issued amount.
     const issued = issuedSharesOf(v2o2r, c.id);
     if (issued > 0 && hs - issued > floatDust(hs + issued, heldRows.get(c.id) ?? 1)) { over++; overLocal += (hs - issued) * c.stockPrice; }
-    if (c.stockPrice > 0 && issued > 0) { const cap = c.stockPrice * issued; if (Math.abs(cap - marketCapAt(v2o2r, c)) > floatDustLocal(cap + marketCapAt(v2o2r, c), 2)) { capN++; capGap += Math.abs(cap - marketCapAt(v2o2r, c)); } }
   });
   if (over) out.push({ family: 'O', check: 'O2 shares held ≤ issued', week, usd: overLocal, message: `${over} firms have more shares on the register than they issued (${B(overLocal)} of phantom stock)` });
-  if (capN) out.push({ family: 'O', check: 'O2 market cap = price × shares', week, usd: capGap, message: `${capN} firms' market cap differs from price × shares by ${B(capGap)} in all` });
   return out;
 }
 

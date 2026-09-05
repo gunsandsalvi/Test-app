@@ -292,7 +292,7 @@ but books its result on the bank's income statement, not here.
 cent — with `terms` the count `ownershipCoverage` itself added into that region's bucket; O6 is the
 same on its key's count, O2 on the rows each issuer's holders occupy. The 2% band that could hide
 tens of billions of paper held by nobody or claimed twice, per region per kind, is gone, and
-`AUDIT_BOOKS_TOLERANCE` is read by nobody (§3.27-ii deletes the declaration). B2 is ✅ with it: the
+`AUDIT_BOOKS_TOLERANCE` was read by nobody and §9.27-ii deleted the declaration. B2 is ✅ with it: the
 register's defining identity holds to the dust or fires.
 
 ### ✅ C2.a / D3 / A1.c — CLOSED: THE REGISTER STORES THE QUANTITY AND THE VALUE IS A READ

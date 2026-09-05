@@ -553,13 +553,6 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-27-ii. **The scoreboard shows the wires, the tautology dies, and the band's declaration with it.**
-    `audit/index.ts:auditSummary` iterates `['M','O','P','X','F','N']`, so the W family — W1
-    money-wires = gross, W3 ladders, W4 goods, W5 the register, W6 plant, W7 dwellings — has no
-    summary line (its findings reach the violation count). `ownership.ts` O2 compares `stockPrice ×
-    issued` against `marketCapAt`, defined as exactly that — a read of one thing against itself,
-    which cannot fire. And `stated.ts:AUDIT_BOOKS_TOLERANCE`, read by nobody after 27-i, leaves the
-    registry (§5-DIST-P: the count falls). the-audit B7/D1 ⚠️→✅, A1.a re-marked.
 27-iii. **The prices family measures what it claims.** `prices.ts` P1 and P2 fire only above
     5%/10% breach quotas and X2 above 25%, so a minority may invert seniority with a clean board —
     every breach is a finding and the count is its size; P1's `loan > bond × 1.05 + 25bp` bands are
@@ -1352,6 +1345,17 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**27-ii — THE SCOREBOARD SHOWS THE WIRES, THE TAUTOLOGY DIES, AND THE BAND'S DECLARATION WITH
+  IT.** `audit/index.ts:auditSummary` iterated a hand-written `['M','O','P','X','F','N']`, so the
+  W family (W1 money-wires = gross … W7 dwellings) reached the violation count and never the one
+  output anyone reads; the families are now the keys of `FAMILY_WORDS`, typed over
+  `AuditFinding['family']`, so a family with no word is a compile error and W has its section. O2's
+  "market cap = price × shares" compared `stockPrice × issued` with `marketCapAt`, defined as
+  exactly that — a read of one thing against itself, which cannot fire (A1.a's failure mode written
+  out): deleted. `stated.ts:AUDIT_BOOKS_TOLERANCE`, read by nobody since 27-i, leaves the registry:
+  12 → 11 stated numbers (§5-DIST-P). the-audit B7/D1 ⚠️→✅, A1.a ⚠️→✅. Gates green; no run
+  (rule 11).
 
 **27-i — EVERY AUDIT TOLERANCE IS FLOAT DUST, DERIVED FROM THE SUM PERFORMED.** Two percentage
   bands and a drawer of round numbers stood where rule 7 asks for one thing: `money.ts` M1 forgave
