@@ -168,7 +168,7 @@ of stated instruments — still unmeasured, and step 38's.
 
 ### ❌ D3 / D3.a / D3.b — THE BENCHMARK IS A POSTED POLICY RATE, AND A CLEARED ONE EXISTS BESIDE IT
 
-Every floating instrument in the model fixes on `region.policyRate`. Measured: `front-core:524`
+Every floating instrument in the model fixes on `region.policyRateAnnual`. Measured: `front-core:524`
 (`isFloating ? principalLocal * (policyRate + annualRate)`), `pricing/tranche.ts:33`,
 `07f-short-debt-clearing:665`, `derivative-markets/irs.ts:114`, `bank-lending:232,267,492,493`,
 `02b-bank-diversification:224,229,239,255`, `stage08-back:1186,1394,1518,1668`,

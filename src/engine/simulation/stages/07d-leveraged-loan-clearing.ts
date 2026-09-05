@@ -231,7 +231,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         if (!(weeksToMaturity > 0)) continue;
         const id = trancheIdOf(v2, r);
         const marginBps = Number.isNaN(S.floatingMarginBps[r]) ? 0 : S.floatingMarginBps[r];
-        const couponRate = reg.policyRate + marginBps / 10000;
+        const couponRate = reg.policyRateAnnual + marginBps / 10000;
         accruedPerFaceById.set(id, accruedPerFace({
           originationWeek: S.originationWeek[r],
           paymentAnchorWeek: Number.isNaN(S.paymentAnchorWeek[r]) ? undefined : S.paymentAnchorWeek[r],
@@ -259,7 +259,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const id = primaryTrancheId(issuerId, o.purpose, week);
       primaryTermsById.set(id, { marginBps, maturityWeek: week + STANDARD_CORP_TENOR_YEARS * 52 });
       loans.push(loanOf(ci, id, 0, o.sizeLocal, {
-        annualCouponRate: reg.policyRate + marginBps / 10000,
+        annualCouponRate: reg.policyRateAnnual + marginBps / 10000,
         // The period the tranche stage 08 issues will carry, from the one owner of that default.
         periodWeeks: defaultPeriodWeeks({ originationWeek: week, rateType: 'FLOATING' }),
         weeksToMaturity: STANDARD_CORP_TENOR_YEARS * 52,
@@ -380,7 +380,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const DS = openDemandStaging(nL);
     // §3.13-READ D5: the same build as 07b's, stated once (see `credit-demand.ts`).
     const participants: ClearingParticipant[] = buildCreditDemandParticipants({
-      ctx, regionId, policyRate: reg.policyRate,
+      ctx, regionId, policyRate: reg.policyRateAnnual,
       entities: regionEntities, instruments: loans, issuerTerms: companyTerms,
       claimedByEntity, rawEntityTargets, sectorTotal,
       assetClass: 'LEVERAGED_LOAN', creditConditionsIndex, openingPrice,

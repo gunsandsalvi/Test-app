@@ -520,7 +520,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       description: `${P(before.unemploymentRate)} → ${P(after.unemploymentRate)} in a week. `
         + (movers.length ? `${du > 0 ? 'Largest cuts' : 'Largest hirers'}: ${movers.map((x) => `${x.c.ticker} ${x.d > 0 ? '+' : ''}${N(x.d)}`).join(', ')}. ` : '')
         + (dead.length ? `${dead.length} firm${dead.length > 1 ? 's' : ''} defaulted (${N(deadHeads)} people): ${dead.map((c) => c.ticker).join(', ')}. ` : '')
-        + `Inflation ${P(after.inflation)}, policy rate ${P(after.policyRate, 2)}, tightness ${(after.laborMarketTightness ?? 0).toFixed(2)}.`,
+        + `Inflation ${P(after.inflationAnnual)}, policy rate ${P(after.policyRateAnnual, 2)}, tightness ${(after.laborMarketTightness ?? 0).toFixed(2)}.`,
       refs: [region(rid), ...movers.map((x) => company(x.c)), ...dead.map(company)],
       materialityLocal: Math.abs(du) * (after.derivedNominalGdpLocal),
       impactRegion: rid,
@@ -548,7 +548,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       category: 'MACRO',
       title: `${rid} prices ${dp > 0 ? 'up' : 'down'} ${P(Math.abs(dp))} in a week`,
       description: `The ${rid} price level moved ${P(dp)} (${after.inflationIsMeasured
-        ? `annualised inflation ${P(after.inflation)}`
+        ? `annualised inflation ${P(after.inflationAnnual)}`
         : `index at ${after.consumerPriceIndex.toFixed(1)}; no year of history yet`}). `
         + (cats.length ? `Biggest moves: ${cats.map((x) => `${x.k.replace(/_/g, ' ')} ${x.move > 0 ? '+' : ''}${P(x.move, 0)} (${P(x.fill, 0)} of demand served)`).join('; ')}.` : ''),
       refs: [region(rid)],

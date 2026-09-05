@@ -32,5 +32,51 @@ export type Shares = Brand<'shares'>;
 /** A physical unit count from the goods registry. */
 export type Units = Brand<'units'>;
 
-export const annualize = <B extends string>(v: PerWeek<B>): PerYear<B> => (v * 52) as PerYear<B>;
-export const weekly = <B extends string>(v: PerYear<B>): PerWeek<B> => (v / 52) as PerWeek<B>;
+export const annualize = <B extends string>(v: PerWeek<B>): PerYear<B> => (v * WEEKS_PER_YEAR) as PerYear<B>;
+export const weekly = <B extends string>(v: PerYear<B>): PerWeek<B> => (v / WEEKS_PER_YEAR) as PerWeek<B>;
+
+// ---- §3.28b-i — THE PERIOD FORMULAS, ONE OWNER (rule 8) ----
+//
+// Every rate, flow and index a region stores carries a period, and the identifier names it
+// (`…Annual`, `…Weekly`). The arithmetic that moves a figure between periods lived as bare
+// `* 52`, `/ 52` and `x / xYearAgo - 1` at each writer; it is here once, so a test can pin what
+// each name means and a reader can find the convention instead of re-deriving it.
+
+/** The model's year. Weeks are the clock (`calendar.ts`); a year is 52 of them, exactly. */
+export const WEEKS_PER_YEAR = 52;
+
+/**
+ * A week's figure at a year's run-rate: x52, linear. This is the model's ONE annualisation, for
+ * flows (a week of exports, a week of procurement) and for rates of change alike (a going rate
+ * that moved x this week is growing at 52x a year). A compounded `(1 + x)^52` is deliberately not
+ * offered: it turned a cold-start level transient into ~110% headline growth and amplifies any
+ * weekly noise by construction (`11-fiscal-and-sovereign-debt.ts`).
+ */
+export const runRateAnnual = (weekly: number): number => weekly * WEEKS_PER_YEAR;
+/** The inverse: an annual rate or flow over one week of it, linear. */
+export const weeklyOfAnnual = (annual: number): number => annual / WEEKS_PER_YEAR;
+
+/**
+ * The levels a year-over-year read needs: this week's and the 52 before it, so that index 0 is
+ * the level EXACTLY a year back. Fifty-three, not fifty-two — a window of 52 compared against its
+ * oldest entry is a year-over-year taken a week short of a year, which is what the CPI and GDP
+ * windows did before §3.15.
+ */
+export const YEAR_OVER_YEAR_LEVELS = WEEKS_PER_YEAR + 1;
+/** The trailing-year window after this week's level joins it. */
+export const trailingYear = (history: readonly number[], level: number): number[] =>
+  [...history.slice(-WEEKS_PER_YEAR), level];
+/** The level a year before the newest one, or nothing until a full year of real levels exists. */
+export const yearAgoLevel = (window: readonly number[]): number | undefined =>
+  window.length >= YEAR_OVER_YEAR_LEVELS ? window[0] : undefined;
+/** The change of an index over its trailing year, as a decimal: 1.03 against 1.00 reads 0.03. */
+export const yearOverYear = (level: number, levelYearAgo: number): number => level / levelYearAgo - 1;
+
+/**
+ * Real growth over a year, from nominal growth and inflation measured over the SAME year: the
+ * ratio of the two gross rates, not their difference. `nominal - inflation` is the first-order
+ * approximation and was the model's until §3.28b-i; at 5% and 2% it overstates real growth by
+ * six basis points, and the error grows with both rates.
+ */
+export const realGrowthAnnual = (nominalGrowthAnnual: number, inflationAnnual: number): number =>
+  (1 + nominalGrowthAnnual) / (1 + inflationAnnual) - 1;

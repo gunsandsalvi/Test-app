@@ -17,8 +17,8 @@ export const EQUITY_RISK_PREMIUM = 0.035;
 
 /** The rate capital is measured against in a region: its own ten-year point, the policy rate
  *  before a curve exists. */
-export function riskFreeRateOf(reg: { zeroRates?: { tenor10Y: number }; policyRate: number }): number {
-  return reg.zeroRates?.tenor10Y ?? reg.policyRate;
+export function riskFreeRateOf(reg: { zeroRates?: { tenor10Y: number }; policyRateAnnual: number }): number {
+  return reg.zeroRates?.tenor10Y ?? reg.policyRateAnnual;
 }
 
 /** What this firm's capital requires, annual: the risk-free rate plus the premium on its own

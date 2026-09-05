@@ -178,7 +178,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       // shortest money the broker itself can raise.
       const brokerSpreadBps = issuerSpreadAtOnCurve(ctx.v2, reg, broker.id, ctx.nextWeek, 1 / 52)?.spreadBps
         ?? WHOLESALE_FUNDING_SPREAD_BPS;
-      const rateAnnual = reg.policyRate + brokerSpreadBps / 10000
+      const rateAnnual = reg.policyRateAnnual + brokerSpreadBps / 10000
         + quoteLoanMarginBps({
             annualDefaultProbability: 0,
             riskWeight: haircutRate,

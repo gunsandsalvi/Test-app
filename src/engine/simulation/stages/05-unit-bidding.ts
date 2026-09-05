@@ -1874,7 +1874,7 @@ function runSubUnitMarkets(
         }
         const valueBuyerMoney = convertLocal(lot.units * book.clearedPriceLocal, lot.sellerRegion, buyerRegion, sourcing.fxToUsd);
         // Trade is reported in USD, because a world total in four different monies is not a total.
-        ctx.bilateralTradeWeeklyLocal[lot.sellerRegion][buyerRegion] +=
+        ctx.bilateralTradeWeeklyUSD[lot.sellerRegion][buyerRegion] +=
           localToUsd(valueBuyerMoney, buyerRegion, sourcing.fxToUsd);
         if (massTonnes > 0) {
           const key = laneKey(lot.sellerRegion, buyerRegion);
@@ -2565,7 +2565,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   const { byRegion: indexes, lookup } = buildMarketIndexes(ctx);
 
   MARKET_REGION_IDS.forEach(exporter => {
-    MARKET_REGION_IDS.forEach(importer => { ctx.bilateralTradeWeeklyLocal[exporter][importer] = 0; });
+    MARKET_REGION_IDS.forEach(importer => { ctx.bilateralTradeWeeklyUSD[exporter][importer] = 0; });
   });
   ctx.shippedTonnesByLane = {};
   ctx.carrierFreightRevenue = {};

@@ -746,10 +746,10 @@ function checkNaNAndPurity(state: GameState, week: number) {
 
   (Object.keys(state.regions) as RegionId[]).forEach(id => {
     const r = state.regions[id];
-    if (isNaN(r.gdpGrowth) || !isFinite(r.gdpGrowth) ||
-        isNaN(r.inflation) || !isFinite(r.inflation) ||
+    if (isNaN(r.gdpGrowthAnnual) || !isFinite(r.gdpGrowthAnnual) ||
+        isNaN(r.inflationAnnual) || !isFinite(r.inflationAnnual) ||
         isNaN(r.unemploymentRate) || !isFinite(r.unemploymentRate) ||
-        isNaN(r.policyRate) || !isFinite(r.policyRate)) {
+        isNaN(r.policyRateAnnual) || !isFinite(r.policyRateAnnual)) {
       violations.push({ week, message: `NaN/Infinity in region ${id} macro` });
     }
     if (isNaN(r.bankingSector.bankCapitalRatio) || !isFinite(r.bankingSector.bankCapitalRatio) ||
@@ -948,7 +948,7 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
         try {
           publishRepoBook(ensureV2(shocked), 'USA', [...repoBookOf(ensureV2(shocked), 'USA'), {
             id: `USA-REPO-SHOCK-${c.id}`, regionId: 'USA', lender: { kind: 'CENTRAL_BANK', region: 'USA' }, borrowerId: c.id,
-            principalLocal: sovLocal, rateAnnual: shocked.regions.USA.policyRate, struckWeek: shocked.currentWeek, maturityWeek: shocked.currentWeek + 52, collateral: pledges,
+            principalLocal: sovLocal, rateAnnual: shocked.regions.USA.policyRateAnnual, struckWeek: shocked.currentWeek, maturityWeek: shocked.currentWeek + 52, collateral: pledges,
           }]);
         } finally { setActiveWireWorld(undefined); }
       }
@@ -1010,7 +1010,7 @@ const hhModule: HarnessModule = (() => {
       series.tight.push(reg.laborMarketTightness ?? 0);
       series.wage.push(Object.values(pools).reduce((a: number, p: OccupationPool) => a + p.wageGrowthAnnual, 0) / 5);
       series.netWorth.push(hs.netWorthLocal);
-      series.infl.push(reg.inflation);
+      series.infl.push(reg.inflationAnnual);
       series.consumption.push((hs.cohorts ?? []).reduce((a, c) => a + c.consumptionBudgetLocal, 0));
     },
     report(s, weeks) {
@@ -1224,7 +1224,7 @@ const pubModule: HarnessModule = (() => {
       series.cbBook.push((cb ? centralBankAssetsLocal(centralBankSovereignAssetsLocal(ensureV2(s), 'USA'), cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0));
       series.reinvest.push(cb?.reinvestmentShare ?? 1);
       series.remit.push(cb?.lastRemittanceLocal ?? 0);
-      series.policy.push(reg.policyRate);
+      series.policy.push(reg.policyRateAnnual);
       series.revenue.push(reg.governmentRevenueLocal);
       series.outlays.push(reg.governmentOutlaysLocal ?? 0);
       series.cmb.push(reg.cashBridgeBillIssuanceLocal ?? 0);
@@ -1333,12 +1333,12 @@ const xbModule: HarnessModule = (() => {
     report(s) {
       const out: string[] = [];
       out.push('--- trade reconciles to who bought from whom ---');
-      const totX = REGIONS.reduce((a, r) => a + (s.regions[r].exportsLocal), 0);
-      const totM = REGIONS.reduce((a, r) => a + (s.regions[r].importsLocal), 0);
+      const totX = REGIONS.reduce((a, r) => a + (s.regions[r].exportsAnnualUSD), 0);
+      const totM = REGIONS.reduce((a, r) => a + (s.regions[r].importsAnnualUSD), 0);
       out.push(`  world exports ${B(totX)}  imports ${B(totM)}  gap ${pct(Math.abs(totX - totM) / Math.max(1, totX))}`);
       REGIONS.forEach(r => {
         const reg = s.regions[r];
-        out.push(`  ${r.padEnd(4)} X ${B(reg.exportsLocal)}  M ${B(reg.importsLocal)}  balance ${B(reg.tradeBalance)}`);
+        out.push(`  ${r.padEnd(4)} X ${B(reg.exportsAnnualUSD)}  M ${B(reg.importsAnnualUSD)}  balance ${B(reg.tradeBalanceAnnualUSD)}`);
       });
       out.push('--- trade share against the physics that should drive it ---');
       const density: number[] = []; const imported: number[] = [];
@@ -2150,8 +2150,8 @@ const spiralModule: HarnessModule = {
       const { overrunLocal } = gov.overrun();
       console.log(`  [spiral] w${w} ${region}`
         + ` u ${(r.unemploymentRate * 100).toFixed(1)}`
-        + ` pi ${(r.inflation * 100).toFixed(0)}`
-        + ` pol ${(r.policyRate * 100).toFixed(1)}`
+        + ` pi ${(r.inflationAnnual * 100).toFixed(0)}`
+        + ` pol ${(r.policyRateAnnual * 100).toFixed(1)}`
         + ` wageIdxG ${(r.occupationPools.GENERAL.wageIndex).toFixed(3)}`
         + ` | outlays ${((r.governmentOutlaysLocal ?? 0) / 1e9).toFixed(2)}B`
         + ` overrun ${(overrunLocal / 1e9).toFixed(2)}B`
@@ -2177,7 +2177,7 @@ function weekLine(s: GameState, w: number, newViol: number, totalViol: number, m
   const gdp = r.USA.derivedNominalGdpLocal;
   return `w${String(w).padStart(3)} | viol +${String(newViol).padStart(2)} S${String(totalViol).padStart(4)}`
     + ` | u ${u('USA')}/${u('EUR')}/${u('UK')}/${u('JPN')}`
-    + ` | pi ${((r.USA.inflation) * 100).toFixed(2)}`
+    + ` | pi ${((r.USA.inflationAnnual) * 100).toFixed(2)}`
     + ` | GDP ${(gdp / 1e12).toFixed(2)}T`
     + ` | 10Y ${((r.USA.zeroRates.tenor10Y) * 100).toFixed(2)}`
     + ` | ${String(ms).padStart(4)}ms`;
@@ -2310,10 +2310,10 @@ function runHarness() {
        // advanceWeeklyStep gates meetings on nextWeek (= w + 1, since state.currentWeek === w
        // going into this call), not on the harness's own loop index w.
        if ((w + 1) % 13 !== 0 && w > 1) {
-         if (preState.regions[rId as RegionId].policyRate !== state.regions[rId as RegionId].policyRate) {
+         if (preState.regions[rId as RegionId].policyRateAnnual !== state.regions[rId as RegionId].policyRateAnnual) {
            violations.push({
              week: w,
-             message: `Policy rate changed on non-meeting week ${w} for region ${rId}: ${preState.regions[rId as RegionId].policyRate} -> ${state.regions[rId as RegionId].policyRate}`
+             message: `Policy rate changed on non-meeting week ${w} for region ${rId}: ${preState.regions[rId as RegionId].policyRateAnnual} -> ${state.regions[rId as RegionId].policyRateAnnual}`
            });
          }
        }
@@ -2451,8 +2451,8 @@ function runHarness() {
     REGION_IDS.forEach(regionId => {
       const reg = state.regions[regionId];
       if (typeof reg.repoRateAnnual !== 'number') return;
-      const floorAnnual = Math.max(0, reg.policyRate - ON_RRP_SPREAD_BPS / 10000);
-      const ceilAnnual = reg.policyRate + SRF_SPREAD_BPS / 10000;
+      const floorAnnual = Math.max(0, reg.policyRateAnnual - ON_RRP_SPREAD_BPS / 10000);
+      const ceilAnnual = reg.policyRateAnnual + SRF_SPREAD_BPS / 10000;
       if (reg.repoRateAnnual < floorAnnual - 1e-6 || reg.repoRateAnnual > ceilAnnual + 1e-6) {
         violations.push({
           week: w,

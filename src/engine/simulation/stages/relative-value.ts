@@ -96,7 +96,7 @@ function readSwapSpread(ctx: WeeklyStepContext, funds: InstitutionalEntity[], vi
       const cashPrice = trancheClearedPricePerFace(ctx.v2, bondId);
       const row = trancheRowOf(ctx.v2, bondId);
       if (!(cashPrice !== undefined && cashPrice > 0) || row === undefined) return;
-      const terms = trancheTerms(ctx.v2, row, week, reg.policyRate);
+      const terms = trancheTerms(ctx.v2, row, week, reg.policyRateAnnual);
       const priceAtYieldBps = (bps: number) => priceFromYield(terms, bps / 10000);
       const swapId = swapInstrumentId(regionId, k);
       const marginRate = initialMarginRateOf({ classId: 'IRS', regionId, reference: { kind: 'RATE' }, termKey: k, maturityWeek: week + Math.round(years * 52) }, view);
@@ -219,7 +219,7 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
         const cashPrice = trancheClearedPricePerFace(ctx.v2, bondId);
         const cashSpreadBps = rowSpreadBps(ctx.v2, reg, rung, week);
         if (!(cashPrice !== undefined && cashPrice > 0) || cashSpreadBps === undefined) return;
-        const terms = trancheTerms(ctx.v2, rung, week, reg.policyRate);
+        const terms = trancheTerms(ctx.v2, rung, week, reg.policyRateAnnual);
         const priceAtSpread = (bps: number) => priceAtSpreadOnTranche(terms, reg.zeroRates, bps);
         const cdsId = cdsInstrumentId(regionId, issuer.id, tenor);
         const marginRate = initialMarginRateOf({ classId: 'CDS', regionId, reference: { kind: 'ISSUER', issuerId: issuer.id }, termKey: tenor, maturityWeek: week + cdsTenorWeeksOf(tenor) }, view);
@@ -304,7 +304,7 @@ function readSeniority(ctx: WeeklyStepContext, funds: InstitutionalEntity[], wee
       const seniorPrice = trancheClearedPricePerFace(ctx.v2, seniorId); const subPrice = trancheClearedPricePerFace(ctx.v2, subId);
       const seniorSpread = rowSpreadBps(ctx.v2, reg, senior, week); const subSpread = rowSpreadBps(ctx.v2, reg, sub, week);
       if (!(seniorPrice !== undefined && seniorPrice > 0) || !(subPrice !== undefined && subPrice > 0) || seniorSpread === undefined || subSpread === undefined) return;
-      const seniorTerms = trancheTerms(ctx.v2, senior, week, reg.policyRate);
+      const seniorTerms = trancheTerms(ctx.v2, senior, week, reg.policyRateAnnual);
       const seniorPriceAtSpread = (bps: number) => priceAtSpreadOnTranche(seniorTerms, reg.zeroRates, bps);
       const subLoans = loanBook.filter((l) => l.instrumentId === subId);
       regionFunds.forEach((fund) => {

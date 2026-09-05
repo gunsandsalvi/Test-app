@@ -317,8 +317,8 @@ export function runRegionalRepoSession(
   const bankIdByTicker = new Map(banks.map((b) => [b.ticker, b.id]));
   const tickerOfBankId = new Map(banks.map((b) => [b.id, b.ticker]));
   const priorRepoRateAnnual = reg.repoRateAnnual;
-  const policyBps = reg.policyRate * 10000;
-  const { floorBps: rrpBps, ceilingBps: srfBps } = repoCorridorBps(reg.policyRate);
+  const policyBps = reg.policyRateAnnual * 10000;
+  const { floorBps: rrpBps, ceilingBps: srfBps } = repoCorridorBps(reg.policyRateAnnual);
   const corridorWidthBps = Math.max(1, srfBps - rrpBps);
   const onInstrumentId = repoOvernightInstrumentId(regionId);
   const termInstrumentId = repoTermInstrumentId(regionId);
@@ -530,7 +530,7 @@ export function runRegionalRepoSession(
         instrumentId: termInstrumentId,
         needLocal: totalTermNeedLocal,
         windowNeedLocal: 0,
-        currentBps: (reg.repoTermRateAnnual ?? reg.policyRate) * 10000,
+        currentBps: (reg.repoTermRateAnnual ?? reg.policyRateAnnual) * 10000,
         bankReservationBps: termBps,
         instReservationBps: Math.max(0, termBps - ON_RRP_SPREAD_BPS),
         withWindow: false,

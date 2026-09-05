@@ -248,7 +248,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const bondShare = (outstandingByBond.get(b.key) ?? 0) / totalBillStockLocal;
           const bondShareOfSovStock = (outstandingByBond.get(b.key) ?? 0) / wholeSovStockLocal;
           demand.set(b.key, {
-            reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000 + BANK_BILL_PICKUP_BPS),
+            reservationStat: billPriceAtYieldBps(b, reg.policyRateAnnual * 10000 + BANK_BILL_PICKUP_BPS),
             maxHoldingLocal: appetiteLocal * bondShareOfSovStock,
             fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
             maxNetPurchaseLocal: fundableLocal * bondShare,
@@ -278,7 +278,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         activeBills.forEach((b) => {
           const bondShare = (outstandingByBond.get(b.key) ?? 0) / totalBillStockLocal;
           demand.set(b.key, {
-            reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000 + INSTITUTIONAL_BILL_TERM_PREMIUM_BPS_PER_YEAR * b.years),
+            reservationStat: billPriceAtYieldBps(b, reg.policyRateAnnual * 10000 + INSTITUTIONAL_BILL_TERM_PREMIUM_BPS_PER_YEAR * b.years),
             maxHoldingLocal: sleeveLocal * bondShare,
             fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
             maxNetPurchaseLocal: institutionSpendableLocal(ctx, entity) * CASH_SLEEVE_BILL_SHARE * bondShare,
@@ -324,7 +324,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const bondShare = (outstandingByBond.get(b.key) ?? 0) / totalBillStockLocal;
           holdings.set(b.key, heldByBond.get(b.key) ?? 0);
           demand.set(b.key, {
-            reservationStat: billPriceAtYieldBps(b, reg.policyRate * 10000),
+            reservationStat: billPriceAtYieldBps(b, reg.policyRateAnnual * 10000),
             maxHoldingLocal: targetLocal * bondShare,
             fullSizeStatRange: billPriceRange(b, billCurrentYieldBps(b), BILL_FULL_SIZE_YIELD_RANGE_BPS),
             maxNetPurchaseLocal: budgetLocal * bondShare,
@@ -695,7 +695,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
     // states it as the PRICE that yield implies on THIS paper's own remaining life. That is the
     // sovereign's own move (§9.13-SOV row 4, `pricing/bond.ts`), applied to the corporate front end.
     const cpRecoveryRate = creditRecoveryRate(reg);
-    const revolverWalkAwayBps = (reg.policyRate * 10000) + REVOLVER_MARGIN_BPS;
+    const revolverWalkAwayBps = (reg.policyRateAnnual * 10000) + REVOLVER_MARGIN_BPS;
 
     interface CpIssuer {
       comp: Company;
@@ -733,7 +733,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       let annualInterest = 0;
       for (const r of ladderRowsOf(v2Mirror, comp.id)) {
         if (!(TSf.flags[r] & TR_FLOATING)) annualInterest += TSf.principalLocal[r] * (Number.isNaN(TSf.couponRate[r]) ? 0.05 : TSf.couponRate[r]);
-        else annualInterest += TSf.principalLocal[r] * (reg.policyRate + (Number.isNaN(TSf.floatingMarginBps[r]) ? 200 : TSf.floatingMarginBps[r]) / 10000);
+        else annualInterest += TSf.principalLocal[r] * (reg.policyRateAnnual + (Number.isNaN(TSf.floatingMarginBps[r]) ? 200 : TSf.floatingMarginBps[r]) / 10000);
       }
       const latestSnap = comp.historicalFundamentals[comp.historicalFundamentals.length - 1];
       const dividendsQuarterLocal = Math.abs(latestSnap.cashFlowStatement.dividendsPaid);
@@ -925,7 +925,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // what this borrower's printed paper says it pays there — and the market decides what it
       // will pay for it. The concession then shows up where it belongs, as a price below par, and
       // the issuer receives price × face instead of par whatever it cleared.
-      const cpRates: RegionRates = { zeroRates: reg.zeroRates, policyRate: reg.policyRate };
+      const cpRates: RegionRates = { zeroRates: reg.zeroRates, policyRateAnnual: reg.policyRateAnnual };
       const cpTenorYears = CP_TENOR_WEEKS / 52;
       const primaryIdByIssuerId = new Map<string, InstrumentId>();
       const primaryTermsById = new Map<string, { couponRate: number }>();

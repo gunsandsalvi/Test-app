@@ -61,7 +61,7 @@ export function findRegionMmf(entities: InstitutionalEntity[], regionId: RegionI
  * quote, and the reason the market can bootstrap itself when that beats the deposit rate.
  */
 function quoteMmfNetYieldAnnual(v2: V2World, entity: InstitutionalEntity, cashLocal: number, reg: Region, week: number, govLadder: GovDebtTrancheView[]): number {
-  const rrpRateAnnual = repoCorridorBps(reg.policyRate).floorBps / 10000;
+  const rrpRateAnnual = repoCorridorBps(reg.policyRateAnnual).floorBps / 10000;
   const repoRateAnnual = reg.repoRateAnnual;
 
   // §3.13-SOV row 3: a holding is a bill because the LADDER says the bond it names is one —

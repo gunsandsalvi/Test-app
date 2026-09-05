@@ -38,7 +38,6 @@ src/domain/preferences.ts
 src/domain/pricing/discount.ts
 src/domain/pricing/index.ts
 src/domain/sme-pool.ts
-src/domain/units.ts
 src/domain/volatility.ts
 src/engine/blackScholes.ts
 src/engine/bootstrap/carriers.ts

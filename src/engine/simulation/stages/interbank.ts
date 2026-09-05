@@ -79,8 +79,8 @@ export function runInterbankSession(ctx: WeeklyStepContext, regionId: RegionId, 
   });
   borrowers.forEach((b) => unfunded.set(b.bank.id, b.needLocal));
   if (borrowers.length === 0 || surplusByLender.size === 0) return { unfunded, struckLocal: 0 };
-  const policyBps = reg.policyRate * 10000;
-  const corridor = repoCorridorBps(reg.policyRate);
+  const policyBps = reg.policyRateAnnual * 10000;
+  const corridor = repoCorridorBps(reg.policyRateAnnual);
   const corridorWidthBps = Math.max(1, corridor.ceilingBps - corridor.floorBps);
   const bankById = new Map(banks.map((b) => [b.id, b]));
   const book = [...interbankBookOf(ctx.v2, regionId)];

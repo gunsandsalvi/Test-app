@@ -132,7 +132,7 @@ export function runForeignDirectInvestment(
         employeeCount: employees,
         productMixBySubUnit: flows,
       }];
-      const babies = generate(target, seeds, reg.policyRate, tickers, names, nextWeek);
+      const babies = generate(target, seeds, reg.policyRateAnnual, tickers, names, nextWeek);
       if (babies.length === 0) continue;
       const sub = babies[0];
 

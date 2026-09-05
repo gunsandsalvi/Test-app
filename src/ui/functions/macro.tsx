@@ -1,4 +1,5 @@
-import { RegionId } from '../../domain/geography';
+import { RegionId, currencyOf } from '../../domain/geography';
+import { usdToLocal, FxToUsd } from '../../domain/currency';
 import { ownershipRateOf } from '../../domain/housing';
 import { ensureV2 } from '../../engine2/world';
 import { materializeGovLadder } from '../../engine2/tranches';
@@ -30,20 +31,26 @@ export const macro: FunctionModule = {
     const hs = r.householdState; const bs = r.bankingSector; const hm = r.housingMarket;
     const books = regionLoanBooksLocal(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.id));
     const gdp = r.derivedNominalGdpLocal;
+    // §3.28b-i: the trade position is stored in USD (stage 05 converts each lot at the cleared
+    // rate); the dashboard shows it in the region's own money beside a GDP that is local.
+    const fxToUsd: FxToUsd = (rid) => ensureV2(world.state).fx[currencyOf(rid)];
+    const exportsAnnualLocal = usdToLocal(r.exportsAnnualUSD, r.id, fxToUsd);
+    const importsAnnualLocal = usdToLocal(r.importsAnnualUSD, r.id, fxToUsd);
+    const tradeBalanceAnnualLocal = exportsAnnualLocal - importsAnnualLocal;
     return (<>
       <SectionLabel>activity</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
         <KV k="gdp, annualised" hint={sub('gdp')} v={money(gdp)} />
-        <KV k="potential growth" v={pctLevel(r.potentialGdpGrowth)} />
+        <KV k="potential growth" v={pctLevel(r.potentialGdpGrowthAnnual)} />
         <KV k="cycle" v={words(r.cycleRegime)} />
         <KV k="consumption · investment" hint="of gdp" v={gdp > 0 ? `${pctLevel(r.consumptionComponentLocal / gdp, 0)} · ${pctLevel(r.investmentComponentLocal / gdp, 0)}` : '—'} />
       </Card>
       <SectionLabel>prices</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
-        <KV k="inflation" hint={`core ${pctLevel(r.coreInflation)}`} v={pctLevel(r.inflation)} />
+        <KV k="inflation" hint={`core ${pctLevel(r.coreInflationAnnual)}`} v={pctLevel(r.inflationAnnual)} />
         <KV k="price level" hint="seed = 100" v={num(r.consumerPriceIndex, 1)} />
-        <KV k="target" hint={r.centralBank} v={pctLevel(r.targetInflation)} />
-        <KV k="expected" hint="the market's" v={pctLevel(r.expectedInflation)} />
+        <KV k="target" hint={r.centralBank} v={pctLevel(r.targetInflationAnnual)} />
+        <KV k="expected" hint="the market's" v={pctLevel(r.expectedInflationAnnual)} />
         <KV k="house prices" hint={`index ${num(hm.priceIndex, 2)}`} v={money(hm.medianHomePriceLocal, 2)} />
       </Card>
       <SectionLabel>labour</SectionLabel>
@@ -51,12 +58,12 @@ export const macro: FunctionModule = {
         <KV k="unemployment" hint={sub('unemployment') ?? `nairu ${pctLevel(r.nairu)}`} v={pctLevel(r.unemploymentRate)} />
         <KV k="participation" v={pctLevel(r.laborForceParticipation, 0)} />
         <KV k="tightness" hint="vacancies per seeker" v={num(r.laborMarketTightness, 2)} />
-        <KV k="wage growth" hint={sub('wage growth')} v={pctLevel(r.wageGrowth)} />
+        <KV k="wage growth" hint={sub('wage growth')} v={pctLevel(r.wageGrowthAnnual)} />
         <KV k="the market" v={<Link to={ref} fn="labour" nav={nav}>occupations · cohorts</Link>} />
       </Card>
       <SectionLabel>money</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
-        <KV k="policy rate" hint={sub('policy')} v={pctLevel(r.policyRate, 2)} />
+        <KV k="policy rate" hint={sub('policy')} v={pctLevel(r.policyRateAnnual, 2)} />
         <KV k="2y · 10y" hint={`2s10s ${pct((r.zeroRates.tenor10Y) - (r.zeroRates.tenor2Y), 2)}`} v={`${pctLevel(r.zeroRates.tenor2Y, 2)} · ${pctLevel(r.zeroRates.tenor10Y, 2)}`} />
         <KV k="overnight repo" v={pctLevel(r.repoRateAnnual, 2)} />
         <KV k="m2" v={money(bs.moneySupplyM2Local)} />
@@ -65,10 +72,10 @@ export const macro: FunctionModule = {
       </Card>
       <SectionLabel>external</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
-        <KV k="exports · imports" hint="annualised" v={`${money(r.exportsLocal)} · ${money(r.importsLocal)}`} />
+        <KV k="exports · imports" hint="annualised" v={`${money(exportsAnnualLocal)} · ${money(importsAnnualLocal)}`} />
         {/* §3.15-iii: the trade balance is a read of real fills; the "current account" that stood
             beside it was a stored zero nothing wrote (atlas E1), deleted — §3.37-BOP builds the read. */}
-        <KV k="trade balance" hint={gdp > 0 ? `${pct(r.tradeBalance / gdp, 1)} of gdp` : undefined} v={money(r.tradeBalance)} />
+        <KV k="trade balance" hint={gdp > 0 ? `${pct(tradeBalanceAnnualLocal / gdp, 1)} of gdp` : undefined} v={money(tradeBalanceAnnualLocal)} />
         <KV k="fx reserves" v={money(r.fxReservesLocal)} />
         <KV k="the currency" v={world.state.fxPairs.filter((p) => p.pair.includes(r.currency)).slice(0, 3).map((p, i) => <span key={p.pair}>{i ? ' · ' : ''}<Link to={{ type: 'fx', id: p.pair }} nav={nav}>{p.pair}</Link></span>)} />
       </Card>

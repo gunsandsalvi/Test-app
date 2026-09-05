@@ -596,7 +596,7 @@ export function runPeLifecycleForRegion(
         // §3.13: the target's own five-year credit, read off its own paper; a private name with
         // nothing printed is underwritten at the sponsor's recap threshold, which is the price the
         // loan market has actually quoted this kind of deal.
-        const debtCostAnnual = reg.policyRate
+        const debtCostAnnual = reg.policyRateAnnual
           + (issuerSpreadAtOnCurve(ctx.v2, reg, listedTarget.id, ctx.nextWeek, STANDARD_CORP_TENOR_YEARS)?.spreadBps
             ?? RECAP_DM_THRESHOLD_BPS) / 10000;
         const leveredCashFlowLocal = ebitdaOf(listedTarget) - allInDebtLocal * debtCostAnnual;
@@ -901,7 +901,7 @@ export function runFirmBirthsForRegion(
       leverage: 2.5,
       sponsorStyle: random() < 0.5,
       employeeCount: employees,
-    }], reg.policyRate, tickers, names, nextWeek);
+    }], reg.policyRateAnnual, tickers, names, nextWeek);
     if (newborn.length === 0) return;
     newborn.forEach((c) => { tickers.add(c.ticker); names.add(c.name); });
 

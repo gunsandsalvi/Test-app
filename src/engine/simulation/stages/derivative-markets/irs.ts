@@ -148,7 +148,7 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
         interestLocal += TS.principalLocal[r]
           * (!isFloating
             ? (Number.isNaN(TS.couponRate[r]) ? 0.05 : TS.couponRate[r])
-            : reg.policyRate + ((Number.isNaN(TS.floatingMarginBps[r]) ? 200 : TS.floatingMarginBps[r])) / 10000);
+            : reg.policyRateAnnual + ((Number.isNaN(TS.floatingMarginBps[r]) ? 200 : TS.floatingMarginBps[r])) / 10000);
       }
       if (!(floatingLocal > 0)) return;
       const affordableInterestLocal = Math.max(0, comp.ebitda) / COVENANT_INTEREST_COVERAGE;

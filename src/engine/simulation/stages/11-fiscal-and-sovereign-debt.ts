@@ -32,6 +32,7 @@ import { internType, internRegion } from '../../../engine2/world';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { repoBorrowedLocal, srfBorrowedLocal } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
+import { trailingYear, yearAgoLevel, yearOverYear, realGrowthAnnual, runRateAnnual } from '../../../domain/units';
 import type { InstrumentId } from '../../../domain/ids';
 import { governmentIssuer } from '../../../domain/entity-keys';
 
@@ -85,10 +86,11 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
     const cpiLevel = computeCpiLevel(reg, reg.cpiBasket);
     const coreCpiLevel = computeCpiLevel(reg, reg.cpiBasket, true);
-    const cpiHistory = [...(reg.cpiHistory).slice(-52), cpiLevel];
-    const coreCpiHistory = [...(reg.coreCpiHistory).slice(-52), coreCpiLevel];
-    const yearAgoCpi = cpiHistory.length >= 53 ? cpiHistory[0] : null;
-    const yearAgoCoreCpi = coreCpiHistory.length >= 53 ? coreCpiHistory[0] : null;
+    // §3.28b-i: the window and the year-over-year read are `domain/units.ts`'s, pinned there.
+    const cpiHistory = trailingYear(reg.cpiHistory, cpiLevel);
+    const coreCpiHistory = trailingYear(reg.coreCpiHistory, coreCpiLevel);
+    const yearAgoCpi = yearAgoLevel(cpiHistory);
+    const yearAgoCoreCpi = yearAgoLevel(coreCpiHistory);
 
     reg.consumerPriceIndex = Number(cpiLevel.toFixed(6));
     reg.coreConsumerPriceIndex = Number(coreCpiLevel.toFixed(6));
@@ -96,9 +98,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     reg.coreCpiHistory = coreCpiHistory;
     // A year of real weeks, or no year-over-year number at all: until then `inflation` is the
     // opening assumption it was seeded with, and the flag says so to everything that reports it.
-    reg.inflationIsMeasured = !!(yearAgoCpi && yearAgoCpi > 0);
-    if (yearAgoCpi && yearAgoCpi > 0) reg.inflation = Number((cpiLevel / yearAgoCpi - 1).toFixed(4));
-    if (yearAgoCoreCpi && yearAgoCoreCpi > 0) reg.coreInflation = Number((coreCpiLevel / yearAgoCoreCpi - 1).toFixed(4));
+    reg.inflationIsMeasured = yearAgoCpi !== undefined && yearAgoCpi > 0;
+    if (yearAgoCpi !== undefined && yearAgoCpi > 0) reg.inflationAnnual = Number(yearOverYear(cpiLevel, yearAgoCpi).toFixed(4));
+    if (yearAgoCoreCpi !== undefined && yearAgoCoreCpi > 0) reg.coreInflationAnnual = Number(yearOverYear(coreCpiLevel, yearAgoCoreCpi).toFixed(4));
   });
 
   // Phase 4a: Derived nominal GDP parallel diagnostic
@@ -125,14 +127,14 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // PUB1e: G is what the government's bids actually FILLED in stage 05, annualized — the same
     // number the treasury is debited by below. It used to be a formula here and a differently
     // allocated formula in the demand stage.
-    const governmentComponentLocal = (reg.governmentProcurementSpentLocal ?? 0) * 52;
+    const governmentComponentLocal = runRateAnnual(reg.governmentProcurementSpentLocal ?? 0);
 
     // NX — net exports, annualized. §6.1's money-locality row, first verified casualty fixed:
     // `exportsLocal`/`importsLocal` are GENUINE USD (05 converts every cross-border lot at the
     // cleared rate before the bilateral table sums a world total), while C, I and G above are
     // REGION-LOCAL money. Adding them raw put a dollar figure inside a yen identity; the NX
     // component converts back to this region's own money before it joins.
-    const netExportsComponentLocal = usdToLocal(reg.exportsLocal - reg.importsLocal, regionId, ctx.getFxToUsd);
+    const netExportsComponentLocal = usdToLocal(reg.exportsAnnualUSD - reg.importsAnnualUSD, regionId, ctx.getFxToUsd);
 
     const rawGdpLocal = consumptionComponentLocal + investmentComponentLocal + governmentComponentLocal + netExportsComponentLocal;
     const instantaneousNominalGdpLocal = Math.max(1e11, isFinite(rawGdpLocal) ? rawGdpLocal : 1e12);
@@ -150,7 +152,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // summed bottom-up from real settled activity, and the growth rate that sum implies is then
       // held inside +/-4%/wk before anyone reads it. A clamped statistic is not a statistic. If
       // the raw number is too noisy to publish, the smoothing two lines below is the honest tool.
-      ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpLocal / gdpLevelLastWeek - 1) - (reg.inflation / 52)))
+      ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpLocal / gdpLevelLastWeek - 1) - (reg.inflationAnnual / 52)))
       : 0;
     const prevSmoothedWeeklyRate = reg.smoothedWeeklyGrowthRate;
     // Kept for the fiscal output-gap signal in macro/evolution.ts, which wants a rough weekly
@@ -167,16 +169,19 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // exactly 52 weeks before the newest one. It used to keep 52 and compare against index 0,
     // which is 51 weeks back — a year-over-year reading taken a week short of a year.
     const gdpHistory = reg.nominalGdpHistory;
-    const updatedGdpHistory = [...gdpHistory.slice(-52), newDerivedNominalGdpLocal];
-    const yearAgoGdpLevel = updatedGdpHistory.length >= 53 ? updatedGdpHistory[0] : null;
+    const updatedGdpHistory = trailingYear(gdpHistory, newDerivedNominalGdpLocal);
+    const yearAgoGdpLevel = yearAgoLevel(updatedGdpHistory);
     // The bootstrap seeds a full trailing year (macro/initialization.ts), so the fallback below
     // is unreachable in a normal run and exists only for a state restored without history. It
     // reports the region's trend rate rather than annualizing one week via (1+x)^52: that
     // extrapolation is what converted the cold-start level transient into ~110% headline growth,
     // and it amplifies any weekly noise by construction whether or not a transient exists.
-    const gdpGrowthBottomUp = (!isStartupTransition && yearAgoGdpLevel && yearAgoGdpLevel > 0 && isFinite(newDerivedNominalGdpLocal))
-      ? (newDerivedNominalGdpLocal / yearAgoGdpLevel - 1) - reg.inflation
-      : reg.potentialGdpGrowth;
+    // §3.28b-i: real growth is the ratio of the nominal and the price gross rates over the SAME
+    // year (`units.ts:realGrowthAnnual`), not their difference — both are the trailing-year reads
+    // this stage just took, so the periods agree by construction.
+    const gdpGrowthBottomUp = (!isStartupTransition && yearAgoGdpLevel !== undefined && yearAgoGdpLevel > 0 && isFinite(newDerivedNominalGdpLocal))
+      ? realGrowthAnnual(yearOverYear(newDerivedNominalGdpLocal, yearAgoGdpLevel), reg.inflationAnnual)
+      : reg.potentialGdpGrowthAnnual;
 
     if (!isFinite(gdpGrowthBottomUp)) {
       throw new Error(`gdpGrowthBottomUp is non-finite for region ${regionId} at week ${nextWeek}: ${gdpGrowthBottomUp}. This must be fixed at its real source, not papered over with an assumed growth rate.`);
@@ -782,8 +787,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // reinvestment below is spread by the FACE each bond holds.
       const bookLocal = centralBankBookLocal(ctx.v2, regionId);
       const { reinvestmentShare, netPurchaseLocal } = openMarketPolicy({
-        policyRate: reg.policyRate,
-        taylorTargetRate: reg.taylorTargetRate,
+        policyRate: reg.policyRateAnnual,
+        taylorTargetRate: reg.taylorTargetRateAnnual,
         bookLocal,
         sovereignStockLocal: totalGovDebtLocal,
       });
@@ -808,7 +813,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
     updatedRegions[regionId] = {
       ...reg,
-      gdpGrowth: finalGdpGrowth,
+      gdpGrowthAnnual: finalGdpGrowth,
       estimatedNominalGdpLocal: newDerivedNominalGdpLocal,
       derivedNominalGdpLocal: newDerivedNominalGdpLocal,
       gdpGrowthBottomUp: Number(gdpGrowthBottomUp.toFixed(4)),

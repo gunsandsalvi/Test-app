@@ -69,7 +69,7 @@ export function quoteOfInstrument(world: World, instrumentId: string): PaperQuot
   try { issuerId = issuerIdOf(v2, instrumentId); } catch { return undefined; }
   const regionId = regionOfGovernmentEntity(issuerId) ?? companyOf(world, issuerId)?.region;
   const reg = regionId ? regionOf(world, regionId) : undefined;
-  return paperQuoteOf(v2, instrumentId, reg?.zeroRates ? { zeroRates: reg.zeroRates, policyRate: reg.policyRate } : undefined, world.state.currentWeek);
+  return paperQuoteOf(v2, instrumentId, reg?.zeroRates ? { zeroRates: reg.zeroRates, policyRateAnnual: reg.policyRateAnnual } : undefined, world.state.currentWeek);
 }
 /** "98.50" — a price per hundred of face; "—" where no market has printed one. */
 export const priceWord = (q: PaperQuote | undefined): string => (q ? (q.pricePerFace * 100).toFixed(2) : '—');
@@ -85,7 +85,7 @@ function allTranches(world: World): { id: string; obj: TrancheView }[] {
   out = [];
   const v2 = ensureV2(world.state);
   for (const c of world.state.companies) {
-    const policy = regionOf(world, c.region)?.policyRate ?? 0;
+    const policy = regionOf(world, c.region)?.policyRateAnnual ?? 0;
     for (const t of materializeLadder(v2, c.id)) out.push({ id: trancheId(c.id, t.id), obj: companyView(world, c, policy, t) });
   }
   for (const r of REGION_IDS) {
@@ -109,7 +109,7 @@ function trancheOf(world: World, key: string): TrancheView | undefined {
   if (!c) return undefined;
   const t = materializeLadder(world.v2, c.id).find((x) => x.id === id);
   if (!t) return undefined;
-  return companyView(world, c, regionOf(world, c.region)?.policyRate ?? 0, t);
+  return companyView(world, c, regionOf(world, c.region)?.policyRateAnnual ?? 0, t);
 }
 
 export const tranche = defineObject<TrancheView>({

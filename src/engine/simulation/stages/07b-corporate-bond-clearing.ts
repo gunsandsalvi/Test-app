@@ -462,7 +462,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // §3.13-READ D5: the build itself is `credit-demand.ts` — one statement of it, for this book
     // and the loan book, which had drifted apart on the sub-investment-grade size factor.
     const participants: ClearingParticipant[] = buildCreditDemandParticipants({
-      ctx, regionId, policyRate: reg.policyRate,
+      ctx, regionId, policyRate: reg.policyRateAnnual,
       entities: regionEntities, instruments: bonds, issuerTerms: companyTerms,
       claimedByEntity, rawEntityTargets, sectorTotal,
       assetClass: 'CORP_BOND', creditConditionsIndex, openingPrice,

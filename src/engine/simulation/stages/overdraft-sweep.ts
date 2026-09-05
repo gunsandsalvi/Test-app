@@ -134,7 +134,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       const line = book.find((l) => l.fundId === fund.id);
       if (line) {
         line.drawnLocal = Math.round(line.drawnLocal + drawLocal);
-        if (penalty) line.rateAnnual = Number(Math.max(line.rateAnnual, reg.policyRate + (WHOLESALE_FUNDING_SPREAD_BPS + penalty) / 10000).toFixed(6));
+        if (penalty) line.rateAnnual = Number(Math.max(line.rateAnnual, reg.policyRateAnnual + (WHOLESALE_FUNDING_SPREAD_BPS + penalty) / 10000).toFixed(6));
       } else {
         book.push({
           id: `${regionId}-PB-${fund.id}`,
@@ -143,7 +143,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
           fundId: fund.id,
           drawnLocal: Math.round(drawLocal),
           haircutRate: 0.5,
-          rateAnnual: Number((reg.policyRate + (WHOLESALE_FUNDING_SPREAD_BPS + penalty) / 10000).toFixed(6)),
+          rateAnnual: Number((reg.policyRateAnnual + (WHOLESALE_FUNDING_SPREAD_BPS + penalty) / 10000).toFixed(6)),
           struckWeek: ctx.nextWeek,
         });
       }

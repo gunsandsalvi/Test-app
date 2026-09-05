@@ -10,8 +10,8 @@ test('the hurdle is the long rate plus the premium on the firm\'s own beta at it
 });
 
 test('the region\'s rate is its own ten-year point, the policy rate before a curve exists', () => {
-  assert.equal(riskFreeRateOf({ zeroRates: { tenor10Y: 0.045 }, policyRate: 0.03 }), 0.045);
-  assert.equal(riskFreeRateOf({ policyRate: 0.03 }), 0.03);
+  assert.equal(riskFreeRateOf({ zeroRates: { tenor10Y: 0.045 }, policyRateAnnual: 0.03 }), 0.045);
+  assert.equal(riskFreeRateOf({ policyRateAnnual: 0.03 }), 0.03);
 });
 
 test('the weekly charge is the net plant at that rate over the year', () => {

@@ -81,14 +81,14 @@ export function generateWeeklyNews(
     let title: string, desc: string, impactBadge: string;
     
     if (isHold) {
-      title = `[CENTRAL BANK] ${reg.centralBank} holds policy rate unchanged at ${(reg.policyRate * 100).toFixed(2)}%`;
-      desc = `Policymakers opted to hold rates steady, citing balanced risks between inflation (${(reg.inflation * 100).toFixed(1)}%) and output growth (${(reg.gdpGrowth * 100).toFixed(1)}%).`;
+      title = `[CENTRAL BANK] ${reg.centralBank} holds policy rate unchanged at ${(reg.policyRateAnnual * 100).toFixed(2)}%`;
+      desc = `Policymakers opted to hold rates steady, citing balanced risks between inflation (${(reg.inflationAnnual * 100).toFixed(1)}%) and output growth (${(reg.gdpGrowthAnnual * 100).toFixed(1)}%).`;
       impactBadge = '[RATES UNCHANGED]';
     } else {
-      title = `[CENTRAL BANK] ${reg.centralBank} ${isHike ? 'hikes' : 'cuts'} policy rate by ${Math.abs(rc.deltaBps)} bps to ${(reg.policyRate * 100).toFixed(2)}%`;
+      title = `[CENTRAL BANK] ${reg.centralBank} ${isHike ? 'hikes' : 'cuts'} policy rate by ${Math.abs(rc.deltaBps)} bps to ${(reg.policyRateAnnual * 100).toFixed(2)}%`;
       desc = isHike
-        ? `Addressing persistent inflation (${(reg.inflation * 100).toFixed(1)}%), policymakers tighten financial conditions. Sovereign curve yields adjust upwards.`
-        : `Responding to slowing GDP growth (${(reg.gdpGrowth * 100).toFixed(1)}%), central bank eases benchmark borrowing costs to stimulate credit creation.`;
+        ? `Addressing persistent inflation (${(reg.inflationAnnual * 100).toFixed(1)}%), policymakers tighten financial conditions. Sovereign curve yields adjust upwards.`
+        : `Responding to slowing GDP growth (${(reg.gdpGrowthAnnual * 100).toFixed(1)}%), central bank eases benchmark borrowing costs to stimulate credit creation.`;
       impactBadge = isHike ? `[RATES +${rc.deltaBps}bps]` : `[RATES ${rc.deltaBps}bps]`;
     }
 

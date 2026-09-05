@@ -234,7 +234,7 @@ export function planSmeShopping(
   reg: Region,
   regionId: RegionId
 ): { grantedByBankTicker: Map<Ticker, Map<string, number>>; declinedLocal: number } {
-  const policyRate = reg.policyRate;
+  const policyRate = reg.policyRateAnnual;
   const grantedByBankTicker = new Map<Ticker, Map<string, number>>();
   let declinedLocal = 0;
   const lenders = offers
@@ -287,7 +287,7 @@ export function runBankWeeklyLending(
   /** §3.20c-ii: what the region's shopping plan sent this bank, per industry. */
   shoppedByIndustry: ReadonlyMap<string, number>
 ): WeeklyLendingResult {
-  const policyRate = reg.policyRate;
+  const policyRate = reg.policyRateAnnual;
   // G3c: every price this bank quotes below rides on ITS OWN cost of equity.
   const bankHurdle = bankRequiredReturnAnnual(bank, reg);
   let loans = [...sheet.businessLoans];
@@ -527,7 +527,7 @@ export function migrateHouseholdDebtAtSeed(
   hs.creditCardDebtLocal = sumKind('CREDIT_CARD');
   hs.otherConsumerLoanDebtLocal = sumKind('CONSUMER_TERM');
   hs.priorMortgageDebtLocal = hs.mortgageDebtLocal;
-  const policyRate = reg.policyRate;
+  const policyRate = reg.policyRateAnnual;
   hs.weeklyDebtServiceLocal = Math.round((
     (hs.mortgageDebtLocal * mortgageRate
       + hs.creditCardDebtLocal * (policyRate + cardMarginBps / 10000)
@@ -598,7 +598,7 @@ export function runBankHouseholdLending(
   /** DIST/HSG — stamped on each new mortgage vintage, so a cohort knows its own age. */
   currentWeek: number
 ): HouseholdLendingResult {
-  const policyRate = reg.policyRate;
+  const policyRate = reg.policyRateAnnual;
   // G3c: this bank's own cost of equity prices the consumer credit it writes.
   const bankHurdle = bankRequiredReturnAnnual(bank, reg);
   const hs = reg.householdState;
@@ -618,8 +618,8 @@ export function runBankHouseholdLending(
   // the confidence index this read is gone; its content was real wage growth (the index's
   // equilibrium was 150 × that on a 100 base, read at 0.5 per unit, so 0.75 per unit of real
   // wage growth), and the ×2 cap is gone with it (rule 6). An appetite cannot be negative.
-  const neutralRate = reg.neutralRate;
-  const appetite = Math.max(0, 1.0 + ((hs.wageGrowth) - reg.inflation) * 0.75 - (policyRate - neutralRate) * 4);
+  const neutralRate = reg.neutralRateAnnual;
+  const appetite = Math.max(0, 1.0 + ((hs.wageGrowthAnnual) - reg.inflationAnnual) * 0.75 - (policyRate - neutralRate) * 4);
 
   const unsecuredLossRateAnnual = consumerAnnualLossRate(adjustedUnemploymentRate, hs.creditTierBooks);
   // Mortgage severity reads the sector's REAL home equity (HH2): foreclosure recovers the house

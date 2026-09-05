@@ -160,7 +160,7 @@ export function closeSeedMoney(
     reg.governmentInterestWeeklyLocal = Math.round(weeklyInterestExpenseLocal(seedGovLadderOf(reg).map(govTrancheView)));
     // §3.13-BOOK d3a: the rows are issued at `openSeededBooks`, after this; the book here is the
     // stash this close just sized.
-    reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(sumByTenor(seedCentralBankBookOf(cb)), cb, waysAndMeansOf(v2, regionId), currencyOf(regionId), v2.fx));
+    reg.centralBankBalanceSheetLocal = Math.round(centralBankAssetsLocal(sumByTenor(seedCentralBankBookOf(cb)), cb, waysAndMeansOf(v2, regionId), currencyOf(regionId), v2.fx));
   });
 }
 
@@ -223,7 +223,7 @@ export function seedOpeningCreditPrices(
       const marginBps = Number.isNaN(TS.floatingMarginBps[tr]) ? 0 : TS.floatingMarginBps[tr];
       const price = priceFromSpreadBps({
         annualCouponRate: floating
-          ? (reg.policyRate) + marginBps / 10000
+          ? (reg.policyRateAnnual) + marginBps / 10000
           : (Number.isNaN(TS.couponRate[tr]) ? 0 : TS.couponRate[tr]),
         periodWeeks: trancheScheduleOf(TS, tr).periodWeeks,
         weeksToMaturity,
@@ -252,7 +252,7 @@ export function seedOpeningAccruals(
         ? (Number.isNaN(TS.floatingMarginBps[tr]) ? TRANCHE_DEFAULT_MARGIN_BPS : TS.floatingMarginBps[tr]) / 10000
         : (Number.isNaN(TS.couponRate[tr]) ? TRANCHE_DEFAULT_COUPON : TS.couponRate[tr]);
       // A floater's coupon is policy + margin; at the seed the policy rate is the region's own.
-      const policyRate = floating ? (regions[c.region].policyRate) : 0;
+      const policyRate = floating ? (regions[c.region].policyRateAnnual) : 0;
       // §3.13b: `accruedPerFace` is the one owner of "what has accrued on a unit of face" — the
       // same read the weekly accrual and the buyer-pays-seller leg take, so the three cannot
       // disagree about a tranche's position in its own period.

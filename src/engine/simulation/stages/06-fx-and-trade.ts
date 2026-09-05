@@ -20,6 +20,7 @@ import { MARKET_REGION_IDS } from './05-unit-bidding';
 import { defect } from '../../../domain/defect';
 import { REGION_IDS, CURRENCY_BY_REGION } from '../../../domain/geography';
 import { V2World, openFxWeek } from '../../../engine2/world';
+import { runRateAnnual } from '../../../domain/units';
 
 /**
  * USD per one unit of a region's currency.
@@ -66,20 +67,23 @@ export function runFxAndTradeStage(state: GameState, ctx: WeeklyStepContext): vo
   publishFxRates(ctx.v2, ctx.updatedFxPairs);
 
   MARKET_REGION_IDS.forEach(regionId => {
-    let exportsWeeklyLocal = 0;
-    let importsWeeklyLocal = 0;
+    let exportsWeeklyUSD = 0;
+    let importsWeeklyUSD = 0;
     MARKET_REGION_IDS.forEach(counterparty => {
       if (counterparty === regionId) return;
-      exportsWeeklyLocal += ctx.bilateralTradeWeeklyLocal[regionId][counterparty];
-      importsWeeklyLocal += ctx.bilateralTradeWeeklyLocal[counterparty][regionId];
+      exportsWeeklyUSD += ctx.bilateralTradeWeeklyUSD[regionId][counterparty];
+      importsWeeklyUSD += ctx.bilateralTradeWeeklyUSD[counterparty][regionId];
     });
     const reg = ctx.updatedRegions[regionId];
     // ANNUALISED, because that is the periodicity every consumer of these fields already reads
     // them at — the GDP identity's net-exports component in stage 11, and fx-clearing's own
     // `/52` back to a weekly flow. The measurement underneath is a real week of settled
-    // cross-border sales; the x52 is the run-rate, and it is named as such (rule 8).
-    reg.exportsLocal = exportsWeeklyLocal * 52;
-    reg.importsLocal = importsWeeklyLocal * 52;
-    reg.tradeBalance = reg.exportsLocal - reg.importsLocal;
+    // cross-border sales; the x52 is the run-rate, and it is named as such (rule 8). And USD,
+    // because stage 05 converts every cross-border lot at the cleared rate before the bilateral
+    // table sums it (a world total in four monies is not a total): §3.28b-i named the price
+    // level, which the `…Local` these carried for years denied — stage 11 converts back.
+    reg.exportsAnnualUSD = runRateAnnual(exportsWeeklyUSD);
+    reg.importsAnnualUSD = runRateAnnual(importsWeeklyUSD);
+    reg.tradeBalanceAnnualUSD = reg.exportsAnnualUSD - reg.importsAnnualUSD;
   });
 }

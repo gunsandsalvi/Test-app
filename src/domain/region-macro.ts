@@ -215,7 +215,7 @@ export interface CreditTierBook {
 
 export interface HouseholdState {
   creditTierBooks: CreditTierBook[];
-  wageGrowth: number;
+  wageGrowthAnnual: number;
   savingsRate: number;
   realConsumptionGrowth: number;
   householdDebtToIncomeRatio: number;
@@ -685,7 +685,7 @@ export interface Region {
   estimatedHouseholdIncomeLocal: number;
   
   // Macro fundamentals
-  policyRate: number;
+  policyRateAnnual: number;
   /**
    * WS6 — the cleared overnight general-collateral repo rate, an ANNUALISED decimal (same
    * convention as policyRate; the weekly accrual is this over 52). A market print solved each
@@ -798,19 +798,19 @@ export interface Region {
   /** §3.20-LLR-iii — what left each bank (by entity id) this week when its uninsured depositors
    *  moved to a sounder one: the run, measured. Written fresh each week by `depositor-flight.ts`. */
   depositorFlightLocal?: Record<string, number>;
-  neutralRate: number;
+  neutralRateAnnual: number;
   /**
    * PUB2b: what the Taylor rule wanted BEFORE the floor clamped it. The gap between this and the
    * effective lower bound is the easing the rate tool cannot deliver — which is the central
    * bank's own trigger for reaching for the balance sheet instead.
    */
-  taylorTargetRate: number;
-  inflation: number;
+  taylorTargetRateAnnual: number;
+  inflationAnnual: number;
   /** True once fifty-three real weeks of index exist and `inflation` is a measured
    *  year-over-year change. Until then it is the opening assumption, and what is REPORTED is the
    *  level — a displayed change where no history exists is a lie. */
   inflationIsMeasured?: boolean;
-  coreInflation: number;
+  coreInflationAnnual: number;
   /**
    * Real measured price level and its trailing year, produced by the CPI basket in
    * simulation/stages/price-index.ts from the prices stage 05's auction actually clears.
@@ -821,24 +821,24 @@ export interface Region {
   cpiHistory: number[];
   coreCpiHistory: number[];
   cpiBasket: import('../engine/simulation/stages/price-index').CpiBasket;
-  expectedInflation: number;
-  centralBankBalanceSheet: number;
+  expectedInflationAnnual: number;
+  centralBankBalanceSheetLocal: number;
   creditConditionsSpilloverAdjustment?: number;
-  targetInflation: number;
-  gdpGrowth: number;
-  potentialGdpGrowth: number;
+  targetInflationAnnual: number;
+  gdpGrowthAnnual: number;
+  potentialGdpGrowthAnnual: number;
   nairu: number;
   weeksAboveNairu: number;
   unemploymentRate: number;
-  wageGrowth: number;
-  tradeBalance: number;
-  exportsLocal: number;
-  importsLocal: number;
+  wageGrowthAnnual: number;
+  tradeBalanceAnnualUSD: number;
+  exportsAnnualUSD: number;
+  importsAnnualUSD: number;
   // §3.15-iii: `currentAccountPctGdp` is DELETED — seeded 0, written by nothing, shown on two
   // screens as a fact. The trade balance above is the read that exists; a current account is
   // §3.37-BOP's to build, and it will be a read of the transactions, never a stored field.
   fxReservesLocal: number;
-  govEmploymentGrowthRate?: number;
+  govEmploymentGrowthWeekly?: number;
   fiscalStanceScore: number;
   sovereignRating: 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
   laggedPolicyRateEMA: number;

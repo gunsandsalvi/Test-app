@@ -31,7 +31,7 @@ export const curve = defineObject<Region>({
     defaultSort: '10y',
     columns: [
       { key: 'name', label: 'curve', width: 0.8, render: (r, _w, nav) => <Link to={{ type: 'curve', id: r.id }} nav={nav}>{r.id}</Link>, value: (r) => r.id },
-      { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRate, 2), value: (r) => r.obj.policyRate },
+      { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRateAnnual, 2), value: (r) => r.obj.policyRateAnnual },
       { key: '2y', label: '2y', render: (r) => pctLevel(r.obj.zeroRates.tenor2Y, 2), value: (r) => r.obj.zeroRates.tenor2Y },
       { key: '10y', label: '10y', render: (r) => pctLevel(r.obj.zeroRates.tenor10Y, 2), value: (r) => r.obj.zeroRates.tenor10Y },
       { key: '30y', label: '30y', render: (r) => pctLevel(r.obj.zeroRates.tenor30Y, 2), value: (r) => r.obj.zeroRates.tenor30Y },
@@ -46,7 +46,7 @@ export const curve = defineObject<Region>({
       <>
         <ObjectHeader name={`${r.name} sovereign curve`} sub={<><RegionLink id={ref.id} nav={nav} /> · {r.centralBank} · sovereign {r.sovereignRating} · {slope < 0 ? 'inverted' : 'upward sloping'}</>} />
         <StatGrid>
-          <Stat label="policy" value={pctLevel(r.policyRate, 2)} sub={`neutral ${pctLevel(r.neutralRate, 2)}`} />
+          <Stat label="policy" value={pctLevel(r.policyRateAnnual, 2)} sub={`neutral ${pctLevel(r.neutralRateAnnual, 2)}`} />
           <Stat label="10y" value={pctLevel(r.zeroRates.tenor10Y, 2)} sub={Number.isFinite(prev) ? `${pct((r.zeroRates.tenor10Y) - prev, 2)} this week` : ''} />
           <Stat label="2s10s" value={pct(slope, 2)} sub="slope" neg={slope < 0} />
         </StatGrid>
@@ -54,7 +54,7 @@ export const curve = defineObject<Region>({
           {TENORS.map((t) => <KV key={t} k={t.toLowerCase()} v={pctLevel(tenorRate(r, t), 2)} />)}
           <KV k="traded this week" hint="the rest is the fit" v={r.sovereignCurve.tradedTenorsYears.length > 0 ? r.sovereignCurve.tradedTenorsYears.map((y) => (y < 1 ? `${Math.round(y * 52)}w` : `${y.toFixed(y % 1 === 0 ? 0 : 1)}y`)).join(' · ') : 'nothing'} />
           <KV k="overnight repo" v={pctLevel(r.repoRateAnnual, 2)} />
-          <KV k="expected inflation" hint="the market's, annual" v={pctLevel(r.expectedInflation, 2)} />
+          <KV k="expected inflation" hint="the market's, annual" v={pctLevel(r.expectedInflationAnnual, 2)} />
           <KV k="dot plot" hint="1y · 2y" v={`${pctLevel(r.dotPlot1Y, 2)} · ${pctLevel(r.dotPlot2Y, 2)}`} />
         </Card>
         <FunctionTiles nav={nav} tiles={[

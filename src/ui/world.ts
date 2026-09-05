@@ -68,13 +68,13 @@ export function recordTape(tape: Tape, state: GameState): void {
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     put(`region:${r}:unemployment`, reg.unemploymentRate);
-    put(`region:${r}:policy`, reg.policyRate);
+    put(`region:${r}:policy`, reg.policyRateAnnual);
     put(`region:${r}:10y`, reg.zeroRates.tenor10Y);
     put(`region:${r}:2y`, reg.zeroRates.tenor2Y);
-    put(`region:${r}:inflation`, reg.inflation);
+    put(`region:${r}:inflation`, reg.inflationAnnual);
     put(`region:${r}:repo`, reg.repoRateAnnual);
     put(`region:${r}:gdp`, reg.derivedNominalGdpLocal);
-    put(`region:${r}:wage growth`, reg.wageGrowth);
+    put(`region:${r}:wage growth`, reg.wageGrowthAnnual);
     put(`region:${r}:bank nim`, reg.bankingSector.netInterestMarginPct);
     put(`region:${r}:bank capital`, reg.bankingSector.bankCapitalRatio);
     put(`region:${r}:household deposits`, householdDepositsOf(ensureV2(state), r));

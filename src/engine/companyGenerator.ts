@@ -405,7 +405,7 @@ export function generateInitialCompanies(
   const existingSeedNames = new Set<string>();
 
   regions.forEach((region) => {
-    const regionPolicyRate = initialRegions[region].policyRate;
+    const regionPolicyRate = initialRegions[region].policyRateAnnual;
     const regionProductivityPerCapita = getRegionProductivityPerCapitaLocal(region);
     const templates: FirmSeedTemplate[] = generateFirmSeeds(region, existingSeedTickers, existingSeedNames);
 

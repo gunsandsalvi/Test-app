@@ -51,7 +51,7 @@ export const fx = defineObject<FxPair>({
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="illiquidity" hint="the dealer's measure" v={ill !== undefined ? num(ill, 3) : '—'} />
-          <KV k="policy rates" hint={`${p.base} · ${p.quote}`} v={`${pctLevel(world.state.regions[p.base as 'USA'].policyRate, 2)} · ${pctLevel(world.state.regions[p.quote as 'USA'].policyRate, 2)}`} />
+          <KV k="policy rates" hint={`${p.base} · ${p.quote}`} v={`${pctLevel(world.state.regions[p.base as 'USA'].policyRateAnnual, 2)} · ${pctLevel(world.state.regions[p.quote as 'USA'].policyRateAnnual, 2)}`} />
         </Card>
         <FunctionTiles nav={nav} tiles={[
           { fn: 'chart', sub: 'the rate' },

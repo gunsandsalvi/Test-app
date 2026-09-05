@@ -77,7 +77,7 @@ export const labour: FunctionModule = {
         <KV k="participation" v={pctLevel(r.laborForceParticipation, 0)} />
         <KV k="tightness" hint="vacancies per seeker" v={num(r.laborMarketTightness, 2)} />
         <KV k="vacancy rate" v={pctLevel(r.vacancyRate)} />
-        <KV k="wage growth" hint="annualised" v={pctLevel(r.wageGrowth)} />
+        <KV k="wage growth" hint="annualised" v={pctLevel(r.wageGrowthAnnual)} />
         <KV k="net migration" hint="annual, share of population" v={pctLevel(r.netMigrationRateAnnual, 2)} />
         <KV k="population" v={count(Math.round(r.totalPopulation))} />
       </Card>

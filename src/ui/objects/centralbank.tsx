@@ -22,7 +22,7 @@ export const centralbank = defineObject<Region>({
   label: (_w, id, r) => ({ ticker: `${id} cb`, name: r.centralBank, kind: 'central bank', region: id }),
   keywords: (_w, id, r) => [id.toLowerCase(), r.centralBank.toLowerCase(), 'central bank', 'cb', 'monetary'],
   parse: (world, phrase) => { const p = phrase.trim().toLowerCase(); const m = p.match(/^([a-z]+) (cb|central bank)$/); return m && Object.hasOwn(world.state.regions, m[1].toUpperCase()) ? m[1].toUpperCase() : undefined; },
-  headline: (_w, _id, r) => ({ value: pctLevel(r.policyRate, 2), sub: 'policy rate' }),
+  headline: (_w, _id, r) => ({ value: pctLevel(r.policyRateAnnual, 2), sub: 'policy rate' }),
   series: (world, id) => [
     taped(world, `region:${id}:policy`, 'policy rate', 'rate', (v) => pctLevel(v, 2)),
     taped(world, `centralbank:${id}:sovereign book`, 'sovereign book', 'USD', (v) => money(v)),
@@ -36,9 +36,9 @@ export const centralbank = defineObject<Region>({
     defaultSort: 'policy',
     columns: [
       { key: 'name', label: 'bank', render: (r, _w, nav) => <Link to={{ type: 'centralbank', id: r.id }} nav={nav}>{r.obj.centralBank}</Link>, value: (r) => r.id },
-      { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRate, 2), value: (r) => r.obj.policyRate },
-      { key: 'target', label: 'taylor', render: (r) => pctLevel(r.obj.taylorTargetRate, 2), value: (r) => r.obj.taylorTargetRate },
-      { key: 'infl', label: 'inflation', render: (r) => pctLevel(r.obj.inflation), value: (r) => r.obj.inflation },
+      { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRateAnnual, 2), value: (r) => r.obj.policyRateAnnual },
+      { key: 'target', label: 'taylor', render: (r) => pctLevel(r.obj.taylorTargetRateAnnual, 2), value: (r) => r.obj.taylorTargetRateAnnual },
+      { key: 'infl', label: 'inflation', render: (r) => pctLevel(r.obj.inflationAnnual), value: (r) => r.obj.inflationAnnual },
       { key: 'book', label: 'sov book', render: (r, w) => money(centralBankBookLocal(ensureV2(w.state), asRegionId(r.id))), value: (r, w) => centralBankBookLocal(ensureV2(w.state), asRegionId(r.id)) },
     ],
   },
@@ -51,11 +51,11 @@ export const centralbank = defineObject<Region>({
     const reserves = banks.reduce((a, b) => a + bankReservesOf(ensureV2(world.state), b.id), 0);
     return (
       <>
-        <ObjectHeader name={r.centralBank} sub={<>central bank of <RegionLink id={ref.id} nav={nav} /> · target inflation {pctLevel(r.targetInflation)} · {r.currency}</>} />
+        <ObjectHeader name={r.centralBank} sub={<>central bank of <RegionLink id={ref.id} nav={nav} /> · target inflation {pctLevel(r.targetInflationAnnual)} · {r.currency}</>} />
         <StatGrid>
-          <Stat label="policy rate" value={pctLevel(r.policyRate, 2)} sub={<ChangeSub series={policy} />} />
-          <Stat label="rule says" value={pctLevel(r.taylorTargetRate, 2)} sub={`neutral ${pctLevel(r.neutralRate, 2)}`} />
-          <Stat label="inflation" value={pctLevel(r.inflation)} sub={`target ${pctLevel(r.targetInflation)} · expected ${pctLevel(r.expectedInflation)}`} neg={r.inflation > r.targetInflation * 2} />
+          <Stat label="policy rate" value={pctLevel(r.policyRateAnnual, 2)} sub={<ChangeSub series={policy} />} />
+          <Stat label="rule says" value={pctLevel(r.taylorTargetRateAnnual, 2)} sub={`neutral ${pctLevel(r.neutralRateAnnual, 2)}`} />
+          <Stat label="inflation" value={pctLevel(r.inflationAnnual)} sub={`target ${pctLevel(r.targetInflationAnnual)} · expected ${pctLevel(r.expectedInflationAnnual)}`} neg={r.inflationAnnual > r.targetInflationAnnual * 2} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="sovereign book" hint="register rows, marked" v={money(book)} />

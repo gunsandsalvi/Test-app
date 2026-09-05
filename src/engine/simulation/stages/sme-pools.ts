@@ -112,7 +112,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // the banks' real quoted marginBps — not an invented +300bp. A credit tightening that
       // widens quoted margins now reaches measured pool distress, which is the default rate the
       // banks price against: the transmission loop is closed where it used to be open.
-      const poolDebtRateAnnual = reg.policyRate + (pool.blendedMarginBps ?? 300) / 10000;
+      const poolDebtRateAnnual = reg.policyRateAnnual + (pool.blendedMarginBps ?? 300) / 10000;
       const cashCoverWeeks = weeklyWageBillLocal > 0 ? cashLocal / weeklyWageBillLocal : TARGET_CASH_WEEKS_OF_WAGES;
 
       // DIST — THE DEFAULT RATE IS AN INTEGRAL OVER THE POOL, NOT A FUNCTION OF ITS MEAN.

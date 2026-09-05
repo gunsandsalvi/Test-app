@@ -69,11 +69,11 @@ export const curves: FunctionModule = {
       ]} />
       <SectionLabel>what it hangs off</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
-        <KV k="policy rate" hint={r.centralBank} v={pctLevel(r.policyRate, 2)} />
-        <KV k="the rule says" hint="Taylor" v={pctLevel(r.taylorTargetRate, 2)} />
-        <KV k="neutral" v={pctLevel(r.neutralRate, 2)} />
+        <KV k="policy rate" hint={r.centralBank} v={pctLevel(r.policyRateAnnual, 2)} />
+        <KV k="the rule says" hint="Taylor" v={pctLevel(r.taylorTargetRateAnnual, 2)} />
+        <KV k="neutral" v={pctLevel(r.neutralRateAnnual, 2)} />
         <KV k="overnight repo" v={pctLevel(r.repoRateAnnual, 2)} />
-        <KV k="expected inflation" hint="the market's" v={pctLevel(r.expectedInflation, 2)} />
+        <KV k="expected inflation" hint="the market's" v={pctLevel(r.expectedInflationAnnual, 2)} />
         <KV k="dot plot" hint="1y · 2y" v={`${pctLevel(r.dotPlot1Y, 2)} · ${pctLevel(r.dotPlot2Y, 2)}`} />
         <KV k="sovereign rating" v={r.sovereignRating} />
       </Card>

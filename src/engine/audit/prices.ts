@@ -80,7 +80,7 @@ function p1(state: GameState, week: number): AuditFinding[] {
       const isFacility = (TS.flags[r] & TR_FACILITY) !== 0, isCp = (TS.flags[r] & TR_CP) !== 0;
       if (!isFacility && !isCp) return;
       // A facility is drawn at par: its spread over the curve is what par implies on its own terms.
-      const spread = isFacility ? spreadBpsFromPrice(trancheTerms(v2, r, week, reg.policyRate), curve, 1) : rowSpreadBps(v2, reg, r, week);
+      const spread = isFacility ? spreadBpsFromPrice(trancheTerms(v2, r, week, reg.policyRateAnnual), curve, 1) : rowSpreadBps(v2, reg, r, week);
       const bondHere = bondAt(tenorYears);
       if (spread === undefined || bondHere === undefined) return;
       if (isFacility && spread - bondHere.spreadBps > dust(spread, bondHere.spreadBps)) bad.push(`facility ${spread.toFixed(1)}bp > bond ${bondHere.spreadBps.toFixed(1)}bp at ${tenorYears.toFixed(1)}y`);
@@ -204,8 +204,8 @@ function x1(state: GameState, week: number): AuditFinding[] {
       if (fwd < -floatDust(Math.abs(r1 * t1) + Math.abs(r0 * t0), 4) / (t1 - t0)) out.push({ family: 'X', check: 'X1 forward rates non-negative', week, usd: fwd, message: `${r}: the ${t0}y→${t1}y forward is ${pct(fwd)}` });
     }
     const repoBps = (reg.repoRateAnnual) * 10000;
-    const { floorBps, ceilingBps } = repoCorridorBps(reg.policyRate);
-    if (repoBps > ceilingBps + floatDust(Math.abs(repoBps) + Math.abs(ceilingBps), 2) || repoBps < floorBps - floatDust(Math.abs(repoBps) + Math.abs(floorBps), 2)) out.push({ family: 'X', check: 'X1 repo inside the corridor', week, usd: repoBps / 10000 - reg.policyRate, message: `${r}: repo ${pct(repoBps / 10000)} outside the corridor [${pct(floorBps / 10000)}, ${pct(ceilingBps / 10000)}] the facilities post around policy ${pct(reg.policyRate)}` });
+    const { floorBps, ceilingBps } = repoCorridorBps(reg.policyRateAnnual);
+    if (repoBps > ceilingBps + floatDust(Math.abs(repoBps) + Math.abs(ceilingBps), 2) || repoBps < floorBps - floatDust(Math.abs(repoBps) + Math.abs(floorBps), 2)) out.push({ family: 'X', check: 'X1 repo inside the corridor', week, usd: repoBps / 10000 - reg.policyRateAnnual, message: `${r}: repo ${pct(repoBps / 10000)} outside the corridor [${pct(floorBps / 10000)}, ${pct(ceilingBps / 10000)}] the facilities post around policy ${pct(reg.policyRateAnnual)}` });
     const banks = banksOf(state.companies, r);
     const negNim = banks.filter((b) => b.bankBalanceSheet!.bankCapitalRatio >= BANK_MIN_CAPITAL_RATIO && b.bankBalanceSheet!.netInterestMarginPct < 0);
     if (negNim.length) out.push({ family: 'X', check: 'X1 a solvent bank earns a margin', week, usd: negNim.length, message: `${r}: ${negNim.map((b) => b.ticker).join(' ')} run a negative margin at or above the ${pct(BANK_MIN_CAPITAL_RATIO)} capital floor` });

@@ -216,14 +216,14 @@ the same absence for every class.
 
 ### ⚠️ A3 — THE FLOATING LEG DOES NOT FIX, IT READS
 
-`profile.ts:overnightRateAnnual` resolves to `reg.repoRateAnnual ?? reg.policyRate` and the leg
+`profile.ts:overnightRateAnnual` resolves to `reg.repoRateAnnual ?? reg.policyRateAnnual` and the leg
 consumes it in the same week it is published. There is no fixing date, no fixing lag, and no
 record of what the rate fixed at — so a contract cannot be in-arrears versus in-advance, and a
 week's fixing cannot be disputed or observed by anyone. The reference itself is real and cleared
 (`02b-bank-diversification.ts:414` writes `reg.repoRateAnnual` from the repo session), which is
 why this is `⚠️` and E3 is not `❌`: the *rate* exists, the *fixing* does not.
 
-The `?? reg.policyRate` fallback is worth naming separately: in a week where the repo book does
+The `?? reg.policyRateAnnual` fallback is worth naming separately: in a week where the repo book does
 not print, every swap in the region silently references an **administered** rate instead of a
 cleared one, which is the thing `runSwapMarket`'s own header says stopped happening (*"it only
 became meaningful once the floating leg stopped referencing an administered rate"*).

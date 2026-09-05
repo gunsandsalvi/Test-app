@@ -105,7 +105,7 @@ export function buildCreditDemandParticipants<I extends CreditDemandInstrument>(
     const overweightMultiple = strategy?.convictionMultiple ?? maxOverweightMultipleOf(entity);
     // XB2: hedged, so a foreign buyer's requirement carries the CIP cost of the hedge.
     const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
-      ctx.updatedRegions[entity.region].policyRate, policyRate);
+      ctx.updatedRegions[entity.region].policyRateAnnual, policyRate);
     const fullSizeRangeBps = fullSizeSpreadRangeBpsOf(entity);
     // The entity's real budget for this auction (S11): available cash plus its type's genuine
     // leverage capacity, sliced to this asset class by its own targets, then directed at the paper

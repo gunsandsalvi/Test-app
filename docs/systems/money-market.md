@@ -223,7 +223,7 @@ should be the same step.
 
 E1 is the node this whole tree exists to serve, and the print goes almost nowhere.
 `reg.repoRateAnnual` is read by the money fund's yield quote, the IRS floating leg, and four UI
-panels. Everything that prices real credit reads `reg.policyRate` directly: the SME all-in rate
+panels. Everything that prices real credit reads `reg.policyRateAnnual` directly: the SME all-in rate
 (`bank-lending.ts:266`), the mortgage quote off `tenor10Y`, the revolver at
 `policyRate + facilityMarginBps`, the deposit rate as a share of `policyRate + ownSpread`. So the
 policy rate reaches the economy by assertion, with a correctly-cleared corridor running beside it —

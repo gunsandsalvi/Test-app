@@ -230,12 +230,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // reads the same loans the book actually holds.
       const priorLoanInterestWeeklyLocal = prevSheet.businessLoans
         .filter((l) => l.status === 'PERFORMING')
-        .reduce((a, l) => a + (l.principalLocal * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
+        .reduce((a, l) => a + (l.principalLocal * (reg.policyRateAnnual + l.marginBps / 10000)) / 52, 0);
       // The FACILITY interest is paid by the borrower as a real payment (stage 08 →
       // settlement), so the evolution measures it and never credits it; the facilities are the
       // ladder rows (step 10). SME pools have no cash ledger of their own and pay through the book.
       const priorFacilityInterestWeeklyLocal = facilityRows
-        .reduce((a, f) => a + (f.principalLocal * (reg.policyRate + f.marginBps / 10000)) / 52, 0);
+        .reduce((a, f) => a + (f.principalLocal * (reg.policyRateAnnual + f.marginBps / 10000)) / 52, 0);
       // The SME slice is a real payment now too — each pool pays its own interest from
       // its own book (SEGMENT → BANK through settlement), on the same prior-week basis the
       // facility exclusion uses, so the evolution must not credit it either.
@@ -245,7 +245,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         .forEach((l) => {
           const seg = reg.smePools.find((s) => smePoolId(regionId, s.industry) === l.borrowerId);
           if (!seg) return;
-          const interestLocal = (l.principalLocal * (reg.policyRate + l.marginBps / 10000)) / 52;
+          const interestLocal = (l.principalLocal * (reg.policyRateAnnual + l.marginBps / 10000)) / 52;
           priorSmeInterestWeeklyLocal += interestLocal;
           pay(ctx, {
             payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
@@ -261,7 +261,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const priorHouseholdInterestWeeklyLocal = prevSheet.householdLoans.reduce((a, pl) => {
         const rate = pl.kind === 'MORTGAGE'
           ? (pl.wacAnnual ?? currentMortgageRateAnnual(reg))
-          : reg.policyRate + (pl.marginBps ?? 500) / 10000;
+          : reg.policyRateAnnual + (pl.marginBps ?? 500) / 10000;
         return a + (pl.principalLocal * rate) / 52;
       }, 0);
 
@@ -275,7 +275,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         bankDepositLines(ctx, bank),
         reg.estimatedHouseholdIncomeLocal * share,
         reg.householdState.savingsRate,
-        reg.policyRate,
+        reg.policyRateAnnual,
         // A higher-risk bank's book is more exposed to the SAME regional unemployment print, the
         // way a bank concentrated in subprime/regional consumer lending genuinely would be (see
         // bankRiskFactor's doc comment in domain/company.ts) — the actual reason two banks facing

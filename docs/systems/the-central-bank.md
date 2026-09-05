@@ -92,11 +92,11 @@ checked by `scripts/check-atlas.sh`.
 | A2.a liabilities: reserves, currency, the TGA, the RRP window | `src/domain/central-bank.ts:centralBankLiabilitiesLocal` · `src/engine/ledger/accounts.ts:bankReservesOf` | ✅ |
 | A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsLocal` · `src/domain/central-bank-loan.ts:CentralBankLoan` · `src/engine/ledger/contract-ledger.ts:centralBankLoanBookOf` · `src/engine/simulation/stages/central-bank-loans.ts:serviceCentralBankLoans` · `src/engine/ledger/contract-ledger.ts:swapLineBookOf` | ✅ |
 | A2.c VERIFY it closes weekly, with a revaluation account | `src/engine/audit/money.ts:m1` | ✅ |
-| A3 a mandate: a stated objective | `src/domain/region-macro.ts:targetInflation` | ⚠️ |
+| A3 a mandate: a stated objective | `src/domain/region-macro.ts:targetInflationAnnual` | ⚠️ |
 | A4 operationally independent, financially owned | `src/domain/central-bank.ts:remittanceLocal` | ✅ |
 | B1 it SETS a rate, as a decision, on a rule | `src/engine/macro/evolution.ts:taylorTarget` | ✅ |
 | B1.a against its mandate: inflation and activity | `src/engine/macro/evolution.ts:inflation_gap` | ✅ |
-| B2 administered, not traded | `src/domain/region-macro.ts:policyRate` | ✅ |
+| B2 administered, not traded | `src/domain/region-macro.ts:policyRateAnnual` | ✅ |
 | **B3 made effective through the corridor, not by assertion** | `src/engine/simulation/stages/repo-clearing.ts:runRegionalRepoSession` | ⚠️ |
 | **B3.a FORBID the policy rate is never a market's cleared rate** | `src/engine/simulation/stages/repo-clearing.ts:parkUnlentSleevesAtTheWindow` | ⚠️ |
 | B4 VERIFY the market rate tracks policy, and the gap is information | `src/engine/audit/prices.ts:repo` | ⚠️ |
@@ -196,7 +196,7 @@ policy every week.
 
 And then **almost nothing reads the cleared rate.** `reg.repoRateAnnual` is consumed by the money
 fund's yield quote, the IRS floating leg, and four UI panels. Every price that matters to the real
-economy reads `reg.policyRate` directly: the SME all-in rate is `policyRate + margin`
+economy reads `reg.policyRateAnnual` directly: the SME all-in rate is `policyRate + margin`
 (`bank-lending.ts:266`), the deposit rate is a share of `policyRate + ownSpread`
 (`macro/banking.ts:399`), the corporate revolver is `policyRate + facilityMarginBps`, the SRF and
 RRP are policy ± a posted spread. So transmission IS assertion, with a correctly-modelled corridor
@@ -249,7 +249,7 @@ E5 (the consolidated and unconsolidated views of the central bank's sovereign ho
 computed: `centralBankBookLocal` (the register read, since §9.13-BOOK d3a) exists and the treasury's gross debt exists, and nothing
 differences them. **A measurement, for §3 step 38.**
 
-A3: the mandate is `region.targetInflation` plus the Taylor rule's implicit output-gap term. It is a
+A3: the mandate is `region.targetInflationAnnual` plus the Taylor rule's implicit output-gap term. It is a
 number on a region, not a stated objective the institution owns, so there is no place for a second
 mandate (financial stability, employment) or for a mandate that differs by region beyond a
 parameter. Worth a row; not worth a step of its own.

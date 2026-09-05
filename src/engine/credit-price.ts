@@ -48,7 +48,7 @@ export interface CreditPriceWorld {
  */
 export interface RegionRates {
   zeroRates: ZeroCurve;
-  policyRate: number;
+  policyRateAnnual: number;
 }
 
 /** Which ladder rows a market clears and deposits a price for. A bank FACILITY is its lender's
@@ -105,7 +105,7 @@ export function rowSpreadBps(
   if (!isPricedRow(S.flags[row])) return undefined;
   const price = clearedPriceOf(v2, trancheIdOf(v2, row));
   if (price === undefined || !(price > 0)) return undefined;
-  const terms = trancheTerms(v2, row, week, rates.policyRate);
+  const terms = trancheTerms(v2, row, week, rates.policyRateAnnual);
   if (!(terms.weeksToMaturity > 0)) return undefined;
   return spreadBpsFromPrice(terms, rates.zeroRates, price);
 }
@@ -122,7 +122,7 @@ function issuerCreditPoints(
   const comp = world.issuerById(issuerId);
   const reg = comp ? world.regionById(comp.region) : undefined;
   return reg?.zeroRates
-    ? issuerCreditPointsOnCurve(v2, { zeroRates: reg.zeroRates, policyRate: reg.policyRate ?? 0 }, issuerId, week)
+    ? issuerCreditPointsOnCurve(v2, { zeroRates: reg.zeroRates, policyRateAnnual: reg.policyRate ?? 0 }, issuerId, week)
     : [];
 }
 

@@ -14,7 +14,7 @@ import { setClearedPrice } from '../src/engine2/prices';
 import { paperQuoteOf } from '../src/engine/credit-price';
 import { priceFromSpreadBps, priceFromYield, COUPON_PERIOD_WEEKS } from '../src/domain/pricing';
 
-const rates = { zeroRates: { tenor3M: 0.04, tenor2Y: 0.04, tenor5Y: 0.04, tenor10Y: 0.04, tenor30Y: 0.04 }, policyRate: 0.04 };
+const rates = { zeroRates: { tenor3M: 0.04, tenor2Y: 0.04, tenor5Y: 0.04, tenor10Y: 0.04, tenor30Y: 0.04 }, policyRateAnnual: 0.04 };
 
 test('a corporate bond quotes its price and the OAS the price implies; unprinted paper quotes nothing', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);

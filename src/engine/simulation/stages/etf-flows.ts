@@ -211,7 +211,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const mmf = ctx.updatedInstitutionalEntities.find(
       (e) => e.region === region && e.entityType === 'MONEY_MARKET_FUND'
     );
-    const depositYield = mmf?.mmfNetYieldAnnual ?? reg.policyRate;
+    const depositYield = mmf?.mmfNetYieldAnnual ?? reg.policyRateAnnual;
     const equityShareOfSaving = earningsYield > 0
       ? Math.max(0, Math.min(1, (earningsYield - depositYield) / earningsYield))
       : 0;

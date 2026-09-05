@@ -5,8 +5,8 @@
  *
  * **A calendar.** `_week` was unused, so a heatwave was as likely in January as in July. Events
  * are now gated by where the year is: a season index runs the annual cycle, and each event type
- * has the part of it that it belongs to. Nothing about the calendar is imported — a year has
- * fifty-two weeks and half of them are the warm half, which is arithmetic.
+ * has the part of it that it belongs to. The year is `units.ts:WEEKS_PER_YEAR` (§3.28b-i: one
+ * owner for the 52) and half of it is the warm half, which is arithmetic.
  *
  * **A geography — a GENERATED one.** The region could draw any of four types, so JPN could have a
  * polar vortex and the UK a monsoon. What a region is exposed to is now read off what it actually
@@ -25,10 +25,9 @@
  */
 
 import { RegionId, WeatherAnomaly, Company, COMMODITY_CATEGORY_LINKAGE } from '../../types';
+import { WEEKS_PER_YEAR } from '../../domain/units';
 import { random } from '../rng';
 
-/** Weeks in the year, and where the warm half of it sits. Arithmetic, not observation. */
-const WEEKS_PER_YEAR = 52;
 
 /** How far into the year a week is, as a fraction. */
 function yearFraction(week: number): number {

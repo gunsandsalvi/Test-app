@@ -258,7 +258,7 @@ export function computeSourcingIntent(args: {
 export function carryRatesByRegion(regions: Record<RegionId, Region>): Record<string, number> {
   const rates: Record<string, number> = {};
   SOURCING_REGION_IDS.forEach(r => {
-    rates[r] = pipelineCarryCostRatePerWeek(regions[r].policyRate);
+    rates[r] = pipelineCarryCostRatePerWeek(regions[r].policyRateAnnual);
   });
   return rates;
 }

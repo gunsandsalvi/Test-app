@@ -528,17 +528,17 @@ function buildRegion(regionId: RegionId): Region {
     corpBondOwnership: { bankShare: 0, institutionalShare: 0, centralBankShare: 0 },
     sovBondOwnership: { bankShare: 0, institutionalShare: 0, centralBankShare: 0 },
     institutionalSector,
-    centralBankBalanceSheet: estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.centralBankBalanceSheetToGdp,
+    centralBankBalanceSheetLocal: estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.centralBankBalanceSheetToGdp,
     // PUB2b: at birth the rule sits at neutral, so the floor blocks nothing.
-    taylorTargetRate: neutralRate,
-    policyRate,
+    taylorTargetRateAnnual: neutralRate,
+    policyRateAnnual: policyRate,
     // WS6: a cleared market print from week 1. The cold start opens at the corridor floor —
     // where an overnight market with no funding need prints, and exactly what the first
     // session computes when the seeded sheets open at their buffers.
     repoRateAnnual: Math.max(0, policyRate - 20 / 10000),
-    neutralRate,
-    inflation: targetInflation,
-    coreInflation: targetInflation,
+    neutralRateAnnual: neutralRate,
+    inflationAnnual: targetInflation,
+    coreInflationAnnual: targetInflation,
     // Seeded empty here and filled once every region's sub-unit prices exist (see
     // simulation/initialization.ts) — a price index needs the prices before it can be built.
     consumerPriceIndex: CPI_BASE_LEVEL,
@@ -546,17 +546,17 @@ function buildRegion(regionId: RegionId): Region {
     cpiHistory: openingCpiHistory(CPI_BASE_LEVEL),
     coreCpiHistory: openingCpiHistory(CPI_BASE_LEVEL),
     cpiBasket: { weightBySubUnit: {}, basePriceBySubUnit: {}, baseIndexLevel: CPI_BASE_LEVEL, baseWeek: 1 },
-    expectedInflation: targetInflation,
-    targetInflation,
-    gdpGrowth,
-    potentialGdpGrowth: gdpGrowth,
+    expectedInflationAnnual: targetInflation,
+    targetInflationAnnual: targetInflation,
+    gdpGrowthAnnual: gdpGrowth,
+    potentialGdpGrowthAnnual: gdpGrowth,
     nairu: UNEMPLOYMENT_RATE,
     weeksAboveNairu: 0,
     unemploymentRate: UNEMPLOYMENT_RATE,
-    wageGrowth,
-    tradeBalance: 0,
-    exportsLocal: 0,
-    importsLocal: 0,
+    wageGrowthAnnual: wageGrowth,
+    tradeBalanceAnnualUSD: 0,
+    exportsAnnualUSD: 0,
+    importsAnnualUSD: 0,
     fxReservesLocal: Math.round((estimatedNominalGdpLocal * 0.002)),
     fiscalStanceScore: 0,
     // FRM: an outcome of this region's own seeded position, through the weekly rater's own
@@ -620,7 +620,7 @@ function buildRegion(regionId: RegionId): Region {
     // sizing rides a stash until close-seed strikes the lines and opens the rows.
     householdState: withOpeningCash({
       creditTierBooks: generateCreditTierBooks(creditCardDebtLocal, otherConsumerLoanDebtLocal),
-      wageGrowth,
+      wageGrowthAnnual: wageGrowth,
       savingsRate: HOUSEHOLD_SAVINGS_RATE,
       realConsumptionGrowth: Number((gdpGrowth * 0.7).toFixed(4)),
       householdDebtToIncomeRatio,

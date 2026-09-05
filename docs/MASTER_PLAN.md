@@ -553,11 +553,24 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-28b. **The units sweep, once, at the source.** Rule 9 is a rule with no sweep behind it. Walk
-    every rate, flow and index at the point it is WRITTEN, establish its periodicity and unit, and
-    pin each with a test. Step 15 fixes the unit bugs the audit found at the point they are
-    RENDERED, which is the same class of error caught later. `historicalInflation` and
-    `historicalZeroCurves` carry a one-week lag that belongs at the type.
+28b-ii. **The histories' one-week lag belongs at the type.** `historicalPolicyRates`,
+    `historicalInflation`, `historicalCoreInflation`, `historicalGdpGrowth`, `historicalWageGrowth`,
+    `historicalDebtToGdp` and `historicalZeroCurves` are appended by the macro evolution AFTER the
+    measurement stages run, so a same-week reader sees history through LAST week — documented once
+    at `region-macro.ts` (P1) and visible to no reader. Give each history the week its newest entry
+    is through (`historicalZeroCurves` already carries a `week` on the row; the rest are bare
+    arrays), so a reader that wants "this week's" is told it is reading last week's, and pin it.
+    Part of 28b (the units sweep, rule 8): 28b-i walked the region's rates and flows at the point
+    they are WRITTEN and named their period and money in the identifier — see §9.
+
+28b-iii. **The company's, bank's and household's rates and flows name their period and money.**
+    The same walk 28b-i made over `Region`, over `Company`, `BankingSector`, `HouseholdState`,
+    `OccupationPool`, `CreditTierBook` and the SME pools: every rate, flow and index at the point
+    it is WRITTEN, its period confirmed at the source and named in the identifier, each pinned in
+    `test/units.test.ts`. The price level is part of the walk — 28b-i found the trade position
+    stored in USD under a `…Local` name for years, and every stored money field's suffix is checked
+    against its writer the same way. Step 15 fixed the unit bugs the audit found at the point they
+    are RENDERED; this is the same class of error caught at the source.
 
 33. **SENIORITY IS DECORATIVE, AND IT IS WHY `P1` CAN FAIL FOREVER** (found by the atlas pilot,
     `docs/systems/corporate-credit.md` node G5). `DebtTranche.seniority` is
@@ -1319,6 +1332,27 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**28b-i — THE REGION'S RATES AND FLOWS NAME THEIR PERIOD AND THEIR MONEY.** Fifteen `Region`
+  fields renamed at the source to say what their writers confirm — `policyRateAnnual`,
+  `neutralRateAnnual`, `taylorTargetRateAnnual`, `inflationAnnual`, `coreInflationAnnual`,
+  `expectedInflationAnnual`, `targetInflationAnnual`, `gdpGrowthAnnual`, `potentialGdpGrowthAnnual`,
+  `wageGrowthAnnual` (and `HouseholdState`'s), `govEmploymentGrowthWeekly`,
+  `centralBankBalanceSheetLocal` — and the trade position, which the walk found stored in **USD
+  under a `…Local` name**: stage 05 converts every cross-border lot at the cleared rate before the
+  bilateral table sums a world total and stage 11 converts back, so `exportsAnnualUSD`,
+  `importsAnnualUSD`, `tradeBalanceAnnualUSD` and `ctx.bilateralTradeWeeklyUSD` now say so, and the
+  macro dashboard and the national-accounts statement, which printed the dollar figure as local
+  money and divided it by a local GDP, convert at the region's own rate. The period arithmetic has
+  one owner, `domain/units.ts` (out of UNMAPPED): `WEEKS_PER_YEAR` (the UI calendar's and the
+  weather's own 52s read it), `runRateAnnual` / `weeklyOfAnnual` (×52 linear — the model's one
+  annualisation, for flows and for rates of change alike), `trailingYear` / `yearAgoLevel` /
+  `yearOverYear` (53 levels, index 0 exactly a year back; the CPI, core CPI and GDP windows read
+  it) and `realGrowthAnnual`, the ratio of the gross rates over the same year: `nominal − inflation`
+  was the model's real growth and overstates it by six basis points at 5% and 2% — a derivation
+  change, step 38's to measure. Pinned in `test/units.test.ts`. Atlas: central-bank A3/B2 cite the
+  new names, goods G2/G3 cite the owner. Gates green; no run (rule 11). Split (rule 1.10): 28b-ii
+  the histories' lag at the type, 28b-iii the company's, bank's and household's fields.
 
 **29-iv-d — THE DEFENSIVE READS IN THE UI AND THE HARNESS, AND STEP 29 IS DONE.** Three hundred
   and twenty-five, rewritten by position in two passes after the review the group needed: the

@@ -43,7 +43,7 @@ export function formatSpan(weeks: number): string {
 
 /** The change-window labels §1.8 asks for: month on month, year on year. */
 export const WEEKS_PER_MONTH = 4;
-export const WEEKS_PER_YEAR = 52;
+export { WEEKS_PER_YEAR } from '../domain/units';
 
 /** The quarter a week falls in, on the UI calendar: "Q1 2027". */
 export function quarterLabel(week: number): string {

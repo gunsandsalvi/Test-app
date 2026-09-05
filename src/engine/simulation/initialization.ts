@@ -102,6 +102,7 @@ import { generateCarriers, seedFreightDemand, specMarginalRatesByLane } from '..
 import { runFreightClearing } from './stages/freight-clearing';
 import { getFxToUsd, publishFxRatesNow } from './stages/06-fx-and-trade';
 import { convertLocal, localToUsd } from '../../domain/currency';
+import { runRateAnnual } from '../../domain/units';
 import { laneTransitWeeks } from '../../domain/carrier';
 import { laneDistanceNm, currencyOf, REGION_IDS } from '../../domain/geography';
 import { bookHeadOf, instrumentIdAt } from '../../engine2/holdings';
@@ -226,7 +227,7 @@ function seedRegionCategoryDemand(
         const demandLevelAnnualLocal = totalOutputBySubUnit[su.unitId] ?? finalDemandBySubUnit[su.unitId];
         reg.categoryDemand[su.unitId] = createSeedCategoryDemandState(
           demandLevelAnnualLocal,
-          reg.gdpGrowth,
+          reg.gdpGrowthAnnual,
           // §7.127: FINAL demand prices the good; total output is the quantity behind it. The
           // intermediate slice is passed so a PURE intermediate prices off its producer buyers.
           deriveSubUnitUnitPrice(
@@ -551,7 +552,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const reg = regions[regionId];
       const segs = reg.smePools;
       const seeds = generatePrivateFirmSeeds(regionId, segs);
-      const firms = generatePrivateCompanies(regionId, seeds, reg.policyRate, allTickers, allNames, SEED_WEEK);
+      const firms = generatePrivateCompanies(regionId, seeds, reg.policyRateAnnual, allTickers, allNames, SEED_WEEK);
 
       // HC3b: the named private tier SELLS. It was held out with a measurement — injecting its
       // supply into markets sized for public supply cost 10-22% of growth — and what changed is
@@ -870,7 +871,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // cash is its reserve liability exist. Currency is the residual; the weekly stage
       // re-derives it by the same arithmetic.
       const cbSheet = reg.centralBankSheet;
-      if (cbSheet) reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(Object.values(seedCentralBankBookOf(cbSheet)).reduce((a, v) => a + (Number(v) || 0), 0), cbSheet, 0)); // no advance at birth; the book is the seed's stash until `openSeededBooks`
+      if (cbSheet) reg.centralBankBalanceSheetLocal = Math.round(centralBankAssetsLocal(Object.values(seedCentralBankBookOf(cbSheet)).reduce((a, v) => a + (Number(v) || 0), 0), cbSheet, 0)); // no advance at birth; the book is the seed's stash until `openSeededBooks`
 
       // Every company banks somewhere: its cash IS a deposit at its house bank (the same
       // relationship lead WS8 mandates for its offerings, so one firm has one bank).
@@ -1309,7 +1310,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // PUB1e/PUB3b: G is the procurement budget the government will actually bid, annualised —
       // the same number stage 05 bids and stage 11 debits the account by.
       governmentPurchasesLocal: seedObligations.procurementBudgetLocal * 52,
-      netExportsLocal: reg.exportsLocal - reg.importsLocal,
+      netExportsLocal: reg.exportsAnnualUSD - reg.importsAnnualUSD,
     });
     // Build the real consumer basket now that every sub-unit carries its bootstrapped price.
     // Weights are what households actually spend on each good; base prices are today's.
@@ -1317,7 +1318,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
 
     reg.derivedNominalGdpLocal = Math.round(bottomUpGdpLocal);
     reg.lastWeekNominalGdpLocal = reg.derivedNominalGdpLocal;
-    const nominalTrendGrowth = reg.potentialGdpGrowth + reg.targetInflation;
+    const nominalTrendGrowth = reg.potentialGdpGrowthAnnual + reg.targetInflationAnnual;
     reg.nominalGdpHistory = reg.nominalGdpHistory.map((_, i, arr) =>
       Math.round((reg.derivedNominalGdpLocal * Math.pow(1 + nominalTrendGrowth, (i - (arr.length - 1)) / 52)))
     );
@@ -1342,18 +1343,19 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // Net exports are a real component of the expenditure identity, and starting them at zero made
     // week 1 read the entire structural balance as a collapse in output. This is the engine's own
     // sourcing decision, taken once at seed prices — not a parallel formula (§7.4).
-    (Object.keys(regions) as RegionId[]).forEach(r => { regions[r].exportsLocal = 0; regions[r].importsLocal = 0; });
+    (Object.keys(regions) as RegionId[]).forEach(r => { regions[r].exportsAnnualUSD = 0; regions[r].importsAnnualUSD = 0; });
     bookings.forEach(b => {
       if (b.from === b.to) return;
       const exWorks = Number(regions[b.from].categoryDemand[b.subUnitId]?.unitPriceLocal) || 0;
-      const valueLocal = localToUsd(b.units * exWorks, b.from, seedFxToUsd) * 52;
-      regions[b.from].exportsLocal += valueLocal;
-      regions[b.to].importsLocal += valueLocal;
+      // USD at the year's run-rate, as stage 06 publishes it (§3.28b-i).
+      const valueAnnualUSD = runRateAnnual(localToUsd(b.units * exWorks, b.from, seedFxToUsd));
+      regions[b.from].exportsAnnualUSD += valueAnnualUSD;
+      regions[b.to].importsAnnualUSD += valueAnnualUSD;
     });
     (Object.keys(regions) as RegionId[]).forEach(r => {
-      regions[r].exportsLocal = Math.round(regions[r].exportsLocal);
-      regions[r].importsLocal = Math.round(regions[r].importsLocal);
-      regions[r].tradeBalance = regions[r].exportsLocal - regions[r].importsLocal;
+      regions[r].exportsAnnualUSD = Math.round(regions[r].exportsAnnualUSD);
+      regions[r].importsAnnualUSD = Math.round(regions[r].importsAnnualUSD);
+      regions[r].tradeBalanceAnnualUSD = regions[r].exportsAnnualUSD - regions[r].importsAnnualUSD;
     });
     const clearing = runFreightClearing({
       carriers, regions, unitMassTonnes: seededUnitMassTonnes, bookings, fxToUsd: seedFxToUsd, week: SEED_WEEK,
@@ -1403,13 +1405,13 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   (Object.keys(regions) as RegionId[]).forEach(regionId => {
     const cb = regions[regionId].centralBankSheet;
     if (!cb) return;
-    const quarterlyImportsLocal = (regions[regionId].importsLocal) / 4;
+    const quarterlyImportsLocal = (regions[regionId].importsAnnualUSD) / 4;
     if (!(quarterlyImportsLocal > 0)) { cb.fxReservesByRegion = {}; return; }
     const sourcesLocal: Record<string, number> = {};
     let totalSourced = 0;
     (Object.keys(regions) as RegionId[]).forEach(origin => {
       if (origin === regionId) return;
-      const x = regions[origin].exportsLocal;
+      const x = regions[origin].exportsAnnualUSD;
       sourcesLocal[origin] = x;
       totalSourced += x;
     });

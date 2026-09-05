@@ -196,7 +196,7 @@ week for the CP sleeve and for invested capital.
 `stage08-back.ts:2160-2163`:
 
 ```
-trendWeeklyGrowth = (reg.potentialGdpGrowth + reg.targetInflation) / 52
+trendWeeklyGrowth = (reg.potentialGdpGrowthAnnual + reg.targetInflationAnnual) / 52
 newBaselineAnnualRevenue = baselineAnnualRevenueLocal * (1 + trendWeeklyGrowth)
 ```
 

@@ -43,7 +43,7 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // interest and then resolved dropped out of the expense the remittance is meant to net.
     const interestOnReservesPaidLocal = cb.lastInterestOnReservesLocal ?? 0;
     // The ways-and-means advance costs the policy rate, paid like any interest.
-    const waysAndMeansInterestLocal = (waysAndMeansOf(ctx.v2, regionId) * reg.policyRate) / 52;
+    const waysAndMeansInterestLocal = (waysAndMeansOf(ctx.v2, regionId) * reg.policyRateAnnual) / 52;
     if (waysAndMeansInterestLocal > 0) {
       pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amount: waysAndMeansInterestLocal, currency: currencyOf(regionId), reason: 'ways and means interest' });
     }
@@ -88,6 +88,6 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // the audit's M1 prints the residual until it does. ----
 
     // Statistic, not a driver: the old `centralBankBalanceSheet` scalar's replacement.
-    reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(centralBankSovereignAssetsLocal(ctx.v2, regionId), cb, waysAndMeansOf(ctx.v2, regionId), currencyOf(regionId), ctx.fx));
+    reg.centralBankBalanceSheetLocal = Math.round(centralBankAssetsLocal(centralBankSovereignAssetsLocal(ctx.v2, regionId), cb, waysAndMeansOf(ctx.v2, regionId), currencyOf(regionId), ctx.fx));
   });
 }

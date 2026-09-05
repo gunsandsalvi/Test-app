@@ -1123,7 +1123,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         ? (Number.isNaN(TS.floatingMarginBps[tr]) ? TRANCHE_DEFAULT_MARGIN_BPS : TS.floatingMarginBps[tr]) / 10000
         : (Number.isNaN(TS.couponRate[tr]) ? TRANCHE_DEFAULT_COUPON : TS.couponRate[tr]);
       const sched = trancheScheduleOf(TS, tr);
-      const acc = trancheWeekAccrual(TS.principalLocal[tr], floating, annualRate, reg.policyRate, (fl & TR_CP) !== 0, TS.maturityWeek[tr],
+      const acc = trancheWeekAccrual(TS.principalLocal[tr], floating, annualRate, reg.policyRateAnnual, (fl & TR_CP) !== 0, TS.maturityWeek[tr],
         sched.periodWeeks, sched.anchorWeek, nextWeek);
       const kind = (fl & TR_CP) ? 'COMMERCIAL_PAPER' : floating ? 'LEVERAGED_LOAN' : 'CORP_BOND';
       const trancheId = trancheIdOf(v2, tr);
@@ -1143,7 +1143,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // bank — a bank, by construction — has none to draw: its shortfall is its own book (its
     // reserves, and the central bank's window), never a facility with no lender (§7.372).
     if (L8.wasDefaulted[row] !== 1 && L8.wasMergerAcquired[row] !== 1 && cash.usd < 0 && L8.homeBankId[row]) {
-      const revolverRateAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
+      const revolverRateAnnual = reg.policyRateAnnual + L8.facilityMarginBps[row] / 10000;
       let alreadyDrawnLocal = 0;
       for (const r of rowList) if (TS.flags[r] & TR_FACILITY) alreadyDrawnLocal += TS.principalLocal[r];
       const headroomLocal = Math.max(0, committedLineHeadroomLocal({
@@ -1354,7 +1354,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       const isFixed = !(TS.flags[r] & TR_FLOATING);
       const annualRate = isFixed
         ? (Number.isNaN(TS.couponRate[r]) ? 0 : TS.couponRate[r])
-        : reg.policyRate + (Number.isNaN(TS.floatingMarginBps[r]) ? 0 : TS.floatingMarginBps[r]) / 10000;
+        : reg.policyRateAnnual + (Number.isNaN(TS.floatingMarginBps[r]) ? 0 : TS.floatingMarginBps[r]) / 10000;
       // §3.13 — WHAT WOULD THIS PAPER COST TODAY, asked of THIS PAPER. A treasurer decides a call
       // by comparing the coupon it is paying to what the same claim trades at, and "the same
       // claim" is this bond, not this borrower: a 2029 and a 2031 of one name are worth different
@@ -1364,7 +1364,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // which makes the saving zero and leaves the call to the premium alone.
       const fairRateToday = isFixed
         ? riskFree + (paperSpreadBps(r) ?? (annualRate - riskFree) * 10000) / 10000
-        : reg.policyRate + (loanQuoteBps(r) ?? (Number.isNaN(TS.floatingMarginBps[r]) ? 0 : TS.floatingMarginBps[r])) / 10000;
+        : reg.policyRateAnnual + (loanQuoteBps(r) ?? (Number.isNaN(TS.floatingMarginBps[r]) ? 0 : TS.floatingMarginBps[r])) / 10000;
       const premiumPerDollar = callPremiumRowLocal(r, 1);
       const savingPvPerDollar = (annualRate - fairRateToday) * annuityFactor(fairRateToday, remainingYears);
       return {
@@ -1498,7 +1498,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // IND4: rating decides an issuer's ACCESS to the bond market; the industry tilts it by
       // what the money is buying. Long-lived assets are funded long, asset-light ones float.
       const refinanceAsFixed = fixedShareOf(comp) >= 0.5;
-      const revolverAllInAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
+      const revolverAllInAnnual = reg.policyRateAnnual + L8.facilityMarginBps[row] / 10000;
       enqueueOffering({
         id: `PO-${L8.companyId[row]}-${nextWeek}-REFI`,
         issuerId: asEntityId(L8.companyId[row]),
@@ -1676,7 +1676,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       for (const r of rowList) totalDebtForGate += TS.principalLocal[r];
       if (bridgeLocal > Math.max(1e6, totalDebtForGate * 0.02)) {
         const asFixed = fixedShareOf(comp) >= 0.5;  // IND4: rating's access, industry's tilt
-        const revolverAllInAnnual = reg.policyRate + L8.facilityMarginBps[row] / 10000;
+        const revolverAllInAnnual = reg.policyRateAnnual + L8.facilityMarginBps[row] / 10000;
         enqueueOffering({
           id: `PO-${L8.companyId[row]}-${nextWeek}-MAINT`,
           issuerId: asEntityId(L8.companyId[row]),
@@ -2010,7 +2010,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // Update next quarter 3-dealer forecasts
       const nextQuarterBaseEps = actualEps * (1 + sec.growthRate / 4);
       const nextAlphaEps = round2(nextQuarterBaseEps * 0.96);
-      const nextBetaEps = round2(nextQuarterBaseEps * (1 + reg.gdpGrowth));
+      const nextBetaEps = round2(nextQuarterBaseEps * (1 + reg.gdpGrowthAnnual));
       const nextGammaEps = round2(nextQuarterBaseEps * 1.08);
       const newConsensusEps = round2((nextAlphaEps + nextBetaEps + nextGammaEps) / 3);
 
@@ -2208,7 +2208,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const regionRecovery = creditRecoveryRate(reg);
     const newBaselineRecoveryRate = round4(comp.baselineRecoveryRate * 0.998 + regionRecovery * 0.002);
     const effectiveRecoveryRate = Math.max(0, newBaselineRecoveryRate * (1 - systemicStressFactor));
-    const trendWeeklyGrowth = (reg.potentialGdpGrowth + reg.targetInflation) / 52;
+    const trendWeeklyGrowth = (reg.potentialGdpGrowthAnnual + reg.targetInflationAnnual) / 52;
     const newBaselineAnnualRevenue = isDefaulted
       ? round1(L8.baselineAnnualRevenueLocal[row] * 0.995)
       : round1(L8.baselineAnnualRevenueLocal[row] * (1 + trendWeeklyGrowth));

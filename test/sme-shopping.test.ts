@@ -6,7 +6,7 @@ import type { Region, Company } from '../src/types';
 import type { BankingSector } from '../src/domain/banking';
 
 const region = (): Region => ({
-  policyRate: 0.03,
+  policyRateAnnual: 0.03,
   smePools: [{ industry: 'apparel_retail', annualRevenueLocal: 10e9, marginPct: 0.15, debtLocal: 1e9, defaultRateAnnualPct: 0.02 }],
 } as unknown as Region);
 const bank = (ticker: string, beta: number): Company => ({ ticker, id: `E-${ticker}`, beta } as unknown as Company);

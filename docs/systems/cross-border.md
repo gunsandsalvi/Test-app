@@ -104,7 +104,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 a bank funds in one currency and lends in another | `src/engine/simulation/stages/fx-squaring.ts:squareInterbankFxPositions` | ⚠️ |
 | C4 a direct investment buys a firm outright | `src/engine/simulation/stages/foreign-direct-investment.ts:runForeignDirectInvestment` | ✅ |
 | C5 income flows across the border | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
-| **D1 the current account is a read of actual transactions** | `src/domain/region-macro.ts:tradeBalance` | ❌ |
+| **D1 the current account is a read of actual transactions** | `src/domain/region-macro.ts:tradeBalanceAnnualUSD` | ❌ |
 | **D2 the financial account is the other side** | — | ❌ |
 | **D3 VERIFY D1 + D2 = 0 as a consequence** | — | ❌ |
 | D3.a a residual that has to be plugged is a lost leg | `src/engine/simulation/stages/fx-clearing.ts:residualByPair` | ⚠️ |
@@ -115,8 +115,8 @@ checked by `scripts/check-atlas.sh`.
 | E2 the register holds foreign issuers' instruments | `src/engine/simulation/stages/holdings-store.ts:buildHoldingsStore` | ✅ |
 | E3 a default reaches foreign holders in proportion | `src/engine/simulation/stages/estate-resolution.ts:distribute` | ✅ |
 | E4 a central bank's actions reach other regions | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ⚠️ |
-| **F1 FORBID no region that is a closed box** | `src/engine/simulation/stages/05-unit-bidding.ts:bilateralTradeWeeklyLocal` | ✅ |
-| **F2 FORBID no netting of cross-border flows into a regional aggregate** | `src/engine/simulation/stages/06-fx-and-trade.ts:exportsWeeklyLocal` | ⚠️ |
+| **F1 FORBID no region that is a closed box** | `src/engine/simulation/stages/05-unit-bidding.ts:bilateralTradeWeeklyUSD` | ✅ |
+| **F2 FORBID no netting of cross-border flows into a regional aggregate** | `src/engine/simulation/stages/06-fx-and-trade.ts:exportsWeeklyUSD` | ⚠️ |
 | **F3 FORBID no exogenous trade or capital-flow series** | `src/engine/simulation/stages/06-fx-and-trade.ts:runFxAndTradeStage` | ✅ |
 
 ---
@@ -142,8 +142,8 @@ thing: the other entries render a real number wrongly, this one renders a number
 Fixing the formatter would print `0.0%` in a different font. Rule 12 — **fix the cause** — and the
 cause is that the model has no external accounts.
 
-The ingredients are all present and none of them are joined up. Goods: `reg.exportsLocal` /
-`reg.importsLocal`, summed from real fills (`06-fx-and-trade:70-77`). Income: coupons and dividends
+The ingredients are all present and none of them are joined up. Goods: `reg.exportsAnnualUSD` /
+`reg.importsAnnualUSD`, summed from real fills (`06-fx-and-trade:70-77`; USD, and since §3.28b-i named so). Income: coupons and dividends
 already reach foreign holders through `applyHolderInterestAccruals` and the register, and the payer
 and payee both carry a region. Financial account: `fx-clearing.ts:100` already computes each
 entity's **change in foreign holdings by issuer region** off `priorForeignHoldingsByRegion` — that
@@ -175,7 +175,7 @@ and today only the goods invoice gets to make one.
 from `fx-clearing`**, which is the removal that mattered. It still exists at `context.ts:271,435`,
 is zeroed each week at `05-unit-bidding:2457`, and is accumulated at `05-unit-bidding:1786` — one
 `+=` per FILL, keyed `[lot.sellerRegion][buyerRegion]`, converted at the buyer's rate. Then
-`06-fx-and-trade:70-77` sums it into `reg.exportsLocal` / `importsLocal` / `tradeBalance`.
+`06-fx-and-trade:70-77` sums it into `reg.exportsAnnualUSD` / `importsAnnualUSD` / `tradeBalanceAnnualUSD`.
 
 That is the correct direction of travel and **F3 holds**: the series is a report of settled
 transactions, not an input. `fx-clearing.ts:111` carries the tombstone — *"This was

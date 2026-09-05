@@ -30,6 +30,7 @@ import { GOVERNMENT_OCCUPATION_MIX, AVERAGE_HOUSEHOLD_SIZE, SmePool, GovDebtTran
 import { BufferBand, bufferMonthsOf, joinCreditTiersToBalanceSheets, delinquencyExposureOf } from '../../domain/household-credit';
 import { smePoolLinkedCommodities } from '../../domain/industry-registry';
 import { localToUsd, FxToUsd } from '../../domain/currency';
+import { runRateAnnual, weeklyOfAnnual } from '../../domain/units';
 import { evolveRegionalWeather } from './weather';
 import { random } from '../rng';
 import {
@@ -140,7 +141,7 @@ export function evolveRegionMacro(
   isMeeting: boolean;
   diagnosticString: string;
 } {
-  const { updatedBuffer: newPolicyRateLagBuffer } = pushAndReadLagged(region.policyRateLagBuffer, region.policyRate, 6);
+  const { updatedBuffer: newPolicyRateLagBuffer } = pushAndReadLagged(region.policyRateLagBuffer, region.policyRateAnnual, 6);
   const { updatedBuffer: newDemandShockLagBuffer } = pushAndReadLagged(region.demandShockLagBuffer, globalShock.gdpShock, 4);
   
   const updatedWeather = evolveRegionalWeather(region.id, region.weather, week, allCompanies);
@@ -154,8 +155,8 @@ export function evolveRegionMacro(
   // counting with an invented weight. `updatedWeather` still drives that real supply effect.
 
   // GDP Growth is derived bottom-up from C+I+G+NX identity in simulation core (Phase 4)
-  const potentialGdp = region.potentialGdpGrowth;
-  const newGdpGrowth = region.gdpGrowth;
+  const potentialGdp = region.potentialGdpGrowthAnnual;
+  const newGdpGrowth = region.gdpGrowthAnnual;
 
   const prevHS: HouseholdState = region.householdState;
 
@@ -170,7 +171,7 @@ export function evolveRegionMacro(
   // consolidations began at 30–35%); above the red line the stance CONSOLIDATES whatever the
   // cycle says, because the constraint binds before the ballot does.
   let newFiscalStanceScore = region.fiscalStanceScore;
-  const piStar = region.targetInflation;
+  const piStar = region.targetInflationAnnual;
 
   // Evaluate once per quarter, same cadence as monetary policy meetings
   if (week % 13 === 0) {
@@ -186,7 +187,7 @@ export function evolveRegionMacro(
       // The stimulus a government DELIVERS is the one it can fund: full 0.15 with a clean
       // sheet, shrinking to nothing as the interest bill closes on the red line.
       newFiscalStanceScore = Math.min(1, region.fiscalStanceScore + 0.15 * fiscalSpace);
-    } else if (region.cycleRegime === 'Expansion' && region.inflation > piStar + 0.03) {
+    } else if (region.cycleRegime === 'Expansion' && region.inflationAnnual > piStar + 0.03) {
       newFiscalStanceScore = Math.max(-1, region.fiscalStanceScore - 0.10); // austerity/consolidation
     } else {
       newFiscalStanceScore = region.fiscalStanceScore * 0.95; // slow decay back to neutral
@@ -201,7 +202,7 @@ export function evolveRegionMacro(
   // clears. This carries last week's measured figure forward for the stages that read it before
   // the new measurement exists — most importantly the Taylor rule below, which is supposed to
   // react to the most recently published statistic, exactly as a real central bank does.
-  const newInflation = region.inflation;
+  const newInflation = region.inflationAnnual;
 
   const newEstimatedNominalGdpLocal = region.lastWeekNominalGdpLocal > 0 ? region.lastWeekNominalGdpLocal : region.estimatedNominalGdpLocal;
 
@@ -233,16 +234,16 @@ export function evolveRegionMacro(
   const newNonEmployablePct = (region.nonEmployablePct + nonEmployableDrift);
 
 
-  let newPotentialGdpGrowth = region.potentialGdpGrowth;
+  let newPotentialGdpGrowth = region.potentialGdpGrowthAnnual;
   if (week % 52 === 0) {
-    const laborForceTrend = (newParticipation - region.laborForceParticipation) * 52;
+    const laborForceTrend = runRateAnnual(newParticipation - region.laborForceParticipation);
     const capexIntensityTrend = (microFeedback.capexGdpContribution * 0.15);
     const potentialGdpDrift = laborForceTrend * 0.3 + capexIntensityTrend;
-    newPotentialGdpGrowth = (Number((region.potentialGdpGrowth + potentialGdpDrift).toFixed(4)));
+    newPotentialGdpGrowth = (Number((region.potentialGdpGrowthAnnual + potentialGdpDrift).toFixed(4)));
   }
 
-  const potentialGdpDelta = newPotentialGdpGrowth - region.potentialGdpGrowth;
-  const newNeutralRate = Number((region.neutralRate + potentialGdpDelta).toFixed(4));
+  const potentialGdpDelta = newPotentialGdpGrowth - region.potentialGdpGrowthAnnual;
+  const newNeutralRate = Number((region.neutralRateAnnual + potentialGdpDelta).toFixed(4));
 
   const isHighUnemp = region.unemploymentRate > region.nairu + 0.005;
   const weeksAboveNairu = isHighUnemp ? (region.weeksAboveNairu) + 1 : Math.max(0, (region.weeksAboveNairu) - 2);
@@ -306,7 +307,7 @@ export function evolveRegionMacro(
   // fertility, mortality and attractiveness moved — which is the whole quantity this project
   // exists to make vary. A population cannot go negative; that is arithmetic and stays below.
   // The signal reads what it always encoded: real wage growth, which is what draws people in.
-  const migrationAttractivenessSignal = (newWageGrowth - region.inflation) * 0.0006;
+  const migrationAttractivenessSignal = (newWageGrowth - region.inflationAnnual) * 0.0006;
   const birthRate = region.birthRateAnnual;
   // DEM: mortality follows the share of the population that is old, which drifts every week, so
   // an ageing region's death rate rises on its own rather than sitting at a seeded constant.
@@ -322,7 +323,7 @@ export function evolveRegionMacro(
   const deathRate = agesForDeaths.reduce((a, w, age) => a + w * mortalityHazardAnnual(age), 0);
   const migrationRate = region.netMigrationRateAnnual;
   const netAnnualGrowthRate = birthRate - deathRate + migrationRate + migrationAttractivenessSignal;
-  const netPopulationGrowthRate = netAnnualGrowthRate / 52;
+  const netPopulationGrowthRate = weeklyOfAnnual(netAnnualGrowthRate);
   const newTotalPopulation = Math.max(1, Math.round(region.totalPopulation * (1 + netPopulationGrowthRate)));
   const totalLaborForce = newTotalPopulation * (1 - newNonEmployablePct) * newParticipation;
 
@@ -333,7 +334,7 @@ export function evolveRegionMacro(
   // budget this week.
   const targetGovEmploymentGrowthRate =
     netPopulationGrowthRate + newFiscalStanceScore * GOV_HIRING_RESPONSE_TO_STANCE;
-  const prevGovEmploymentGrowthRate = region.govEmploymentGrowthRate ?? targetGovEmploymentGrowthRate;
+  const prevGovEmploymentGrowthRate = region.govEmploymentGrowthWeekly ?? targetGovEmploymentGrowthRate;
   const govEmploymentGrowthRate = prevGovEmploymentGrowthRate * 0.85 + targetGovEmploymentGrowthRate * 0.15;
   const newGovernmentEmployment = Math.max(1, Math.round(region.governmentEmployment * (1 + govEmploymentGrowthRate)));
 
@@ -456,13 +457,13 @@ export function evolveRegionMacro(
 
   // Update newRealConsumptionGrowth with real balance-sheet channels:
   // §3.18-i: the trend is the trend — it was scaled by the confidence index, which is gone.
-  const trendConsumptionGrowth = region.potentialGdpGrowth;
+  const trendConsumptionGrowth = region.potentialGdpGrowthAnnual;
   // DIST/MAC — LAST week's measured savings rate. This term runs before the cohorts are built,
   // and the rate is now their output, so it reads the most recent one that exists. A lag here is
   // right anyway: what a household spends out of a real wage gain this week is governed by the
   // saving behaviour it already had, not by the one this week's budgets will turn out to imply.
   const priorSavingsRate = prevHS.savingsRate;
-  const realWageGainEffect = (1 - priorSavingsRate) * (laggedWageGrowth - region.inflation - 0.005);
+  const realWageGainEffect = (1 - priorSavingsRate) * (laggedWageGrowth - region.inflationAnnual - 0.005);
   const newRealConsumptionGrowth = trendConsumptionGrowth
     + realWageGainEffect
     + balanceSheetWealthEffect
@@ -715,7 +716,7 @@ export function evolveRegionMacro(
     // also a SECOND representation of household credit pricing: `quoteHouseholdMarginBps` already
     // prices exactly this for the banks' own pools, off measured loss, capital and cost to serve.
     // One price, from one place, at this tier's OWN measured loss rate.
-    const newAvgInterestRate = region.policyRate + quoteHouseholdMarginBps({
+    const newAvgInterestRate = region.policyRateAnnual + quoteHouseholdMarginBps({
       annualLossRate: newDelinquency,
       riskWeight: CONSUMER_CREDIT_RISK_WEIGHT,
       operatingCostBps: CARD_OPERATING_COST_BPS,
@@ -750,7 +751,7 @@ export function evolveRegionMacro(
   // inflation that fed a "monetization share" printing deposits straight into households —
   // which is not what a central bank does. The balance sheet is now the real sovereign book
   // written by stages/central-bank.ts, and it moves by bidding in 07c/07f.
-  const newCbBalance = region.centralBankBalanceSheet;
+  const newCbBalance = region.centralBankBalanceSheetLocal;
 
   const { sheet: newBankingSector } = evolveBankingSector(
     region.bankingSector,
@@ -761,7 +762,7 @@ export function evolveRegionMacro(
     microFeedback.bankDepositLines,
     newEstimatedHouseholdIncomeLocal,
     newSavingsRate,
-    region.policyRate,
+    region.policyRateAnnual,
     newUnemployment,
     // The aggregate book's real yield at the real cleared curve — the per-bank truth is
     // recomputed in 02b, which overwrites this aggregate with the sum of named banks.
@@ -779,14 +780,14 @@ export function evolveRegionMacro(
   // raising what buyers bid in stage 05's real auction, and the price index measures that. A
   // separate term for them counts the same economics twice, once through the market and once
   // around it.
-  const newCoreInflation = region.coreInflation;
-  const rawExp = region.expectedInflation * 0.9 + newInflation * 0.1;
+  const newCoreInflation = region.coreInflationAnnual;
+  const rawExp = region.expectedInflationAnnual * 0.9 + newInflation * 0.1;
   // §3.18-i: no [−20%, +50%] band on expectations and no 2.5% fallback (rule 6).
   const newExpectedInflation = Number.isFinite(rawExp) ? Number(rawExp.toFixed(4)) : defect(`${region.id} expected inflation is not a number`);
 
   // Calibrated Inertial Taylor Rule:
   // Target: i*_t = r* + pi_t + 0.5(pi_t - pi*) + 0.5(y_t - y*)
-  const rStar = region.neutralRate; // US: 1.00%, UK: 0.75%, EU: 0.50%, JP: -0.25%
+  const rStar = region.neutralRateAnnual; // US: 1.00%, UK: 0.75%, EU: 0.50%, JP: -0.25%
   
   // §3.18-i: the ±10% caps on both gaps and the 20% ceiling on the target are gone (rule 6). The
   // ONE bound that stays is the effective lower bound, which is a real thing the central bank
@@ -800,26 +801,26 @@ export function evolveRegionMacro(
   let rateDeltaBps = 0;
 
   // Policy Lag: Smooth movement toward Taylor Target each week (moves 15% of the way)
-  const targetPolicyRate = Math.max(EFFECTIVE_LOWER_BOUND, region.policyRate + 0.15 * (clampedTaylorTarget - region.policyRate));
+  const targetPolicyRate = Math.max(EFFECTIVE_LOWER_BOUND, region.policyRateAnnual + 0.15 * (clampedTaylorTarget - region.policyRateAnnual));
 
   // Update inflation deviation streak
-  const isAboveTarget = region.inflation > piStar + 0.01;
+  const isAboveTarget = region.inflationAnnual > piStar + 0.01;
   const newInflationDeviationStreak = isAboveTarget ? (region.inflationDeviationStreak || 0) + 1 : Math.max(0, (region.inflationDeviationStreak || 0) - 2);
 
   const isMeeting = (week % 13 === 0);
 
-  let newPolicyRate = region.policyRate;
+  let newPolicyRate = region.policyRateAnnual;
   if (isMeeting) {
-    const rawMove = targetPolicyRate - region.policyRate;
+    const rawMove = targetPolicyRate - region.policyRateAnnual;
     // Round to nearest 25 bps (0.0025)
     const roundedMove = Math.round(rawMove / 0.0025) * 0.0025;
-    newPolicyRate = region.policyRate + roundedMove;
+    newPolicyRate = region.policyRateAnnual + roundedMove;
     newPolicyRate = Math.max(EFFECTIVE_LOWER_BOUND, newPolicyRate);
   }
 
-  if (Math.abs(newPolicyRate - region.policyRate) > 0.0001) {
+  if (Math.abs(newPolicyRate - region.policyRateAnnual) > 0.0001) {
     rateChanged = true;
-    rateDeltaBps = Math.round((newPolicyRate - region.policyRate) * 10000);
+    rateDeltaBps = Math.round((newPolicyRate - region.policyRateAnnual) * 10000);
   }
 
   const smoothedTargetRate = taylorTarget; // Used for dot plot and curve parameters
@@ -829,9 +830,9 @@ export function evolveRegionMacro(
   const outGapBps = Math.round(output_gap * 10000);
   const infGapBps = Math.round(inflation_gap * 10000);
   
-  const diagnosticString = `Prior GDP: ${(region.gdpGrowth * 100).toFixed(2)}% | CapEx Boost: ${capexBps > 0 ? '+' : ''}${capexBps} bps | Net Realized GDP: ${(newGdpGrowth * 100).toFixed(2)}%
+  const diagnosticString = `Prior GDP: ${(region.gdpGrowthAnnual * 100).toFixed(2)}% | CapEx Boost: ${capexBps > 0 ? '+' : ''}${capexBps} bps | Net Realized GDP: ${(newGdpGrowth * 100).toFixed(2)}%
 Potential GDP: ${(potentialGdp * 100).toFixed(2)}% | Output Gap: ${outGapBps > 0 ? '+' : ''}${outGapBps} bps | CPI: ${(newInflation * 100).toFixed(2)}% (Gap ${infGapBps > 0 ? '+' : ''}${infGapBps} bps)
-Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.policyRate * 100).toFixed(2)}% | Meeting Decision: ${rateChanged ? `${rateDeltaBps > 0 ? '+' : ''}${rateDeltaBps} bps -> ${(newPolicyRate * 100).toFixed(2)}%` : 'Hold'}`;
+Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.policyRateAnnual * 100).toFixed(2)}% | Meeting Decision: ${rateChanged ? `${rateDeltaBps > 0 ? '+' : ''}${rateDeltaBps} bps -> ${(newPolicyRate * 100).toFixed(2)}%` : 'Hold'}`;
 
   // Dot Plot projections converging toward Taylor target & long-run neutral
   const dotPlot1Y = Number((newPolicyRate * 0.4 + smoothedTargetRate * 0.6).toFixed(4));
@@ -1122,9 +1123,9 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     cycleRegime: newCycleRegime,
     inversionWeeksCount: newInversionCount,
     recessionShockQueue: remainingShocks,
-    centralBankBalanceSheet: newCbBalance,
-    taylorTargetRate: taylorTarget,
-    govEmploymentGrowthRate,
+    centralBankBalanceSheetLocal: newCbBalance,
+    taylorTargetRateAnnual: taylorTarget,
+    govEmploymentGrowthWeekly: govEmploymentGrowthRate,
     fiscalStanceScore: newFiscalStanceScore,
     sovereignRating: newSovereignRating,
     laggedPolicyRateEMA: region.laggedPolicyRateEMA * 0.96 + newPolicyRate * 0.04,
@@ -1133,16 +1134,16 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     smoothedSlackGap: newSmoothedSlackGap,
     policyRateLagBuffer: newPolicyRateLagBuffer,
     demandShockLagBuffer: newDemandShockLagBuffer,
-    potentialGdpGrowth: newPotentialGdpGrowth,
-    neutralRate: newNeutralRate,
+    potentialGdpGrowthAnnual: newPotentialGdpGrowth,
+    neutralRateAnnual: newNeutralRate,
     nairu: newNairu,
     weeksAboveNairu,
-    policyRate: newPolicyRate,
-    inflation: newInflation,
-    coreInflation: newCoreInflation,
-    expectedInflation: newExpectedInflation,
-    gdpGrowth: newGdpGrowth,
-    wageGrowth: Number(newWageGrowth.toFixed(4)),
+    policyRateAnnual: newPolicyRate,
+    inflationAnnual: newInflation,
+    coreInflationAnnual: newCoreInflation,
+    expectedInflationAnnual: newExpectedInflation,
+    gdpGrowthAnnual: newGdpGrowth,
+    wageGrowthAnnual: Number(newWageGrowth.toFixed(4)),
     unemploymentRate: newUnemployment,
     totalPopulation: newTotalPopulation,
     birthRateAnnual: birthRate,
@@ -1169,7 +1170,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     employerPayrollTaxWeeklyLocal: Math.round((employerPayrollTaxLocal / 52)),
     householdState: {
       creditTierBooks: normalizedTiers,
-      wageGrowth: newWageGrowth,
+      wageGrowthAnnual: newWageGrowth,
       savingsRate: newSavingsRate,
       realConsumptionGrowth: newRealConsumptionGrowth,
       householdDebtToIncomeRatio: newHouseholdDebtToIncomeRatio,
@@ -1224,9 +1225,9 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     estimatedHouseholdIncomeLocal: newEstimatedHouseholdIncomeLocal,
     dotPlot1Y,
     dotPlot2Y,
-    exportsLocal: region.exportsLocal,
-    importsLocal: region.importsLocal,
-    tradeBalance: region.tradeBalance,
+    exportsAnnualUSD: region.exportsAnnualUSD,
+    importsAnnualUSD: region.importsAnnualUSD,
+    tradeBalanceAnnualUSD: region.tradeBalanceAnnualUSD,
     yieldCurveParams: newCurveParams,
     zeroRates: newZeroRates,
     sovereignCurve: region.sovereignCurve,

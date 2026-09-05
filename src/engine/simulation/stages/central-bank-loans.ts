@@ -27,8 +27,8 @@ export const CENTRAL_BANK_LOAN_PENALTY_BPS = 100;
 type Bank = { id: EntityId; ticker: Ticker; region: RegionId; management?: import('../../../domain/preferences').Preferences; bankBalanceSheet?: BankingSector };
 
 /** The window's unsecured rate this week: the top of the corridor, plus the penalty. */
-export const centralBankLoanRateAnnual = (reg: Pick<Region, 'policyRate'>): number =>
-  Number(((repoCorridorBps(reg.policyRate).ceilingBps + CENTRAL_BANK_LOAN_PENALTY_BPS) / 10000).toFixed(6));
+export const centralBankLoanRateAnnual = (reg: Pick<Region, 'policyRateAnnual'>): number =>
+  Number(((repoCorridorBps(reg.policyRateAnnual).ceilingBps + CENTRAL_BANK_LOAN_PENALTY_BPS) / 10000).toFixed(6));
 
 /** The sheets' derived lines, from the book — the one writer of both. */
 export function syncCentralBankLoanSheets(ctx: WeeklyStepContext, regionId: RegionId, reg: Region, banks: readonly Bank[]): void {

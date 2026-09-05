@@ -342,7 +342,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
   // per-week region tables
   for (let ri = 0; ri < R; ri++) {
     const reg = updatedRegions[regionIds[ri]];
-    S.policyRate[ri] = reg.policyRate;
+    S.policyRate[ri] = reg.policyRateAnnual;
     S.effectiveTaxRate[ri] = reg.effectiveTaxRate;
     const supplied = suppliedSubUnitsByRegion.get(regionIds[ri]);
     for (let si = 0; si < NSUB; si++) {

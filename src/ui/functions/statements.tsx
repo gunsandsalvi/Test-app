@@ -1,4 +1,6 @@
 import { RegionId, currencyOf } from '../../domain/geography';
+import { usdToLocal, FxToUsd } from '../../domain/currency';
+import { runRateAnnual } from '../../domain/units';
 import { plantGrossLocal, plantAccumulatedDepreciationLocal } from '../../domain/plant';
 import { bankSovereignBookLocal } from '../../engine/sovereign-register';
 /**
@@ -230,17 +232,22 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
   let body: React.ReactNode;
   if (active === 'national accounts') {
     const gdp = r.derivedNominalGdpLocal;
-    body = <Statement units="USD millions · annualised from the week" asOf={asOf} lines={[
+    // §3.28b-i: C, I, G and GDP are the region's own money; the trade position is stored in USD
+    // (stage 05 converts each lot at the cleared rate) and joins the statement converted back.
+    const fxToUsd: FxToUsd = (rid) => ensureV2(world.state).fx[currencyOf(rid)];
+    const exportsAnnualLocal = usdToLocal(r.exportsAnnualUSD, r.id, fxToUsd);
+    const importsAnnualLocal = usdToLocal(r.importsAnnualUSD, r.id, fxToUsd);
+    body = <Statement units={`${r.currency} millions · annualised from the week`} asOf={asOf} lines={[
       { label: 'Consumption', usd: r.consumptionComponentLocal },
       { label: 'Investment', usd: r.investmentComponentLocal },
-      { label: 'Government', usd: (r.governmentOutlaysLocal ?? r.governmentSpendingWeeklyLocal) * 52 },
-      { label: 'Exports', usd: r.exportsLocal },
-      { label: 'Imports', usd: -r.importsLocal },
+      { label: 'Government', usd: runRateAnnual(r.governmentOutlaysLocal ?? r.governmentSpendingWeeklyLocal) },
+      { label: 'Exports', usd: exportsAnnualLocal },
+      { label: 'Imports', usd: -importsAnnualLocal },
       { label: 'GDP', usd: gdp, total: true },
       { label: 'Unemployment', text: pctLevel(r.unemploymentRate) },
-      { label: 'Inflation · core', text: `${pctLevel(r.inflation)} · ${pctLevel(r.coreInflation)}` },
+      { label: 'Inflation · core', text: `${pctLevel(r.inflationAnnual)} · ${pctLevel(r.coreInflationAnnual)}` },
       // §3.15-iii: the trade balance is the external read that exists; a current account is 37-BOP's.
-      { label: 'Trade balance, share of GDP', text: gdp > 0 ? pct(r.tradeBalance / gdp, 1) : '—' },
+      { label: 'Trade balance, share of GDP', text: gdp > 0 ? pct((exportsAnnualLocal - importsAnnualLocal) / gdp, 1) : '—' },
     ]} />;
   } else if (active === 'treasury') {
     body = <Statement units="USD millions · weekly flows" asOf={asOf} lines={[

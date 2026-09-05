@@ -297,9 +297,10 @@ export interface WeeklyStepContext {
    * XB3a — who bought from whom this week, in USD: `[exporter][importer]`. Set by stage 05 from
    * the world book's own fills (a lot whose two sides sit in different regions IS an export) and
    * published as each region's trade position by stage 06. WEEKLY, unlike the annualised
-   * `Region.exportsLocal` it feeds — rule 8.
+   * `Region.exportsAnnualUSD` it feeds, and USD like it — stage 05 converts each lot at the
+   * cleared rate, because a world total in four monies is not a total (rule 8).
    */
-  bilateralTradeWeeklyLocal: Record<RegionId, Record<RegionId, number>>;
+  bilateralTradeWeeklyUSD: Record<RegionId, Record<RegionId, number>>;
   /** XB3a-3 — where each region intends to source each good this week, set by the sourcing-intent
    *  stage and read by the goods auction. key: `${buyerRegion}|${subUnitId}`. */
   sourcingSplitByRegionSubUnit: Map<string, import('./sourcing-intent').SourcingSplit>;
@@ -474,7 +475,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     fx: ensureV2(state).fx,
     getFxToUsd: () => 1.0,
     currencyValueLocal: undefined,
-    bilateralTradeWeeklyLocal: {
+    bilateralTradeWeeklyUSD: {
       USA: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
       EUR: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
       UK: { USA: 0, EUR: 0, UK: 0, JPN: 0 },

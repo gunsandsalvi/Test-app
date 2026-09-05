@@ -154,8 +154,8 @@ checked by `scripts/check-atlas.sh`.
 | **G1.a PPI — prices received at the factory gate** | — | ❌ |
 | G1.b CPI — prices paid by households | `src/engine/simulation/stages/price-index.ts:buildCpiBasket` | ✅ |
 | G1.c VERIFY the two diverge, and the gap is the wedge | — | ❌ |
-| G2 inflation is the change in the relevant index | `src/engine/simulation/stages/price-index.ts:computeCpiLevel` | ⚠️ |
-| G3 real and nominal output are distinguishable | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:gdpGrowthBottomUp` | ⚠️ |
+| G2 inflation is the change in the relevant index | `src/engine/simulation/stages/price-index.ts:computeCpiLevel` · `src/domain/units.ts:yearOverYear` | ⚠️ |
+| G3 real and nominal output are distinguishable | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:gdpGrowthBottomUp` · `src/domain/units.ts:realGrowthAnnual` | ⚠️ |
 | G4 VERIFY capacity utilisation is a read | — | ❌ |
 
 ---
@@ -241,7 +241,8 @@ recipe). So:
 
 - there is no production-weighted, factory-gate index at all;
 - real output is deflated by the consumer index — `11-fiscal:174`,
-  `gdpGrowthBottomUp = (nominal YoY) − reg.inflation`, where `reg.inflation` is CPI. G3 is
+  `gdpGrowthBottomUp = realGrowthAnnual(nominal YoY, reg.inflationAnnual)` — the ratio of the
+  gross rates since §3.28b-i — where `reg.inflationAnnual` is CPI. G3 is
   therefore ⚠️ rather than ❌: the deflation happens, with the wrong deflator;
 - G1.c's wedge — distribution margin plus consumption tax plus import mix — cannot be read,
   which means **margin compression is invisible**, and the tree names that as most of what a cost

@@ -36,6 +36,7 @@
 
 import { plantNetLocal } from '../../../domain/plant';
 import { laborForceCount } from '../../../domain/region-macro';
+import { runRateAnnual } from '../../../domain/units';
 import { GameState, Region, RegionId, Company, OccupationType } from '../../../types';
 import { ensureV2, rowOf, revHistFill } from '../../../engine2/world';
 const revHistScratch: number[] = [];
@@ -177,7 +178,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     const separationsByOcc = { ...vacanciesByOcc };
 
     // Real output growth is what hiring follows, so the revenue signal is deflated.
-    const inflationAnnual = reg.inflation;
+    const inflationAnnual = reg.inflationAnnual;
     // LAB: the occupation wage table this region's employers pay against.
     const baseAnnualWageLocal = getBaseAnnualWageLocal(regionId);
 
@@ -771,7 +772,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         ...pools[occ],
         wageIndex: Number(next.toFixed(5)),
         // The going rate's own growth, annualized — what household income is paid at.
-        wageGrowthAnnual: Number((catchup * 52).toFixed(4)),
+        wageGrowthAnnual: Number(runRateAnnual(catchup).toFixed(4)),
         // §3.24-i: the price the occupation printed this week, against the rate it was bid at.
         clearedWageIndex: clearedIndexByOcc[occ] === undefined ? undefined : Number(clearedIndexByOcc[occ]!.toFixed(5)),
       };

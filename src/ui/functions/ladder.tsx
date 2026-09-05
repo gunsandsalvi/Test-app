@@ -62,7 +62,7 @@ export const ladder: FunctionModule = {
     if (ref.type === 'company') {
       const c = companyOf(world, ref.id);
       if (!c) return null;
-      const policy = regionOf(world, c.region)?.policyRate ?? 0;
+      const policy = regionOf(world, c.region)?.policyRateAnnual ?? 0;
       const rows: Row[] = materializeLadder(world.v2, c.id).map((t) => ({
         id: t.id, name: instrumentDisplayName(c.ticker, t, yearOf(world)), key: trancheId(c.id, t.id),
         kind: t.isCommercialPaper ? 'paper' : t.isBankFacility ? `facility${t.facilityBankId ? ` · ${t.facilityBankId}` : ''}` : t.seniority === 'SUBORDINATED' ? 'sub bond' : t.rateType === 'FLOATING' ? 'loan' : 'bond',

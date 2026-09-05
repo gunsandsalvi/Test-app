@@ -240,7 +240,7 @@ and are recorded here as a second witness rather than as new steps.
 *2026-09-05 (§9.18-i). The consumer-confidence INDEX is deleted — an invented level off four
 coefficients, an equity return clamped ±0.5 and the index clamped [30, 170], read by nothing that
 decided. Its two readers read what it was made of: the migration signal and consumer-credit
-appetite read real wage growth. What remains of C1.c is expectations: `expectedInflation`, an
+appetite read real wage growth. What remains of C1.c is expectations: `expectedInflationAnnual`, an
 adaptive average of the measured index, with its [−20%, +50%] band and 2.5% fallback gone.*
 
 `consumerConfidence` is an AR(1) around an equilibrium (`evolution.ts:329-332`) — a formula, not a

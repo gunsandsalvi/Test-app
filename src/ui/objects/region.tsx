@@ -46,8 +46,8 @@ export const region = defineObject<Region>({
     columns: [
       { key: 'name', label: 'region', render: (r, _w, nav) => <Link to={{ type: 'region', id: r.id }} nav={nav}>{r.id}</Link>, value: (r) => r.id },
       { key: 'u', label: 'u', render: (r) => pctLevel(r.obj.unemploymentRate), value: (r) => r.obj.unemploymentRate },
-      { key: 'infl', label: 'inflation', render: (r) => pctLevel(r.obj.inflation), value: (r) => r.obj.inflation },
-      { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRate, 2), value: (r) => r.obj.policyRate },
+      { key: 'infl', label: 'inflation', render: (r) => pctLevel(r.obj.inflationAnnual), value: (r) => r.obj.inflationAnnual },
+      { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRateAnnual, 2), value: (r) => r.obj.policyRateAnnual },
       { key: '10y', label: '10y', render: (r) => pctLevel(r.obj.zeroRates.tenor10Y, 2), value: (r) => r.obj.zeroRates.tenor10Y },
       { key: 'gdp', label: 'gdp', render: (r) => money(r.obj.derivedNominalGdpLocal), value: (r) => r.obj.derivedNominalGdpLocal },
     ],
@@ -68,13 +68,13 @@ export const region = defineObject<Region>({
         <ObjectHeader name={r.name} sub={<>{r.currency} · {r.centralBank} · {words(r.cycleRegime)} · sovereign {r.sovereignRating}{weather ? ` · ${weather}` : ''}</>} />
         <StatGrid>
           <Stat label="unemployment" value={pctLevel(r.unemploymentRate)} sub={u.length > 1 ? <ChangeSub series={u} /> : `nairu ${pctLevel(r.nairu)}`} neg={r.unemploymentRate > r.nairu} />
-          <Stat label="inflation" value={pctLevel(r.inflation)} sub={`core ${pctLevel(r.coreInflation)}`} neg={r.inflation > 0.1} />
-          <Stat label="policy rate" value={pctLevel(r.policyRate, 2)} sub={`10y ${pctLevel(r.zeroRates.tenor10Y, 2)} · 2y ${pctLevel(r.zeroRates.tenor2Y, 2)}`} />
+          <Stat label="inflation" value={pctLevel(r.inflationAnnual)} sub={`core ${pctLevel(r.coreInflationAnnual)}`} neg={r.inflationAnnual > 0.1} />
+          <Stat label="policy rate" value={pctLevel(r.policyRateAnnual, 2)} sub={`10y ${pctLevel(r.zeroRates.tenor10Y, 2)} · 2y ${pctLevel(r.zeroRates.tenor2Y, 2)}`} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="gdp, annualised" hint={gdp.filter(Number.isFinite).length > 1 ? <ChangeSub series={gdp} /> : undefined} v={money(r.derivedNominalGdpLocal)} />
           <KV k="price level" hint={cpi.length > 1 ? <ChangeSub series={cpi} /> : 'seed = 100'} v={num(r.consumerPriceIndex, 1)} />
-          <KV k="labour market" hint="tightness · wage growth" v={`${num(r.laborMarketTightness, 2)} · ${pctLevel(r.wageGrowth)}`} />
+          <KV k="labour market" hint="tightness · wage growth" v={`${num(r.laborMarketTightness, 2)} · ${pctLevel(r.wageGrowthAnnual)}`} />
           <KV k="banks" hint="capital · margin" v={`${pctLevel(r.bankingSector.bankCapitalRatio, 1)} · ${pctLevel(r.bankingSector.netInterestMarginPct, 2)}`} onTap={() => nav.go('banks')} />
           <KV k="households" hint="deposits · net worth" v={`${money(householdDepositsOf(ensureV2(world.state), r.id as RegionId))} · ${money(r.householdState.netWorthLocal)}`} onTap={() => nav.go('statements', { tab: 'households' })} />
           <KV k="treasury" hint="revenue · outlays, weekly" v={`${money(r.governmentRevenueLocal)} · ${money(r.governmentOutlaysLocal ?? r.governmentSpendingWeeklyLocal)}`} onTap={() => nav.go('statements', { tab: 'treasury' })} />

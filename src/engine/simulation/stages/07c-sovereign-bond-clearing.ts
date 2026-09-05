@@ -127,18 +127,18 @@ function durationPremiumBps(tenorYears: number, preferredTenorYears: number): nu
 const INFLATION_MEAN_REVERSION_YEARS = 3;
 
 function expectedInflationOverTenor(
-  reg: { expectedInflation: number; targetInflation: number },
+  reg: { expectedInflationAnnual: number; targetInflationAnnual: number },
   tenorYears: number
 ): number {
-  const target = reg.targetInflation;
-  const gap = reg.expectedInflation - target;
+  const target = reg.targetInflationAnnual;
+  const gap = reg.expectedInflationAnnual - target;
   const x = Math.max(0.01, tenorYears) / INFLATION_MEAN_REVERSION_YEARS;
   const averagingFactor = (1 - Math.exp(-x)) / x;
   return target + gap * averagingFactor;
 }
 
 function computeSovereignReservationYieldBps(
-  reg: { expectedInflation: number; targetInflation: number; policyRate: number },
+  reg: { expectedInflationAnnual: number; targetInflationAnnual: number; policyRateAnnual: number },
   tenorYears: number,
   preferredTenorYears: number
 ): number {
@@ -418,7 +418,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           reservationStat: priceAtYieldBps(b,
             computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS)
             + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
-                ctx.updatedRegions[entity.region].policyRate, reg.policyRate))),
+                ctx.updatedRegions[entity.region].policyRateAnnual, reg.policyRateAnnual))),
           maxHoldingLocal: entityTarget * shareOfMarket * maxOverweightMultipleOf(entity),
           fullSizeStatRange: priceRangeOfYieldRange(b, curveYieldBpsOf(b), SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
           maxNetPurchaseLocal: classBudgetLocal * shareOfMarket,
@@ -528,7 +528,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         demandByInstrumentId.set(b.id, {
           // The duration premium is on THIS bond's remaining life, so a rung six years into a
           // ten-year life is priced as the four-year bond it now is.
-          reservationStat: priceAtYieldBps(b, reg.policyRate * 10000 + durationPremiumBps(b.years, BANK_PREFERRED_TENOR_YEARS)),
+          reservationStat: priceAtYieldBps(b, reg.policyRateAnnual * 10000 + durationPremiumBps(b.years, BANK_PREFERRED_TENOR_YEARS)),
           maxHoldingLocal: appetiteLocal * shareOfSovStock,
           fullSizeStatRange: priceRangeOfYieldRange(b, curveYieldBpsOf(b), SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
           maxNetPurchaseLocal: fundableLocal * shareOfMarket,

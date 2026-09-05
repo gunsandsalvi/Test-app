@@ -66,7 +66,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
   );
 
 
-  const usdPolicyRate = updatedRegions.USA.policyRate;
+  const usdPolicyRate = updatedRegions.USA.policyRateAnnual;
   ctx.weeklyInterestIncomeLocal = Math.max(0, state.portfolio.cashLocal) * (usdPolicyRate / 52);
   ctx.attributionCarry += ctx.weeklyInterestIncomeLocal;
 
@@ -159,7 +159,7 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           // printed keeps the mark it had — a round trip through a fitted curve cannot return a
           // price nobody struck, and `priceCorporateBond` is gone with that reading.
           const reg = updatedRegions[pos.region];
-          const terms = trancheTerms(v2, trRow, nextWeek, reg.policyRate);
+          const terms = trancheTerms(v2, trRow, nextWeek, reg.policyRateAnnual);
           const printed = clearedPriceOf(v2, trancheIdOf(v2, trRow));
           currentPrice = printed !== undefined && printed > 0 ? printed * 100 : pos.currentPrice;
           const posValueLocal = pos.quantity * (currentPrice / 100) * fxRateToUsd;
