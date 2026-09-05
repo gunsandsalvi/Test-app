@@ -190,7 +190,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | E2 VERIFY Σ held = issued (N8.a) | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | **E3 the holder marks at the cleared price** | `src/engine/simulation/stages/register-marking.ts:markRegisterToMarket` | ✅ |
 | E4 the change in the mark is P&L reaching income | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` | ⚠️ |
-| E4.a realised and unrealised are distinguishable | `src/engine/simulation/stages/12-portfolio-and-positions.ts:unrealizedPnL` | ⚠️ |
+| E4.a realised and unrealised are distinguishable | `src/engine2/holdings.ts:bookUnrealisedLocal` · `src/engine2/holdings.ts:bookRealisedOf` | ✅ |
 | E5 an economic reservation | `src/engine/simulation/stages/asset-allocation.ts:computeReservationSpreadBps` | ✅ |
 | E5.a its cost of funds | `src/engine/simulation/stages/asset-allocation.ts:entityRequiredReturn` | ✅ |
 | E5.b its expected loss — A4's assessment × LGD | `src/engine/simulation/stages/shared-helpers.ts:computeAnnualDefaultProbability` | ✅ |
@@ -227,7 +227,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-**76 rows: 45 ✅, 23 ⚠️, 8 ❌** — COUNTED, not adjusted (§5's lesson from §9.13-CREDIT row 2:
+**76 rows: 46 ✅, 22 ⚠️, 8 ❌** — COUNTED, not adjusted (§5's lesson from §9.13-CREDIT row 2:
 a tally nobody recounts drifts as silently as a mark nobody re-marks). Re-marked at rows 1, 3, 4
 and 5; row 4 moved D2 ⚠️→✅ and D8 ❌→✅ and DELETED the two "bonds and loans" sub-rows it added at
 row 1, which had nothing left to say once every book cleared, and row 5 moved E3 ❌→✅ by wiring the
@@ -445,7 +445,7 @@ off its holders' equity — contagion with no correlation parameter anywhere, ex
 ### Also marked, briefly
 
 - **B2 ⚠️** — default is `isInDefault`'s state test, never a missed payment or a breach — G1/G2.
-- **E4 ⚠️ / E4.a ⚠️** — the mark's change is P&L for the player's portfolio (stage 12) and reaches no holder's own income statement; realised and unrealised are split there and nowhere else.
+- **E4 ⚠️** — the mark's change is P&L for the player's portfolio (stage 12) and reaches no holder's own income statement. **E4.a ✅** (§9.13-BOOK f2b): every register book's realised result (`bookRealisedOf`, written at each debit against the lots it consumed) and unrealised result (`bookUnrealisedLocal`, the mark less the cost) are two reads of the register.
 - **E8 ⚠️** — only sovereign paper is pledgeable (`domain/repo.ts`, deliberately) — a corporate bond cannot be encumbered.
 - **F5 ⚠️** — a refinancing's fair rate is read off the fitted curve — step 25.
 - **H2 ⚠️** — `P3` measures it behind a breach quota, so a minority of inverted names passes.

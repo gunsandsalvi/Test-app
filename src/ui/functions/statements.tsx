@@ -18,6 +18,7 @@ import { Card, Hint, KV, Tabs, T, mono } from '../ui';
 import { statementLocal, pct, pctLevel, ratio, changePct, money } from '../format';
 import { formatDate, quarterLabel } from '../calendar';
 import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
+import { bookBasisLocal, bookUnrealisedLocal, bookRealisedOf } from '../../engine2/holdings';
 import { bankRwaLocal } from '../../domain/bank-pricing';
 
 import { cashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../../engine/ledger/accounts';
@@ -198,11 +199,17 @@ function InstitutionStatements({ world, e }: { world: World; e: InstitutionalEnt
   const eCashLocal = entityCashOf(ensureV2(world.state), e);
   const assets = holdings + eCashLocal;
   const lines: Line[] = [...byType.entries()].sort((a, b) => b[1] - a[1]).map(([t, usd]) => ({ label: t.toLowerCase().replace(/_/g, ' '), usd }));
+  // §3.13-BOOK f2b: the book's cost and its two results, read off the register's lots.
+  const v2 = ensureV2(world.state);
+  let realised = 0; bookRealisedOf(v2, e.id).forEach((usd) => { realised += usd; });
   return (
     <Statement units="USD millions · the live book" asOf={formatDate(world.state.currentWeek)} lines={[
       ...lines,
       { label: 'Cash at the house bank', usd: eCashLocal },
       { label: 'Total assets', usd: assets, total: true },
+      { label: 'The book at cost', usd: bookBasisLocal(v2, e.id) },
+      { label: 'Unrealised on the book', usd: bookUnrealisedLocal(v2, e.id) },
+      { label: 'Realised since the seed', usd: realised },
       { label: 'Owed to beneficiaries', usd: e.beneficiaryLiabilityLocal ?? 0 },
       { label: 'Equity capital', usd: e.equityCapitalLocal, total: true },
     ]} />

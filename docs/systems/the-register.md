@@ -117,7 +117,7 @@ checked by `scripts/check-atlas.sh`.
 | **D2 who holds this instrument?** | — | ❌ |
 | D2.a both directions answerable without reconstruction | `src/engine2/holdings.ts:bookRowsOf` | ⚠️ |
 | D3 what is it worth? — quantity × a market price | `src/engine/ledger/holdings-ledger.ts:markBookToMarket` | ✅ |
-| **D4 what did it cost? — the basis** | — | ❌ |
+| D4 what did it cost? — the basis | `src/engine2/holdings.ts:rowBasisLocal` · `src/engine2/holdings.ts:bookRealisedOf` · `src/engine/ledger/holdings-ledger.ts:debitRow` | ✅ |
 | D5 a lien binds units of a position: neither sold nor counted free | `src/engine2/holdings.ts:lienUnits` · `src/engine/ledger/holdings-ledger.ts:setLien` · `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | E1 a coupon or dividend pays the holders of record | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` · `src/engine/columns/holdings-table.ts:buildFromRows` · `src/engine/simulation/stages/register-index.ts:bumpRegister` | ✅ |
 | E2 an amortisation or maturity pays its face | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ✅ |
@@ -271,29 +271,19 @@ the register holds it by (`etfShareId`), the fund behind a share is a read of th
 index's issuer rather than a cast of the id (`etfShareFundId` is gone), and F1.a holds everywhere
 the grammar is used.
 
-### ❌ D4 — NOTHING RECORDS WHAT A POSITION COST
+### ✅ D4 — CLOSED: EVERY ROW IS ITS LOTS, AND A DEBIT REALISES AGAINST THEM (§9.13-BOOK f1/f2)
 
-`ItemizedHolding` (`domain/banking.ts:28-56`) carries `quantityOrNotionalLocal`, `quantityShares`,
-`units` and `faceLocal`. There is no basis field, and `grep -rn 'costBasis\|basis\|realizedGain'`
-over `src/` returns nothing. The doc comment on `quantityOrNotionalLocal` even says *"market value
-at cost"* — two different quantities named as one, which is how the field came to be re-marked
-every week by `markBookToMarket` without anybody noticing the cost was gone.
-
-**Consequence.** A realised gain cannot be computed, so it cannot be taxed and cannot be reported.
-`the-treasury.md` C1 wants taxes on real bases; a capital-gains base does not exist here. It also
-means a fund's P&L cannot separate what it earned from what it was handed by a re-mark.
-
-**§3 step 37-DVP**, . Small on the register (one column, written where a row is credited),
-larger where it lands (the tax base, the P&L split).
-
-**§9.13-BOOK f1 (2026-09-05): the WRITERS now carry it.** Every register row is a chain of lots
-(`holdings.ts:lotUnits` / `lotPriceLocal` / `lotWeek`): a credit lands as a lot at the wire's
-price, a debit consumes first-in-first-out, the clearing write-back moves a rebuilt position's
-lots across itself, a desk's short is a negative lot, and `O14` checks that a row's units are its
-lots' sum. Nothing READS it yet — the basis, the realised gain and the holding period are (f2) —
-so the node stays ❌ until a reader exists; and a credit fill's lot is at the wire's price, which
-is par (`clearedBookDelta`) until the fill wires carry the cleared price.
-
+A register row is a chain of lots (`holdings.ts:lotUnits` / `lotPriceLocal` / `lotWeek`): a
+credit lands as a lot at the wire's price — the price the book cleared, for a fill — a debit takes
+the units the wire names off the oldest lots first, the clearing write-back carries a rebuilt
+position's lots across itself, and `O14` checks that a row's units are its lots' sum. The reads:
+`rowBasisLocal` (what a row cost), `rowHeldSinceWeek`, `bookBasisLocal` and `bookUnrealisedLocal`
+(the mark less the cost), and `bookRealisedOf` — what a book has realised since the seed, per
+money, written by `debitRow` as the wire's proceeds less the cost of the lots it consumed: a
+sale's gain, a redemption's pull to par, a write-off's loss. A capital-gains base exists to be
+taxed (`the-treasury.md` C1), and a fund's P&L can separate what it earned from what a re-mark
+handed it (`corporate-credit.md` E4.a). Not in it: a DESK's row (`adjustDeskRow`) keeps its lots
+but books its result on the bank's income statement, not here.
 
 ### ❌ B2.b — THE HELD-EQUALS-ISSUED CHECK FORGIVES 2% OF THE ISSUE
 

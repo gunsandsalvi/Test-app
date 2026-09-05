@@ -516,14 +516,8 @@ written from here):
     f. **ONE POSITION BOOK, AS LOTS** — split 2026-09-05 (found writing it: the merge, the basis,
        the accrual and the goods stock are four writers' worth of work, and the plan itself says
        writers first). f1 (every register row is a chain of lots the writers keep; `O14` holds
-       the sum) is in §9. What is left, in order:
-    f2. **THE BASIS IS READ** — split 2026-09-05; f2a (the debit takes the units the wire
-        names; the fill wires and lots carry the cleared price) is in §9. What is left:
-    f2b. **THE READS.** `basisOf` a row and its lots' holding period; a sale's proceeds against
-        the lots it consumed is the realised gain, the mark against the basis the unrealised, and
-        the register keeps what each book has realised — which closes `the-register.md` D4 (❌
-        today), unblocks the capital-gains base (`the-treasury.md` C1) and lets `equity.md` E4.a
-        close.
+       the sum) and f2 (the debit takes the wire's units, fills carry the cleared price, and the
+       basis, the unrealised and the realised results are read) are in §9. What is left, in order:
     f3. **THE GOODS LOTS ARE THE SAME TABLE.** `v2.lots` merges into the position book — the firm
         the holder, the sub-unit the instrument, kind GOOD — and the FIFO kernels read the one
         table. A fungible asset sums its lots, an identified one addresses them. This one moves
@@ -1710,6 +1704,17 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK f2b — THE BASIS IS READ.** `holdings.ts:rowBasisLocal` (what a row cost — its lots'
+units at the prices they arrived at), `rowHeldSinceWeek`, `bookBasisLocal`, `bookUnrealisedLocal`
+(the mark less the cost) and `bookRealisedOf` — the register's own P&L record, per book and
+money, cumulative since the seed, written by `debitRow` at every debit as the wire's proceeds
+less the cost of the lots it consumed (`adjustLots` reports it): a sale's gain, a redemption's
+pull to par, a write-off's loss. The institution's statement shows the three lines. This closes
+`the-register.md` D4 and `corporate-credit.md` E4.a (the plan said `equity.md` E4.a; the node is
+the credit tree's), and a capital-gains base exists for `the-treasury.md` C1 to tax. A desk's
+row keeps its lots but its result stays on the bank's income statement (`adjustDeskRow` books
+nothing here). This closes f2. Gates green; no run.
 
 **13-BOOK f2a — THE DEBIT TAKES THE WIRE'S UNITS; THE FILL WIRES AND LOTS CARRY THE CLEARED
 PRICE.** `debitRow` took the wire's VALUE and let the units follow in proportion, so a sale of

@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
-import { bookRowsOf, rowLotsOf, rowLotUnits, rowUnits } from '../src/engine2/holdings';
+import { bookRowsOf, rowLotsOf, rowLotUnits, rowUnits, rowBasisLocal, bookUnrealisedLocal, bookRealisedOf, rowHeldSinceWeek } from '../src/engine2/holdings';
 import { setActiveWireWorld, setActiveWireJournal, newWireJournal } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { issueHolding, transferHolding, retireHolding, deskBookId } from '../src/engine/ledger/holdings-ledger';
@@ -87,6 +87,15 @@ test('§3.13-BOOK f2a: a debit takes the units the wire names, and the value tha
     assert.ok(Math.abs(H.qtyLocal[r] - 149 * 30 / 150) < 1e-9);
     assert.deepEqual(rowLotsOf(v2, r), [{ units: 30, priceLocal: 1.02, week: 3 }]);
     assert.equal(rowLotUnits(v2, r), rowUnits(H, r));
+    // §3.13-BOOK f2b — THE READS. The sale fetched 120 for lots that cost 100 × 0.98 + 20 × 1.02:
+    // 1.6 realised, in the bond's money. What is left cost 30 × 1.02 and is marked at 29.8.
+    assert.ok(Math.abs((bookRealisedOf(v2, fund.id).get('USD') ?? 0) - 1.6) < 1e-9);
+    assert.ok(Math.abs(rowBasisLocal(v2, r) - 30.6) < 1e-9);
+    assert.ok(Math.abs(bookUnrealisedLocal(v2, fund.id) - (29.8 - 30.6)) < 1e-9);
+    assert.equal(rowHeldSinceWeek(v2, r), 3);
+    // A redemption at face realises the pull to par on what is left.
+    retireHolding(v2, fund, gov, spec(30, 1.0), 'redemption');
+    assert.ok(Math.abs((bookRealisedOf(v2, fund.id).get('USD') ?? 0) - (1.6 + (30 - 30.6))) < 1e-9);
   } finally {
     setActiveWireJournal(undefined);
     setActiveWireWorld(undefined);

@@ -17,7 +17,7 @@
  */
 import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
 import { companyParty, bankPartyOf, bankSecuritiesPartyOf } from '../../domain/party';
-import { adjustLots,
+import { addRealised, adjustLots,
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
 import { PartyRef, partyKey, partyFromKey } from './party';
@@ -29,6 +29,8 @@ import { RegionId } from '../../domain/geography';
 import { defect } from '../../domain/defect';
 import { PLEDGE_ROUNDING_TOLERANCE_LOCAL } from '../../domain/collateral';
 import { issuerIdOf } from '../../engine2/tranches';
+import { instrumentCurrencyOf } from '../../engine2/instruments';
+import { currencyOf } from '../../domain/geography';
 import { holdingClassOf } from '../../domain/assets';
 import type { Company } from '../../domain/company';
 
@@ -335,8 +337,12 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien:
       H.units[r] = nextUnits;
       // A share-counted row's units ARE its shares (`unitsOf` says so on the way in).
       if (!Number.isNaN(H.shares[r])) H.shares[r] = nextUnits;
-      // §3.13-BOOK f1: what leaves comes off the oldest lots first.
-      adjustLots(v2, r, -takeUnits, priceOf(spec).priceLocal, lotWeek());
+      // §3.13-BOOK f1: what leaves comes off the oldest lots first. f2b: what the wire fetched
+      // for those units, less what the lots say they cost, is REALISED on this book, in the
+      // instrument's money — a sale's gain, a redemption's pull to par, a write-off's loss.
+      const consumed = adjustLots(v2, r, -takeUnits, priceOf(spec).priceLocal, lotWeek());
+      addRealised(v2, holderId, instrumentCurrencyOf(v2, spec.instrumentId) ?? currencyOf(spec.issuerRegion),
+        priceOf(spec).priceLocal * takeUnits - consumed.consumedBasisLocal);
       leftUnits -= takeUnits;
     }
     if (!keepsRow(H, r)) drops = true;

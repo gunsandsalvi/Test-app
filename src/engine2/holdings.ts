@@ -61,6 +61,10 @@ export interface HoldingStore {
   lotPriceLocal: Float64Array;
   lotWeek: Int32Array;
   lotNext: Int32Array;
+  /** §3.13-BOOK f2b — WHAT EACH BOOK HAS REALISED, cumulative, per money: `bookId|CUR` → the
+   *  proceeds of every debit less the cost of the lots it consumed. The register's own P&L
+   *  record — the capital-gains base and the realised half of a holder's result read here. */
+  realised: Map<string, number>;
   next: Int32Array;
   freeHead: number;
   used: number;
@@ -96,6 +100,7 @@ export type ReadonlyHoldingStore = {
     : HoldingStore[K] extends Float64Array ? Readonly<Float64Array>
     : HoldingStore[K] extends Int32Array ? Readonly<Int32Array>
     : HoldingStore[K] extends Set<string> ? ReadonlySet<string>
+    : HoldingStore[K] extends Map<string, number> ? ReadonlyMap<string, number>
     : HoldingStore[K];
 };
 /** The ledger's own handle on the store. Nothing else may hold one. */
@@ -115,6 +120,7 @@ export function newHoldingStore(): HoldingStore {
     lotHead: new Int32Array(cap).fill(-1), lotTail: new Int32Array(cap).fill(-1),
     lotCap: cap, lotUsed: 0, lotFreeHead: -1,
     lotUnits: new Float64Array(cap), lotPriceLocal: new Float64Array(cap), lotWeek: new Int32Array(cap), lotNext: new Int32Array(cap).fill(-1),
+    realised: new Map<string, number>(),
     next: new Int32Array(cap).fill(-1),
     freeHead: -1,
     used: 0,
@@ -186,14 +192,18 @@ export function appendLot(v2: V2World, r: number, units: number, priceLocal: num
  * over is a new lot at `priceLocal` (ledger-internal). Dust below the row's own float noise is
  * dropped rather than kept as a lot of nothing.
  */
-export function adjustLots(v2: V2World, r: number, dUnits: number, priceLocal: number, week: number): void {
-  if (!(Math.abs(dUnits) > 0) || !Number.isFinite(dUnits)) return;
+export function adjustLots(v2: V2World, r: number, dUnits: number, priceLocal: number, week: number): { consumedUnits: number; consumedBasisLocal: number } {
+  const consumed = { consumedUnits: 0, consumedBasisLocal: 0 };
+  if (!(Math.abs(dUnits) > 0) || !Number.isFinite(dUnits)) return consumed;
   const H = mutableHoldings(v2);
   let left = dUnits;
   for (let l = H.lotHead[r]; l >= 0 && left !== 0; ) {
     const lu = H.lotUnits[l];
     if (lu === 0 || (lu > 0) === (left > 0)) break;
     const take = Math.min(Math.abs(lu), Math.abs(left));
+    // §3.13-BOOK f2b: what the consumed units COST — the lot's price on them — is the basis a
+    // realised gain is measured against.
+    consumed.consumedUnits += take; consumed.consumedBasisLocal += take * H.lotPriceLocal[l];
     const remaining = lu + Math.sign(left) * take;
     left -= Math.sign(left) * take;
     if (Math.abs(remaining) <= 1e-12 * Math.max(1, Math.abs(lu))) {
@@ -206,6 +216,7 @@ export function adjustLots(v2: V2World, r: number, dUnits: number, priceLocal: n
     }
   }
   if (Math.abs(left) > 1e-9 * Math.max(1, Math.abs(dUnits))) appendLot(v2, r, left, priceLocal, week);
+  return consumed;
 }
 
 /** §3.13-BOOK f1 — `from`'s chain joins the tail of `to`'s, in order (a rebuild, a fold). */
@@ -223,6 +234,56 @@ export function rowLotUnits(v2: V2World, r: number): number {
   let sum = 0;
   for (let l = H.lotHead[r]; l >= 0; l = H.lotNext[l]) sum += H.lotUnits[l];
   return sum;
+}
+
+/** §3.13-BOOK f2b — WHAT THE ROW COST: its lots' units at the prices they arrived at, in the
+ *  instrument's money. The mark less this is the unrealised result. */
+export function rowBasisLocal(v2: V2World, r: number): number {
+  const H = v2.holdings;
+  let basis = 0;
+  for (let l = H.lotHead[r]; l >= 0; l = H.lotNext[l]) basis += H.lotUnits[l] * H.lotPriceLocal[l];
+  return basis;
+}
+
+/** The earliest week any lot of the row arrived — how long the position has been held. */
+export function rowHeldSinceWeek(v2: V2World, r: number): number | undefined {
+  const H = v2.holdings;
+  const l = H.lotHead[r];
+  return l >= 0 ? H.lotWeek[l] : undefined;
+}
+
+/** A whole book's cost, summed over its rows (each in its instrument's money). */
+export function bookBasisLocal(v2: V2World, bookId: string): number {
+  const H = v2.holdings;
+  let basis = 0;
+  for (let r = bookHeadOf(v2, bookId); r >= 0; r = H.next[r]) basis += rowBasisLocal(v2, r);
+  return basis;
+}
+
+/** A whole book's unrealised result: what its rows are marked at, less what they cost. */
+export function bookUnrealisedLocal(v2: V2World, bookId: string): number {
+  const H = v2.holdings;
+  let gain = 0;
+  for (let r = bookHeadOf(v2, bookId); r >= 0; r = H.next[r]) gain += H.qtyLocal[r] - rowBasisLocal(v2, r);
+  return gain;
+}
+
+const realisedKey = (bookId: string, currency: string): string => `${bookId}|${currency}`;
+
+/** The ledger records a debit's realised result on the book (ledger-internal). */
+export function addRealised(v2: V2World, bookId: string, currency: string, usd: number): void {
+  if (!(Math.abs(usd) > 0) || !Number.isFinite(usd)) return;
+  const H = mutableHoldings(v2);
+  const k = realisedKey(bookId, currency);
+  H.realised.set(k, (H.realised.get(k) ?? 0) + usd);
+}
+
+/** What a book has realised since the world began, in each money it realised it in. */
+export function bookRealisedOf(v2: V2World, bookId: string): Map<string, number> {
+  const out = new Map<string, number>();
+  const prefix = `${bookId}|`;
+  v2.holdings.realised.forEach((usd, k) => { if (k.startsWith(prefix)) out.set(k.slice(prefix.length), usd); });
+  return out;
 }
 
 /** The row's lots as objects, in order — for a test or a view; the engine reads the columns. */
