@@ -123,7 +123,7 @@ checked by `scripts/check-atlas.sh`.
 | C4 the facility is collateralised and priced above the market | `src/engine/simulation/stages/repo-clearing.ts:SRF_SEAT_STEP_BPS` | ✅ |
 | C4.a so a bank prefers the market; drawing is information | `src/domain/repo.ts:srfBorrowedLocal` | ✅ |
 | C4.b a bank out of eligible collateral CANNOT DRAW | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` | ⚠️ |
-| **C5 FORBID no uncollateralised, unpriced, unlimited CB credit** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ❌ |
+| **C5 FORBID no uncollateralised, unpriced, unlimited CB credit** | `src/engine/simulation/stages/central-bank-loans.ts:strikeCentralBankLoan` | ❌ |
 | D1 it shrinks: it sells assets, in a real book | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:liquidityFloorLocal` | ✅ |
 | D2 it bids up for deposits, and depositors respond | `src/engine/macro/banking.ts:liquidityShortfallShare` | ⚠️ |
 | D3 it draws the facility, at the penalty, against collateral | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
@@ -164,7 +164,7 @@ node any of them needs.
 Worth stating precisely because **the model contains a correct facility and an incorrect one**, and
 the difference is this tree's whole C section:
 
-| | the SRF seat (`repo-clearing.ts:414`) | `raiseCentralBankLoanLocal` (`bank-lending.ts:917`) |
+| | the SRF seat (`repo-clearing.ts:414`) | `strikeCentralBankLoan` (`central-bank-loans.ts`, a contract row since §9.20-LLR-a) |
 |---|---|---|
 | collateral | pledged paper, per bucket, encumbered | none |
 | size | bounded by `unencumberedBorrowingCapacityLocal` | the whole shortfall, always |
@@ -187,7 +187,7 @@ starts at the front of the borrower's own cleared credit curve (`issuerSpreadAtO
 its bonds print; the posted constant only for a bank nothing has priced) and commits its whole
 surplus by the top of the corridor. The borrowers clear in order of that spread, so the strongest
 name takes the cash first and the doubted one bids for what is left, pays more, or finds no bid —
-B2.a — and only the unfilled remainder reaches `raiseCentralBankLoanLocal`. The loan is a row of
+B2.a — and only the unfilled remainder reaches `strikeCentralBankLoan`. The loan is a row of
 the contract store (`domain/interbank.ts`, kind `INTERBANK`), principal moved between reserve
 accounts at the close and repaid at the next open with interest between the banks' own accounts
 (`matureInterbankLoans`, 02b), the sheets' `interbankLentLocal`/`interbankBorrowedLocal` derived

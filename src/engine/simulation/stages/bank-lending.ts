@@ -905,58 +905,18 @@ export function runBankHouseholdLending(
  * Idempotent: derived from the assets and equity actually present, so re-applying is safe.
  */
 /**
- * G2 funding composition, the FLOW half: wholesale money is a ROLL, and a bank holding cash
- * beyond its stressed-outflow cover simply does not renew it. §7.254 measured the gap this
- * closes: the stock was written once at seed (`applyBankFundingSplit`, called only from the
- * migrations) and never by any weekly flow — one bank carried exactly 170.62B for 32 straight
- * weeks, priced at its own blown-out OAS, while 308B of cash sat beside it. Nothing in the
- * identity forces the repayment; the roll does.
- *
- * Writes the liability down and returns the repayment; the CALLER settles the cash leg as a
- * payment instruction (BANK_SECURITIES → CENTRAL_BANK), so the reserves the loan created are
- * extinguished where the money moves.
- */
-export function repayCentralBankLoanLocal(sheet: BankingSector, cashLocal: number, householdDepositsLocal: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
-  const excessCashLocal = Math.max(0, cashLocal - operatingCashBufferLocal(householdDepositsLocal, bufferRatio));
-  const repayLocal = Math.min(Math.max(0, sheet.centralBankLoanLocal ?? 0), excessCashLocal);
-  if (repayLocal < 1e6) return 0;
-  sheet.centralBankLoanLocal = (sheet.centralBankLoanLocal ?? 0) - repayLocal;
-  return repayLocal;
-}
-
-/**
- * ONE DEFINITION OF THE OPERATING BUFFER, and both sides of the central bank's loan read it.
- *
- * The draw was sized against this — the settlement cash a bank keeps against its retail
- * deposits — while the repayment released cash only above the LCR's HQLA requirement, a much
- * larger number that a bank's SOVEREIGN BOOK also satisfies (`liquidityDrivenSovereignFloorLocal`
- * is where that requirement belongs, and it is already there). Measured against cash alone, the
- * repay threshold sat far above the raise threshold, so the loan ratcheted up and was never
- * repaid. The repo session and the bill book size their own cash need the same way.
+ * §3.20-LLR-a — what a bank is SHORT of its operating buffer at the close, on settled cash plus
+ * the legs already posted: the amount the funding close lends it as a central-bank loan ROW
+ * (`central-bank-loans.ts`). The raise and the repayment that used to mutate a scalar here are
+ * the book's now — struck at the close, serviced and rolled at the open.
  */
 function operatingCashBufferLocal(householdDepositsLocal: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
   return Math.max(0, householdDepositsLocal) * bufferRatio;
 }
-
-/**
- * §5-CLOSE — THE LENDER OF LAST RESORT. A bank whose week closes short of its operating buffer
- * after every real flow has settled borrows the shortfall from the central bank, unsecured, at
- * the window rate plus a penalty (`CENTRAL_BANK_LOAN_PENALTY_BPS`). This replaces the boundary's
- * "wholesale lender": the creditor is named, the interest is a payment to it, and the money it
- * creates is reserves the central bank's own asset backs — the identity closes by construction.
- * Repaid from cash above the SAME buffer (`repayCentralBankLoanLocal`, in 02b).
- *
- * Writes the liability up and returns the amount; the CALLER settles the cash leg as a payment
- * (CENTRAL_BANK → BANK_SECURITIES) and books the central bank's asset.
- */
-export function raiseCentralBankLoanLocal(sheet: BankingSector, householdDepositsLocal: number, settledCashLocal: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
+export function centralBankShortfallLocal(householdDepositsLocal: number, settledCashLocal: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
   const shortfallLocal = operatingCashBufferLocal(householdDepositsLocal, bufferRatio) - settledCashLocal;
-  if (shortfallLocal < 1e6) return 0;
-  sheet.centralBankLoanLocal = (sheet.centralBankLoanLocal ?? 0) + shortfallLocal;
-  return shortfallLocal;
+  return shortfallLocal < 1e6 ? 0 : shortfallLocal;
 }
-/** The penalty over the standing-facility rate an unsecured central-bank loan carries. */
-export const CENTRAL_BANK_LOAN_PENALTY_BPS = 100;
 
 /**
  * §5-CLOSE P1 — THE FACILITY IS PRICED. A bank's revolver carried one stated margin for every

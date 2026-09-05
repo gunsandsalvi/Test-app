@@ -20,10 +20,11 @@ import { bankSecuritiesParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { GameState } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
-import { raiseCentralBankLoanLocal } from './bank-lending';
+import { centralBankShortfallLocal } from './bank-lending';
+import { strikeCentralBankLoan, syncCentralBankLoanSheets } from './central-bank-loans';
 import { bankCashBufferRatioOf } from '../../macro/banking';
 import { WeeklyStepContext } from './context';
-import { pay, pendingSettlementLocal, runSettlementStage } from './settlement';
+import { pendingSettlementLocal, runSettlementStage } from './settlement';
 import { runInterbankSession } from './interbank';
 import { banksOf } from '../../../domain/company';
 import { RegionId } from '../../../types';
@@ -46,27 +47,26 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
       const unfunded = runInterbankSession(ctx, regionId, reg, banks);
       if ([...unfunded.values()].some((v) => v > 0)) raisedAny = true;
     });
+    const touchedRegions = new Set<RegionId>();
     ctx.updatedCompanies.forEach((bank) => {
       if (!bank.isBankEntity || !bank.bankBalanceSheet || !isActiveCompany(bank)) return;
-      const sheet = bank.bankBalanceSheet;
+      const reg = ctx.updatedRegions[bank.region];
+      if (!reg) return;
       const reservesLocal = bankReservesOf(ctx.v2, bank.id) + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
-      const raisedLocal = raiseCentralBankLoanLocal(sheet, householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)), reservesLocal, bankCashBufferRatioOf(bank));
+      const raisedLocal = centralBankShortfallLocal(householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)), reservesLocal, bankCashBufferRatioOf(bank));
       if (raisedLocal <= 0) return;
       raisedAny = true;
-      // The lender of last resort. The central bank pays with reserves it creates and
-      // books the loan as its asset, so the money it made has a purchase behind it.
-      const cb = ctx.updatedRegions[bank.region]?.centralBankSheet;
-      if (cb) cb.loansToBanksLocal = (cb.loansToBanksLocal ?? 0) + raisedLocal;
-      pay(ctx, {
-        payer: { kind: 'CENTRAL_BANK', region: bank.region },
-        payee: bankSecuritiesParty(bank),
-        amount: raisedLocal,
-        currency: currencyOf(bank.region),
-        reason: 'central bank loan drawn',
-      });
+      // §3.20-LLR-a: the lender of last resort's loan is a ROW — the central bank pays with
+      // reserves it creates, and the row is the asset the money it made has behind it.
+      strikeCentralBankLoan(ctx, bank.region, reg, bank, raisedLocal);
+      touchedRegions.add(bank.region);
       if (process.env.FUNDING_TRACE === '1') {
         console.log(`  [funding-close] w${ctx.nextWeek} r${round} ${bank.region}:${bank.ticker} raised ${(raisedLocal / 1e6).toFixed(0)}M (cash was ${(reservesLocal / 1e6).toFixed(0)}M)`);
       }
+    });
+    touchedRegions.forEach((regionId) => {
+      const reg = ctx.updatedRegions[regionId];
+      if (reg) syncCentralBankLoanSheets(ctx, regionId, reg, banksOf(ctx.updatedCompanies, regionId));
     });
     if (!raisedAny) return;
     runSettlementStage(ctx);

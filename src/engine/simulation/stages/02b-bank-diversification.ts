@@ -26,7 +26,7 @@ import { repoBookOf } from '../../ledger/contract-ledger';
 import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { defect } from '../../../domain/defect';
-import { bankCreditParty, bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
+import { bankCreditParty, bankParty, companyParty } from '../../../domain/party';
 
 import { ensureV2 } from '../../../engine2/world';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
@@ -43,12 +43,12 @@ import { runRegionalRepoSession } from './repo-clearing';
 import { bankSovereignValueRecord, bankSovereignPositions, bankSovereignBookLocal } from '../../sovereign-register';
 import { maturingAt, repoInterestToMaturityLocal } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
-import { runBankWeeklyLending, planSmeShopping, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, repayCentralBankLoanLocal, CENTRAL_BANK_LOAN_PENALTY_BPS, facilityMarginBpsFor } from './bank-lending';
+import { runBankWeeklyLending, planSmeShopping, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, facilityMarginBpsFor } from './bank-lending';
+import { serviceCentralBankLoans } from './central-bank-loans';
 import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
 import { pay } from './settlement';
-import { SRF_SPREAD_BPS, bankCashBufferRatioOf } from '../../macro/banking';
 import { cashOf, entityCashOf, adjustSectorRow, adjustBankReserves, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { sovereignTenorResolver } from '../../../domain/government';
@@ -433,23 +433,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     if (reg.centralBankSheet) reg.centralBankSheet.lastLoanInterestLocal = 0;
     // §3.20b: last night's interbank loans repay first — principal between reserve accounts,
     // interest between the banks' own accounts — before anyone repays the window.
-    matureInterbankLoans(ctx, regionId, newSheets.map(({ bank, sheet }) => ({ id: bank.id, ticker: bank.ticker, region: bank.region, management: bank.management, bankBalanceSheet: sheet })));
+    const openBanks = newSheets.map(({ bank, sheet }) => ({ id: bank.id, ticker: bank.ticker, region: bank.region, management: bank.management, bankBalanceSheet: sheet }));
+    matureInterbankLoans(ctx, regionId, openBanks);
+    // §3.20-LLR-a: then the window's loans — each row pays its week's interest at its own rate,
+    // repays what the bank holds above its buffer, and rolls what it cannot repay.
+    serviceCentralBankLoans(ctx, regionId, reg, openBanks);
     newSheets.forEach(({ bank, sheet }) => {
-      // The central bank's loan is repaid from cash above the buffer (the liability
-      // leaves here, bank-lending owns the write; the cash leaves at settlement, extinguishing
-      // the reserves it created), and its interest is a payment to the named creditor.
-      const cbSheet = reg.centralBankSheet;
-      const repaidLocal = repayCentralBankLoanLocal(sheet, bankReservesOf(ctx.v2, bank.id), householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)), bankCashBufferRatioOf(bank));
-      if (repaidLocal > 0) {
-        if (cbSheet) cbSheet.loansToBanksLocal = Math.max(0, (cbSheet.loansToBanksLocal ?? 0) - repaidLocal);
-        pay(ctx, {
-          payer: bankSecuritiesParty(bank),
-          payee: { kind: 'CENTRAL_BANK', region: regionId },
-          amount: repaidLocal,
-          currency: currencyOf(regionId),
-          reason: 'central bank loan repaid',
-        });
-      }
       // C4: interest on corporate balances is paid to the depositors who earn it —
       // each firm with a positive balance at this bank, pro rata to its balance, at the rate
       // the evolution decided. (Estates and defaulted firms hold balances too; a balance is
@@ -471,17 +460,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
             });
           });
         }
-      }
-      const cbLoanInterestLocal = ((sheet.centralBankLoanLocal ?? 0) * (reg.policyRate + (SRF_SPREAD_BPS + CENTRAL_BANK_LOAN_PENALTY_BPS) / 10000)) / 52;
-      if (cbLoanInterestLocal > 0) {
-        pay(ctx, {
-          payer: bankParty(bank),
-          payee: { kind: 'CENTRAL_BANK', region: regionId },
-          amount: cbLoanInterestLocal,
-          currency: currencyOf(regionId),
-          reason: 'central bank loan interest',
-        });
-        if (cbSheet) cbSheet.lastLoanInterestLocal = (cbSheet.lastLoanInterestLocal ?? 0) + cbLoanInterestLocal;
       }
       updateBankSheet(ctx, bank.ticker, sheet);
     });

@@ -19,6 +19,7 @@ import { internType, typeOf, internRegion, regionOf, internPartyKey, partyKeyOf,
 import { ABSENT_REF, newRefColumn, type RefColumn, type TypeRef, type RegionRef, type PartyKeyRef, type InstrRef } from './refs';
 import type { DerivativeContract, DerivativeReference, DerivativeParty } from '../domain/derivatives/contract';
 import type { InterbankLoan } from '../domain/interbank';
+import type { CentralBankLoan } from '../domain/central-bank-loan';
 import type { RepoContract, RepoPledge, RepoParty } from '../domain/repo';
 import type { SecurityLoan } from '../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../domain/prime-brokerage';
@@ -325,6 +326,48 @@ export function materializeRepo(v2: V2World, r: number): RepoContract {
     id: S.id[r], regionId: regionOf(v2, S.regionRef[r]) as RegionId, lender, borrowerId: borrower.id,
     principalLocal: S.notional[r], rateAnnual: S.strike[r], struckWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
     collateral: (S.pledges[r] ?? []).map((p) => ({ bondId: p.bondId, faceLocal: p.faceLocal })),
+  };
+}
+
+// ---- §3.20-LLR-a — THE CENTRAL BANK'S LOANS: the central bank as A, the bank as B, principal as
+// the size, the rate as the strike. Unsecured: no pledges. ----
+
+/** Write a central-bank loan as a new row (ledger-internal). Returns the row. */
+export function writeCentralBankLoanRow(v2: V2World, c: CentralBankLoan): number {
+  const S = mutableObligations(v2);
+  if (S.rowById.has(c.id)) return defect(`central bank loan ${c.id} struck twice`);
+  const r = allocRow(S);
+  const kindRef = internType(v2, 'CB_LOAN');
+  S.kindRef[r] = kindRef; S.classRef[r] = kindRef; S.regionRef[r] = internRegion(v2, c.regionId);
+  S.currencyId[r] = CURRENCY_ID[currencyOf(c.regionId)];
+  S.aRef[r] = internPartyKey(v2, partyKey({ kind: 'CENTRAL_BANK', region: c.regionId })); S.bRef[r] = internPartyKey(v2, partyKey(bankPartyOf(c.bankId)));
+  S.notional[r] = c.principalLocal; S.strike[r] = c.rateAnnual; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
+  S.struckWeek[r] = c.struckWeek | 0; S.maturityWeek[r] = c.maturityWeek | 0;
+  S.refKind[r] = 0; S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = c.id;
+  S.pledges[r] = [];
+  S.rowById.set(c.id, r);
+  appendToKind(S, kindRef, r);
+  bump(S, kindRef);
+  return r;
+}
+
+/** A live central-bank loan row takes the loan's current terms (ledger-internal). */
+export function writeCentralBankLoanTerms(v2: V2World, r: number, c: CentralBankLoan): void {
+  const S = mutableObligations(v2);
+  S.bRef[r] = internPartyKey(v2, partyKey(bankPartyOf(c.bankId)));
+  S.notional[r] = c.principalLocal; S.strike[r] = c.rateAnnual;
+  S.struckWeek[r] = c.struckWeek | 0; S.maturityWeek[r] = c.maturityWeek | 0;
+  bump(S, S.kindRef[r]);
+}
+
+/** One central-bank loan row materialized back to the contract the stages read. */
+export function materializeCentralBankLoan(v2: V2World, r: number): CentralBankLoan {
+  const S = v2.obligations;
+  const borrower = partyFromKey(partyKeyOf(v2, S.bRef[r]));
+  if (borrower === undefined || borrower.kind !== 'BANK') return defect(`central bank loan row ${r} (${S.id[r]}) names a borrower the key table cannot read`);
+  return {
+    id: S.id[r], regionId: regionOf(v2, S.regionRef[r]) as RegionId, bankId: borrower.id,
+    principalLocal: S.notional[r], rateAnnual: S.strike[r], struckWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
   };
 }
 

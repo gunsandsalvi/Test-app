@@ -551,21 +551,15 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-20-LLR-a. **THE CENTRAL BANK'S CLAIMS ON ITS BANKS ARE A BOOK, NOT SCALARS** (user, 2026-09-05:
-    *"make sure it's nice and tidy in that sector as well"* — the reserve side, checked: a bank's
-    reserves are one row at the central bank moved only by settlement legs, read by
-    `bankReservesOf`, closed by M1/M6, and the sheet's weekly copy of that row is gone (§9
-    20-LLR-0). What is NOT tidy is the asset side of the same sheet: `loansToBanksLocal` is a
-    scalar the funding close adds to and 02b subtracts from, and the swap-line draws are a
-    per-region map on each bank — neither is a contract with a lender, a borrower, a rate and a
-    maturity, so neither can be matured, audited per counterparty, refused or novated the way
-    the repo, prime-brokerage and interbank books are.) Each central-bank loan becomes a row of
-    the contract store (kind `CB_LOAN`, the central bank as lender, the bank as borrower, struck
-    at the close, repaid at the open), `loansToBanksLocal` and `centralBankLoanLocal` become
-    reads of the book, and the swap-line draws follow (`swapLineDrawnByRegion` → rows). Sits
-    directly under 20-LLR because 20-LLR deletes the unbounded loan this book would carry: build
-    the book first so what 20-LLR replaces it with — the window as a seat in the close session —
-    has rows to write into.
+20-LLR-b. **THE SWAP-LINE COPIES ARE READS OF THE DRAWS.** (20-LLR-a, the central bank's loans as
+    a book, is §9.) The swap lines already are a book of draws — `CentralBank.swapLines`, one
+    record per bank, per foreign money, with the amounts and the weeks — but three copies are
+    kept beside it by hand: `BankingSector.swapLineDrawnByRegion`, `CentralBank.swapLineLentByRegion`
+    and `CentralBank.swapLineDepositsLocal`, each added to at the draw, subtracted from at the
+    unwind, merged at a resolution and compared to the draws by M2. The draws move into the
+    contract store beside the central-bank loans (kind `SWAP_LINE`, the lending central bank as
+    A, the bank as B, the foreign money as the currency), and the three copies become reads of
+    it, so a draw cannot disagree with what was drawn.
 20-LLR. **NOTHING CAN FAIL FOR WANT OF LIQUIDITY, AND THAT IS THE MONEY SYSTEM'S LARGEST HOLE**
     (user, 2026-09-03, asking whether the desks and the central bank are buyers of last resort so
     that an auction cannot fail — half right, and the half that is right is not in the auctions).
@@ -1533,6 +1527,24 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20-LLR-a — THE CENTRAL BANK'S LOANS TO ITS BANKS ARE A BOOK.** `loansToBanksLocal` was a scalar the
+  funding close added to and 02b subtracted from; `centralBankLoanLocal` its mirror on each
+  bank, mutated by `raiseCentralBankLoanLocal` and `repayCentralBankLoanLocal` (both deleted);
+  the interest was charged on the balance at today's rate. Now each close's loan is a row of the
+  contract store (`domain/central-bank-loan.ts`, kind `CB_LOAN`, the central bank as lender, the
+  bank as borrower, struck at the window rate plus the penalty, overnight): the funding close
+  strikes it for what the interbank market left unfunded (`stages/central-bank-loans.ts:
+  strikeCentralBankLoan`, the reserves it creates paid against the row), the open services it —
+  each row pays its week's interest at its own struck rate through the bank's own account,
+  repays what the bank holds above its buffer oldest-first, and rolls the rest a week on at that
+  morning's rate (`serviceCentralBankLoans`, before the window's other flows) — and a resolution
+  re-seats the failed bank's rows on the acquirer (`reseatCentralBankLoans`). The two scalars are
+  reads of the book (`syncCentralBankLoanSheets`), M2 now checks the sync, and the swap lines'
+  copies are 20-LLR-b (inserted). Bagehot's four are still absent — that is 20-LLR's, which now
+  has rows to write into. `the-central-bank.md` D3 and A2.b, `money-market.md` C5,
+  `money-and-settlement.md` B3.b, `banks-funding-and-liquidity.md` D6.a re-cited. Gates green; no
+  run.
 
 **20d-iii — GUIDANCE IS THE MANAGEMENT'S OWN EXPECTATION, PUBLISHED.** Step 20d is closed with this
   (its six decisions, per rule 1.10: 20d-i, 20d-ii and this are §9; risk appetite already IS the management's

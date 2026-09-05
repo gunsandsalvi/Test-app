@@ -114,7 +114,7 @@ checked by `scripts/check-atlas.sh`.
 | D4.a which transmits into the credit book | — | ❌ |
 | D5 draws the facility, collateralised, at a penalty | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ⚠️ |
 | **D6 it can FAIL TO FUND ITSELF** | `src/domain/bank-resolution.ts:isBankUnderPca` | ❌ |
-| **D6.a FORBID no unbounded, uncollateralised, unpriced line** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ❌ |
+| **D6.a FORBID no unbounded, uncollateralised, unpriced line** | `src/engine/simulation/stages/central-bank-loans.ts:strikeCentralBankLoan` | ❌ |
 | **E1 depositors can leave; A1.c leaves fastest** | — | ❌ |
 | **E2 they leave because they observe something** | — | ❌ |
 | E2.a and what they observe is observable | `src/ui/objects/company.tsx:bankCapitalRatio` | ✅ |

@@ -90,7 +90,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.a it can always meet an obligation in its own money | `src/engine/simulation/stages/central-bank-demand.ts:bookCentralBankFills` | ✅ |
 | A2 it has a balance sheet, and a real one | `src/domain/central-bank.ts:CentralBank` | ✅ |
 | A2.a liabilities: reserves, currency, the TGA, the RRP window | `src/domain/central-bank.ts:centralBankLiabilitiesLocal` · `src/engine/ledger/accounts.ts:bankReservesOf` | ✅ |
-| A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsLocal` | ✅ |
+| A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsLocal` · `src/domain/central-bank-loan.ts:CentralBankLoan` · `src/engine/ledger/contract-ledger.ts:centralBankLoanBookOf` | ✅ |
 | A2.c VERIFY it closes weekly, with a revaluation account | `src/engine/audit/money.ts:m1` | ✅ |
 | A3 a mandate: a stated objective | `src/domain/region-macro.ts:targetInflation` | ⚠️ |
 | A4 operationally independent, financially owned | `src/domain/central-bank.ts:remittanceLocal` | ✅ |
@@ -109,7 +109,7 @@ checked by `scripts/check-atlas.sh`.
 | C4 reinvestment is a separate decision; the difference is QT | `src/domain/central-bank.ts:reinvestmentShare` | ✅ |
 | D1 the standing facility lends against collateral at a stated rate | `src/engine/macro/banking.ts:SRF_SPREAD_BPS` | ✅ |
 | D2 eligibility and haircuts are ITS choice, a policy instrument | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ⚠️ |
-| **D3 lender of last resort: freely, good collateral, penalty, solvent** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` · `src/engine/simulation/stages/swap-lines.ts:drawSwapLine` | ❌ |
+| **D3 lender of last resort: freely, good collateral, penalty, solvent** | `src/engine/simulation/stages/central-bank-loans.ts:strikeCentralBankLoan` · `src/engine/simulation/stages/swap-lines.ts:drawSwapLine` | ❌ |
 | **D3.a FORBID it does not lend to an insolvent bank** | `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` | ❌ |
 | **D4 it can REFUSE, and refusal must be reachable** | — | ❌ |
 | E1 the treasury banks with it; the account is a liability | `src/engine/ledger/accounts.ts:treasuryAccountOf` | ✅ |
@@ -137,7 +137,14 @@ unfilled once the basis cleared past the line's price — and at a penalty (over
 money and on-lent to its banks for a quarter. Unsecured, and to any bank that came to the market:
 collateral and solvency are still the two the domestic line lacks, so the row stays ❌.*
 
-Bagehot's rule is four conditions and `raiseCentralBankLoanLocal` (`bank-lending.ts:917`) has one and a
+*2026-09-05 (§9.20-LLR-a): the loan is a CONTRACT now — a row of the contract store per bank per
+close (`domain/central-bank-loan.ts`, `stages/central-bank-loans.ts`), struck at the close for what the
+interbank market left unfunded, paying its week's interest at its own struck rate at the open, repaid
+from cash above the buffer and rolled at that morning's rate when it cannot be; `loansToBanksLocal`
+and `centralBankLoanLocal` are reads of the book, and a resolution re-seats the rows. What the row
+carries is still what the scalar carried: none of the four below.*
+
+Bagehot's rule is four conditions and `strikeCentralBankLoan` (`central-bank-loans.ts`) has one and a
 half:
 
 | Bagehot | code |

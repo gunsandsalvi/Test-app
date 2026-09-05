@@ -15,6 +15,7 @@
  * The plan (domain/bank-resolution.ts) decides who eats the hole; this stage only executes it.
  */
 
+import { reseatCentralBankLoans } from './central-bank-loans';
 import { GameState, RegionId } from '../../../types';
 import { bankSovereignBookLocal } from '../../sovereign-register';
 import { bankBookAssetsLocal, deskGrossLocal } from '../../desk-register';
@@ -77,6 +78,8 @@ export function rekeyBankLinks(
     lender: c.lender.kind === 'BANK' ? { ...c.lender, id: rekeyId(c.lender.id) ?? c.lender.id } : c.lender,
   })));
   publishPrimeBrokerageBook(ctx.v2, regionId, primeBrokerageBookOf(ctx.v2, regionId).map((l) => ({ ...l, brokerId: rekeyId(l.brokerId) ?? l.brokerId })));
+  // §3.20-LLR-a: the window's loans to the resolved bank are assumed by the acquirer — rows re-seat.
+  reseatCentralBankLoans(ctx, regionId, fromBank.id, toBank.id);
   ctx.primaryOfferingsWorking = ctx.primaryOfferingsWorking.map((o) => ({ ...o, leadBankId: rekeyId(o.leadBankId) ?? o.leadBankId }));
   // §3.13-BOOK f4b: the failed bank's sovereign accruals are on its rows and moved with them when
   // `absorbBankSheet` transferred its book — nothing to re-key here.
