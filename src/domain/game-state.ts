@@ -153,9 +153,8 @@ export interface GameState {
   companies: Company[];
   institutionalEntities: InstitutionalEntity[];
   commodities: Commodity[];
-  /** DRV — the one derivative book: every bilateral contract of every class (swaps, CDS,
-   *  futures, FX forwards), one shape, one lifecycle. Born empty (§7.44). */
-  derivativesBook?: import('./derivatives/contract').DerivativeContract[];
+  // DRV / §3.13-BOOK d4c-i — the one derivative book is rows of the world's contract store
+  // (`engine2/obligations.ts`), read through `contract-ledger.ts:derivativesOf`; not a field.
   compositeIndices: CompositeBenchmarkIndices;
   recentIPOs: { ticker: Ticker; name: string; category: string; week: number }[];
   recentMergers: { acquirerTicker: Ticker; acquirerName: string; targetTicker: Ticker; targetName: string; week: number; dealValueLocal: number }[];

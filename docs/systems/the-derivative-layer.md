@@ -94,7 +94,7 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a long-lived bilateral obligation | `src/domain/derivatives/contract.ts:DerivativeContract` · `src/domain/derivatives/contract.ts:DerivativeReference` | ✅ |
+| A1 a long-lived bilateral obligation | `src/engine2/obligations.ts:ObligationStore` · `src/domain/derivatives/contract.ts:DerivativeContract` · `src/domain/derivatives/contract.ts:DerivativeReference` | ✅ |
 | A2 the exposure is managed, and how is this system | `src/engine/simulation/stages/derivatives.ts:runDerivativesStage` | ✅ |
 | A3 the same obligation twice, one number from two sides | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ✅ |
 | **A4 VERIFY Σ marks = 0 per contract and in aggregate** | — | ❌ |

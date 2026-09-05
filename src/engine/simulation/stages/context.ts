@@ -175,8 +175,9 @@ export interface WeeklyStepContext {
    * the week closes, whether or not this field is set — every stage from `holdings-store` (269)
    * onwards must read positions through the ROWS.
    */
-  /** DRV — THE ONE DERIVATIVE BOOK: every bilateral contract of every class, the week's working
-   * copy (derivative-lifecycle.ts owns every read and write; market stages strike into it). */
+  /** DRV — THE ONE DERIVATIVE BOOK, the week's working copy: §3.13-BOOK d4c-i, the store is
+   * `v2.obligations` and this is it materialized once on first touch (`contract-ledger.ts` owns
+   * every read and write; market stages strike into it through the ledger). */
   derivativesBook?: import('../../../domain/derivatives/contract').DerivativeContract[];
   /** The standing index of that book (derivative-lifecycle.ts `standingBookOf`), valid while
    * `book` is the live array — the lifecycle replaces the array when a contract leaves. */

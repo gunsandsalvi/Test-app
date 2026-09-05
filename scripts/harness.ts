@@ -130,6 +130,7 @@ import { isPubliclyListed, isActiveCompany, banksOf } from '../src/domain/compan
 import { ensureV2 } from '../src/engine2/world';
 import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
 import { issuedSharesOf, etfSharesOutstandingOf } from '../src/engine2/instruments';
+import { derivativesOf } from '../src/engine/ledger/contract-ledger';
 import { issuerSpreadAtOnCurve } from '../src/engine/credit-price';
 import { forEachContract } from '../src/engine2/contracts';
 import { sovereignCouponByBond, weeklyInterestExpenseLocal, decomposeGovernmentSpending } from '../src/domain/government';
@@ -1702,7 +1703,7 @@ const indModule: HarnessModule = (() => {
 
     out.push('--- DRV: the one derivative book (§5-DRV) ---');
     {
-      const book = s.derivativesBook ?? [];
+      const book = derivativesOf(ensureV2(s));
       const wk = s.currentWeek;
       const byClass = new Map<string, { n: number; notional: number; settledMarkLocal: number; banks: number; firms: number; institutions: number }>();
       let pfeLocal = 0;

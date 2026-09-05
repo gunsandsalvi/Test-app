@@ -273,7 +273,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
         });
       });
     });
-    strikeDerivatives(ctx, state, struck);
+    strikeDerivatives(ctx, struck);
   });
 }
 

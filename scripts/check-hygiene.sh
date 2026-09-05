@@ -126,7 +126,7 @@ fi
 # write has a name and a home, and the type-level seal (`Readonly*` views) has no function-level
 # way round it. This is the guard the three list-shaped ones above could not be, because a new
 # handle would have needed a new list.
-HANDLE_STRAY=$(grep -rnE "\bmutable(Holdings|Tranches|Lots|Contracts|Prices|Accounts|InstrumentIndex)\b" src scripts/harness.ts test --include=*.ts --include=*.tsx 2>/dev/null \
+HANDLE_STRAY=$(grep -rnE "\bmutable(Holdings|Tranches|Lots|Contracts|Prices|Accounts|InstrumentIndex|Obligations)\b" src scripts/harness.ts test --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE '^src/engine/ledger/|^src/engine2/' || true)
 if [ -n "$HANDLE_STRAY" ]; then
   echo "ERROR: a mutable store handle is named outside engine/ledger/ and engine2/ — ask the store for a named operation:"

@@ -7,6 +7,7 @@
  */
 
 import { GameState, Company, InstitutionalEntity, Region, RegionId } from '../types';
+import { derivativesOf } from '../engine/ledger/contract-ledger';
 import { loanBooksOf } from '../domain/banking';
 import { entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../engine/ledger/accounts';
 import { spendableDepositsOf } from '../domain/banking';
@@ -254,5 +255,5 @@ export function contractsOf(world: World, party: { kind: string; key: string }):
   const same = (p: { kind: string; ticker?: string; id?: string; region?: string }) =>
     (p.kind === party.kind || (party.kind === 'BANK' && (p.kind === 'BANK' || p.kind === 'BANK_SECURITIES' || p.kind === 'BANK_CREDIT')))
     && ((p.ticker ?? p.id ?? p.region) === party.key);
-  return (world.state.derivativesBook ?? []).filter((k) => same(k.a as never) || same(k.b as never));
+  return derivativesOf(world.v2).filter((k) => same(k.a as never) || same(k.b as never));
 }

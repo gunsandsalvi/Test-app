@@ -284,7 +284,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
     });
   });
 
-  strikeDerivatives(ctx, state, struck);
+  strikeDerivatives(ctx, struck);
   // The standing book then marks at the week's fresh prints (the stage settles this class AFTER
   // the market): every open position's move settles in cash between its two named parties, a
   // contract in its delivery week settles to spot and closes, a dead counterparty closes out.

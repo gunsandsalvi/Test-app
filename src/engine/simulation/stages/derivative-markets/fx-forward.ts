@@ -126,7 +126,7 @@ interface DeskState {
 const deskCapacityLocal = (d: DeskState) => deskNotionalCapacityLocal(d.headroomLocal, d.chargedPfeLocal, 'FX_FORWARD');
 
 function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: DerivativeMarketRun): void {
-  const book = derivativesBookOf(ctx, state);
+  const book = derivativesBookOf(ctx);
 
   // Every dealer's desk, opened at what its LIVE book leaves it — contracts that matured released
   // their notional and their margin in the settle before this market, which is what frees
@@ -402,7 +402,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     strikeFor(companyParty(c), c.region, `CORP-${c.ticker}`, gaps,
       Math.max(0, cashOf(ctx.v2, c) + pendingSettlementLocal(ctx, companyParty(c))));
   });
-  strikeDerivatives(ctx, state, struck);
+  strikeDerivatives(ctx, struck);
 
   // The desk offers its WHOLE net position to the FX market — it does not decide how much
   // it can work. What the market absorbs at the cleared rate is settled in stages/fx-clearing.ts,

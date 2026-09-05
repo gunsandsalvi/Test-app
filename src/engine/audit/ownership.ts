@@ -1,6 +1,7 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
+import { derivativesOf } from '../ledger/contract-ledger';
 import type { CounterpartyRef } from '../../domain/party';
 import { deskRowsOf } from '../desk-register';
 import { deskBankIdOf } from '../ledger/holdings-ledger';
@@ -411,7 +412,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
   const bump = (store: string) => dead.set(store, (dead.get(store) ?? 0) + 1);
 
   let deadRef = 0;
-  (state.derivativesBook ?? []).forEach((c) => {
+  derivativesOf(ensureV2(state)).forEach((c) => {
     if (!partyExists(c.a)) bump('derivative contracts');
     if (!partyExists(c.b)) bump('derivative contracts');
     // §3.13-BOOK dIIb: a reference is typed by class — only the issuer arm names a company.
@@ -494,7 +495,7 @@ function o5(state: GameState, week: number): AuditFinding[] {
     const c = byId5.get(p.id);
     return !!c && isActiveCompany(c);
   };
-  (state.derivativesBook ?? []).forEach((k) => {
+  derivativesOf(ensureV2(state)).forEach((k) => {
     if (!alive(k.a) || !alive(k.b)) { deadParty++; deadLocal += k.notional; }
   });
   if (deadParty) out.push({ family: 'O', check: 'O5 contracts have two live parties', week, usd: deadLocal, message: `${deadParty} contracts (${B(deadLocal)}) have a dead or missing party` });
@@ -565,7 +566,7 @@ export type { RegionId };
  */
 function o9(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  const book = state.derivativesBook ?? [];
+  const book = derivativesOf(ensureV2(state));
   const markByParty = new Map<string, number>();
   const keyOf = (p: { kind: string; ticker?: string; id?: string }): string => `${p.kind}:${p.ticker ?? p.id ?? '?'}`;
   let unmarkedNotionalLocal = 0, unmarkedN = 0, selfFaced = 0;

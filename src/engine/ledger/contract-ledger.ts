@@ -13,7 +13,8 @@
  * The books keep their shapes and the stages keep their arithmetic; only the writes moved. One
  * columnar store for the six is slice d4c's.
  */
-import type { GameState } from '../../types';
+import type { V2World } from '../../engine2/world';
+import { rowsOfKind, relinkKind, materializeDerivative, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties } from '../../engine2/obligations';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import type { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
 import type { RepoContract } from '../../domain/repo';
@@ -24,33 +25,75 @@ import { bankPartyOf, companyPartyOf } from '../../domain/party';
 import { resolvePartyRef } from './wire';
 import { defect } from '../../domain/defect';
 
-/** The live derivatives book for the week: the context's working copy, opened from the state. */
-export function derivativesBookOf(ctx: WeeklyStepContext, state: GameState): DerivativeContract[] {
-  if (!ctx.derivativesBook) ctx.derivativesBook = [...(state.derivativesBook ?? [])];
+/**
+ * §3.13-BOOK d4c-i — THE DERIVATIVES ARE ROWS OF THE CONTRACT STORE (`engine2/obligations.ts`).
+ * The week's working copy is the store materialized once, on first touch, with each object
+ * carrying its row; a strike writes rows and appends to the copy, the lifecycle's survivors are
+ * relinked from the copy (and the marks they settled written back), a novation re-points rows.
+ * `GameState.derivativesBook` is gone: the store rides the world into next week and every clone.
+ */
+const ROW: unique symbol = Symbol('obligation row');
+type Rowed = DerivativeContract & { [ROW]?: number };
+const tagRow = (c: DerivativeContract, r: number): DerivativeContract => {
+  Object.defineProperty(c, ROW, { value: r, enumerable: false, writable: true, configurable: true });
+  return c;
+};
+const rowOfContract = (c: DerivativeContract): number => {
+  const r = (c as Rowed)[ROW];
+  return r === undefined ? defect(`derivative ${c.id} is not on the contract store`) : r;
+};
+
+/** Every live derivative, materialized in store order — the audits', the UI's and the harness's read. */
+export function derivativesOf(v2: V2World): DerivativeContract[] {
+  return rowsOfKind(v2, 'DERIVATIVE').map((r) => tagRow(materializeDerivative(v2, r), r));
+}
+
+/** One live contract by id. */
+export function derivativeContractOf(v2: V2World, id: string): DerivativeContract | undefined {
+  const r = derivativeRowOf(v2, id);
+  return r === undefined ? undefined : tagRow(materializeDerivative(v2, r), r);
+}
+
+/** The live derivatives book for the week: the context's working copy, opened from the store. */
+export function derivativesBookOf(ctx: WeeklyStepContext): DerivativeContract[] {
+  if (!ctx.derivativesBook) ctx.derivativesBook = derivativesOf(ctx.v2);
   return ctx.derivativesBook;
 }
 
-/** A strike appends: both parties resolve, the standing index folds the tail and stays the book's. */
-export function strikeDerivatives(ctx: WeeklyStepContext, state: GameState, struck: DerivativeContract[]): void {
+/** A strike appends: both parties resolve, the rows are written, the standing index folds the tail. */
+export function strikeDerivatives(ctx: WeeklyStepContext, struck: DerivativeContract[]): void {
   if (struck.length === 0) return;
-  struck.forEach((c) => { resolvePartyRef(c.a, `derivative ${c.id} party a`); resolvePartyRef(c.b, `derivative ${c.id} party b`); });
-  const book = derivativesBookOf(ctx, state);
+  const book = derivativesBookOf(ctx);
+  struck.forEach((c) => {
+    resolvePartyRef(c.a, `derivative ${c.id} party a`); resolvePartyRef(c.b, `derivative ${c.id} party b`);
+    tagRow(c, writeDerivativeRow(ctx.v2, c));
+  });
   book.push(...struck);
   if (ctx.derivativeStanding?.book === book) ctx.derivativeStanding.index.extend(book);
 }
 
-/** The lifecycle's survivors after a settle or a close-out: the contracts that remain live. */
+/** The lifecycle's survivors after a settle or a close-out: their rows stay (marks written back),
+ *  every other derivative row is freed, and the copy becomes the survivors. */
 export function keepDerivatives(ctx: WeeklyStepContext, kept: DerivativeContract[]): void {
+  const rows = kept.map((c) => {
+    const r = rowOfContract(c);
+    writeSettledMark(ctx.v2, r, c.settledMarkLocal);
+    return r;
+  });
+  relinkKind(ctx.v2, 'DERIVATIVE', rows);
   ctx.derivativesBook = kept;
 }
 
 /** A novation: every contract naming the old party names the new one, which must exist. */
-export function novateDerivatives(ctx: WeeklyStepContext, state: GameState, rekey: (p: DerivativeParty) => DerivativeParty): void {
-  ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => {
+export function novateDerivatives(ctx: WeeklyStepContext, rekey: (p: DerivativeParty) => DerivativeParty): void {
+  ctx.derivativesBook = derivativesBookOf(ctx).map((c) => {
     const a = rekey(c.a), b = rekey(c.b);
+    if (a === c.a && b === c.b) return c;
     if (a !== c.a) resolvePartyRef(a, `derivative ${c.id} novated party a`);
     if (b !== c.b) resolvePartyRef(b, `derivative ${c.id} novated party b`);
-    return a === c.a && b === c.b ? c : { ...c, a, b };
+    const r = rowOfContract(c);
+    writeDerivativeParties(ctx.v2, r, a, b);
+    return tagRow({ ...c, a, b }, r);
   });
 }
 

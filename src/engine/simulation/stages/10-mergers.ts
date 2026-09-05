@@ -506,7 +506,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // acquirer on either side. A merged firm is not dead — an acquired firm's rows cannot exist.
   if (!target.bankBalanceSheet) {
     const rekey = (p: DerivativeParty): DerivativeParty => (p.kind === 'COMPANY' && p.id === target.id ? companyParty(acquirer) : p);
-    novateDerivatives(ctx, state, rekey); // §3.13-BOOK d4b: through the contract ledger's door
+    novateDerivatives(ctx, rekey); // §3.13-BOOK d4b: through the contract ledger's door
   }
   reassignConsignments(state, target, acquirer);
   Object.entries(target.outputInventoryBySubUnit ?? {}).forEach(([subUnitId, row]) => {

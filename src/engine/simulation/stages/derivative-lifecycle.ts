@@ -52,7 +52,7 @@ export { derivativesBookOf, strikeDerivatives };
  * after stage 08 charges at this week's ratings, exactly as the per-call map did.
  */
 export function standingBookOf(ctx: WeeklyStepContext, state: GameState): StandingBook {
-  const book = derivativesBookOf(ctx, state);
+  const book = derivativesBookOf(ctx);
   const memo = ctx.derivativeStanding;
   if (memo && memo.book === book) { memo.index.extend(book); return memo.index; }
   // §3.13-BOOK (c-then-1): the same private-firm fold, and the same no-op — see
@@ -157,7 +157,7 @@ function payToB(ctx: WeeklyStepContext, c: DerivativeContract, usdToB: number, r
  * audit saw a contract with a dead party at every such week's end (O5).
  */
 export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameState, party: DerivativeParty): number {
-  const book = derivativesBookOf(ctx, state);
+  const book = derivativesBookOf(ctx);
   const key = derivativePartyKey(party);
   const view = buildDerivativeMarketView(ctx);
   const net = new Map<string, number>();
@@ -212,7 +212,7 @@ export function settleDerivativeClass(
   classId: DerivativeClassId,
   view: DerivativeLifecycleView
 ): Map<string, number> {
-  const book = derivativesBookOf(ctx, state);
+  const book = derivativesBookOf(ctx);
   const profile = derivativeProfile(classId);
   const net = new Map<string, number>();
   const kept: DerivativeContract[] = [];

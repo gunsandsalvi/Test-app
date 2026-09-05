@@ -516,12 +516,23 @@ written from here):
         it: the derivatives are NOT in `v2.contracts`, which is the supply-contract table; they
         are `state.derivativesBook`, an object array with one lifecycle writer). d4a (one party
         union and one key across the bilateral books) is in §9. What is left, in order:
-    d4c. **ONE STORE.** The six books become one columnar contract store beside the register:
-        kind, party A, party B, currency, principal, rate, struck and maturity weeks, and a
-        per-kind terms row (a repo's pledges, a loan's shares, an invoice's booked rate), with
-        `d4b`'s door as its writer and one liveness check (`O5`) over every kind. A derivative is
-        in the INDEX and the CONTRACT store, never in the position book: nothing is held, and its
-        check is `O9`'s zero-sum, not held = issued.
+    d4c. **ONE STORE** — one kind per commit, in this order; d4c-i (the derivatives) is in §9.
+        `engine2/obligations.ts` is the store: kind, class, region, money, party A, party B,
+        size, strike, units, settled mark, struck and maturity weeks, the reference and the term;
+        each kind below adds its own columns where it has them and joins the same chains, door
+        (`contract-ledger.ts`) and liveness check.
+    d4c-ii. **THE REPO BOOK** (`reg.repoBook`): lender, borrower, principal, rate, weeks, and the
+        pledges as a per-row collateral list; `repoBorrowedLocal`, `repoLentLocal`,
+        `srfBorrowedLocal`, `encumberedFaceByBond`, `maturingAt` read the rows.
+    d4c-iii. **THE STOCK-LOAN BOOK** (`reg.securityLoanBook`): lender, borrower, the instrument,
+        shares, fee, collateral, the lender's position at strike, recall week.
+    d4c-iv. **THE PRIME-BROKERAGE BOOK** (`reg.primeBrokerageBook`): broker, fund, drawn, haircut, rate.
+    d4c-v. **THE TRADE INVOICES** (`state.tradeInvoices`): seller, buyer, the sub-unit, the invoice
+        currency and amount, the booked rate, booked and due weeks.
+    d4c-vi. **THE CAPITAL COMMITMENTS** (`peFund.lpCommitments`): fund, LP, committed, drawn — and
+        one liveness check (`O5`) over every kind on the store. A derivative is in the INDEX and
+        the CONTRACT store, never in the position book: nothing is held, and its check is `O9`'s
+        zero-sum, not held = issued.
     d5. **A CLAIM ON A POSITION IS A LIEN ON A LOT** (added 2026-09-04). Repo encumbrance
         (`encumberedFaceByBond`), stock-loan collateral and posted initial margin
         (`initialMarginHeldLocal`, a scalar on the desk) are parallel numbers reconciled after the
@@ -1714,6 +1725,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d4c-i — THE DERIVATIVES ARE ROWS OF THE CONTRACT STORE.** `engine2/obligations.ts` is
+the one columnar store every bilateral obligation joins, one kind at a time, and the derivatives
+are its first: kind and class refs, region, money, the two parties as interned party keys, size,
+strike, units, the settled mark, the weeks, the typed reference and the term, chained per kind in
+insertion order — the order every reader of the object book relied on. `GameState.derivativesBook`
+is deleted; the store rides `v2` into next week and into every clone. The week's working copy is
+the store materialized once on first touch (`contract-ledger.ts:derivativesBookOf`), each object
+carrying its row: a strike resolves the parties, writes rows and appends to the copy; the
+lifecycle's survivors are relinked (`keepDerivatives`, which writes back the marks they settled
+and frees the rest); a novation re-points rows. The audits, the UI and the harness read
+`derivativesOf(v2)` — the rows materialized — so no reader holds a second copy. The class
+profiles still price the object they always priced (`materializeDerivative`, as a ladder row
+materializes a `DebtTranche`); byte-identical, one materialization per week per reader class.
+Gates green; no run.
 
 **13-BOOK d4b — ONE DOOR FOR EVERY BILATERAL OBLIGATION.** `engine/ledger/contract-ledger.ts` is
 the only writer of the six bilateral books, through named operations — `strikeDerivatives`,

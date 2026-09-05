@@ -8,7 +8,9 @@ import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
 import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
-import { bookTradeInvoices, publishRepoBook } from '../src/engine/ledger/contract-ledger';
+import { bookTradeInvoices, publishRepoBook, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
+import type { WeeklyStepContext } from '../src/engine/simulation/stages/context';
+import type { DerivativeContract } from '../src/domain/derivatives/contract';
 import { asEntityId } from '../src/domain/ids';
 import type { TradeInvoice } from '../src/domain/trade-invoice';
 import type { RepoContract } from '../src/domain/repo';
@@ -45,6 +47,39 @@ test('a repo book resolves its lenders and borrowers, the window included, and n
     publishRepoBook(reg, [contract]);
     assert.equal(reg.repoBook?.length, 1);
     assert.throws(() => publishRepoBook(reg, [{ ...contract, borrowerId: asEntityId('USA_GHOST') }]), /no entity, region or bank/);
+  } finally {
+    setActiveWireWorld(undefined);
+  }
+});
+
+test('§3.13-BOOK d4c-i: a struck derivative is a row of the contract store, and comes back as the object it was', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const a = { kind: 'INSTITUTION' as const, id: asEntityId('INST-A') };
+  const b = { kind: 'INSTITUTION' as const, id: asEntityId('INST-B') };
+  const c = { kind: 'INSTITUTION' as const, id: asEntityId('INST-C') };
+  setActiveWireWorld(wireWorldOf(v2, [], [{ id: a.id }, { id: b.id }, { id: c.id }]));
+  const ctx = { v2 } as unknown as WeeklyStepContext;
+  try {
+    const swap: DerivativeContract = {
+      id: 'USA-IRS-s5-1-0', classId: 'IRS', regionId: 'USA', currency: 'USD', a, b, notional: 1e6, strike: 0.04,
+      reference: { kind: 'RATE' }, termKey: 's5', struckWeek: 1, maturityWeek: 261,
+    };
+    const future: DerivativeContract = {
+      id: 'FUT-OIL-3M-1-0', classId: 'COMMODITY_FUTURE', regionId: 'USA', currency: 'USD', a: b, b: a, notional: 7e5, strike: 100,
+      reference: { kind: 'COMMODITY', commodityId: 'OIL' }, termKey: '3M', units: 7000, settledMarkLocal: 0, struckWeek: 1, maturityWeek: 14,
+    };
+    strikeDerivatives(ctx, [swap, future]);
+    assert.deepEqual(derivativesOf(v2), [swap, future], 'the store materializes exactly what was struck, in order');
+    assert.throws(() => strikeDerivatives(ctx, [{ ...swap, id: 'x', a: { kind: 'INSTITUTION', id: asEntityId('INST-GHOST') } }]), /no entity, region or bank/);
+    // The lifecycle advances a mark and keeps the survivors; the rows follow.
+    const book = derivativesBookOf(ctx);
+    book[1].settledMarkLocal = 3_500;
+    keepDerivatives(ctx, [book[1]]);
+    assert.deepEqual(derivativesOf(v2).map((k) => [k.id, k.settledMarkLocal]), [['FUT-OIL-3M-1-0', 3_500]]);
+    // A novation re-points the row.
+    novateDerivatives(ctx, (p) => (p.id === a.id ? c : p));
+    assert.deepEqual(derivativesOf(v2)[0].b, c);
+    assert.equal(derivativeContractOf(v2, 'USA-IRS-s5-1-0'), undefined, 'a freed row is gone');
   } finally {
     setActiveWireWorld(undefined);
   }

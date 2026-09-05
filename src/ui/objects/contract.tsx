@@ -1,6 +1,7 @@
 /** AU · object: contract — one derivative contract on the one book: a swap, a CDS, a future, a forward. Reached from a party or a class. */
 
 import { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
+import { derivativeContractOf } from '../../engine/ledger/contract-ledger';
 import { referenceKeyOf } from '../../domain/derivatives/contract';
 import { defineObject } from './registry';
 import { Card, KV, Link, Stat, StatGrid } from '../ui';
@@ -28,7 +29,7 @@ export const contract = defineObject<DerivativeContract>({
   type: 'contract',
   words: ['contract', 'contracts'],
   searchable: false,
-  find: (world, id) => (world.state.derivativesBook ?? []).find((k) => k.id === id),
+  find: (world, id) => derivativeContractOf(world.v2, id),
   list: () => [],
   label: (world, _id, k) => ({ ticker: `${classWord(k.classId)} · ${partyName(world, k.a)} × ${partyName(world, k.b)}`, name: `${money(k.notional)} ${classWord(k.classId)} between ${partyName(world, k.a)} and ${partyName(world, k.b)}`, kind: classWord(k.classId), region: k.regionId }),
   headline: (_w, _id, k) => ({ value: money(k.notional), sub: classWord(k.classId) }),

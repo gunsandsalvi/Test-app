@@ -457,7 +457,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   cbTrace?.report(baseCtx.nextWeek);
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
-    derivativesBook: ctx.derivativesBook ?? state.derivativesBook,
     holderAccruedInterestLocal: ctx.holderAccruedInterestLocal,
     sovereignAccruedInterestLocal: ctx.sovereignAccruedInterestLocal,
     lastCashOverdraftLocal: ctx.cashOverdraftLocal,

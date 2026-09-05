@@ -112,7 +112,7 @@ export function rekeyBankLinks(
   // entity id — so the whole book rekeys on one field rather than on whichever name an arm had.
   const rekeyParty = (p: DerivativeParty): DerivativeParty =>
     (p.id === fromBank.id ? { ...p, id: toBank.id } : p);
-  novateDerivatives(ctx, state, rekeyParty);
+  novateDerivatives(ctx, rekeyParty);
   // THE DELIVERIES MOVE WITH THE BOOKS. A resolved bank buys goods like any other firm, and its
   // consignments were the one link this function did not re-key: the assuming bank took the
   // business but not the shipments, so what was still on the water named a bank that no longer

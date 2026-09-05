@@ -260,7 +260,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
         });
       });
     });
-    strikeDerivatives(ctx, state, struck);
+    strikeDerivatives(ctx, struck);
 
     reg.swapParRateByTenor = parByTenor;
     // The published benchmark: the overnight print compounded, exactly as an overnight index is.

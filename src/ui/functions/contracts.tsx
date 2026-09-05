@@ -5,6 +5,7 @@
  */
 
 import { FunctionModule } from '../fn';
+import { derivativesOf } from '../../engine/ledger/contract-ledger';
 import { Card, Hint, KV, Link, Table, Tabs, T } from '../ui';
 import { money, pctLevel, num, count } from '../format';
 import { formatMonthYear } from '../calendar';
@@ -18,7 +19,7 @@ export const contracts: FunctionModule = {
   blurb: 'the derivatives on it',
   argKey: 'tab',
   render({ world, ref, args, nav }) {
-    const book = world.state.derivativesBook ?? [];
+    const book = derivativesOf(world.v2);
     let mine: DerivativeContract[];
     if (ref.type === 'company') { const c = companyOf(world, ref.id); mine = c ? [...contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker }), ...book.filter((k) => k.reference.kind === 'ISSUER' && k.reference.issuerId === c.id)] : []; }
     else if (ref.type === 'institution') mine = contractsOf(world, { kind: 'INSTITUTION', key: ref.id });
