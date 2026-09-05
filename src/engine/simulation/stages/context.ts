@@ -327,10 +327,11 @@ export interface WeeklyStepContext {
   rrpRateAnnualByRegion: Map<string, number>;
   /** §7.321 barrier mode: suppress emission-time running-net application (merge applies it). */
   deferPendingNet?: boolean;
-  /** CAL — what each holder has EARNED and not yet been paid, by (instrument, holder). The
-   *  receivable that sits between an accrual and a coupon date, and the reason a bond can change
-   *  hands mid-period without moving the interest to the wrong party. */
-  holderAccruedInterestLocal: Map<string, Map<string, number>>;
+  // §3.13-BOOK f4a: what each holder has EARNED and not been paid is `holdings.ts:accruedLocal`,
+  // a column of the register row it accrues on; not a ledger beside it.
+  /** §3.13-BOOK f4a — the interest a clearing book moved with each participant's fills, waiting
+   *  for the write-back to make the rows it lands on (`finalizeHoldingsStore`). */
+  pendingAccruedMoves: { bookId: string; instrumentType: string; instrumentId: string; usd: number }[];
   /** CAL — the same receivable for GOVERNMENT paper, keyed `<region>|<bucket>|<partyKey>` because
    *  its holders are not all on the institutional register: a bank holds sovereigns directly, per
    *  tenor, on its own balance sheet, and so do the central bank and the corporate treasuries. */
@@ -470,7 +471,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     pendingHolderAccrualPayout: new Set(),
     rrpIntendedByEntity: new Map(),
     rrpRateAnnualByRegion: new Map(),
-    holderAccruedInterestLocal: state.holderAccruedInterestLocal,
+    pendingAccruedMoves: [],
     sovereignAccruedInterestLocal: state.sovereignAccruedInterestLocal,
     tradeInvoiceFxGainLocal: 0,
     tradeInvoiceWriteOffLocal: 0,

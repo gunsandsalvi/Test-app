@@ -48,6 +48,8 @@ export class HoldingsTable {
       { name: 'instrumentId', kind: 'i32' },
       { name: 'instrumentType', kind: 'u8' },
       { name: 'units', kind: 'f64' },
+      // §3.13-BOOK f4a: the register row behind the table row, for the writes that land on it.
+      { name: 'registerRow', kind: 'i32' },
     ], 1 << 17);
   }
 
@@ -59,6 +61,7 @@ export class HoldingsTable {
    *  walk that apportions an issuer's week over its holders reads this: at par the face and the
    *  money are the same number, and everywhere else they are not. */
   get units(): Float64Array { return this.table.f64('units'); }
+  get registerRow(): Int32Array { return this.table.i32('registerRow'); }
 
   /** The slice of `byType` carrying one instrument type. */
   typeRange(type: ItemizedHolding['instrumentType']): [number, number] {
@@ -88,7 +91,7 @@ export class HoldingsTable {
     this.table.length = total;
 
     const entityRow = this.entityRow, instrumentId = this.instrumentId;
-    const instrumentType = this.instrumentType, unitsCol = this.units;
+    const instrumentType = this.instrumentType, unitsCol = this.units, registerRow = this.registerRow;
     const typeCounts = new Int32Array(HOLDING_TYPES.length);
 
     let at = 0;
@@ -103,6 +106,7 @@ export class HoldingsTable {
         instrumentId[at] = iid;
         instrumentType[at] = code;
         unitsCol[at] = rowUnits(H, r);
+        registerRow[at] = r;
         typeCounts[code]++;
         at++;
       }

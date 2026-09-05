@@ -519,8 +519,13 @@ written from here):
        the sum), f2 (the debit takes the wire's units, fills carry the cleared price, and the
        basis, the unrealised and the realised results are read) and f3 (the goods lots are the
        register's lots) are in §9. What is left, in order:
-    f4. **ACCRUED INTEREST IS A RECEIVABLE BESIDE THE LOT IT ACCRUES ON** (`holderAccruedInterestLocal`
-        and its sovereign twin, 13f).
+    f4. **ACCRUED INTEREST IS A RECEIVABLE BESIDE THE LOT IT ACCRUES ON** — split 2026-09-05;
+        f4a (the corporate ledger, `holderAccruedInterestLocal`, is the row's `accruedLocal`) is
+        in §9. What is left:
+    f4b. **THE SOVEREIGN TWIN.** `sovereignAccruedInterestLocal` (party-keyed, 13f) becomes the
+        same column on the sovereign rows — the banks' own books, the central bank's, the
+        desks', the treasuries', the households' — and the banks' `sovereignAccruedCouponLocal`
+        is a read of it; an institution shows its receivable on its sheet (13f).
     f5. **THE LAST GOODS STOCK OUTSIDE THE GOODS LEDGER GETS A HOLDER** (`categoryDemand[c].inventoryLevelLocal`,
         a value with no holder and no units).
     g. **PLANT AND HOUSING JOIN** — BLOCKED on step 26 deciding what a unit of plant is. Not a
@@ -1701,6 +1706,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK f4a — CORPORATE ACCRUED INTEREST IS A COLUMN OF THE ROW IT ACCRUES ON.**
+`GameState.holderAccruedInterestLocal` (≈105k keys, a nested map beside the register) is
+deleted; the register row gained `accruedLocal` (`holdings.ts`), what the position has earned
+and not been paid, in the instrument's money. The weekly accrual walk lands each holder's share
+on its row (the column table now carries `registerRow`; a desk's share on its signed row); the
+coupon date walks every register book and pays each row of a paying instrument to the book's
+own party, clearing it; a transfer moves the balance pro rata with the units (`debitRow`
+returns it, `creditRow` / `adjustDeskRow` take it — a resolution's desk assumption needs no
+re-key any more); a redemption leaves it on the row, which stays on its book, emptied, until
+it is paid (`keepsRow`, and the fold and the prune know it); the clearing write-back carries a
+claimed row's balance onto its successor and keeps a sold-out position's row while it is owed;
+the fills' moves (`moveCorporateAccrued`) wait on `ctx.pendingAccruedMoves` until the write-back
+has made the rows they land on. `O8`'s corporate arm goes (the holder is the row's book). Reads:
+`bookAccruedLocal`, `accruedRowOf`. Gates green; no run.
 
 **13-BOOK f3 — THE GOODS LOTS ARE THE REGISTER'S LOTS.** `v2.lots` is deleted. A firm's
 holding of one good is a row of kind GOOD on its own book (the sub-unit its instrument, the

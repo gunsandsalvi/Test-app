@@ -28,7 +28,6 @@ import { reassignConsignments } from './goods-arrival';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { banksOf } from '../../../domain/company';
 import { partyKey } from '../../ledger/party';
-import { deskBookId } from '../../ledger/holdings-ledger';
 import { getSimulationDate } from '../../formatters';
 import { WeeklyStepContext } from './context';
 import { novateDerivatives, publishRepoBook, repoBookOf, primeBrokerageBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
@@ -90,19 +89,8 @@ export function rekeyBankLinks(
     ctx.sovereignAccruedInterestLocal.set(k2, (ctx.sovereignAccruedInterestLocal.get(k2) ?? 0) + usd);
     ctx.sovereignAccruedInterestLocal.delete(k);
   });
-  // THE DESK'S UNPAID COUPONS MOVE WITH ITS INVENTORY. `absorbBankSheet` merges the dealer books
-  // into the acquirer, but what that paper has already EARNED and not been paid sits on the
-  // register's accrual ledger under the failed bank's own desk BOOK (§3.13-BOOK d3f). Left there, the coupon date
-  // paid a desk whose bank has no account any more: the settlement store had no row for it and
-  // dropped BOTH legs of the payment — the only kind M7 ever named was `payee BANK_SECURITIES`.
-  const fromDesk = deskBookId(fromBank.id);
-  const toDesk = deskBookId(toBank.id);
-  ctx.holderAccruedInterestLocal.forEach((byHolder) => {
-    const owedLocal = byHolder.get(fromDesk);
-    if (owedLocal === undefined) return;
-    byHolder.set(toDesk, (byHolder.get(toDesk) ?? 0) + owedLocal);
-    byHolder.delete(fromDesk);
-  });
+  // §3.13-BOOK f4a: the desk's unpaid coupons are on its rows and moved with them when
+  // `absorbBankSheet` transferred the inventory — nothing to re-key here.
   // §3.13-BOOK (c-then-3b): a contract's counterparty is `CounterpartyRef` — every arm an
   // entity id — so the whole book rekeys on one field rather than on whichever name an arm had.
   const rekeyParty = (p: DerivativeParty): DerivativeParty =>

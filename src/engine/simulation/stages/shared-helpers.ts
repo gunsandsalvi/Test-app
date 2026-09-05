@@ -11,10 +11,10 @@ import { instrumentCurrencyOf, issuedSharesOf } from '../../../engine2/instrumen
 import type { EntityId } from '../../../domain/ids';
 import { bankSecuritiesParty, companyPartyOf } from '../../../domain/party';
 import { buildEntityIndex } from '../../ledger/entity-index';
-import { currencyOf } from '../../../domain/geography';
+import { currencyOf, type CurrencyCode } from '../../../domain/geography';
 import { defect } from '../../../domain/defect';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
-import { transferHolding, registerBooks, deskBookId, deskBankIdOf, bookIdOfParty } from '../../ledger/holdings-ledger';
+import { transferHolding, registerBooks, deskBookId, deskBankIdOf, bookIdOfParty, accrueInterestOnRow, settleAccruedOnRow, closeEmptyPositions } from '../../ledger/holdings-ledger';
 import { bookPnL } from '../../ledger/bank-book';
 import { revHistLen, revHistAt, rowOf, V2World, regionOf, typeOf, typeRefOf, instrumentRefOf } from '../../../engine2/world';
 import { ladderRowsOf, TR_FLOATING, facilityBookOf, issuerIdOf } from '../../../engine2/tranches';
@@ -390,8 +390,8 @@ function deskHoldingsByInstrument(
   v2: V2World,
   companies: Company[] | undefined,
   book: string | undefined
-): Map<string, Map<string, number>> {
-  const out = new Map<string, Map<string, number>>();
+): Map<string, Map<string, { faceLocal: number; row: number }>> {
+  const out = new Map<string, Map<string, { faceLocal: number; row: number }>>();
   if (!book) return out;
   const kind = DESK_BOOK_KIND[book];
   if (kind === undefined) return out;
@@ -405,7 +405,10 @@ function deskHoldingsByInstrument(
       if (!(faceLocal > 0)) return;
       let byDesk = out.get(p.instrumentId);
       if (!byDesk) { byDesk = new Map(); out.set(p.instrumentId, byDesk); }
-      byDesk.set(deskId, (byDesk.get(deskId) ?? 0) + faceLocal);
+      // §3.13-BOOK f4a: the row, so the desk's share of the week lands on it. One row per
+      // (desk, instrument) — the desk's book is signed and merged (`adjustDeskRow`).
+      const cur = byDesk.get(deskId);
+      if (cur) cur.faceLocal += faceLocal; else byDesk.set(deskId, { faceLocal, row: p.row });
     });
   });
   return out;
@@ -578,7 +581,7 @@ export function applyPendingCorporateActionSettlements(
   // resolution to build it, and a scale-down at the payment — all of it to bridge two key spaces
   // that stopped being different in 13b, and none of it ever matching (see
   // `deskHoldingsByInstrument`).
-  const deskByInstrumentByType = new Map<string, Map<string, Map<string, number>>>();
+  const deskByInstrumentByType = new Map<string, Map<string, Map<string, { faceLocal: number; row: number }>>>();
   if (hasCash) {
     pendingCashByType.forEach((_byId, type) => {
       deskByInstrumentByType.set(type, deskHoldingsByInstrument(v2, ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
@@ -637,7 +640,7 @@ export function applyPendingCorporateActionSettlements(
         // so does the position.
         const byDesk = deskByInstrument?.get(instrumentId);
         let deskLocal = 0;
-        byDesk?.forEach((usd) => { deskLocal += usd; });
+        byDesk?.forEach((pos) => { deskLocal += pos.faceLocal; });
         // §9.13-CREDIT row 5 — THE WHOLE SPLIT IS IN THE INSTRUMENT'S OWN UNIT: face for credit,
         // SHARES for equity. It used to be in money on the register's side, the desks' MARKED
         // money on theirs, and market cap for the issue — three numbers that agree only while
@@ -663,8 +666,8 @@ export function applyPendingCorporateActionSettlements(
         // ledgers are keyed by it.
         const paymentReason = t === equityRef ? 'dividend to holder of record' : 'security payment to holder of record';
         if (deskLocal > 0) {
-          byDesk?.forEach((usd, deskId) => {
-            const amountLocal = owedLocal * (usd / denomLocal);
+          byDesk?.forEach((pos, deskId) => {
+            const amountLocal = owedLocal * (pos.faceLocal / denomLocal);
             if (!(amountLocal > 0)) return;
             journalPayment(ctx, {
               payer, payee: holderPayee(deskId, payeeByBook), amount: amountLocal,
@@ -904,19 +907,15 @@ export function accrueHoldersInterest(
  * payout path leaves it.
  */
 export function moveCorporateAccrued(
-  holderAccruedInterestLocal: Map<string, Map<string, number>>,
+  ctx: { pendingAccruedMoves: { bookId: string; instrumentType: string; instrumentId: string; usd: number }[] },
   instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER',
   instrumentId: string,
   holderKey: string,
   deltaLocal: number
 ): void {
   if (!Number.isFinite(deltaLocal) || deltaLocal === 0) return;
-  const key = `${instrumentType}:${instrumentId}`;
-  let byHolder = holderAccruedInterestLocal.get(key);
-  if (!byHolder) { byHolder = new Map(); holderAccruedInterestLocal.set(key, byHolder); }
-  const next = (byHolder.get(holderKey) ?? 0) + deltaLocal;
-  if (next === 0) byHolder.delete(holderKey); else byHolder.set(holderKey, next);
-  if (byHolder.size === 0) holderAccruedInterestLocal.delete(key);
+  // §3.13-BOOK f4a: onto the row — once the write-back has made it (`finalizeHoldingsStore`).
+  ctx.pendingAccruedMoves.push({ bookId: holderKey, instrumentType, instrumentId, usd: deltaLocal });
 }
 
 /** The coupon date: what each holder accrued on this paper becomes cash, and the balance
@@ -952,7 +951,6 @@ export function applyHolderInterestAccruals(
     updatedInstitutionalEntities: InstitutionalEntity[];
     pendingHolderAccrualLocal: Map<string, number>;
     pendingHolderAccrualPayout: Set<string>;
-    holderAccruedInterestLocal: Map<string, Map<string, number>>;
     /** The banks, so the desks holding an issuer's paper accrue their share of its coupon. */
     updatedCompanies?: Company[];
     nextWeek?: number;
@@ -985,15 +983,11 @@ export function applyHolderInterestAccruals(
     // register is grouped by type, so a row costs two typed-array loads and touches no object.
     // Within a type the table preserves register order, so every float accumulates in the same
     // order — and to the same value — whichever pass reads it.
-    const deskHoldings = new Map<string, Map<string, Map<string, number>>>();
+    const deskHoldings = new Map<string, Map<string, Map<string, { faceLocal: number; row: number }>>>();
     accrualsByType.forEach((_byId, type) => {
       deskHoldings.set(type, deskHoldingsByInstrument(ctx.v2, ctx.updatedCompanies, DESK_BOOK_BY_TYPE[type]));
     });
     const holdings = getHoldingsTable(ctx);
-    const entities = ctx.updatedInstitutionalEntities;
-    // Resolved once, so the row loop reads a dense string array rather than dereferencing an
-    // entity object per row.
-    const entityIdByRow: string[] = entities.map((e) => e.id);
     const byTypeRows = holdings.byType;
     // §9.13-CREDIT row 5 — A COUPON FOLLOWS FACE. This walked `qtyLocal`, the row's MONEY, to
     // decide each holder's share of an issuer's week. At par the two are the same number; once a
@@ -1002,7 +996,7 @@ export function applyHolderInterestAccruals(
     // can pay. The face is `units`, in the same column order.
     const faceCol = holdings.units;
     const instCol = holdings.instrumentId;
-    const entCol = holdings.entityRow;
+    const registerRowCol = holdings.registerRow;
     accrualsByType.forEach((byId, type) => {
       const [lo, hi] = holdings.typeRange(type as never);
       if (hi <= lo) return;
@@ -1038,15 +1032,15 @@ export function applyHolderInterestAccruals(
           const byDesk = deskByInstrument.get(instrumentText);
           if (!byDesk) return;
           let deskLocal = 0;
-          byDesk.forEach((usd) => { deskLocal += usd; });
+          byDesk.forEach((pos) => { deskLocal += pos.faceLocal; });
           const registerLocal = totalByInst[iid] ?? 0;
           if (!(deskLocal + registerLocal > 0)) return;
           deskTotalOfInst[iid] = deskLocal;
           registerShare[iid] = registerLocal / (registerLocal + deskLocal);
         });
       }
-      // Pass 2 — the same rows in the same order; each holder's share of the weekly amount.
-      const byHolderByInst: (Map<string, number> | undefined)[] = [];
+      // Pass 2 — the same rows in the same order; each holder's share of the weekly amount,
+      // §3.13-BOOK f4a: onto the register row itself.
       for (let i = lo; i < hi; i++) {
         const row = byTypeRows[i];
         const iid = instCol[row];
@@ -1057,15 +1051,7 @@ export function applyHolderInterestAccruals(
         if (weeklyLocal === undefined || !(totalLocal > 0)) continue;
         const shareLocal = weeklyLocal * (faceCol[row] / totalLocal) * (registerShare[iid] ?? 1);
         if (!(shareLocal > 0)) continue;
-        let byHolder = byHolderByInst[iid];
-        if (byHolder === undefined) {
-          const key = `${type}:${instrumentText}`;
-          byHolder = ctx.holderAccruedInterestLocal.get(key);
-          if (!byHolder) { byHolder = new Map(); ctx.holderAccruedInterestLocal.set(key, byHolder); }
-          byHolderByInst[iid] = byHolder;
-        }
-        const entityId = entityIdByRow[entCol[row]];
-        byHolder.set(entityId, (byHolder.get(entityId) ?? 0) + shareLocal);
+        accrueInterestOnRow(ctx.v2, registerRowCol[row], shareLocal);
       }
       // Pass 3 — the desks' side of the same split, on the accrual ledger the register uses, so
       // the coupon date pays them out of the same balance. An issuer whose paper the register
@@ -1076,13 +1062,10 @@ export function applyHolderInterestAccruals(
           if (!(deskLocal > 0)) return;
           const deskCutLocal = accruingWeekly[iid] * (1 - registerShare[iid]);
           if (!(deskCutLocal > 0)) return;
-          const key = `${type}:${instrumentText}`;
-          let byHolder = ctx.holderAccruedInterestLocal.get(key);
-          if (!byHolder) { byHolder = new Map(); ctx.holderAccruedInterestLocal.set(key, byHolder); }
-          deskByInstrument.get(instrumentText)?.forEach((usd, deskId) => {
-            const shareLocal = deskCutLocal * (usd / deskLocal);
+          deskByInstrument.get(instrumentText)?.forEach((pos) => {
+            const shareLocal = deskCutLocal * (pos.faceLocal / deskLocal);
             if (!(shareLocal > 0)) return;
-            byHolder.set(deskId, (byHolder.get(deskId) ?? 0) + shareLocal);
+            accrueInterestOnRow(ctx.v2, pos.row, shareLocal); // §3.13-BOOK f4a: onto the desk's row
             if (COUPON_TRACE) traceAdd(traceDeskAccruedLocal, type, shareLocal);
           });
         });
@@ -1104,42 +1087,50 @@ export function applyHolderInterestAccruals(
   // mirror that had to be hand-registered at every firm birth. Built here, after the early
   // returns, so a week with no payout pays nothing for it.
   const { companyById: issuersById } = buildEntityIndex(ctx.updatedCompanies ?? [], []);
-  // §3.13-BOOK d3f: a holder key is a register book id; its payee is what the register says.
-  const payeeByBook = new Map(registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), ctx.updatedCompanies ?? []).map((b) => [b.id, b.payee] as const));
-  const deskCouponByBankId = new Map<EntityId, number>();
+  // §3.13-BOOK f4a: the balances are on the ROWS. One walk of every register book pays each row
+  // of a paying instrument what it is owed, to the book's own party, and clears it; a row
+  // emptied by an earlier sale or redemption then leaves its book.
+  const payingRefs = new Map<number, Set<number>>();
+  const payerOf = new Map<string, { payer: import('./settlement').PartyRef; currency: CurrencyCode }>();
   payouts.forEach((instrumentKey) => {
-    const byHolder = ctx.holderAccruedInterestLocal.get(instrumentKey);
-    if (!byHolder) return;
-    const paperId = asInstrumentId(instrumentKey.slice(instrumentKey.indexOf(':') + 1));
-    const ticker = issuersById.get(issuerIdOf(ctx.v2, paperId))?.id; // §3.13-BOOK (c-then-3b): the issuer's entity id
-    if (!ticker || !ctx.paymentJournal) {
-      // A coupon due from an issuer nobody can name is a defect at the site that accrued it,
-      // not a receivable that quietly survives.
-      const owedLocal = Array.from(byHolder.values()).reduce((a, v) => a + Math.max(0, v), 0);
-      return defect(`coupon of ${(owedLocal / 1e6).toFixed(3)}M due on ${instrumentKey} from an issuer with no ticker`);
-    }
-    const payer = companyPartyOf(ticker) as import('./settlement').PartyRef;
-    // §3.13-BOOK (dI): a coupon is paid in the paper's own money, which the instrument index states.
-    const couponCurrency = instrumentCurrencyOf(ctx.v2, paperId) ?? defect(`coupon due on ${paperId}, which the instrument index does not hold`);
-    byHolder.forEach((accruedLocal, holderId) => {
-      if (!(accruedLocal > 0)) return;
-      const deskBankId = deskBankIdOf(holderId);
+    const at = instrumentKey.indexOf(':');
+    const type = instrumentKey.slice(0, at);
+    const paperId = asInstrumentId(instrumentKey.slice(at + 1));
+    const tRef = typeRefOf(ctx.v2, type), iRef = instrumentRefOf(ctx.v2, paperId);
+    if (tRef < 0 || iRef < 0) return;
+    let set = payingRefs.get(tRef); if (!set) { set = new Set(); payingRefs.set(tRef, set); }
+    set.add(iRef);
+    const issuer = issuersById.get(issuerIdOf(ctx.v2, paperId))?.id; // §3.13-BOOK (c-then-3b): the issuer's entity id
+    if (!issuer || !ctx.paymentJournal) return defect(`coupon due on ${instrumentKey} from an issuer with no ticker`);
+    payerOf.set(`${tRef}|${iRef}`, {
+      payer: companyPartyOf(issuer) as import('./settlement').PartyRef,
+      // §3.13-BOOK (dI): a coupon is paid in the paper's own money, which the instrument index states.
+      currency: instrumentCurrencyOf(ctx.v2, paperId) ?? defect(`coupon due on ${paperId}, which the instrument index does not hold`),
+    });
+  });
+  const H = ctx.v2.holdings;
+  const deskCouponByBankId = new Map<EntityId, number>();
+  const touched = new Set<string>();
+  registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), ctx.updatedCompanies ?? []).forEach((book) => {
+    for (let r = bookHeadOf(ctx.v2, book.id); r >= 0; r = H.next[r]) {
+      const set = payingRefs.get(H.typeRef[r]);
+      if (!set || !set.has(H.instrRef[r])) continue;
+      const accruedLocal = H.accruedLocal[r];
+      if (!(accruedLocal > 0)) { if (accruedLocal !== 0) settleAccruedOnRow(ctx.v2, r, accruedLocal); continue; }
+      const who = payerOf.get(`${H.typeRef[r]}|${H.instrRef[r]}`)!;
+      const deskBankId = deskBankIdOf(book.id);
       if (deskBankId !== undefined) deskCouponByBankId.set(deskBankId, (deskCouponByBankId.get(deskBankId) ?? 0) + accruedLocal);
       if (COUPON_TRACE) {
-        const type = instrumentKey.slice(0, instrumentKey.indexOf(':'));
+        const type = typeOf(ctx.v2, H.typeRef[r]);
         traceAdd(tracePaidLocal, type, accruedLocal);
         if (deskBankId !== undefined) traceAdd(traceDeskPaidLocal, type, accruedLocal);
       }
-      journalPayment(ctx, {
-        payer,
-        payee: holderPayee(holderId, payeeByBook),
-        amount: accruedLocal,
-        currency: couponCurrency,
-        reason: 'coupon payment',
-      });
-    });
-    ctx.holderAccruedInterestLocal.delete(instrumentKey);
+      journalPayment(ctx, { payer: who.payer, payee: book.payee, amount: accruedLocal, currency: who.currency, reason: 'coupon payment' });
+      settleAccruedOnRow(ctx.v2, r, accruedLocal);
+      touched.add(book.id);
+    }
   });
+  touched.forEach((bookId) => closeEmptyPositions(ctx.v2, bookId));
   payouts.clear();
   bookDeskIncome(ctx.updatedCompanies, deskCouponByBankId, 'coupon on desk inventory');
   if (COUPON_TRACE) reportCouponTrace(ctx, traceAccruedLocal, tracePaidLocal, traceDeskAccruedLocal, traceDeskPaidLocal);
@@ -1147,7 +1138,7 @@ export function applyHolderInterestAccruals(
 
 /** The COUPON_TRACE line: accrued / paid / still owed this week, by instrument type. */
 function reportCouponTrace(
-  ctx: { holderAccruedInterestLocal: Map<string, Map<string, number>>; nextWeek?: number },
+  ctx: { v2: V2World; updatedInstitutionalEntities: InstitutionalEntity[]; updatedCompanies?: Company[]; nextWeek?: number },
   accrued: Map<string, number>,
   paid: Map<string, number>,
   deskAccrued: Map<string, number>,
@@ -1155,17 +1146,17 @@ function reportCouponTrace(
 ): void {
   const owed = new Map<string, number>();
   const deskOwed = new Map<string, number>();
-  ctx.holderAccruedInterestLocal.forEach((byHolder, key) => {
-    const type = key.slice(0, key.indexOf(':'));
-    let usd = 0;
-    let deskLocal = 0;
-    byHolder.forEach((v, holderId) => {
-      if (!(v > 0)) return;
-      usd += v;
-      if (deskBankIdOf(holderId) !== undefined) deskLocal += v;
-    });
-    owed.set(type, (owed.get(type) ?? 0) + usd);
-    deskOwed.set(type, (deskOwed.get(type) ?? 0) + deskLocal);
+  // §3.13-BOOK f4a: what is still owed is on the rows.
+  const H = ctx.v2.holdings;
+  registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), ctx.updatedCompanies ?? []).forEach((book) => {
+    const isDesk = deskBankIdOf(book.id) !== undefined;
+    for (let r = bookHeadOf(ctx.v2, book.id); r >= 0; r = H.next[r]) {
+      const v = H.accruedLocal[r];
+      if (!(v > 0)) continue;
+      const type = typeOf(ctx.v2, H.typeRef[r]);
+      owed.set(type, (owed.get(type) ?? 0) + v);
+      if (isDesk) deskOwed.set(type, (deskOwed.get(type) ?? 0) + v);
+    }
   });
   const types = [...new Set([...accrued.keys(), ...paid.keys(), ...owed.keys()])].sort();
   const b = (usd: number): string => `${(usd / 1e9).toFixed(3)}B`;

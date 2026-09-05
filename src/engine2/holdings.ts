@@ -16,7 +16,7 @@
 
 import { ItemizedHolding } from '../domain/banking';
 import { asInstrumentId, type InstrumentId } from '../domain/ids';
-import { V2World, rowOf, internType, internInstrument, internRegion, instrumentOf, regionOf, typeOf } from './world';
+import { typeRefOf, V2World, rowOf, internType, internInstrument, internRegion, instrumentOf, regionOf, typeOf } from './world';
 import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type TypeRef, type RegionRef, type PartyKeyRef } from './refs';
 
 export interface HoldingStore {
@@ -44,6 +44,14 @@ export interface HoldingStore {
    * to what is left, and the repo book's collateral call follows.
    */
   lienUnits: Float64Array;
+  /**
+   * §3.13-BOOK f4a — WHAT THIS ROW HAS EARNED AND NOT BEEN PAID: the interest accrued on the
+   * position since its last coupon date, in the instrument's money — a receivable beside the
+   * lots it accrues on. The weekly accrual walk adds to it, a coupon date pays it and clears it,
+   * a transfer moves it pro rata with the units, and a row that is sold or redeemed to nothing
+   * stays on its book while it is still owed. Corporate paper (f4a); the sovereign twin is f4b.
+   */
+  accruedLocal: Float64Array;
   // ---- §3.13-BOOK f1 — THE LOTS UNDER A ROW. A position is what it is made of: every credit
   // that landed on the row is a LOT with the units it brought, the price a unit cost and the week
   // it arrived; a debit consumes them first-in-first-out; a desk's short is a lot with a negative
@@ -120,6 +128,7 @@ export function newHoldingStore(): HoldingStore {
     shares: new Float64Array(cap),
     units: new Float64Array(cap),
     lienUnits: new Float64Array(cap),
+    accruedLocal: new Float64Array(cap),
     lotHead: new Int32Array(cap).fill(-1), lotTail: new Int32Array(cap).fill(-1),
     lotCap: cap, lotUsed: 0, lotFreeHead: -1,
     lotUnits: new Float64Array(cap), lotPriceLocal: new Float64Array(cap), lotWeek: new Int32Array(cap), lotNext: new Int32Array(cap).fill(-1),
@@ -146,7 +155,7 @@ function growHoldings(H: HoldingStore): void {
     const a = newRefColumn<B>(cap); a.set(old); return a;
   };
   H.typeRef = gR(H.typeRef); H.instrRef = gR(H.instrRef); H.regionRef = gR(H.regionRef);
-  H.qtyLocal = gF(H.qtyLocal); H.shares = gF(H.shares); H.units = gF(H.units); H.lienUnits = gF(H.lienUnits);
+  H.qtyLocal = gF(H.qtyLocal); H.shares = gF(H.shares); H.units = gF(H.units); H.lienUnits = gF(H.lienUnits); H.accruedLocal = gF(H.accruedLocal);
   const next = new Int32Array(cap).fill(-1); next.set(H.next); H.next = next;
   const mark = new Int32Array(cap); mark.set(H.mark); H.mark = mark;
   const lh = new Int32Array(cap).fill(-1); lh.set(H.lotHead); H.lotHead = lh;
@@ -223,6 +232,31 @@ export function adjustLots(v2: V2World, r: number, dUnits: number, priceLocal: n
   }
   if (Math.abs(left) > 1e-9 * Math.max(1, Math.abs(dUnits))) appendLot(v2, r, left, priceLocal, week);
   return consumed;
+}
+
+/** §3.13-BOOK f4a — the row's receivable moves (ledger-internal): an accrual, a payout, a carry. */
+export function addAccrued(v2: V2World, r: number, usd: number): void {
+  if (!(Math.abs(usd) > 0) || !Number.isFinite(usd)) return;
+  mutableHoldings(v2).accruedLocal[r] += usd;
+}
+
+/** The book's row of one instrument, for the accrual that lands on it; -1 when it holds none. */
+export function accruedRowOf(v2: V2World, bookId: string, kind: string, instrumentId: string): number {
+  const H = v2.holdings;
+  const tRef = typeRefOf(v2, kind);
+  if (tRef < 0) return -1;
+  for (let r = bookHeadOf(v2, bookId); r >= 0; r = H.next[r]) {
+    if (H.typeRef[r] === tRef && instrumentIdAt(v2, r) === instrumentId) return r;
+  }
+  return -1;
+}
+
+/** What a whole book is owed and has not been paid, across its rows. */
+export function bookAccruedLocal(v2: V2World, bookId: string): number {
+  const H = v2.holdings;
+  let total = 0;
+  for (let r = bookHeadOf(v2, bookId); r >= 0; r = H.next[r]) total += H.accruedLocal[r];
+  return total;
 }
 
 /** §3.13-BOOK f3 — lots a kernel consumed off a shared view go back to the free list (the
@@ -463,6 +497,7 @@ function freeRow(H: HoldingStore, r: number): void {
   H.shares[r] = Number.NaN;
   H.units[r] = Number.NaN;
   H.lienUnits[r] = 0;
+  H.accruedLocal[r] = 0;
   H.instrRef[r] = ABSENT_REF;
   H.typeRef[r] = ABSENT_REF;
   H.next[r] = H.freeHead;
@@ -526,6 +561,8 @@ export function foldRowInto(v2: V2World, keep: number, drop: number): void {
   H.lienUnits[keep] += H.lienUnits[drop];
   // §3.13-BOOK f1: and so are its lots, the dropped row's after the kept row's.
   moveLotsTo(v2, drop, keep);
+  // §3.13-BOOK f4a: and what the two have earned.
+  H.accruedLocal[keep] += H.accruedLocal[drop]; H.accruedLocal[drop] = 0;
 }
 
 /**
@@ -602,7 +639,7 @@ export function clearDirtyBooks(v2: V2World): void { mutableHoldings(v2).dirty.c
 export function pruneEmptyRows(v2: V2World, entityId: string): void {
   const H = mutableHoldings(v2); const kept: number[] = [];
   for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) {
-    if (H.qtyLocal[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0) || H.lienUnits[r] > 0) kept.push(r);
+    if (H.qtyLocal[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0) || H.lienUnits[r] > 0 || H.accruedLocal[r] !== 0) kept.push(r);
   }
   relinkBook(v2, entityId, kept);
 }

@@ -29,7 +29,7 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
-import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, materializeBook, setRowShares, foldRowInto, moveLotsTo, adjustLots, rowUnits } from '../../../engine2/holdings';
+import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, materializeBook, setRowShares, foldRowInto, moveLotsTo, adjustLots, rowUnits, accruedRowOf, addAccrued, pruneEmptyRows } from '../../../engine2/holdings';
 import { activeWireJournal, hasActiveWireJournal } from '../../ledger/wire';
 import { clearedPriceOf } from '../../../engine2/prices';
 import { V2World } from '../../../engine2/world';
@@ -314,10 +314,26 @@ export class HoldingsStore {
         const k = keyOf(slot.rows[i]);
         const list = claimedByKey.get(k); if (list) list.push(slot.rowIds[i]); else claimedByKey.set(k, [slot.rowIds[i]]);
       }
+      // §3.13-BOOK f4a — AND SO DOES WHAT THE POSITION IS OWED. A claimed row's accrued moves
+      // onto its successor with its lots; a position the book sold out with a coupon still owed
+      // keeps its row, emptied, until the coupon date pays it (the pending fill move lands on it).
+      const H = v2.holdings;
+      const appendedKeys = new Set(slot.appended.map(keyOf));
+      const retained = new Set<number>();
       const ids: number[] = [];
       for (let i = 0; i < slot.rows.length; i++) {
-        if (slot.claimed[i]) continue;
-        ids.push(slot.rowIds[i] >= 0 ? slot.rowIds[i] : newBookRow(v2, slot.rows[i], week));
+        if (!slot.claimed[i]) { ids.push(slot.rowIds[i] >= 0 ? slot.rowIds[i] : newBookRow(v2, slot.rows[i], week)); continue; }
+        const rid = slot.rowIds[i];
+        if (rid < 0) continue;
+        const k = keyOf(slot.rows[i]);
+        if (appendedKeys.has(k) || H.accruedLocal[rid] === 0) continue;
+        const olds = claimedByKey.get(k)!;
+        if (olds[0] !== rid) { addAccrued(v2, olds[0], H.accruedLocal[rid]); addAccrued(v2, rid, -H.accruedLocal[rid]); continue; }
+        // The first old row of a sold-out position: emptied, kept, still owed.
+        adjustLots(v2, rid, -rowUnits(H, rid), 0, week);
+        setRowShares(v2, slot.entity.id, rid, Number.isNaN(H.shares[rid]) ? 0 : 0, 0, week);
+        retained.add(rid);
+        ids.push(rid);
       }
       const carried = new Set<string>();
       for (const h of slot.appended) {
@@ -327,13 +343,16 @@ export class HoldingsStore {
         carried.add(k);
         const r = newBookRow(v2, h, week, false);
         let before = 0;
-        for (const old of olds) { before += rowUnits(v2.holdings, old); moveLotsTo(v2, old, r); }
+        for (const old of olds) {
+          before += rowUnits(H, old); moveLotsTo(v2, old, r);
+          addAccrued(v2, r, H.accruedLocal[old]); addAccrued(v2, old, -H.accruedLocal[old]);
+        }
         const px = markById.get(k) ?? (h.quantityShares !== undefined && h.quantityShares > 0 ? (h.quantityOrNotionalLocal ?? 0) / h.quantityShares : (clearedPriceOf(v2, h.instrumentId) ?? 1));
-        adjustLots(v2, r, rowUnits(v2.holdings, r) - before, px, week);
+        adjustLots(v2, r, rowUnits(H, r) - before, px, week);
         ids.push(r);
       }
       for (let i = 0; i < slot.rows.length; i++) {
-        if (slot.claimed[i] && slot.rowIds[i] >= 0) freeBookRow(v2, slot.rowIds[i]);
+        if (slot.claimed[i] && slot.rowIds[i] >= 0 && !retained.has(slot.rowIds[i])) freeBookRow(v2, slot.rowIds[i]);
       }
       setBookChain(v2, slot.entity.id, ids);
     });
@@ -349,6 +368,20 @@ export function buildHoldingsStore(ctx: WeeklyStepContext): void {
 
 export function finalizeHoldingsStore(ctx: WeeklyStepContext): void {
   ctx.holdingsStore?.finalize();
+  // §3.13-BOOK f4a — THE FILLS' ACCRUED, ONTO THE ROWS THEY NOW HAVE. A book moves the interest
+  // that ran on what each participant bought or sold (`accruedOnFills`) while the buyers' rows
+  // do not exist yet; the moves wait here until the write-back has made them.
+  const v2 = ctx.v2;
+  const touched = new Set<string>();
+  for (const m of ctx.pendingAccruedMoves) {
+    const r = accruedRowOf(v2, m.bookId, m.instrumentType, m.instrumentId);
+    if (r < 0) return defect(`accrued of ${(m.usd / 1e6).toFixed(3)}M moved onto ${m.bookId}, which holds no row of ${m.instrumentType} ${m.instrumentId}`);
+    addAccrued(v2, r, m.usd);
+    touched.add(m.bookId);
+  }
+  ctx.pendingAccruedMoves.length = 0;
+  // A sold-out row whose balance the move just cleared leaves its book.
+  touched.forEach((bookId) => pruneEmptyRows(v2, bookId));
   bumpRegister(ctx);
   ctx.holdingsStore = undefined;
 }

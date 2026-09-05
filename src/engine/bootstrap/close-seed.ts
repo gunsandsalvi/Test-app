@@ -222,7 +222,6 @@ export function seedOpeningAccruals(
   institutionalEntities: InstitutionalEntity[],
   v2: V2World,
   currentWeek: number,
-  holderAccruedInterestLocal: Map<string, Map<string, number>>,
   sovereignAccruedInterestLocal: Map<string, number>,
 ): void {
   const TS = v2.tranches;
@@ -273,6 +272,5 @@ export function seedOpeningAccruals(
     pendingHolderAccrualLocal,
     // Nothing is DUE at the seed: this opens the balance, it does not pay it.
     pendingHolderAccrualPayout: new Set<string>(),
-    holderAccruedInterestLocal,
   } as Parameters<typeof applyHolderInterestAccruals>[0]);
 }

@@ -7,7 +7,6 @@ import { bankSecuritiesPartyOf } from '../../domain/party';
 import { initialMarginLocal } from '../../domain/derivatives/registry';
 import type { CurrencyCode } from '../../domain/geography';
 import { deskRowsOf } from '../desk-register';
-import { deskBankIdOf } from '../ledger/holdings-ledger';
 import { issuedSharesOf, marketCapAt } from '../../engine2/instruments';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
@@ -442,11 +441,8 @@ function o8(state: GameState, week: number): AuditFinding[] {
     if (!entityExists(sh.buyerId)) bump('consignment buyers');
     if (sh.carrierId !== undefined && !companyById.has(sh.carrierId)) bump('consignment carriers');
   });
-  // §3.13-BOOK d3f: the corporate accrual ledger's holder key is a register BOOK id — an
-  // institution's entity id, or a desk's securities book, which names its bank.
-  state.holderAccruedInterestLocal.forEach((byHolder) => byHolder.forEach((_v, holderId) => {
-    if (!entityExists(deskBankIdOf(holderId) ?? asEntityId(holderId))) bump('accrued-interest holders');
-  }));
+  // §3.13-BOOK f4a: corporate accrued interest is a column of the register row it accrues on —
+  // its holder is the row's book, which O3 and O14 hold to account; nothing to check here.
   // The sovereign accrual ledger's key ends in a `partyKey`.
   state.sovereignAccruedInterestLocal.forEach((_v, k) => {
     const ref = partyFromKey(k.slice(k.lastIndexOf('|') + 1));

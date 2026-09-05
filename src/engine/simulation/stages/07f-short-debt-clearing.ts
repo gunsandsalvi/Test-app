@@ -1218,8 +1218,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         (id) => accruedPerFaceById.get(id) ?? 0,
         // §3.13-BOOK d3f: the ledger's holder key is the participant's register BOOK — the same id
         // its rows sit under — read through the seat→party crossing above.
-        (instrumentId, participantId, usd) => moveCorporateAccrued(
-          ctx.holderAccruedInterestLocal, 'COMMERCIAL_PAPER', instrumentId, accrualBookOf(participantId, cpPartyOfParticipant), usd)
+        (instrumentId, participantId, usd) => moveCorporateAccrued(ctx, 'COMMERCIAL_PAPER', instrumentId, accrualBookOf(participantId, cpPartyOfParticipant), usd)
       );
       settleClearedBook(
         ctx, regionId, currencyOf(regionId), CP_BOOK,

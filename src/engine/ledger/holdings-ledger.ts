@@ -17,7 +17,7 @@
  */
 import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
 import { companyParty, bankPartyOf, bankSecuritiesPartyOf } from '../../domain/party';
-import { addRealised, adjustLots,
+import { addAccrued, addRealised, adjustLots,
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
 import { PartyRef, partyKey, partyFromKey } from './party';
@@ -202,12 +202,14 @@ const unitsOf = (spec: HoldingSpec): number => spec.shares ?? spec.units ?? spec
 /** §3.13-BOOK f1: the week a lot arrives — the journal's, or the seed's week 0. */
 const lotWeek = (): number => (hasActiveWireJournal() ? activeWireJournal().week : 0);
 
-/** Add to (or open) the holder's row of this instrument. */
-function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
+/** Add to (or open) the holder's row of this instrument. §3.13-BOOK f4a: `accruedIn` is the
+ *  interest that came with the paper — what the debit on the other side took off its row. */
+function creditRow(v2: V2World, holderId: string, spec: HoldingSpec, accruedIn = 0): void {
   const H = mutableHoldings(v2);
   const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
+    H.accruedLocal[r] += accruedIn;
     // §3.13-READ A6: what the row already holds is read BEFORE the row is touched, so the
     // fallback is the ordinary one and not a value the addition has to be unwound out of.
     const priorUnits = rowUnits(H, r);
@@ -219,11 +221,12 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
     markBookDirty(v2, holderId);
     return;
   }
-  pushBookRow(v2, holderId, {
+  const opened = pushBookRow(v2, holderId, {
     instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
     quantityOrNotionalLocal: spec.valueLocal, quantityShares: spec.shares,
     units: unitsOf(spec),
   }, lotWeek());
+  H.accruedLocal[opened] += accruedIn;
 }
 
 /**
@@ -234,34 +237,45 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
  * stays a debit (`debitRow`), which refuses to go below zero — that is C4 ("no short by
  * accident"), and this is the deliberate short the node allows for.
  */
-function adjustDeskRow(v2: V2World, holderId: string, spec: HoldingSpec, sign: 1 | -1): void {
+function adjustDeskRow(v2: V2World, holderId: string, spec: HoldingSpec, sign: 1 | -1, accruedIn = 0): number {
   const H = mutableHoldings(v2);
   const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
   const dValue = sign * spec.valueLocal;
   const dUnits = sign * unitsOf(spec);
+  let accruedOut = 0;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
     const priorUnits = rowUnits(H, r);
+    // §3.13-BOOK f4a: what the desk is owed moves with what it sells, pro rata; what it buys
+    // brings its own.
+    if (sign < 0 && priorUnits > 0 && H.accruedLocal[r] !== 0) {
+      accruedOut = H.accruedLocal[r] * Math.min(1, unitsOf(spec) / priorUnits);
+      H.accruedLocal[r] -= accruedOut;
+    }
+    H.accruedLocal[r] += accruedIn;
     H.qtyLocal[r] += dValue;
     if (spec.shares !== undefined) H.shares[r] = (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]) + sign * spec.shares;
     H.units[r] = priorUnits + dUnits;
     // §3.13-BOOK f1: signed lots — a short is a negative one, and a cover consumes it.
     adjustLots(v2, r, dUnits, priceOf(spec).priceLocal, lotWeek());
     markBookDirty(v2, holderId);
-    const flat = Math.abs(H.qtyLocal[r]) < 1e-6 && Math.abs(H.units[r]) < 1e-9 && (Number.isNaN(H.shares[r]) || Math.abs(H.shares[r]) < 1e-9);
+    const flat = Math.abs(H.qtyLocal[r]) < 1e-6 && Math.abs(H.units[r]) < 1e-9 && (Number.isNaN(H.shares[r]) || Math.abs(H.shares[r]) < 1e-9)
+      && H.accruedLocal[r] === 0; // f4a: a flat desk row still owed its coupon stays
     if (flat) {
       H.qtyLocal[r] = 0; H.units[r] = 0; if (!Number.isNaN(H.shares[r])) H.shares[r] = 0;
       const kept: number[] = [];
       for (let k = bookHeadOf(v2, holderId); k >= 0; k = H.next[k]) if (k !== r) kept.push(k);
       relinkBook(v2, holderId, kept);
     }
-    return;
+    return accruedOut;
   }
-  pushBookRow(v2, holderId, {
+  const opened = pushBookRow(v2, holderId, {
     instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
     quantityOrNotionalLocal: dValue, quantityShares: spec.shares === undefined ? undefined : sign * spec.shares,
     units: dUnits,
   }, lotWeek());
+  H.accruedLocal[opened] += accruedIn;
+  return accruedOut;
 }
 
 /**
@@ -276,7 +290,9 @@ function adjustDeskRow(v2: V2World, holderId: string, spec: HoldingSpec, sign: 1
  * answer to one question.
  */
 const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
-  H.qtyLocal[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0) || H.lienUnits[r] > 0; // d5a: a lien keeps an empty row
+  H.qtyLocal[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0)
+  || H.lienUnits[r] > 0 // d5a: a lien keeps an empty row
+  || H.accruedLocal[r] !== 0; // f4a: so does interest still owed on it
 
 /**
  * Take from the holder's row(s) of this instrument; a row emptied is unlinked. One walk of the
@@ -310,12 +326,17 @@ const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
  * paper minted on the receiving side that never left the payer's book. `retireTranche` defects on
  * exactly this case; so does this. One walk of the chain, one relink only if a row emptied.
  */
-function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien: boolean): void {
+/** §3.13-BOOK f4a: a TRANSFER carries the row's accrued out pro rata with the units (the buyer
+ *  pays the seller for it beside the paper, and the balance follows the paper); a RETIREMENT
+ *  leaves it on the row — the paper is gone, the coupon is still due, and the row stays until it
+ *  is paid. Returns what left. */
+function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien: boolean): number {
   const H = mutableHoldings(v2);
   const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
   const askedUnits = unitsOf(spec);
   let leftUnits = askedUnits;
   let hit = false; let drops = false;
+  let accruedOut = 0;
   // The residue of a row-by-row subtraction scales with the whole position the walk draws from,
   // not with the amount asked for.
   let walkedUnits = 0;
@@ -337,6 +358,10 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien:
       H.units[r] = nextUnits;
       // A share-counted row's units ARE its shares (`unitsOf` says so on the way in).
       if (!Number.isNaN(H.shares[r])) H.shares[r] = nextUnits;
+      if (enforceLien && unitsHere > 0 && H.accruedLocal[r] !== 0) {
+        const share = H.accruedLocal[r] * (takeUnits / unitsHere);
+        H.accruedLocal[r] -= share; accruedOut += share;
+      }
       // §3.13-BOOK f1: what leaves comes off the oldest lots first. f2b: what the wire fetched
       // for those units, less what the lots say they cost, is REALISED on this book, in the
       // instrument's money — a sale's gain, a redemption's pull to par, a write-off's loss.
@@ -362,6 +387,7 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien:
     H.synced.add(holderId);
     markBookDirty(v2, holderId);
   }
+  return accruedOut;
 }
 
 /**
@@ -386,8 +412,10 @@ export function transferHolding(v2: V2World, from: PartyRef, to: PartyRef, spec:
   if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const fromId = holderIdOf(v2, from, spec), toId = holderIdOf(v2, to, spec);
   const n = wireHolding(from, to, spec, reason);
-  if (fromId) { if (isDeskBook(fromId)) adjustDeskRow(v2, fromId, spec, -1); else debitRow(v2, fromId, spec, true); }
-  if (toId) { if (isDeskBook(toId)) adjustDeskRow(v2, toId, spec, 1); else creditRow(v2, toId, spec); }
+  // §3.13-BOOK f4a: the interest owed on the paper travels with it, from the one row to the other.
+  let accrued = 0;
+  if (fromId) accrued = isDeskBook(fromId) ? adjustDeskRow(v2, fromId, spec, -1) : debitRow(v2, fromId, spec, true);
+  if (toId) { if (isDeskBook(toId)) adjustDeskRow(v2, toId, spec, 1, accrued); else creditRow(v2, toId, spec, accrued); }
   return n;
 }
 
@@ -617,6 +645,12 @@ export function markHolding(v2: V2World, holderId: string, row: number, valueLoc
 
 /** The rows a written-down book has left holding nothing are closed — no wire: nothing moved. */
 export function closeEmptyPositions(v2: V2World, holderId: string): void { pruneEmptyRows(v2, holderId); }
+
+/** §3.13-BOOK f4a — the weekly accrual lands on a row: what the holder of record earned this
+ *  week on the paper it holds, in the paper's own money. The one door a stage writes it through. */
+export function accrueInterestOnRow(v2: V2World, r: number, usd: number): void { addAccrued(v2, r, usd); }
+/** And the coupon date takes it back off the row as it pays it. */
+export function settleAccruedOnRow(v2: V2World, r: number, usd: number): void { addAccrued(v2, r, -usd); }
 
 // `bookPositions` is deleted (§9.13-CREDIT row 5): it had no caller, and what it returned was
 // a book in MONEY at a moment when the only honest before/after of a credit book is in units.

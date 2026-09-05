@@ -67,16 +67,8 @@ export interface GameState {
    *  form let a state without the field compile, and the `?? []` default at context creation
    *  silently reset every open workout (§4.0 Tier 1 item 3's resetting-default trap). */
   estates: import('./estate').Estate[];
-  /**
-   * CAL — accrued-but-unpaid interest by (instrument, holder); see stages/shared-helpers.ts.
-   *
-   * SCALE: a **Map**, carried across the week boundary as itself. It was a plain object, so every
-   * week rebuilt it into a Map on the way in and back into an object on the way out — and this
-   * ledger holds ~105,000 keys. Those two lines were the #1 and #5 self-time lines in the whole
-   * program, 5.25% of all CPU, converting a container to another container and back. Nothing
-   * serialises or hashes GameState, so the object form was buying nothing at all.
-   */
-  holderAccruedInterestLocal: Map<string, Map<string, number>>;
+  // §3.13-BOOK f4a: accrued-but-unpaid interest on corporate paper is `holdings.ts:accruedLocal`,
+  // a column of the register row it accrues on; not a field.
   /** CAL — accrued-but-unpaid SOVEREIGN interest by (region, tenor bucket, party); see
    *  stages/sovereign-calendar.ts. Party-keyed rather than holder-keyed because a bank holds
    *  government paper on its own balance sheet and is not on the institutional register. */

@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
-import { bookRowsOf, rowLotsOf, rowLotUnits, rowUnits, rowBasisLocal, bookUnrealisedLocal, bookRealisedOf, rowHeldSinceWeek } from '../src/engine2/holdings';
+import { bookRowsOf, rowLotsOf, rowLotUnits, rowUnits, rowBasisLocal, bookUnrealisedLocal, bookRealisedOf, rowHeldSinceWeek, addAccrued, bookAccruedLocal } from '../src/engine2/holdings';
 import { setActiveWireWorld, setActiveWireJournal, newWireJournal } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { issueHolding, transferHolding, retireHolding, deskBookId } from '../src/engine/ledger/holdings-ledger';
@@ -96,6 +96,34 @@ test('§3.13-BOOK f2a: a debit takes the units the wire names, and the value tha
     // A redemption at face realises the pull to par on what is left.
     retireHolding(v2, fund, gov, spec(30, 1.0), 'redemption');
     assert.ok(Math.abs((bookRealisedOf(v2, fund.id).get('USD') ?? 0) - (1.6 + (30 - 30.6))) < 1e-9);
+  } finally {
+    setActiveWireJournal(undefined);
+    setActiveWireWorld(undefined);
+  }
+});
+
+test('§3.13-BOOK f4a: accrued interest is a column of the row — it travels pro rata with a transfer, and outlives a redemption until it is paid', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const a = { kind: 'INSTITUTION' as const, id: asEntityId('INST-A') };
+  const b = { kind: 'INSTITUTION' as const, id: asEntityId('INST-B') };
+  setActiveWireJournal(newWireJournal(1, 3));
+  setActiveWireWorld(wireWorldOf(v2, [], [{ id: a.id }, { id: b.id }]));
+  try {
+    seedLadder(v2, governmentIssuer('USA'), [{ id: bond, principalLocal: 1e6, rateType: 'FIXED', couponRate: 0.02, originationWeek: 0, maturityWeek: 260, seniority: 'SENIOR' }]);
+    issueHolding(v2, gov, a, spec(100, 1.0), 'seed');
+    const [ra] = bookRowsOf(v2, a.id);
+    addAccrued(v2, ra, 5);
+    transferHolding(v2, a, b, spec(40, 1.0), 'sale');
+    assert.ok(Math.abs(bookAccruedLocal(v2, a.id) - 3) < 1e-12, 'three fifths stays with three fifths of the paper');
+    assert.ok(Math.abs(bookAccruedLocal(v2, b.id) - 2) < 1e-12, 'and two fifths went with the paper sold');
+    // Redeemed to nothing, the row stays on the book while its coupon is owed.
+    retireHolding(v2, a, gov, spec(60, 1.0), 'redemption');
+    assert.equal(bookRowsOf(v2, a.id).length, 1);
+    assert.equal(rowUnits(v2.holdings, ra), 0);
+    assert.ok(Math.abs(bookAccruedLocal(v2, a.id) - 3) < 1e-12);
+    addAccrued(v2, ra, -3);
+    transferHolding(v2, b, a, spec(1, 1.0), 'a fresh position, which relinks the book');
+    assert.equal(bookRowsOf(v2, a.id).length, 1, 'the paid-out empty row was pruned when the book relinked');
   } finally {
     setActiveWireJournal(undefined);
     setActiveWireWorld(undefined);
