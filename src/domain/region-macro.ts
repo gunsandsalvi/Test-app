@@ -728,6 +728,16 @@ export interface Region {
    *  `MEASURE_WINDOW_WEEKS` prints: the history a CDS's initial margin is sized from. Written by
    *  the CDS book when it clears a name. */
   cdsSpreadHistoryByIssuer?: Record<string, number[]>;
+  /** §3.17d-i — the region's credit index SERIES, by id: the basket's names fixed at the roll and
+   *  its events settled once for the line. Rolled and written by `derivative-markets/cds-index.ts`;
+   *  a series stays while a contract names it. */
+  creditIndexSeries?: Record<string, import('./derivatives/classes/cds-index').CreditIndexSeries>;
+  /** The series currently on the run, and the number the next roll takes. */
+  creditIndexSeriesId?: string;
+  creditIndexNextSeriesNo?: number;
+  /** §3.17d-i — each series' cleared spread, the last `MEASURE_WINDOW_WEEKS` prints: what an index
+   *  contract marks at and sizes its margin from. Written by the index book when it clears. */
+  creditIndexSpreadHistoryBySeries?: Record<string, number[]>;
   /**
    * CAL/DER — the SECURED OVERNIGHT INDEX: the cleared GC repo rate compounded week by week, the
    * way a published overnight benchmark actually is. It is a level, not a rate: the ratio of two

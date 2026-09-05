@@ -14,7 +14,7 @@
  * columnar store for the six is slice d4c's.
  */
 import type { V2World } from '../../engine2/world';
-import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeCcpFundRow, writeCcpFundAmount, materializeCcpFund, ccpFundIdOf, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
+import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeUnits, writeDerivativeParties, writeRepoRow, writeCcpFundRow, writeCcpFundAmount, materializeCcpFund, ccpFundIdOf, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import { derivativePartyKey, type DerivativeClassId, type DerivativeContract, type DerivativeParty } from '../../domain/derivatives/contract';
@@ -235,6 +235,7 @@ export function keepDerivatives(ctx: WeeklyStepContext, kept: DerivativeContract
   const rows = kept.map((c) => {
     const r = rowOfContract(c);
     writeSettledMark(ctx.v2, r, c.settledMarkLocal);
+    if (c.units !== ctx.v2.obligations.units[r] && !(c.units === undefined && Number.isNaN(ctx.v2.obligations.units[r]))) writeDerivativeUnits(ctx.v2, r, c.units);
     return r;
   });
   relinkKind(ctx.v2, 'DERIVATIVE', rows);

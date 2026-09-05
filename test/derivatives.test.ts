@@ -19,6 +19,14 @@ import { asEntityId } from '../src/domain/ids';
 import { writerReservationVol, ATM_PRICE_PER_VOL_SQRT_T } from '../src/domain/derivatives/classes/option';
 import { lenderReservationBps } from '../src/domain/derivatives/classes/xcs';
 import { protectionNeedLocal, twoWayProtectionQuote, LARGE_EXPOSURE_LIMIT_OF_CAPITAL } from '../src/domain/derivatives/classes/cds';
+import { rollCreditIndex, creditIndexRollDue, survivingShareOf, pendingEventsOf, eventPayoutLocal, CDX_ROLL_WEEKS, type CreditIndexSeries } from '../src/domain/derivatives/classes/cds-index';
+
+/** §3.17d-i — a four-name basket, one name's event already settled for the series. */
+const SERIES: CreditIndexSeries = {
+  seriesId: 'USA-CDX-1', struckWeek: 0,
+  constituents: [asEntityId('N1'), asEntityId('N2'), asEntityId('N3'), asEntityId('N4')],
+  events: [{ issuerId: asEntityId('N1'), week: 8, recovery: 0.3 }],
+};
 import { cipForwardRate, forwardStrikeOf } from '../src/domain/derivatives/classes/fx-forward';
 import type { DerivativeLeg, DerivativeLegs } from '../src/domain/derivatives/profile';
 
@@ -50,12 +58,16 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
   indexLevel: () => 4000,
   indexAnnualVol: () => 0.2,
   indexWeeklyMove: () => 0.03,
+  creditIndexSeries: () => SERIES,
+  creditIndexSpreadBps: () => 120,
+  creditIndexWeeklyMoveBps: () => 10,
   ...over,
 });
 
 /** §3.13-BOOK dIIb: each class states its own reference; a generic fixture picks the class's. */
 const referenceFor = (classId: DerivativeContract['classId']): DerivativeReference =>
   classId === 'CDS' ? { kind: 'ISSUER', issuerId: asEntityId('X') }
+    : classId === 'CDS_INDEX' ? { kind: 'BASKET', regionId: 'USA', seriesId: SERIES.seriesId }
     : classId === 'OPTION' ? { kind: 'SHARES', issuerId: asEntityId('X') }
     : classId === 'COMMODITY_FUTURE' ? { kind: 'COMMODITY', commodityId: 'X' }
       : classId === 'FX_FORWARD' || classId === 'XCS' ? { kind: 'REGION', regionId: 'EUR' } : { kind: 'RATE' };
@@ -196,7 +208,7 @@ test('every registered class states both roles and admissible facts — the comp
   for (const p of Object.values(DERIVATIVE_CLASSES)) {
     assert.ok(p.roleA && p.roleB);
     assert.ok(p.pfeAddOnRate > 0 && p.pfeAddOnRate < 1);
-    const termKey = p.id === 'OPTION' ? 'CALL' : p.id === 'XCS' ? '' : 's5';
+    const termKey = p.id === 'OPTION' ? 'CALL' : p.id === 'XCS' || p.id === 'CDS_INDEX' ? '' : 's5';
     const move = p.closeOutMoveOf(base({ classId: p.id, reference: referenceFor(p.id), termKey }), view());
     assert.ok(move !== undefined && move > 0 && move < 1, `${p.id}: the reference's move sizes its margin`);
     const marks = p.markToMarketUSDToA(base({ classId: p.id, units: 1, reference: referenceFor(p.id), termKey, settledMarkLocal: 0 }), view()) !== null;
@@ -376,4 +388,53 @@ test('CDS: a two-way quote opens holding its short capacity and is flat at its r
   assert.equal(target(150) - q.currentHoldingLocal, -1000);
   assert.equal(target(175) - q.currentHoldingLocal, -500);
   assert.equal(twoWayProtectionQuote({ reservationBps: 200, rangeBps: 50, sizeLocal: -5 }).maxHoldingLocal, 0);
+});
+
+// §3.17d-i — the series is the thing: rolled on the convention's clock from the names the market
+// makes, and a name's event settled ONCE for every contract on the line.
+test('CDS index: a series rolls on its clock from at least two names, fixed until the next roll', () => {
+  assert.equal(rollCreditIndex('USA', 1, 10, [asEntityId('A')]), undefined, 'one name is not a basket');
+  const s = rollCreditIndex('USA', 2, 10, [asEntityId('A'), asEntityId('B')])!;
+  assert.equal(s.seriesId, 'USA-CDX-2');
+  assert.deepEqual(s.constituents, ['A', 'B']);
+  assert.equal(creditIndexRollDue(undefined, 10), true);
+  assert.equal(creditIndexRollDue(s, 10 + CDX_ROLL_WEEKS - 1), false);
+  assert.equal(creditIndexRollDue(s, 10 + CDX_ROLL_WEEKS), true);
+});
+
+test('CDS index: premium runs on the surviving share; a settled event pays the name\'s weight and the line stands', () => {
+  const c = base({ classId: 'CDS_INDEX', strike: 100, reference: referenceFor('CDS_INDEX'), termKey: '', notional: 4_000_000, units: 0 });
+  const defaulted = new Set(['N1']);
+  const m = view({ isIssuerDefaulted: (id) => defaulted.has(id) });
+  assert.equal(survivingShareOf(SERIES, (id) => defaulted.has(id)), 0.75);
+  const prem = leg(DERIVATIVE_CLASSES.CDS_INDEX.periodicLegUSDToB(c, m));
+  assert.ok(Math.abs(prem.usdToB - (4_000_000 * 0.75 * 0.01) / 52) < 1e-9);
+  // N1's event is on the series and this contract has settled none of them: it owes N1's weight.
+  assert.deepEqual(pendingEventsOf(c, SERIES).map((e) => e.issuerId), ['N1']);
+  const ev = DERIVATIVE_CLASSES.CDS_INDEX.eventSettlement!(c, m)!;
+  assert.equal(leg(ev.legs).usdToB, -eventPayoutLocal(4_000_000, 4, 0.3));
+  assert.equal(leg(ev.legs).usdToB, -(1_000_000 * 0.7));
+  assert.equal(ev.unitsAfter, 1);
+  assert.equal(ev.done, false);
+  // Settled: nothing pending, the line stands, and it does not hold past maturity for N1.
+  const settled = { ...c, units: 1 };
+  assert.equal(DERIVATIVE_CLASSES.CDS_INDEX.eventSettlement!(settled, m), null);
+  assert.equal(DERIVATIVE_CLASSES.CDS_INDEX.holdsPastMaturity!(settled, m), false);
+  // A second name fails with its workout open: the line holds past maturity until it settles.
+  defaulted.add('N2');
+  assert.equal(DERIVATIVE_CLASSES.CDS_INDEX.holdsPastMaturity!(settled, view({ isIssuerDefaulted: (id) => defaulted.has(id), issuerWorkout: () => ({ state: 'OPEN' }) })), true);
+  assert.equal(DERIVATIVE_CLASSES.CDS_INDEX.eventTermination(c, m), null);
+  assert.ok(leg(DERIVATIVE_CLASSES.CDS_INDEX.eventTermination(c, view({ creditIndexSeries: () => undefined }))!).reason.includes('gone'));
+});
+
+test('CDS index: the mark is the spread move on the surviving share plus a failed name\'s expected payoff', () => {
+  const c = base({ classId: 'CDS_INDEX', strike: 100, reference: referenceFor('CDS_INDEX'), termKey: '', notional: 4_000_000, units: 1, maturityWeek: 62 });
+  const flat = view({ creditIndexSpreadBps: () => 100 });
+  assert.equal(DERIVATIVE_CLASSES.CDS_INDEX.markToMarketUSDToA(c, flat), 0, 'at the strike, nothing to value');
+  assert.equal(DERIVATIVE_CLASSES.CDS_INDEX.markToMarketUSDToA(c, view({ creditIndexSpreadBps: () => Number.NaN })), null, 'no print, no mark');
+  const wider = DERIVATIVE_CLASSES.CDS_INDEX.markToMarketUSDToA(c, view({ creditIndexSpreadBps: () => 200 }))!;
+  assert.ok(wider > 0, 'a wider print is worth money to the buyer');
+  // N2 fails with a closed workout at 0.2: the mark carries its weight at par less that.
+  const failed = view({ creditIndexSpreadBps: () => 100, isIssuerDefaulted: (id) => id === 'N2', issuerWorkout: () => ({ state: 'CLOSED', recovery: 0.2 }) });
+  assert.ok(Math.abs(DERIVATIVE_CLASSES.CDS_INDEX.markToMarketUSDToA(c, failed)! - 1_000_000 * 0.8) < 1e-9);
 });

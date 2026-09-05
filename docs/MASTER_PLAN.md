@@ -547,12 +547,27 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17d. **The credit index** (user). `cds.ts:83` builds one instrument per reference entity: there is
-    no index product. A CDX is a fixed basket of names traded as one line, which is how broad
-    credit risk is actually bought and sold, and it is the natural instrument for an asset
-    manager that wants the asset class rather than the name. It also creates the index-versus-
-    single-name basis — a second measurable relationship, and one of 17f's comparables. Needs the
-    contract to carry a basket reference, and a credit event to settle the one name's weight.
+17d-ii. **The credit index CLEARS** (user; 17d-i built the series and the class — §9). The line
+    has no market: `derivative-markets/cds-index.ts` rolls the series and records its events and
+    strikes nothing. Who is on it: the asset class's REAL-MONEY holders — an asset manager, an
+    insurer, a pension fund whose corporate-credit target (`institution-profiles.ts` targets,
+    corpBondPct + loanPct of its assets) exceeds what its cash credit book holds WRITES index
+    protection for the gap (the asset class without funding it), one whose book exceeds its
+    target BUYS it for the excess; and 17c's two-way quoters (desks, credit funds) at the
+    basket's own reservation — the equal-weighted mean of the constituents' single-name
+    reservations. The print joins `creditIndexSpreadHistoryBySeries` (what the class marks at
+    and sizes margin from), and the **index-versus-single-name basis** — the print against the
+    constituents' average single-name print — is published on the region as a measured number,
+    one of 17f's comparables. Atlas: cds A5/A5.b.
+17d-iii. **The CDS curve** (atlas cds A1.d: *"a stated tenor, and a CURVE of them — 1y, 3y, 5y,
+    10y, which is a term structure of credit and not one number"*). `classes/cds.ts:
+    CDS_TENOR_WEEKS` is one tenor and every contract is struck with `termKey: ''`;
+    `cdsInstrumentId` carries no tenor. Small mechanically — the contract already carries
+    `termKey`, and the swap book proves the multi-tenor clearing shape (`irs.ts:SWAP_TENORS`) —
+    and it opens the term dimension of credit: a curve inversion before a default, and the tenor
+    half of C2's inversion (a term structure is what hazard rates bootstrap from). One instrument
+    per (name, tenor); the basis test P2 compares each tenor to the issuer's cash curve at the
+    same point (`issuerSpreadAtOnCurve` already takes a tenor).
 17e. **Futures on government bonds, and the basis trade** (user). `commodity-future.ts` is the
     only future in the tree. A deliverable govie future plus the cash-futures basis is the largest
     single source of real repo demand in a real market: the basis trader is long the cash bond,
@@ -1596,7 +1611,24 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17c — CREDIT PROTECTION HAS EVERY BUYER IT SHOULD, AND EVERY QUOTE IS TWO-WAY.** The CDS
+**17d-i — THE CREDIT INDEX: THE SERIES AND THE CLASS.** A CDX is a fixed basket traded as one
+  line, and the basket is a SERIES: `Region.creditIndexSeries` (names fixed at the roll, events
+  settled once for the line), rolled every `CDX_ROLL_WEEKS = 26` by `derivative-markets/
+  cds-index.ts` from the names the single-name book has printed (at least `CDX_MIN_NAMES`);
+  a constituent that fails settles its weight for the series when its workout closes, at what
+  it paid (the region's average when it left no estate). The contract's reference is the series
+  (`{ kind: 'BASKET', regionId, seriesId }`, `REF_KINDS` 'BASKET', the row's region its region)
+  and its `units` count the series' events it has settled — the lifecycle's new partial-event
+  hook (`profile.ts:eventSettlement`, applied before the maturity check; `done` ends the line;
+  `keepDerivatives` writes the count back through `writeDerivativeUnits`). `CDS_INDEX_PROFILE`:
+  premium on the surviving share, mark = spread move on it as a risky annuity at the series'
+  print + a failed name's expected payoff, held past maturity while a failed name's workout is
+  open, CEM add-on 0.05. The view gains `creditIndexSeries` / `creditIndexSpreadBps` /
+  `creditIndexWeeklyMoveBps` (off `creditIndexSpreadHistoryBySeries`, which 17d-ii writes). The
+  market module settles AFTER the market so an event recorded this week settles this week.
+  Split from 17d per rule 1.10: 17d-ii clears the line; 17d-iii (inserted) is the curve the atlas
+  had pointed at 17d. Atlas: cds A5 nodes added and mapped. Gates green; no run.
+- **17c — CREDIT PROTECTION HAS EVERY BUYER IT SHOULD, AND EVERY QUOTE IS TWO-WAY.** The CDS
   book's float was one regulatory quantity — a bank's loan-book excess over 25% of its equity —
   and nobody else could buy. (a) A bank's exposure to a name is now its facility rows AND its
   desk's paper on the name (`deskRowsOf` through `isTrancheId`/`issuerIdOf`) AND the protection

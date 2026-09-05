@@ -195,6 +195,14 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
     indexLevel: (r) => { const v = regionIndexOf(ctx.updatedCompositeIndices, r).value; return v > 0 ? v : Number.NaN; },
     indexAnnualVol: (r) => region(r)?.indexImpliedVol ?? realizedAnnualVol(regionIndexOf(ctx.updatedCompositeIndices, r).historical, VOL_WINDOW_WEEKS),
     indexWeeklyMove: (r) => measuredWeeklyMove(regionIndexOf(ctx.updatedCompositeIndices, r).historical),
+    // §3.17d-i — the basket a credit index is on, off the region that rolled it.
+    creditIndexSeries: (r, seriesId) => region(r)?.creditIndexSeries?.[seriesId],
+    creditIndexSpreadBps: (r, seriesId) => {
+      const hist = region(r)?.creditIndexSpreadHistoryBySeries?.[seriesId];
+      const v = hist?.[hist.length - 1];
+      return typeof v === 'number' && v > 0 ? v : Number.NaN;
+    },
+    creditIndexWeeklyMoveBps: (r, seriesId) => measuredWeeklyBpsMove(region(r)?.creditIndexSpreadHistoryBySeries?.[seriesId]),
   };
 }
 
@@ -417,6 +425,14 @@ export function settleDerivativeClass(
 
     const event = profile.eventTermination(c, view);
     if (event) { asLegs(event).forEach((l) => payThroughHouse(ctx, c, l.usdToB, l.reason, net, stands, l.currency)); releaseInitialMargin(ctx, c, view); continue; }
+
+    // §3.17d-i: a partial event — one name's weight of a basket — settles and the line stands.
+    const partial = profile.eventSettlement?.(c, view);
+    if (partial) {
+      asLegs(partial.legs).forEach((l) => payThroughHouse(ctx, c, l.usdToB, l.reason, net, stands, l.currency));
+      c.units = partial.unitsAfter;
+      if (partial.done) { settleMark(c, profile.markReasonFinal ?? 'derivative settled'); releaseInitialMargin(ctx, c, view); continue; }
+    }
 
     // §3.17-vi: a contract with an event pending outlives its maturity until the event settles.
     if (c.maturityWeek <= view.week && !profile.holdsPastMaturity?.(c, view)) {

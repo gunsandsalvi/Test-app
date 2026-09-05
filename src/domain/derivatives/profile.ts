@@ -19,6 +19,7 @@
 import { RegionId, CurrencyCode } from '../geography';
 import { DerivativeClassId, DerivativeContract } from './contract';
 import type { EntityId } from '../ids';
+import type { CreditIndexSeries } from './classes/cds-index';
 
 export type IssuerWorkout = { state: 'OPEN' } | { state: 'CLOSED'; recovery: number };
 
@@ -75,6 +76,12 @@ export interface DerivativeMarketView {
   indexLevel(regionId: RegionId): number;
   indexAnnualVol(regionId: RegionId): number | undefined;
   indexWeeklyMove(regionId: RegionId): number | undefined;
+  // §3.17d-i — THE BASKET a credit index is on: its series (names fixed at the roll, events
+  // settled once for the line), its last print, its weekly move for margin.
+  creditIndexSeries(regionId: RegionId, seriesId: string): CreditIndexSeries | undefined;
+  /** Last cleared spread of the series; NaN when none has printed. */
+  creditIndexSpreadBps(regionId: RegionId, seriesId: string): number;
+  creditIndexWeeklyMoveBps(regionId: RegionId, seriesId: string): number | undefined;
 }
 
 export interface DerivativeLeg {
@@ -126,6 +133,13 @@ export interface DerivativeClassProfile {
    * Non-null = final leg then gone; null = no event. Counterparty death is NOT detected here.
    */
   eventTermination(c: DerivativeContract, m: DerivativeMarketView): DerivativeLegs;
+  /**
+   * §3.17d-i — an event that settles PART of the contract and leaves the line standing (one
+   * name's weight of a credit index). The legs are paid, the contract's `units` become
+   * `unitsAfter` — the profile's own count of what it has settled — and `done` ends it.
+   * Absent: a class has no partial events.
+   */
+  eventSettlement?(c: DerivativeContract, m: DerivativeMarketView): { legs: DerivativeLegs; unitsAfter: number; done: boolean } | null;
   /**
    * Replacement value to B at current prints — what a dead counterparty's estate settles
    * (rate-leg classes; mark-leg classes close out at the mark, which the lifecycle owns).

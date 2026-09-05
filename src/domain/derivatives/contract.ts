@@ -55,7 +55,7 @@ export const companyPartyKey = (companyId: EntityId): string => derivativePartyK
 export const institutionPartyKey = (id: EntityId): string => derivativePartyKey({ kind: 'INSTITUTION', id });
 
 /** The classes the registry knows. A new derivative adds a member here and a profile module. */
-export type DerivativeClassId = 'IRS' | 'CDS' | 'COMMODITY_FUTURE' | 'FX_FORWARD' | 'OPTION' | 'XCS';
+export type DerivativeClassId = 'IRS' | 'CDS' | 'CDS_INDEX' | 'COMMODITY_FUTURE' | 'FX_FORWARD' | 'OPTION' | 'XCS';
 
 /**
  * §3.13-BOOK dIIb — WHAT A CONTRACT IS ON, typed by class. This was `referenceId: string`, four
@@ -79,12 +79,15 @@ export type DerivativeReference =
    *  the shares). */
   | { kind: 'SHARES'; issuerId: EntityId }
   /** §3.17b-iii — an index option: the region whose composite equity index it is on. */
-  | { kind: 'INDEX'; regionId: RegionId };
+  | { kind: 'INDEX'; regionId: RegionId }
+  /** §3.17d-i — a credit index: the SERIES of a region's basket (`Region.creditIndexSeries`),
+   *  whose fixed names and settled events every contract on the line reads. */
+  | { kind: 'BASKET'; regionId: RegionId; seriesId: string };
 
 /** The standing book keys cover by reference; this is that key — the string the field used to
  *  hold, so a cover lookup by `issuer.id`, `comm.id` or a region still finds its contracts. */
 export const referenceKeyOf = (r: DerivativeReference): string =>
-  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' || r.kind === 'INDEX' ? r.regionId : '';
+  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' || r.kind === 'INDEX' ? r.regionId : r.kind === 'BASKET' ? r.seriesId : '';
 
 export const issuerReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): EntityId =>
   c.reference.kind === 'ISSUER' ? c.reference.issuerId : defect(`${c.classId} contract read as if it named an issuer`);
@@ -96,6 +99,8 @@ export const sharesReferenceOf = (c: { classId: DerivativeClassId; reference: De
   c.reference.kind === 'SHARES' ? c.reference.issuerId : defect(`${c.classId} contract read as if it named an issuer's shares`);
 export const indexReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): RegionId =>
   c.reference.kind === 'INDEX' ? c.reference.regionId : defect(`${c.classId} contract read as if it named an index`);
+export const basketReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): { regionId: RegionId; seriesId: string } =>
+  c.reference.kind === 'BASKET' ? c.reference : defect(`${c.classId} contract read as if it named a basket`);
 /** §3.17b-i — the option's kind, as its `termKey` carries it. */
 export type OptionType = 'CALL' | 'PUT';
 export const optionTypeOf = (c: { classId: DerivativeClassId; termKey: string }): OptionType =>

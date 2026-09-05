@@ -208,17 +208,19 @@ function freeRow(S: ObligationStore, r: number): void {
   S.next[r] = S.freeHead; S.freeHead = r;
 }
 
-const REF_KINDS = ['RATE', 'ISSUER', 'COMMODITY', 'REGION', 'SHARES', 'INDEX'] as const;
+const REF_KINDS = ['RATE', 'ISSUER', 'COMMODITY', 'REGION', 'SHARES', 'INDEX', 'BASKET'] as const;
 const refKindIdOf = (r: DerivativeReference): number => REF_KINDS.indexOf(r.kind);
 const refTextOf = (r: DerivativeReference): string | undefined =>
-  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' || r.kind === 'INDEX' ? r.regionId : undefined;
-function referenceAt(S: ReadonlyObligationStore, r: number): DerivativeReference {
+  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' || r.kind === 'INDEX' ? r.regionId : r.kind === 'BASKET' ? r.seriesId : undefined;
+/** §3.17d-i: a basket's region is the contract's own (the row's region), so only the series is text. */
+function referenceAt(v2: V2World, S: ReadonlyObligationStore, r: number): DerivativeReference {
   const kind = REF_KINDS[S.refKind[r]];
   const text = S.refText[r] ?? '';
   return kind === 'ISSUER' || kind === 'SHARES' ? { kind, issuerId: asEntityId(text) }
     : kind === 'COMMODITY' ? { kind, commodityId: text }
       : kind === 'REGION' || kind === 'INDEX' ? { kind, regionId: text as RegionId }
-        : { kind: 'RATE' };
+        : kind === 'BASKET' ? { kind, regionId: regionOf(v2, S.regionRef[r]) as RegionId, seriesId: text }
+          : { kind: 'RATE' };
 }
 
 /** Write one derivative as a row of the store (ledger-internal). Returns the row. */
@@ -246,6 +248,13 @@ export function writeDerivativeRow(v2: V2World, c: DerivativeContract): number {
 export function writeSettledMark(v2: V2World, r: number, markLocal: number | undefined): void {
   const S = mutableObligations(v2);
   S.settledMark[r] = markLocal === undefined ? Number.NaN : markLocal;
+  bump(S, S.kindRef[r]);
+}
+
+/** §3.17d-i: a contract's settled count of its series' events moves as they settle (ledger-internal). */
+export function writeDerivativeUnits(v2: V2World, r: number, units: number | undefined): void {
+  const S = mutableObligations(v2);
+  S.units[r] = units === undefined ? Number.NaN : units;
   bump(S, S.kindRef[r]);
 }
 
@@ -567,7 +576,7 @@ export function materializeDerivative(v2: V2World, r: number): DerivativeContrac
   const c: DerivativeContract = {
     id: S.id[r], classId: typeOf(v2, S.classRef[r]) as DerivativeContract['classId'], regionId: regionOf(v2, S.regionRef[r]) as RegionId,
     currency: currencyOfId(S.currencyId[r]), a, b, notional: S.notional[r], strike: S.strike[r],
-    reference: referenceAt(S, r), termKey: S.termKey[r], struckWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
+    reference: referenceAt(v2, S, r), termKey: S.termKey[r], struckWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
     initialMarginLocal: Number.isNaN(S.initialMargin[r]) ? 0 : S.initialMargin[r],
   };
   if (!Number.isNaN(S.units[r])) c.units = S.units[r];
