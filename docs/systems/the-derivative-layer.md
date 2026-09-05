@@ -108,9 +108,9 @@ checked by `scripts/check-atlas.sh`.
 | **C2 cleared: a CCP becomes buyer to the seller and seller to the buyer** | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` · `src/engine/simulation/stages/derivative-lifecycle.ts:postInitialMargin` | ✅ |
 | C2.a it concentrates the risk in a named party | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` · `src/engine/audit/ownership.ts:o15` | ✅ |
 | C3 the CCP is a real entity with a balance sheet | `src/domain/clearing-house.ts:CcpSheet` · `src/engine/ledger/contract-ledger.ts:ccpFundOf` · `src/engine/simulation/stages/derivatives.ts:trueUpDefaultFunds` | ✅ |
-| **C4 a stated default waterfall, in order** | — | ❌ |
-| C4.a a member's loss can come from another member's default | — | ❌ |
-| **C5 FORBID the CCP is not a guarantor of last resort** | — | ❌ |
+| **C4 a stated default waterfall, in order** | `src/domain/clearing-house.ts:runWaterfall` · `src/engine/simulation/stages/derivative-lifecycle.ts:resolveMemberDefault` | ✅ |
+| C4.a a member's loss can come from another member's default | `src/domain/clearing-house.ts:writeDownSurvivors` | ✅ |
+| **C5 FORBID the CCP is not a guarantor of last resort** | `src/domain/clearing-house.ts:WaterfallRound` · `src/engine/audit/ownership.ts:o15` | ⚠️ |
 | D1 initial margin, sized from the risk of the position | `src/domain/derivatives/registry.ts:initialMarginAtStrike` | ✅ |
 | D2 variation margin: the change in the mark, in cash, every period | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ✅ |
 | D2.a real money leaving one account and arriving in another | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
@@ -120,9 +120,9 @@ checked by `scripts/check-atlas.sh`.
 | D4.a meeting it may force a sale | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageCloseSweep` | ⚠️ |
 | D5 margin rises when volatility rises — procyclical, measured | `src/domain/derivatives/profile.ts:closeOutMoveOf` | ⚠️ |
 | E1 a party can fail with open positions | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` | ✅ |
-| E2 closed out at a stated value; a claim on the estate | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ⚠️ |
-| E3 the loss is the mark less collateral, on named survivors | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` | ⚠️ |
-| E4 VERIFY the loss chain is traceable party by party | — | ❌ |
+| E2 closed out at a stated value; a claim on the estate | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` · `src/domain/estate.ts:ClaimHolder` | ✅ |
+| E3 the loss is the mark less collateral, on named survivors | `src/domain/clearing-house.ts:runWaterfall` | ✅ |
+| E4 VERIFY the loss chain is traceable party by party | `src/domain/clearing-house.ts:WaterfallRound` | ⚠️ |
 | F1 FORBID no position without a counterparty | `src/engine/audit/ownership.ts:o5` | ⚠️ |
 | F2 FORBID no exposure without margin or a stated reason | `src/domain/derivatives/profile.ts:closeOutMoveOf` | ⚠️ |
 | **F3 FORBID no netting across counterparties** | `src/domain/derivatives/registry.ts:standingPfeChargeLocal` | ✅ |
@@ -149,7 +149,22 @@ two stores to guess which space a string was in.
 `DerivativeParty` was a second party union re-declaring three of `PartyRef`'s arms; it is
 `CounterpartyRef`, an `Extract` view of the one union, since §9.13-BOOK c-then-3a.
 
-### ✅ C2, C3 / ❌ C4, C5 — EVERY MEMBER FACES THE HOUSE, AND FUNDS IT; NO WATERFALL YET
+### ✅ C2, C3, C4 / ⚠️ C5 — THE HOUSE HAS ITS STACK, AND RUNS IT IN ORDER
+
+*2026-09-05 (§9.17-iv-c-ii). A member's default is the house's waterfall
+(`derivative-lifecycle.ts:resolveMemberDefault`, from the estate's opening and from the settle's
+dead branch alike): the house pays every survivor in full at the mark, nets what the defaulter
+owed it across the defaulter's contracts at that house, and recovers in the stated order
+(`clearing-house.ts:runWaterfall`) — the defaulter's margin, which the house kept rather than
+returned; its fund contribution; the house's own capital; the survivors' contributions, written
+down pro rata (`writeDownSurvivors`; a bank survivor books it against equity, C4.a's channel
+made of a real loss on a real sheet). What the defaulter's own money did not cover is the house's
+UNSECURED claim on the estate (E2, below). Past the end the house is short of what it owes its
+members: `O15` reports it and the news tells it (`news-derivation.ts` 7e), and every round is a
+record on the region (`Region.lastWaterfall`). C5 is ⚠️ for one honest reason: a survivor is
+still paid in full past the end — the house's cash goes negative where a real one would haircut
+the survivors' gains — so the stack is finite and enumerable but running past it hurts the
+house's books rather than a member's.*
 
 *2026-09-05 (§9.17-iv-c-i). The sheet has its three lines. The DEFAULT FUND is rows of the
 contract store (`clearing-house.ts:CcpFundContribution`, kind `CCP_FUND`, one per member per
@@ -185,47 +200,28 @@ contract's initial margin is posted TO the house of the contract's money
 margin held, and `O15` holds the cash to the contracts. ⚠️ at the time because C3 names three
 lines and this was one of them; the default fund and the house's own capital came with 17-iv-c-i.*
 
-What is left is the waterfall: the resources exist and have no ORDER, and no clearing-member
-limit. A member's default closes out through the house at the mark, and a loss the house cannot
-recover sits on its cash with no rule for which line it consumes first. The only waterfall in `src`
-is the estate's (`estate-resolution.ts:374`, secured → unsecured → equity), which is an issuer's
-liquidation and not a clearing house's.
+What is left is the clearing-member LIMIT (17-v): the house takes every contract its markets
+strike, so a member's capacity is still its dealer's PFE budget and not a limit the house sets
+on the member.
 
-**Consequence.** C4.a's mutualisation channel — a member losing money because a *different*
-member failed — does not exist in this world, so the largest systemic transmission a derivative
-layer has is unrepresentable. And C5, the tree's hardest FORBID, is unanswerable rather than
-satisfied: there is no finite enumerable resource stack to run past, because there is no stack.
+### ✅ E2 / E3 / ⚠️ E4 — A DEAD MEMBER'S CLOSE-OUT IS THE HOUSE'S CLAIM, RANKED, AND ITS LOSS IS NAMED
 
-**§3 17-iv-c**, in the plan's words: *"a default is its waterfall (IM → default fund →
-mutualisation) rather than a bilateral close-out."* Recorded here as five nodes rather than one
-line, because C3 (the CCP's own balance sheet) and C5 (finite resources) are separable pieces of
-that step and are the ones a partial implementation drops — which is why C3 and C2 landed first,
-each on its own.
+*2026-09-05 (§9.17-iv-c-ii). Nothing is paid out of the estate's cash at the close-out any more.
+The house pays the survivors and takes the loss through its stack; what the defaulter's own
+margin and contribution did not cover becomes one claim on the estate — holder the house
+(`estate.ts:ClaimHolder` admits the `CCP` arm), type `DERIVATIVE_CLOSE_OUT`, UNSECURED, ranking
+with the bonds in `distribute` and written off with them. E2 is the node as written. E3: the
+loss is the mark net of the margin, and it lands by name — the house's capital, then each
+survivor's contribution pro rata, a bank's against its equity. E4 is ⚠️ because the round records
+the LINES (`WaterfallRound`: margin, fund, capital, survivors, unfunded, claim) and not each
+survivor's share; the fund rows carry that, but nothing keeps them from one week to the next.
+The super-seniority the paragraph below recorded is gone with the payoff.*
 
-### ⚠️ E2 / E3 — A DEAD PARTY'S DERIVATIVES ARE PAID IN FULL, AHEAD OF EVERY RANKED CLAIM
-
-*2026-09-05 (§9.17-iv-b). The survivor is the house now: the dead member's close-out is paid to
-the house through the estate's account, and the house pays the living member whether or not it
-recovers. E3's loss therefore lands on a named party — the house — and E2's claim is the house's
-on the estate; what is still missing is that claim's RANK, below.*
-
-The node says the in-the-money side has **a claim on an estate, not a payoff**. The code has the
-payoff. `estate-resolution.ts:152-153` calls `closeOutDerivativesOfParty` at the moment the estate
-is opened, and that function `pay()`s the replacement value straight out of the defaulted party's
-account. The estate's claim list is built afterwards (`:520 addClaim`) and carries exactly five
-instrument types — `LEVERAGED_LOAN`, `CORP_BOND`, `COMMERCIAL_PAPER`, `EQUITY`, `BANK_FACILITY`.
-**A derivative close-out is not one of them.**
-
-So a surviving counterparty is settled at 100 cents out of the estate's cash before the waterfall
-runs, while the secured lender behind it recovers whatever is left — an accidental super-seniority
-created by call order, not by any stated rule. On the other side, a close-out the estate *owes*
-drives the dead account further negative with no claim recorded against it, which is where E3's
-"the loss lands on named survivors" quietly stops being true.
-
-Adjacent to **§3 step 33** (seniority is decorative) but not the same defect: 33 is about ordering
-*within* the claim list, and this is a claimant that never reaches the list. **§3 step 37-ESTATE**
-— small (one `addClaim` at the right seniority instead of a `pay`), and it changes recovery for
-every defaulted issuer that had a swap or wrote protection.
+Before this, `estate-resolution.ts` called `closeOutDerivativesOfParty` at the moment the estate
+was opened and that function `pay()`ed the replacement value straight out of the defaulted
+party's account, ahead of a claim list that carried five instrument types and no derivative —
+an accidental super-seniority created by call order. **§3 step 37-ESTATE** named it; it closed
+with the waterfall rather than on its own.
 
 ### ✅ A4 / ⚠️ D2.b — EVERY CLASS MARKS, AND THE MARKS ARE SUMMED
 
@@ -357,7 +353,6 @@ does with that claim is `hedge-funds.md`'s B5 (gross, net and equity as three re
 
 ### Also marked, briefly
 
-- **C4 ❌** — the house has no waterfall yet — C above.
 - **D2 ✅** — variation margin flows for every class (§9.17-iii gave IRS and CDS their marks) — A4/D2.b.
 - **F1 ⚠️** — `O5` checks both parties are alive for the one book (§9.13-BOOK d4a: it read a firm party by a `ticker` it no longer carried, so every firm party counted dead — it reads the entity id now); the player's legacy positions have no `b` at all — `../instruments/derivative.md` D1.a.
 - **F4 ⚠️** — the commodity future cash-settles to `evolveCommodity`'s formula spot — 37-COMMODITY.

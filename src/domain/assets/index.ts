@@ -162,7 +162,9 @@ export type HoldingType = Extract<InstrumentKind,
 export type ItemizedHoldingType = Exclude<HoldingType, 'BANK_FACILITY'>;
 /** What an estate owes claims against: the corporate capital structure. A sovereign cannot file,
  *  and claims on vehicles resolve at the vehicle, not in a corporate workout. */
-export type EstateClaimType = Exclude<HoldingType, 'GOV_BOND' | 'PE_FUND_INTEREST' | 'ETF_SHARE' | 'MMF_SHARE'>;
+export type EstateClaimType = Exclude<HoldingType, 'GOV_BOND' | 'PE_FUND_INTEREST' | 'ETF_SHARE' | 'MMF_SHARE'>
+  /** §3.17-iv-c-ii — the clearing house's claim for a dead member's close-out, unsecured. */
+  | 'DERIVATIVE_CLOSE_OUT';
 /** What the primary market can bring to market (sovereign issuance has its own calendar). */
 export type PrimaryOfferingType = Extract<HoldingType, 'CORP_BOND' | 'LEVERAGED_LOAN' | 'EQUITY'>;
 

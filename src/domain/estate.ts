@@ -21,7 +21,7 @@
  */
 
 import { RegionId } from './geography';
-import type { CounterpartyRef } from './party';
+import type { CounterpartyRef, PartyOfKind } from './party';
 import { EstateClaimType } from './assets';
 import type { EntityId } from './ids';
 import type { Ticker } from './ids';
@@ -38,7 +38,9 @@ export const CLAIM_SENIORITY = {
  * under a second name. Both are `CounterpartyRef` now: who a claim is HELD BY and who a contract
  * is FACED BY are the same question, and the arms live once.
  */
-export type ClaimHolder = CounterpartyRef;
+export type ClaimHolder = CounterpartyRef
+  /** §3.17-iv-c-ii — the clearing house, claiming a dead member's close-out. */
+  | PartyOfKind<'CCP'>;
 
 export interface EstateClaim {
   holder: ClaimHolder;

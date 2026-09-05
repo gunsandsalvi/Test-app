@@ -10,7 +10,7 @@ import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { partyKey, partyFromKey } from '../src/engine/ledger/party';
 import { ccpParty, samePartyRef } from '../src/domain/party';
-import { ccpOfContract, ccpOfMoney, ccpSheetOf, ccpOwnCapitalLocal, coverOneFundLocal, fundContributionsOf, CCP_CLOSE_OUT_SESSIONS } from '../src/domain/clearing-house';
+import { ccpOfContract, ccpOfMoney, ccpSheetOf, ccpOwnCapitalLocal, coverOneFundLocal, fundContributionsOf, CCP_CLOSE_OUT_SESSIONS, runWaterfall, writeDownSurvivors } from '../src/domain/clearing-house';
 import { trueUpDefaultFunds } from '../src/engine/simulation/stages/derivatives';
 import { openSectorRow, ccpCashOf, ccpDepositsAt, depositLinesAt } from '../src/engine/ledger/accounts';
 import { keepDerivatives, strikeDerivatives, ccpSheetAt, memberMarginPostedLocal, bankMarginAtHouseLocal, bankAtHouseLocal, ccpFundOf, ccpFundLocal, publishCcpFund, membersOfHouse } from '../src/engine/ledger/contract-ledger';
@@ -183,4 +183,35 @@ test('§3.17-iv-c-i: the weekly true-up settles each member to its share, and re
     setActiveWireJournal(undefined);
     setActiveWireWorld(undefined);
   }
+});
+
+test('§3.17-iv-c-ii: the waterfall pays in its stated order, claims what the defaulter\'s own money did not cover, and runs past the end', () => {
+  const stack = { marginLocal: 30, fundLocal: 20, capitalLocal: 25, survivorsFundLocal: 40 };
+  const r1 = runWaterfall(100, stack);
+  assert.deepEqual(r1, { lossLocal: 100, fromMarginLocal: 30, fromFundLocal: 20, fromCapitalLocal: 25, fromSurvivorsLocal: 25, unfundedLocal: 0, claimLocal: 50 });
+  const r2 = runWaterfall(200, stack);
+  assert.deepEqual(r2, { lossLocal: 200, fromMarginLocal: 30, fromFundLocal: 20, fromCapitalLocal: 25, fromSurvivorsLocal: 40, unfundedLocal: 85, claimLocal: 150 });
+  const r3 = runWaterfall(-15, stack);
+  assert.deepEqual(r3, { lossLocal: 0, fromMarginLocal: 0, fromFundLocal: 0, fromCapitalLocal: 0, fromSurvivorsLocal: 0, unfundedLocal: 0, claimLocal: 0 }, 'a defaulter owed money net costs the stack nothing');
+  const r4 = runWaterfall(10, { ...stack, capitalLocal: -5 });
+  assert.equal(r4.fromCapitalLocal, 0, 'a house already short has no capital to give');
+  assert.equal(r4.fromMarginLocal, 10);
+});
+
+test('§3.17-iv-c-ii: the survivors\' contributions are written down pro rata, and the defaulter\'s row leaves the fund', () => {
+  const a = { kind: 'INSTITUTION' as const, id: asEntityId('INST-A') };
+  const b = { kind: 'BANK' as const, id: asEntityId('USA_BANK1') };
+  const d = { kind: 'COMPANY' as const, id: asEntityId('USA_DEAD') };
+  const fund = [
+    { regionId: 'USA' as const, member: a, amountLocal: 100 },
+    { regionId: 'USA' as const, member: b, amountLocal: 300 },
+    { regionId: 'USA' as const, member: d, amountLocal: 50 },
+  ];
+  const { kept, writtenDownByMember } = writeDownSurvivors(fund, (m) => m.id === d.id, 40);
+  assert.deepEqual(kept.map((c) => [c.member.id, c.amountLocal]), [[a.id, 90], [b.id, 270]]);
+  assert.equal(writtenDownByMember.get(a), 10);
+  assert.equal(writtenDownByMember.get(b), 30);
+  const whole = writeDownSurvivors(fund, (m) => m.id === d.id, 1e9);
+  assert.deepEqual(whole.kept.map((c) => c.amountLocal), [0, 0], 'never more than what is in');
+  assert.equal(writeDownSurvivors(fund, (m) => m.id === d.id, 0).writtenDownByMember.size, 0);
 });

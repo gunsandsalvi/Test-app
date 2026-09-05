@@ -16,7 +16,7 @@
 
 import { tradeInvoicesOf } from '../../ledger/contract-ledger';
 import { assertNever } from '../../../domain/defect';
-import { bankParty, bankSecuritiesParty, companyParty, companyPartyOf } from '../../../domain/party';
+import { bankParty, bankSecuritiesParty, ccpParty, companyParty, companyPartyOf } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
@@ -59,7 +59,9 @@ const holderRef = (c: EstateClaim): PartyRef =>
     // loan write-off was going to the dead channel; with that write revived, the equity leg
     // broke the per-bank identity by exactly the recovery.
     : c.holder.kind === 'BANK' ? bankSecuritiesParty(c.holder)
-      : companyParty(c.holder);
+      // §3.17-iv-c-ii: the clearing house is paid as itself — a recovery on its claim is its cash.
+      : c.holder.kind === 'CCP' ? c.holder
+        : companyParty(c.holder);
 
 /**
  * The indices this stage's inner loops used to rebuild from scratch.
@@ -151,11 +153,13 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
       scrapConsignmentsOf(state, comp.ticker, comp.id);
       return;
     }
-    // The death closes out every derivative the firm stands on, this
-    // week, through the estate's account — the survivor's replacement value is a claim on it
-    // or a payment into it, like any other.
-    closeOutDerivativesOfParty(ctx, state, companyParty(comp));
-    if (comp.isBankEntity) closeOutDerivativesOfParty(ctx, state, bankParty(comp));
+    // The death closes out every derivative the firm stands on, this week, through the
+    // clearing house's waterfall (§3.17-iv-c-ii): the house pays the survivors, keeps the dead
+    // member's margin and contribution, and what its own resources and the survivors funded
+    // beyond that is its UNSECURED claim on this estate — ranked with the bonds (E2).
+    [...closeOutDerivativesOfParty(ctx, state, companyParty(comp)), ...(comp.isBankEntity ? closeOutDerivativesOfParty(ctx, state, bankParty(comp)) : [])].forEach((round) => {
+      if (round.claimLocal > 1) estate.claims.push({ holder: ccpParty(round.regionId), instrumentType: 'DERIVATIVE_CLOSE_OUT', seniority: CLAIM_SENIORITY.UNSECURED, principalLocal: round.claimLocal, recoveredLocal: 0 });
+    });
     // THE FILING SEIZES NOTHING ANY MORE. It used to pay the debtor's cash into the
     // UNMODELED boundary at filing and drew the distributions back out of it — two legs of one
     // workout meeting at a party that is nobody. The debtor's account IS the estate's account:
@@ -507,7 +511,11 @@ function reduceHolding(
     e.equityCapitalLocal = Math.max(0, (e.equityCapitalLocal ?? 0) - (isLoss ? amountLocal : 0));
     return;
   }
+  // §3.17-iv-c-ii: the clearing house holds no paper of the dead firm — its claim is the close-out
+  // itself, and a recovery is cash arriving on its account with nothing to take off a book.
+  if (claim.holder.kind === 'CCP') return;
   if (claim.holder.kind === 'BANK') {
+    const bankId = claim.holder.id;
     const company = companyOfParty(index, claim.holder);
     // A bank claim is written down against a SHEET. Dead or alive is not the test — an estate
     // exists to resolve the dead — but having a book to write down is, and the narrowing here is
@@ -522,7 +530,7 @@ function reduceHolding(
     // (there is no loan row to write down); what the ladder still carries for this lender bounds
     // what this write can extinguish.
     const onLadderLocal = facilitiesOfBorrower(index.v2, companyId)
-      .filter((f) => f.bankId === claim.holder.id).reduce((a, f) => a + f.principalLocal, 0);
+      .filter((f) => f.bankId === bankId).reduce((a, f) => a + f.principalLocal, 0);
     const leftLocal = Math.max(0, amountLocal - onLadderLocal);
     // Equity moves by what the BOOK moved: a LOSS writes equity down by what was actually
     // extinguished — no more; a RECOVERY is an asset swap for the matched slice (cash in, facility

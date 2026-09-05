@@ -376,6 +376,37 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
     });
   });
 
+  // ---- 7e. §3.17-iv-c-ii: a clearing house ran its waterfall — a member defaulted owing it
+  // money, and the stack paid in its stated order. Past the end is the story of the week. ----
+  REGION_IDS.forEach((rid) => {
+    const w = ctx.updatedRegions[rid]?.lastWaterfall;
+    if (!w || w.week !== week) return;
+    const c = w.member.kind === 'INSTITUTION' ? undefined : companyById.get(w.member.id);
+    const fund = w.member.kind === 'INSTITUTION' ? ctx.updatedInstitutionalEntities.find((e) => e.id === w.member.id) : undefined;
+    const who = c?.name ?? fund?.name ?? partyLabel(w.member);
+    const refs: Ref[] = [region(rid)];
+    const pr = partyRef(w.member, companyById);
+    if (pr) refs.push(pr);
+    const past = w.unfundedLocal > 1e5;
+    const mutualised = w.fromSurvivorsLocal > 1e5;
+    push({
+      id: `ccp-waterfall-${rid}-${w.member.id}-${week}`,
+      kind: past ? 'clearing house exhausted' : mutualised ? 'clearing house mutualises' : 'clearing house waterfall',
+      category: 'CREDIT',
+      title: past ? `The ${rid} clearing house runs past the end of its resources on ${who}`
+        : mutualised ? `The ${rid} clearing house draws on its members for ${who}: ${M(w.fromSurvivorsLocal)}`
+          : `The ${rid} clearing house closes out ${who}: ${M(w.lossLocal)}`,
+      description: `${who} defaulted owing the house ${M(w.lossLocal)} net at close-out. Recovered from its margin ${M(w.fromMarginLocal)}, its default-fund contribution ${M(w.fromFundLocal)}, the house's own capital ${M(w.fromCapitalLocal)}, the surviving members' contributions ${M(w.fromSurvivorsLocal)}`
+        + (past ? `; ${M(w.unfundedLocal)} is unfunded — the house now holds less than it owes its members.` : '.')
+        + (w.claimLocal > 1e5 ? ` The house claims ${M(w.claimLocal)} on the estate, unsecured.` : ''),
+      cause: `A member defaulted with its contracts out of the money; the house pays the survivors in full and recovers in order.`,
+      refs,
+      materialityLocal: w.lossLocal,
+      impactRegion: rid, affectedTicker: c?.ticker ?? fund?.ticker,
+      urgent: past || mutualised,
+    });
+  });
+
   // ---- 8. Each region's labour market, when it moved, citing the firms that moved it. ----
   REGION_IDS.forEach((rid) => {
     const before = state.regions[rid];

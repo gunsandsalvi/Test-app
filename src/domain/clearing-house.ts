@@ -100,3 +100,62 @@ export const memberMarginAccount = (p: CounterpartyRef): PartyRef => (p.kind ===
 /** Every contract has two members, and each posts the margin the contract carries (§3.17-ii sizes
  *  it from the reference's move, which cuts both ways). */
 export const MEMBERS_PER_CONTRACT = 2;
+
+/**
+ * §3.17-iv-c-ii — THE WATERFALL. A member's default is the house's to absorb, in a STATED ORDER
+ * (C4): the defaulter's own margin, then the defaulter's fund contribution, then the house's own
+ * capital, then the surviving members' contributions — which is C4.a's mutualisation channel, a
+ * member losing money because a DIFFERENT member failed. What the stack cannot fund is past the
+ * end (C5): the house then holds less than it owes its members, which is a real state the audit
+ * (`O15`) and the news both report. The house's claim on the estate is for everything its own
+ * resources and the survivors' funded — the defaulter's margin and contribution were the
+ * defaulter's money and are simply kept.
+ */
+export interface WaterfallRound {
+  week: number;
+  regionId: RegionId;
+  member: CounterpartyRef;
+  /** What the defaulter owed the house, net across its contracts at close-out (never negative). */
+  lossLocal: number;
+  fromMarginLocal: number;
+  fromFundLocal: number;
+  fromCapitalLocal: number;
+  fromSurvivorsLocal: number;
+  /** Past the end of the stack. */
+  unfundedLocal: number;
+  /** The house's unsecured claim on the defaulter's estate. */
+  claimLocal: number;
+}
+export interface WaterfallResources {
+  /** The defaulter's initial margin the house holds. */
+  marginLocal: number;
+  /** The defaulter's default-fund contribution. */
+  fundLocal: number;
+  /** The house's own capital (`ccpOwnCapitalLocal`), what it holds beyond its members' money. */
+  capitalLocal: number;
+  /** The surviving members' contributions together. */
+  survivorsFundLocal: number;
+}
+export function runWaterfall(lossLocal: number, r: WaterfallResources): Omit<WaterfallRound, 'week' | 'regionId' | 'member'> {
+  let left = Math.max(0, lossLocal);
+  const take = (available: number): number => { const t = Math.min(left, Math.max(0, available)); left -= t; return t; };
+  const fromMarginLocal = take(r.marginLocal);
+  const fromFundLocal = take(r.fundLocal);
+  const fromCapitalLocal = take(r.capitalLocal);
+  const fromSurvivorsLocal = take(r.survivorsFundLocal);
+  return { lossLocal: Math.max(0, lossLocal), fromMarginLocal, fromFundLocal, fromCapitalLocal, fromSurvivorsLocal, unfundedLocal: left, claimLocal: Math.max(0, lossLocal) - fromMarginLocal - fromFundLocal };
+}
+
+/** The survivors' write-down, pro rata to what each has in: the fund after the round. */
+export function writeDownSurvivors(contributions: readonly CcpFundContribution[], defaulterKey: (m: CounterpartyRef) => boolean, amountLocal: number): { kept: CcpFundContribution[]; writtenDownByMember: Map<CounterpartyRef, number> } {
+  const survivors = contributions.filter((c) => !defaulterKey(c.member));
+  const total = survivors.reduce((a, c) => a + c.amountLocal, 0);
+  const share = total > 0 ? Math.min(1, Math.max(0, amountLocal) / total) : 0;
+  const writtenDownByMember = new Map<CounterpartyRef, number>();
+  const kept = survivors.map((c) => {
+    const down = c.amountLocal * share;
+    if (down > 0) writtenDownByMember.set(c.member, down);
+    return { ...c, amountLocal: c.amountLocal - down };
+  });
+  return { kept, writtenDownByMember };
+}

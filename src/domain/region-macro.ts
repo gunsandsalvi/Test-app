@@ -907,6 +907,9 @@ export interface Region {
   /** §3.16b-ii — cover nobody could write this week: what there was to insure beyond every
    *  insurer's capacity at its own price. Written by `insurance-and-pensions.ts`. */
   insuranceUnplacedCoverLocal?: number;
+  /** §3.17-iv-c-ii — the clearing house's latest waterfall round: who defaulted, what it owed,
+   *  what each line of the stack paid. Written by `derivative-lifecycle.ts:resolveMemberDefault`. */
+  lastWaterfall?: import('./clearing-house').WaterfallRound;
   /** PUB: matured paper that no named book ever bought — the front-of-ladder undersubscription
    *  the treasury auction leaves behind. It is not a payment; nobody was owed it. */
   lastUnsoldMaturedLocal?: number;

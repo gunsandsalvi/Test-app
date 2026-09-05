@@ -551,18 +551,6 @@ written from here):
     one commit each; 17-i (the margin a contract carries is the amount posted), 17-ii (initial
     margin is the reference's own move) and 17-iii (variation margin is the mark, for every
     class) are in §9. What is left, in order:
-17-iv. **THE CCP** — split 2026-09-05, one commit each; 17-iv-a (the clearing house is a party
-    with a balance sheet, and holds the margin), 17-iv-b (novation: every member faces the
-    house) and 17-iv-c-i (the default fund, cover-one, trued up weekly) are in §9. What is left:
-17-iv-c-ii. **THE WATERFALL.** A member's default is the house's waterfall rather than a
-    payment out of its estate: the house pays the survivor and recovers in order — the
-    defaulter's margin (kept: `releaseInitialMargin` returns nothing to a DEFAULTED or GONE
-    member), then the defaulter's fund contribution (written down), then the house's own
-    capital, then the survivors' contributions (written down pro rata); what is left is the
-    house's UNSECURED claim on the estate (`ClaimHolder` widens to the house, E2's rank). The
-    round is a record on the region (`lastWaterfall`: who, the loss, what each line paid), the
-    news tells it, and running past the end — the house's cash below what it owes its members —
-    is a real event the news tells too. C4, C4.a, C5 — the CCP's resources are finite.
 17-v. **CAPACITY IS A CLEARING-MEMBER LIMIT (rule 5), and the market view:** open interest,
     margin held and net position per member, by class — the "stats on the derivative markets
     overall" the user asked for.
@@ -1199,13 +1187,12 @@ step that owns its node; where it does not yet, the step below is the owner.
     Sequenced after 37-CDS-DIRECTION, which is what lets a view disagree with the accounting
     model. Medium.
 
-37-ESTATE. **A DEAD PARTY'S DERIVATIVES ARE PAID IN FULL, AHEAD OF EVERY RANKED CLAIM.**
-    (the-derivative-layer E2/E3; trade-credit D2; firm-birth-and-death D6.a, D1, D4/D4.a.)
-    `estate-resolution.ts:152` closes out derivatives at filing and `pay()`s replacement value out
-    of the estate's account, while the claim list built at `:520` carries five instrument types and
-    **no derivative** — accidental super-seniority over every secured lender. In the same estate,
-    **trade creditors rank nowhere while the estate COLLECTS the dead firm's receivables as an
-    asset**, so recoveries — and the model's calibrated recovery rate — are biased high by exactly
+37-ESTATE. **TRADE CREDITORS RANK NOWHERE, AND THREE SMALLER ABSENCES OF A DEATH.**
+    (trade-credit D2; firm-birth-and-death D6.a, D1, D4/D4.a. The derivative half — a dead
+    party's derivatives paid in full ahead of every ranked claim, the-derivative-layer E2/E3 —
+    closed with 17-iv-c-ii: the close-out is the clearing house's unsecured claim on the estate.)
+    In the estate, **trade creditors rank nowhere while the estate COLLECTS the dead firm's
+    receivables as an asset**, so recoveries — and the model's calibrated recovery rate — are biased high by exactly
     that asymmetry. Also here: a dead firm with no claims opens no estate and keeps its cash for
     ever (rule 2), estate assets are sold to peers at a formula discount off book rather than
     cleared, and a firm's death drops its headcount with no separation event. Medium; it is
@@ -1635,6 +1622,30 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17-iv-c-ii — THE WATERFALL.** Step 17-iv is closed: a member's default is the house's to
+absorb, in a stated order. `derivative-lifecycle.ts:resolveMemberDefault` — reached from the
+estate's opening (`closeOutDerivativesOfParty`, which now returns the rounds) and from the
+settle's dead branch (a dead member's contracts gathered per member after the walk) — closes the
+member's contracts out at the mark: the survivors are paid in full by the house and get their
+margin back, the defaulter's leg is not written, and what it owed the house NET across its
+contracts at each house is the loss `clearing-house.ts:runWaterfall` absorbs in order — its
+margin (kept), its fund contribution, the house's own capital (`ccpOwnCapitalLocal` plus the
+week's pending legs), the survivors' contributions written down pro rata
+(`writeDownSurvivors`; a bank survivor books the write-down against equity — C4.a, a real loss on
+a real sheet) — and past the end nothing: `O15` reports the house short and the news tells it.
+A defaulter owed money net is paid it, and margin or contribution the round did not consume goes
+back to it. What its own money did not cover is the house's UNSECURED claim on the estate:
+`ClaimHolder` admits the `CCP` arm, `EstateClaimType` gains `DERIVATIVE_CLOSE_OUT`, the estate
+stage files it at opening and pays it as itself (`holderRef`; nothing to take off a book) — the
+super-seniority atlas E2 recorded (the close-out paid out of the estate's cash ahead of every
+ranked claim; 37-ESTATE) is gone with it. Every round is `Region.lastWaterfall`
+(`WaterfallRound`: who, the loss, what each line paid, the unfunded rest, the claim), told by
+news 7e — "closes out", "draws on its members", "runs past the end of its resources". Atlas C4,
+C4.a, E2, E3 ✅; C5, E4 ⚠️ (a survivor is still paid in full past the end, and the round records
+lines, not each survivor's share). `test/ccp.test.ts`: the order, the claim, past the end, a
+house already short gives nothing; the pro-rata write-down and the defaulter's row leaving the
+fund. Gates green; no run.
 
 **17-iv-c-i — THE DEFAULT FUND.** The house's sheet has C3's three lines. The fund is rows of
 the contract store — `obligations.ts` kind `CCP_FUND`, one row per member per house, the house as

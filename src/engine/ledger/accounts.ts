@@ -765,6 +765,8 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
     // banks; there is no house bank).
     {
       const ccp = ccpParty(region);
+      // The house keeps its books in its region's money (a pending-net read converts into it).
+      setHomeCurrency(ctx.v2, ccp, money);
       const p = partyId(ccp);
       const split: number[] = [];
       regionBanks.forEach((b) => {

@@ -20,7 +20,11 @@
 
 import { GameState, RegionId } from '../../../types';
 import { derivativesBookOf, strikeDerivatives, keepDerivatives } from '../../ledger/contract-ledger';
-import { ccpOfContract, memberMarginAccount } from '../../../domain/clearing-house';
+import { ccpOfContract, memberMarginAccount, runWaterfall, writeDownSurvivors, ccpOwnCapitalLocal, type WaterfallRound } from '../../../domain/clearing-house';
+import { ccpFundOf, publishCcpFund, ccpSheetAt } from '../../ledger/contract-ledger';
+import { pendingSettlementLocal } from './settlement';
+import { bookPnL } from '../../ledger/bank-book';
+import { ccpParty } from '../../../domain/party';
 
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../domain/derivatives/contract';
@@ -32,6 +36,7 @@ import { StandingBook } from '../../../domain/derivatives/standing-book';
 import { WeeklyStepContext } from './context';
 import { buildEntityIndex, companyOfParty } from '../../ledger/entity-index';
 import { pay } from './settlement';
+import { currencyOf } from '../../../domain/geography';
 import { creditRecoveryRate } from './shared-helpers';
 import type { EntityId } from '../../../domain/ids';
 
@@ -201,27 +206,95 @@ export function payThroughHouse(ctx: WeeklyStepContext, c: DerivativeContract, u
  * had already run that week carried the dead party's contracts to its next settle, and the
  * audit saw a contract with a dead party at every such week's end (O5).
  */
-export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameState, party: DerivativeParty): number {
+export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameState, party: DerivativeParty): WaterfallRound[] {
   const book = derivativesBookOf(ctx);
   const key = derivativePartyKey(party);
   const view = buildDerivativeMarketView(ctx);
-  const stands: Stands = (p) => view.partyState(p) !== 'GONE';
   const net = new Map<string, number>();
   const kept: DerivativeContract[] = [];
-  let closed = 0;
+  const closing: DerivativeContract[] = [];
   for (const c of book) {
-    const onA = derivativePartyKey(c.a) === key;
-    if (!onA && derivativePartyKey(c.b) !== key) { kept.push(c); continue; }
-    closed++;
-    // §3.17-iv-b: the house pays the survivor whether or not the other member still exists.
-    const profile = derivativeProfile(c.classId);
-    const markLocal = profile.markToMarketUSDToA(c, view);
-    if (markLocal !== null) payThroughHouse(ctx, c, -(markLocal - (c.settledMarkLocal ?? 0)), 'derivative close-out', net, stands);
-    else payThroughHouse(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net, stands);
-    releaseInitialMargin(ctx, c, view);
+    if (derivativePartyKey(c.a) === key || derivativePartyKey(c.b) === key) closing.push(c); else kept.push(c);
   }
-  if (closed > 0) keepDerivatives(ctx, kept);
-  return closed;
+  if (closing.length === 0) return [];
+  const rounds = resolveMemberDefault(ctx, view, party, closing, net);
+  keepDerivatives(ctx, kept);
+  return rounds;
+}
+
+/**
+ * §3.17-iv-c-ii — A MEMBER'S DEFAULT IS THE HOUSE'S WATERFALL. Its contracts close out at the
+ * mark: the house pays every survivor in full and writes nothing for the defaulter, and what the
+ * defaulter owed the house NET across its contracts at each house is the loss the stack absorbs
+ * in order (`clearing-house.ts:runWaterfall`): the defaulter's margin, which the house kept
+ * rather than returned; its fund contribution; the house's own capital; the survivors'
+ * contributions, written down pro rata (a bank survivor books the write-down against equity —
+ * its asset at the house shrank with no cash moving); and past the end, nothing — the house is
+ * short, which `O15` reports and the news tells. What the defaulter's own money did not cover is
+ * the house's UNSECURED claim on its estate, returned here for the estate to rank. A defaulter
+ * that was owed money net is paid it, and any margin or contribution the round did not consume
+ * goes back to it: the house takes what it is owed and no more. One round per house the member
+ * cleared at, recorded on the region (`Region.lastWaterfall`).
+ */
+export function resolveMemberDefault(ctx: WeeklyStepContext, view: DerivativeLifecycleView, member: DerivativeParty, contracts: readonly DerivativeContract[], net: Map<string, number>): WaterfallRound[] {
+  const memberKey = derivativePartyKey(member);
+  const isMember = (p: DerivativeParty) => derivativePartyKey(p) === memberKey;
+  const memberStands = view.partyState(member) !== 'GONE';
+  const stands: Stands = (p) => !isMember(p) && view.partyState(p) !== 'GONE';
+  const byHouse = new Map<RegionId, DerivativeContract[]>();
+  contracts.forEach((c) => { const r = ccpOfContract(c).region; byHouse.set(r, [...(byHouse.get(r) ?? []), c]); });
+  const rounds: WaterfallRound[] = [];
+  byHouse.forEach((list, region) => {
+    const house = ccpParty(region);
+    const money = currencyOf(region);
+    // The house's own capital BEFORE the round, the week's pending legs included.
+    const sheet = ccpSheetAt(ctx.v2, region);
+    const capitalLocal = ccpOwnCapitalLocal(sheet) + pendingSettlementLocal(ctx, house);
+    let owedLocal = 0, marginLocal = 0;
+    list.forEach((c) => {
+      const profile = derivativeProfile(c.classId);
+      const markLocal = profile.markToMarketUSDToA(c, view);
+      const usdToB = markLocal !== null ? -(markLocal - (c.settledMarkLocal ?? 0)) : profile.closeOutUSDToB(c, view);
+      // The survivor's leg is written; the defaulter's is the house's claim, netted below.
+      payThroughHouse(ctx, c, usdToB, 'derivative close-out', net, stands);
+      const memberIsB = isMember(c.b);
+      owedLocal += memberIsB ? -usdToB : usdToB;
+      marginLocal += initialMarginLocal(c);
+      // The survivor's margin goes back; the defaulter's is the first line of the stack.
+      [c.a, c.b].forEach((p) => {
+        if (isMember(p) || view.partyState(p) === 'GONE' || !(initialMarginLocal(c) > MIN_LEG_LOCAL)) return;
+        pay(ctx, { payer: house, payee: memberMarginAccount(p), amount: initialMarginLocal(c), currency: c.currency, reason: 'initial margin returned' });
+      });
+    });
+    const fund = ccpFundOf(ctx.v2, region);
+    const fundLocal = fund.filter((f) => isMember(f.member)).reduce((a, f) => a + f.amountLocal, 0);
+    const survivorsFundLocal = fund.reduce((a, f) => a + f.amountLocal, 0) - fundLocal;
+    const round = runWaterfall(owedLocal, { marginLocal, fundLocal, capitalLocal, survivorsFundLocal });
+    if (memberStands) {
+      // Owed money net: paid. Margin and contribution the round did not consume: returned.
+      if (-owedLocal > MIN_LEG_LOCAL) pay(ctx, { payer: house, payee: member, amount: -owedLocal, currency: money, reason: 'derivative close-out' });
+      const marginBack = marginLocal - round.fromMarginLocal;
+      if (marginBack > MIN_LEG_LOCAL) pay(ctx, { payer: house, payee: memberMarginAccount(member), amount: marginBack, currency: money, reason: 'initial margin returned' });
+      const fundBack = fundLocal - round.fromFundLocal;
+      if (fundBack > MIN_LEG_LOCAL) pay(ctx, { payer: house, payee: memberMarginAccount(member), amount: fundBack, currency: money, reason: 'default fund refunded' });
+    }
+    // The survivors' contributions, written down pro rata; a bank's equity says so.
+    const { kept, writtenDownByMember } = writeDownSurvivors(fund, isMember, round.fromSurvivorsLocal);
+    publishCcpFund(ctx.v2, region, kept);
+    if (writtenDownByMember.size > 0) {
+      const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
+      writtenDownByMember.forEach((down, p) => {
+        if (p.kind !== 'BANK') return;
+        const bank = companyById.get(p.id);
+        if (bank?.bankBalanceSheet) bank.bankBalanceSheet = bookPnL(bank.bankBalanceSheet, -down, 'default fund written down', bank.ticker);
+      });
+    }
+    const record: WaterfallRound = { week: view.week, regionId: region, member, ...round };
+    const reg = ctx.updatedRegions[region];
+    if (reg) reg.lastWaterfall = record;
+    rounds.push(record);
+  });
+  return rounds;
 }
 
 /**
@@ -281,6 +354,8 @@ export function settleDerivativeClass(
   const net = new Map<string, number>();
   const kept: DerivativeContract[] = [];
   const stands: Stands = (p) => view.partyState(p) !== 'GONE';
+  /** §3.17-iv-c-ii: a dead member's contracts, gathered for its waterfall after the walk. */
+  const deadByMember = new Map<string, { member: DerivativeParty; contracts: DerivativeContract[] }>();
 
   /** The mark leg: value to A now, less what was already settled, signed to B. */
   const settleMark = (c: DerivativeContract, reason: string): void => {
@@ -308,14 +383,13 @@ export function settleDerivativeClass(
     const aState = view.partyState(c.a);
     const bState = view.partyState(c.b);
     if (aState !== 'ALIVE' || bState !== 'ALIVE') {
-      // §3.17-iv-b: the house closes the contract out and pays the survivor. A DEFAULTED member
-      // still has an account (its estate's) and pays the house through it like any other claim
-      // on the estate; a member that has ceased to exist pays nothing, and the house's leg to
-      // the other side stands.
-      const markLocal = profile.markToMarketUSDToA(c, view);
-      if (markLocal !== null) payThroughHouse(ctx, c, -(markLocal - (c.settledMarkLocal ?? 0)), 'derivative close-out', net, stands);
-      else payThroughHouse(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net, stands);
-      releaseInitialMargin(ctx, c, view);
+      // §3.17-iv-c-ii: the house closes a dead member's contracts out through its waterfall —
+      // every contract of the member at once, after the walk (`resolveMemberDefault`).
+      const dead = aState !== 'ALIVE' ? c.a : c.b;
+      const key = derivativePartyKey(dead);
+      const entry = deadByMember.get(key) ?? { member: dead, contracts: [] };
+      entry.contracts.push(c);
+      deadByMember.set(key, entry);
       continue;
     }
 
@@ -325,6 +399,7 @@ export function settleDerivativeClass(
     kept.push(c);
   }
 
+  deadByMember.forEach(({ member, contracts }) => resolveMemberDefault(ctx, view, member, contracts, net));
   keepDerivatives(ctx, kept);
   return net;
 }
