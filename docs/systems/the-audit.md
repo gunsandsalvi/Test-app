@@ -89,7 +89,7 @@ checked by `scripts/check-atlas.sh`.
 | B1 money is conserved | `src/engine/audit/money.ts:auditMoney` | ✅ |
 | B2 ownership is conserved | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | B3 prices exist and are cleared | `src/engine/audit/prices.ts:auditPrices` | ✅ |
-| B4 cross-market consistency | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
+| B4 cross-market consistency | `src/engine/audit/prices.ts:auditPrices` | ✅ |
 | B5 accounts balance | `src/engine/audit/accounts.ts:auditAccounts` | ✅ |
 | B6 names resolve | `src/engine/audit/names.ts:auditNames` | ✅ |
 | **B7 wires are complete** | `src/engine/audit/wires.ts:auditWires` | ✅ |
@@ -138,7 +138,7 @@ findings reached the violation count and never the one output anyone reads. The 
 the keys of `FAMILY_WORDS`, typed over `AuditFinding['family']`: a family with no word is a compile
 error, and `--- W · wires ---` prints W1 (money-wires = gross) through W7 (dwellings) like the rest.
 
-### ✅ A1.a / B3 / ⚠️ B4 — CHECKS THAT CANNOT FIRE
+### ✅ A1.a / B3 / B4 — CHECKS THAT CANNOT FIRE
 
 A1.a's witness is gone: `ownership.ts` O2 compared `stockPrice × issued` against `marketCapAt`,
 defined as exactly that — **a read of one thing against itself, which always passes** — and
@@ -150,9 +150,9 @@ is a finding. §9.27-iii-b: X1 holds repo to the corridor the facilities post
 (`repoCorridorBps`) and solvency to `BANK_MIN_CAPITAL_RATIO`, and the deposit line — a regularity
 the mechanism does not promise — left for §6. §9.27-iii-c-i: X2 holds every commodity print to the
 desks' own ceiling (`costOfCarryPrice`) and the bond future's basis to the relative-value book's
-cheapest carry (`Region.bondBasisCarryBps`). B4 stays `⚠️` for §3.27-iii-c-ii: X2's 2.5× wedge
-across regions is a stated width where the landed alternative the sourcing intent saw is the
-honest bound.
+cheapest carry (`Region.bondBasisCarryBps`); §9.27-iii-c-ii: the 2.5× wedge across regions is the
+landed alternative the sourcing intent saw with stock (`cheapestAlternativeLandedLocal`), and a
+buyer that paid above it is a finding. B4 closed with it.
 
 ### ⚠️ A3 — THE SIZE IS A NUMBER WITHOUT ITS CURRENCY
 

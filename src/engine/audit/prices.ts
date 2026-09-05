@@ -213,19 +213,26 @@ function x1(state: GameState, week: number): AuditFinding[] {
 /** X2 — one good, one price with a wedge: the same good across regions within freight and conversion; the futures curve within carry. */
 function x2(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  const fx = (r: string) => { const p = state.fxPairs.find((x) => x.pair === `${state.regions[r as 'USA']?.currency}/USD`); return p ? p.rate : r === 'USA' ? 1 : undefined; };
-  const subUnits = new Set<string>();
-  REGION_IDS.forEach((r) => Object.keys(state.regions[r]?.categoryDemand ?? {}).forEach((s) => subUnits.add(s)));
-  let wide = 0, n = 0; const examples: string[] = [];
-  subUnits.forEach((su) => {
-    const prices: [string, number][] = [];
-    REGION_IDS.forEach((r) => { const d = state.regions[r]?.categoryDemand[su as 'apparel_retail']; const f = fx(r); if (d?.unitPriceLocal && f) prices.push([r, d.unitPriceLocal * f]); });
-    if (prices.length < 2) return;
-    n++;
-    const lo = Math.min(...prices.map((p) => p[1])), hi = Math.max(...prices.map((p) => p[1]));
-    if (hi > lo * 2.5) { wide++; if (examples.length < 3) examples.push(`${su} ${prices.map(([r, p]) => `${r} ${p.toFixed(0)}`).join('/')}`); }
+  // §3.27-iii-c-ii: the wedge is what the sourcing intent saw. For every buyer and good it prices
+  // each origin's landed cost — ex-works in the buyer's money, the lane's cleared freight per
+  // unit, the pipeline's carry over the transit — takes the cheapest first, and records the
+  // cheapest ALTERNATIVE that still had stock once its need was met
+  // (`CategoryDemandState.cheapestAlternativeLandedLocal`). A buyer whose landed price paid
+  // exceeds that route paid more than a route with stock: a finding, one per buyer and good, dust
+  // the only band. In-place goods have no route and no record; the 2.5× across regions and the
+  // 25% quota that stood here were stated widths, and they compared four landed prices with no
+  // lane between them.
+  let overpaid = 0, routed = 0; const routeExamples: string[] = [];
+  REGION_IDS.forEach((r) => {
+    const reg = state.regions[r]; if (!reg) return;
+    Object.entries(reg.categoryDemand).forEach(([su, d]) => {
+      const alt = d.cheapestAlternativeLandedLocal;
+      if (!alt || alt.week !== state.currentWeek || !(d.unitPriceLocal !== undefined && d.unitPriceLocal > 0)) return;
+      routed++;
+      if (d.unitPriceLocal - alt.landedLocal > floatDustLocal(d.unitPriceLocal + alt.landedLocal, 4)) { overpaid++; if (routeExamples.length < 3) routeExamples.push(`${r} ${su} paid ${d.unitPriceLocal.toFixed(2)} landed, ${alt.origin} would have landed at ${alt.landedLocal.toFixed(2)}`); }
+    });
   });
-  if (wide > n * 0.25) out.push({ family: 'X', check: 'X2 one good, one price with a wedge', week, usd: wide, message: `${wide} of ${n} goods differ more than 2.5× across regions in one currency (${examples.join(' | ')})` });
+  if (overpaid) out.push({ family: 'X', check: 'X2 one good, one price with a wedge', week, usd: overpaid, message: `${overpaid} of ${routed} buyer-goods paid a landed price above a route that still had stock (${routeExamples.join(' | ')})` });
   // §3.27-iii-c-i: the desks' own ceiling — spot financed at the USA short rate to the tenor plus
   // the category's storage (`costOfCarryPrice`, the bound `commodity-future.ts` brings supply
   // against) — holds every tenor's print from above. Nothing holds it from below: nobody shorts

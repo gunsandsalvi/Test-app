@@ -89,7 +89,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 VERIFY freight demand equals the volume actually moving | `src/engine/simulation/stages/freight-clearing.ts:shippedShareByLaneSubUnit` | ⚠️ |
 | D1 it clears, per route | `src/engine/simulation/stages/freight-clearing.ts:runFreightClearing` | ✅ |
 | D2 the freight cost is part of the delivered price | `src/engine/simulation/stages/sourcing-intent.ts:freightPerUnitLocal` | ✅ |
-| **D3 it is the mechanism behind the location basis** | `src/engine/simulation/stages/sourcing-intent.ts:exWorksInBuyerMoney` | ✅ |
+| **D3 it is the mechanism behind the location basis** | `src/engine/simulation/stages/sourcing-intent.ts:exWorksInBuyerMoney` · `src/domain/market-microstructure.ts:cheapestAlternativeLandedLocal` | ✅ |
 | D3.a the arbitrage is somebody actually shipping, with capacity and money | `src/engine/simulation/stages/freight-clearing.ts:laneFillRatio` | ⚠️ |
 | D4 the transit time is a real lag between purchase and delivery | `src/engine/simulation/stages/goods-arrival.ts:runGoodsArrivalStage` | ✅ |
 | D5 VERIFY the price gap tracks the freight price on the route | — | ❌ |

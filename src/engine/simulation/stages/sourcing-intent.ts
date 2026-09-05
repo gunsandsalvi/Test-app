@@ -115,8 +115,10 @@ export function computeSourcingIntent(args: {
    *  domestic one. Without it the lowest-price-level region undercuts every other on every good
    *  and supplies the whole world, which is a missing conversion rather than competitiveness. */
   fxToUsd: FxToUsd;
+  /** The week the intent is formed for — stamped on the record each buyer's marginal route leaves. */
+  week: number;
 }): SourcingIntent {
-  const { regions, subUnitIds, unitMassTonnes, freightRatePerTonneLaneMoneyByLane, marginalRatePerTonneLaneMoneyByLane, fxToUsd, carryCostRatePerWeekByRegion } = args;
+  const { regions, subUnitIds, unitMassTonnes, freightRatePerTonneLaneMoneyByLane, marginalRatePerTonneLaneMoneyByLane, fxToUsd, carryCostRatePerWeekByRegion, week } = args;
   const bookings: LaneBooking[] = [];
   const splitByRegionSubUnit = new Map<string, SourcingSplit>();
 
@@ -180,7 +182,7 @@ export function computeSourcingIntent(args: {
     // Cheapest delivered goes first, which is both the fair allocation and the market's own.
     pairs.sort((a, b) => a.landed - b.landed);
 
-    const allocated: { pair: Pair; units: number; alternativeLanded: number }[] = [];
+    const allocated: { pair: Pair; units: number; alternativeLanded: number; alternativeOrigin?: RegionId }[] = [];
     pairs.forEach((pair, i) => {
       const need = needRemaining[pair.buyer] ?? 0;
       const supply = supplyRemaining[pair.origin] ?? 0;
@@ -193,11 +195,13 @@ export function computeSourcingIntent(args: {
       // surplus, so no freight was ever booked for them and three of the four regions exported
       // nothing at all.
       let alternativeLanded = Infinity;
+      let alternativeOrigin: RegionId | undefined;
       for (let j = i + 1; j < pairs.length; j++) {
         const next = pairs[j];
         if (next.buyer !== pair.buyer) continue;
         if ((supplyRemaining[next.origin] ?? 0) - (next.origin === pair.origin ? take : 0) <= 0) continue;
         alternativeLanded = next.landed;
+        alternativeOrigin = next.origin;
         break;
       }
       if (!isFinite(alternativeLanded)) {
@@ -207,16 +211,23 @@ export function computeSourcingIntent(args: {
 
       needRemaining[pair.buyer] = need - take;
       supplyRemaining[pair.origin] = supply - take;
-      allocated.push({ pair, units: take, alternativeLanded });
+      allocated.push({ pair, units: take, alternativeLanded, alternativeOrigin });
     });
 
-    allocated.forEach(({ pair, units, alternativeLanded }) => {
+    allocated.forEach(({ pair, units, alternativeLanded, alternativeOrigin }) => {
       const key = `${pair.buyer}|${subUnitId}`;
       const split = splitByRegionSubUnit.get(key)
         ?? { unitsByOrigin: {}, expectedLandedCostByOrigin: {} };
       split.unitsByOrigin[pair.origin] = (split.unitsByOrigin[pair.origin] ?? 0) + units;
       split.expectedLandedCostByOrigin[pair.origin] = pair.landed;
       splitByRegionSubUnit.set(key, split);
+      // §3.27-iii-c-ii: the marginal route this buyer left with stock. Merit order runs cheapest
+      // first, so the buyer's LAST allocation leaves the record; a buyer with no such route this
+      // week leaves none, and the audit (X2) holds the landed price paid to what is left.
+      const buyerState = regions[pair.buyer].categoryDemand[subUnitId];
+      if (buyerState) {
+        regions[pair.buyer].categoryDemand[subUnitId] = { ...buyerState, cheapestAlternativeLandedLocal: alternativeOrigin !== undefined ? { week, origin: alternativeOrigin, landedLocal: alternativeLanded } : undefined };
+      }
 
       if (!(massTonnes > 0)) return; // digital and in-place goods book no freight
       // The surplus is computed in the buyer's money, then quoted back into the lane's own
@@ -263,6 +274,7 @@ export function runSourcingIntentStage(state: GameState, ctx: WeeklyStepContext)
     marginalRatePerTonneLaneMoneyByLane: marginal,
     fxToUsd,
     carryCostRatePerWeekByRegion: carryRatesByRegion(ctx.updatedRegions),
+    week: ctx.nextWeek,
   });
   ctx.sourcingSplitByRegionSubUnit = intent.splitByRegionSubUnit;
   ctx.laneBookings = intent.bookings;

@@ -80,6 +80,12 @@ export interface CategoryDemandState {
    *  §3.22: read by `domain/commodity-spot.ts` — a commodity's spot is this price, weighted by the
    *  units each origin supplied, in the numéraire. */
   exWorksUnitPriceLocal?: number;
+  /** §3.27-iii-c-ii — the cheapest landed ALTERNATIVE the sourcing intent saw for this buyer once
+   *  its need was met: the next origin still holding stock, at its ex-works in the buyer's money
+   *  plus the lane's freight per unit plus the pipeline's carry over the transit
+   *  (`sourcing-intent.ts:computeSourcingIntent`). A landed price paid above it bought dearer than
+   *  a route with stock — X2's bound. Absent when no other origin had stock left. */
+  cheapestAlternativeLandedLocal?: { week: number; origin: RegionId; landedLocal: number };
   totalUnitsSuppliedThisWeek?: number;
   totalUnitsDemandedThisWeek?: number;
 }

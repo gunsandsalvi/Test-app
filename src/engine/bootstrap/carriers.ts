@@ -110,6 +110,7 @@ export function seedFreightDemand(
     marginalRatePerTonneLaneMoneyByLane: marginal,
     fxToUsd,
     carryCostRatePerWeekByRegion: carryRatesByRegion(regions),
+    week: 0, // the seed's own week: the record its marginal routes leave is the opening world's
   });
   const tonnesByLane: Record<string, number> = {};
   bookings.forEach(b => {
