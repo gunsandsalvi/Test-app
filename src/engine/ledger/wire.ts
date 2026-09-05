@@ -18,11 +18,13 @@ import type { PlantFlow } from '../../domain/plant';
 
 /** §3.13-BOOK (e): what a wire moves — every kind the register or a ladder holds (a view of the
  *  one kind list), money, a good, a house, or a bilateral contract. */
-export type AssetKind = HoldingType | 'MONEY' | 'GOOD' | 'HOUSE' | 'CONTRACT' | 'PLANT';
+export type AssetKind = HoldingType | 'MONEY' | 'GOOD' | 'CONTRACT' | 'PLANT';
 
 export const ASSET_KINDS: readonly AssetKind[] = [
   'MONEY', 'EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER',
-  'ETF_SHARE', 'MMF_SHARE', 'BANK_FACILITY', 'GOOD', 'HOUSE', 'CONTRACT', 'PE_FUND_INTEREST',
+  // §3.13-BOOK g-i: `DWELLING` was `HOUSE` — the kind the register holds now, same id, so every
+  // earlier journal's kind ids stand.
+  'ETF_SHARE', 'MMF_SHARE', 'BANK_FACILITY', 'GOOD', 'DWELLING', 'CONTRACT', 'PE_FUND_INTEREST',
   // §3.26-f-iii: plant — vintages in service (`PLANT`) or capital not yet plant (`PLANT_QUEUE`),
   // in units of COST. Appended last so the kind ids of every earlier journal are unchanged.
   'PLANT',
@@ -319,7 +321,7 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
     valueUSDByKind[k] = (valueUSDByKind[k] ?? 0) + valueLocal;
     if (k === 'MONEY') continue;
     const from = partyOf(j.fromId[i]), to = partyOf(j.toId[i]);
-    if (k === 'HOUSE') {
+    if (k === 'DWELLING') {
       // The register is the household sector's, per region; a builder or a pool is a source.
       if (to.kind === 'HOUSEHOLD') dwellingNetUnitsByRegion[to.region] = (dwellingNetUnitsByRegion[to.region] ?? 0) + j.quantity[i];
       if (from.kind === 'HOUSEHOLD') dwellingNetUnitsByRegion[from.region] = (dwellingNetUnitsByRegion[from.region] ?? 0) - j.quantity[i];

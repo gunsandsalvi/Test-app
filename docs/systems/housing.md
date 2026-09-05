@@ -86,8 +86,8 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| **A1 a durable, immovable asset owned by a named party** | `src/domain/region-macro.ts:HousingMarket` · `src/domain/housing.ts:ownershipRateOf` | ⚠️ |
-| A1.a location is part of the identity | `src/domain/region-macro.ts:HousingMarket` | ⚠️ |
+| **A1 a durable, immovable asset owned by a named party** | `src/engine/ledger/dwelling-ledger.ts:dwellingUnitsOf` · `src/domain/housing.ts:ownershipRateOf` | ⚠️ |
+| A1.a location is part of the identity | `src/domain/housing.ts:dwellingInstrumentId` | ⚠️ |
 | A2 it yields a service, consumed by whoever lives in it | `src/domain/industry-registry.ts:housing_rental_services` | ⚠️ |
 | A3 owner and occupier can differ, and then there is rent | `src/domain/housing.ts:ownershipRateOf` · `src/domain/industry-registry.ts:housing_rental_services` | ⚠️ |
 | A4 the stock is finite and changes slowly | `src/engine/ledger/dwelling-ledger.ts:moveDwellings` · `src/engine/macro/evolution.ts:owningHouseholdsCount` | ✅ |
@@ -132,15 +132,20 @@ residential construction's real cleared output entered the price walk's supply a
 to the stock (the houses built this week did not exist next week), and the wire ledger's declared
 `'HOUSE'` kind had no writer.
 
-Now: `HousingMarket.ownerOccupiedUnits` is the household sector's dwellings, in UNITS — seeded once
-as the seed's opening share of households and moved only by what changes hands. A household's
-purchase of a `residential_construction` unit at the goods auction IS a new dwelling: the GOOD wire
-is the build consumed on receipt (W4's sink), and the dwelling itself is a HOUSE wire from the
-builder to the household sector (`ledger/dwelling-ledger.ts:moveDwellings`), the register moving by
-exactly it. The ownership rate (`domain/housing.ts:ownershipRateOf`) and the stock's value
+Now: the household sector's dwellings are a row of kind DWELLING on its own register book, in
+UNITS, whose lots are the houses at the price each was bought at (§9.13-BOOK g-i; it was
+`HousingMarket.ownerOccupiedUnits`, a field, until then) — seeded once as the seed's opening share
+of households, placed by the region's construction pool at the seed's price, and moved only by
+what changes hands. A household's purchase of a `residential_construction` unit at the goods
+auction IS a new dwelling: the GOOD wire is the build consumed on receipt (W4's sink), and the
+dwelling itself is a DWELLING wire from the builder to the household sector AND the lot on the
+sector's row, one operation (`ledger/dwelling-ledger.ts:moveDwellings`: an issue from a builder, a
+retirement to a party outside the sector, a transfer inside it). The units are one read
+(`dwellingUnitsOf`); the ownership rate (`domain/housing.ts:ownershipRateOf`) and the stock's value
 (`housingStockValueLocal`, one owner — the bank pass and the household sheet read the same
-function) are READS of the register, and `audit/wires.ts` W7 closes the identity per region every
-week: Δ units = HOUSE wires in − out.
+function) are reads of that read, and `audit/wires.ts` W7 closes the identity per region every
+week: Δ the row's units = DWELLING wires in − out. The stock has a basis now, which is what a
+holding gain on housing will be read from.
 
 - **A4 ✅.** The stock is finite, and it changes only by construction that a household bought —
   slowly, at the builders' cleared pace.

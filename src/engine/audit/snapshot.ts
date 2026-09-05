@@ -19,6 +19,7 @@ import { facilityBookOf, ladderRowsOf, trancheKindOfRow } from '../../engine2/tr
 import { materializeBook } from '../../engine2/holdings';
 import { heldInShares } from '../../domain/assets';
 import { ASSET_KINDS } from '../ledger/wire';
+import { dwellingUnitsOf } from '../ledger/dwelling-ledger';
 
 /** A holding type that is an asset kind in its own right, so its row and its wire meet. */
 const isOwnAssetKind = (t: string): boolean => (ASSET_KINDS as readonly string[]).includes(t);
@@ -170,8 +171,10 @@ export function queueCostByCompany(state: GameState): Record<string, number> {
 /** §3.26b-i W7: every region's owner-occupied dwellings, in units — the register W7 replays. */
 export function dwellingUnitsByRegion(state: GameState): Record<string, number> {
   const out: Record<string, number> = {};
+  const v2 = state.v2 as V2World | undefined;
+  if (!v2) return out;
   REGION_IDS.forEach((r) => {
-    const u = state.regions[r].housingMarket.ownerOccupiedUnits;
+    const u = dwellingUnitsOf(v2, r); // §3.13-BOOK g-i: the sector's register row
     if (u) out[r] = u;
   });
   return out;

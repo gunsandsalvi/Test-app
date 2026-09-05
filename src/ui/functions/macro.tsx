@@ -1,6 +1,7 @@
 import { RegionId, currencyOf } from '../../domain/geography';
 import { usdToLocal, FxToUsd } from '../../domain/currency';
 import { ownershipRateOf } from '../../domain/housing';
+import { dwellingUnitsOf } from '../../engine/ledger/dwelling-ledger';
 import { ensureV2 } from '../../engine2/world';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { householdDepositsOf, treasuryAccountOf, bankReservesOf } from '../../engine/ledger/accounts';
@@ -85,7 +86,7 @@ export const macro: FunctionModule = {
         <KV k="net worth" hint={sub('household net worth')} v={money(hs.netWorthLocal)} />
         <KV k="debt to income" v={ratio(hs.householdDebtToIncomeRatio, 2)} />
         <KV k="savings rate" v={pctLevel(hs.savingsRate)} />
-        <KV k="home ownership" hint={sub('a read of the dwelling register')} v={pctLevel(ownershipRateOf(hm, r.totalPopulation), 0)} />
+        <KV k="home ownership" hint={sub('a read of the dwelling register')} v={pctLevel(ownershipRateOf(dwellingUnitsOf(ensureV2(world.state), r.id), r.totalPopulation), 0)} />
       </Card>
       <SectionLabel>banks</SectionLabel>
       <Card style={{ padding: '2px 0' }}>

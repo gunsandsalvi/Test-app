@@ -1,6 +1,7 @@
 import { levelPaymentFactor } from '../../../domain/pricing';
 import { defect } from '../../../domain/defect';
 import { housingStockValueLocal } from '../../../domain/housing';
+import { dwellingUnitsOf } from '../../ledger/dwelling-ledger';
 import type { Ticker } from '../../../domain/ids';
 import { openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf, seedBankBookLocalOf } from '../../ledger/accounts';
 /**
@@ -535,7 +536,7 @@ export function migrateHouseholdDebtAtSeed(
     + annuityWeeklyPrincipalLocal(hs.otherConsumerLoanDebtLocal, policyRate + termMarginBps / 10000, CONSUMER_TERM_SEED_WAM_WEEKS)
     + hs.creditCardDebtLocal * CARD_MIN_PRINCIPAL_RATE_WEEKLY
   ));
-  const housingStockLocal = housingStockValueLocal(reg.housingMarket); // §3.26b-i: the register's read
+  const housingStockLocal = housingStockValueLocal(dwellingUnitsOf(v2, regionId), reg.housingMarket.medianHomePriceLocal); // §3.26b-i: the register's read
   // Seeded as the engine's own shape: NET mortgage credit — buyers' new loans at the
   // origination LTV minus sellers' remaining loans (at the book's average LTV) the sales retire.
   const seedAvgLtv = housingStockLocal > 0 ? Math.min(2, hs.mortgageDebtLocal / housingStockLocal) : 1;
@@ -595,7 +596,9 @@ export function runBankHouseholdLending(
   reg: Region,
   adjustedUnemploymentRate: number,
   /** DIST/HSG — stamped on each new mortgage vintage, so a cohort knows its own age. */
-  currentWeek: number
+  currentWeek: number,
+  /** §3.13-BOOK g-i: the sector's dwellings, read off its register row by the caller. */
+  dwellingUnits: number
 ): HouseholdLendingResult {
   const policyRate = reg.policyRateAnnual;
   // G3c: this bank's own cost of equity prices the consumer credit it writes.
@@ -624,7 +627,7 @@ export function runBankHouseholdLending(
   // Mortgage severity reads the sector's REAL home equity (HH2): foreclosure recovers the house
   // less the cost of selling it, against the loan — deep equity means small severity, and a
   // price crash walks severity up as LTV approaches 1.
-  const housingStockLocal = housingStockValueLocal(reg.housingMarket); // §3.26b-i: the register's read, not the sheet's carried line
+  const housingStockLocal = housingStockValueLocal(dwellingUnits, reg.housingMarket.medianHomePriceLocal); // §3.26b-i: the register's read, not the sheet's carried line
   // DIST/HSG — SEVERITY IS `E[f(LTV)]` NOW, NOT `f(E[LTV])`.
   //
   // It used to read one average LTV for the whole region — measured at 0.340 — into a curve that

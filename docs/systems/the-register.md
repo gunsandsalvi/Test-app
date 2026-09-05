@@ -385,7 +385,10 @@ on the bank's securities book (`deskBookId`), SIGNED, because a market maker is 
 sold what it did not have (`adjustDeskRow` is the desk arm of every ledger op). No holder class is
 held outside this register any more, `registerBooks` lists every book there is, and the O-family
 checks reconcile the register against the ladders — not a second store against the register. The
-boundary this node used to record is gone.
+boundary this node used to record is gone. And since §9.13-BOOK g-i the register holds a
+non-financial asset for the first time: the household sector's DWELLINGS are a row on its book
+(`dwelling-ledger.ts`), in units, its lots the houses at the price each was bought at — the same
+columns a bond's or a good's live in.
 
 ### Also marked, briefly
 

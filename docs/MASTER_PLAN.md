@@ -504,8 +504,19 @@ written from here):
        six kinds (d4a–d4c-vi), the liens (d5a–c), the one kind list (e), and the position book as
        lots with a basis, the goods and the accruals on it (f1–f5). What is left of PART II's
        13-BOOK:
-    g. **PLANT AND HOUSING JOIN** — BLOCKED on step 26 deciding what a unit of plant is. Not a
-       cost exclusion: there is no unit to register until that decision is made.
+    g. **PLANT AND HOUSING JOIN.** g-i (housing) is in §9: the household sector's dwellings are a
+       DWELLING row on its register book, lots at the price each was bought at. What is left:
+    g-ii. **PLANT JOINS** — unblocked by 26-f, which decided what a unit of plant is (a vintage:
+       cost, kind, the week it entered service, its own life). A vintage is a LOT — units of
+       COST, price 1 at commissioning, the week its week — under a row of kind PLANT per capital
+       good on the firm's own book, and `Company.plant: PlantVintage[]` becomes a read of those
+       rows (`usefulLifeYearsOf(kind)` is a function of the kind, so the row reproduces the
+       vintage exactly). Two things the register's lot chain cannot do today and the plant does:
+       a move takes a pro-rata SLICE of every vintage (`slicePlant`), not the oldest first, and a
+       vintage LEAVES when fully worn (`retireWornPlant`), which is a retirement by lot week, not
+       by units. Writers first (f1's discipline): every writer keeps the rows while
+       `Company.plant` still equals them, then the readers take the rows, then the field goes.
+       ~58 sites in 23 files; split it when taken.
 
     **WHAT IS NOT IN THE BOOK, AND WHY.** SME pool loans, mortgage vintages and consumer pools are
     positions of the BANK with no register of their own — that is 37-LOANBOOK, sequenced there
@@ -1322,6 +1333,23 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK g-i — THE DWELLINGS ARE ON THE REGISTER.** The household sector's dwellings were a
+  field (`HousingMarket.ownerOccupiedUnits`, §9.26b-i) beside a wire; they are a row of kind
+  `DWELLING` on the sector's own register book now — `InstrumentKind` gains `DWELLING` (class
+  `HOUSING`, counted in `DWELLINGS`), the wire kind `HOUSE` is renamed to it at the same id, and
+  the wire world resolves a region's dwellings by location as it did. `dwelling-ledger.ts:
+  moveDwellings` is the wire AND the row in one operation: a builder or a pool creates a dwelling
+  (an issue — it keeps no row of houses), a household selling out of the sector retires it off the
+  row, a sale inside the sector transfers it; the seed places the opening share of households on
+  the row through the region's construction pool at the seed's price, so the stock carries a
+  basis from week zero (`openingDwellingUnitsOf`, and the household size has one owner). The
+  units are one read, `dwellingUnitsOf`; the ownership rate, the stock's value, the housing
+  book's offers, the bank pass's severity, the household sheet, the dashboard and W7's snapshot
+  all read it; the estate's exhaustive switch states a dwelling is not a claim on a company.
+  Pinned in `test/housing.test.ts` (the lot at the price bought, FIFO out of the sector). Atlas:
+  housing A1/A1.a cite the row, the register's A1.a records the first non-financial row. Gates
+  green; no run (rule 11). Split (rule 1.10): g-ii, plant, stays in §3 with its own shape.
 
 **13-READ D13 — THE FUNDING SPLIT IS APPLIED ONCE, AT THE END, AND THE END ALREADY EXISTED.** The
   seed's step order, read whole (rule 19): the three house-bank passes each re-ran

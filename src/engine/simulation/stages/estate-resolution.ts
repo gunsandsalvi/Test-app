@@ -675,8 +675,10 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
         case 'PE_FUND_INTEREST':
         case 'ETF_SHARE':
         case 'MMF_SHARE':
-          // Not claims on THIS estate: a sovereign is not the company, and fund interests
-          // resolve through their own vehicles. (Their ids cannot equal comp.id today; stated
+        case 'DWELLING':
+          // Not claims on THIS estate: a sovereign is not the company, fund interests resolve
+          // through their own vehicles, and a dwelling (§3.13-BOOK g-i) is a house somebody
+          // owns, not paper the company issued. (Their ids cannot equal comp.id today; stated
           // here so the decision is visible rather than a fall-through.)
           break;
         default:

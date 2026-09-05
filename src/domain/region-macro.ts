@@ -137,15 +137,9 @@ export interface HousingMarket {
   baselineHomePriceLocal: number;
   priceIndex: number;
   historicalPrices: number[];
-  /**
-   * §3.26b-i — THE DWELLING REGISTER: the household sector's owner-occupied dwellings, in UNITS.
-   * Seeded once as the seed's opening share of households (`createHousingMarket`) and moved
-   * only by what changes hands — a household's purchase of a new dwelling at the goods auction
-   * (`05-unit-bidding.ts`, a HOUSE wire), later a foreclosure and an estate's sale. The ownership
-   * rate and the stock's value are READS of it (`domain/housing.ts`); the rate was a constant
-   * written once, so the stock moved only with the population and construction never entered it.
-   */
-  ownerOccupiedUnits: number;
+  // §3.26b-i / §3.13-BOOK g-i — THE DWELLING REGISTER is the household sector's DWELLING row on
+  // its own register book (`ledger/dwelling-ledger.ts:dwellingUnitsOf`), never a field here: the
+  // units, and the lots at the price each house was bought at.
   mortgageOriginationVolumeLocal: number;
   /**
    * HSG — the BEST mortgage quote in this region last week, annual.

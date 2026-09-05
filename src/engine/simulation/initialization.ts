@@ -13,7 +13,8 @@ import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
 import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, seedLoanBookShareLocal } from './stages/bank-lending';
 import { loanBooksOf } from '../../domain/banking';
 import { leverageHeadroomLocal } from '../macro/banking';
-import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
+import { EFFECTIVE_TAX_RATE, openingDwellingUnitsOf } from '../macro/initialization';
+import { moveDwellings } from '../ledger/dwelling-ledger';
 import { facilityBookOf } from '../../engine2/tranches';
 
 /**
@@ -444,6 +445,12 @@ function openSeededBooks(state: GameState): void {
         });
       });
       seedBook(v2, { kind: 'HOUSEHOLD', region: regionId }, book, issuerOfHolding);
+      // §3.13-BOOK g-i — AND ITS DWELLINGS: the seed's opening share of households, placed on the
+      // sector's book by the region's construction pool at the seed's price, so the row's lots
+      // carry a basis from week zero and W7 replays every move from here.
+      const reg = state.regions[regionId];
+      moveDwellings(v2, { kind: 'SEGMENT', region: regionId, industry: 'RealEstateConstruction' }, { kind: 'HOUSEHOLD', region: regionId },
+        regionId, openingDwellingUnitsOf(reg.totalPopulation), reg.housingMarket.medianHomePriceLocal, 'seed: dwellings opened');
     });
     // The seed's wires are a real journal and the world carries it, so week 0 can be asked what
     // it wired exactly as any week is. There are no payments at the seed, so the pending money it

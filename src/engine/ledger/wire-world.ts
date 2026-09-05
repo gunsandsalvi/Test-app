@@ -9,9 +9,10 @@
  * week's (or the seed's) start and grown by `admit` at each birth — so a wire naming anything
  * outside those spaces is refused at the site.
  *
- * HOUSE answers `undefined`: the index does not hold houses yet (slice g); until it does they are
- * unchecked, and this file says so rather than passing them. CONTRACT resolves against the index
- * like every other instrument kind (§3.13-BOOK dII: the books the adapters mint are declared).
+ * DWELLING resolves by its region (§3.13-BOOK g-i): a region's dwellings are one asset on the
+ * household sector's book, keyed by location, and no index issues them. CONTRACT resolves
+ * against the index like every other instrument kind (§3.13-BOOK dII: the books the adapters
+ * mint are declared).
  */
 import { DWELLING_ASSET_PREFIX } from '../../domain/housing';
 import type { V2World } from '../../engine2/world';
@@ -53,7 +54,7 @@ export function wireWorldOf(
       switch (kind) {
         case 'GOOD': return goods.has(asset);
         case 'MONEY': return currencies.has(asset);
-        case 'HOUSE': return asset.startsWith(DWELLING_ASSET_PREFIX) && regions.has(asset.slice(DWELLING_ASSET_PREFIX.length));
+        case 'DWELLING': return asset.startsWith(DWELLING_ASSET_PREFIX) && regions.has(asset.slice(DWELLING_ASSET_PREFIX.length));
         case 'PLANT': return asset === 'PLANT' || asset === 'PLANT_QUEUE';
         case 'EQUITY': case 'ETF_SHARE': case 'MMF_SHARE': case 'PE_FUND_INTEREST': case 'CONTRACT':
         case 'CORP_BOND': case 'LEVERAGED_LOAN': case 'GOV_BOND': case 'COMMERCIAL_PAPER': case 'BANK_FACILITY': return undefined; // handled above

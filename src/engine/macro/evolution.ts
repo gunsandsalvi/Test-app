@@ -129,6 +129,9 @@ export function evolveRegionMacro(
     govLadder: GovDebtTrancheView[];
     /** §3.13-BOOK d3b: the region's banks' own sovereign books, summed by bond off their register rows. */
     bankSovereignByBond: Record<string, number>;
+    /** §3.13-BOOK g-i: the household sector's dwellings — its DWELLING row on the register, read
+     *  by the caller (`dwelling-ledger.ts:dwellingUnitsOf`). */
+    dwellingUnits: number;
   },
   week: number,
   prevCommodities: Commodity[] = [],
@@ -955,7 +958,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // at the keenest quote, for the households of its own that move. The price is the last
   // buyer's bid that met a reservation; an offer no bid reaches does not clear — volumes
   // collapse before prices — and a week in which nothing clears keeps last week's print.
-  const owningHouseholdsCount = Math.max(0, prevHousing.ownerOccupiedUnits);
+  const owningHouseholdsCount = Math.max(0, microFeedback.dwellingUnits);
   const turnoverRateAnnual = prevHousing.turnoverRateAnnual ?? HOUSING_TURNOVER_SEED_RATE_ANNUAL;
   const buildCostLocal = Math.max(0, (resCat?.unitPriceLocal ?? 0));
   const dwellingBook = clearDwellings(

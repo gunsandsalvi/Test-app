@@ -1,5 +1,6 @@
 import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
 import { housingStockValueLocal } from '../../../domain/housing';
+import { dwellingUnitsOf } from '../../ledger/dwelling-ledger';
 import { marketCapAt, etfSharesOutstandingOf } from '../../../engine2/instruments';
 /**
  * The household balance sheet, and the claims that link it to the institutions.
@@ -135,7 +136,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // §3.26b-i: the dwelling register's units at this week's median price (one owner of the
     // read, `domain/housing.ts`) — never backed out of the debt, so a move in home prices moves
     // household wealth, which is the transmission the omission was suppressing.
-    const housingStockLocal = housingStockValueLocal(reg.housingMarket);
+    const housingStockLocal = housingStockValueLocal(dwellingUnitsOf(ctx.v2, region), reg.housingMarket.medianHomePriceLocal);
     const mortgageLocal = hs.mortgageDebtLocal;
     const homeEquityLocal = housingStockLocal - mortgageLocal;
 

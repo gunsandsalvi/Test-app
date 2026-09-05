@@ -9,7 +9,7 @@ import { buildHouseholdCohorts } from './household-cohorts';
 import { weeklyInterestExpenseLocal, govTrancheView } from '../../domain/government';
 import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
 import { governmentPayrollWeeklyLocal, governmentObligationsWeeklyLocal } from '../../domain/government';
-import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
+import { GOVERNMENT_OCCUPATION_MIX, AVERAGE_HOUSEHOLD_SIZE } from '../../domain/region-macro';
 import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, smePoolEmployment, seedDemandFromCIG, registryCapitalMix } from '../../domain/industry-registry';
 import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT, seedPoolLeverageStrata, SME_POOL_STRATA_COUNT } from '../bootstrap/firms';
 import { generate52WeekHistory } from './utils';
@@ -102,14 +102,17 @@ export function createWealthDistribution(estimatedHouseholdIncomeLocal: number):
 
 // Structural house-price-to-income and household-size coefficients, applied to the region's
 // own generated income primitive — replacing the previous per-region literal base prices.
-const AVG_HOUSEHOLD_SIZE = 2.5;
 const HOME_PRICE_TO_HOUSEHOLD_INCOME_MULTIPLE = 4.2;
 /** §3.26b-i: the seed's OPENING owner-occupier share — written once into the dwelling register's
  *  unit count, and the count moves only by what changes hands from then on. */
 const HOME_OWNERSHIP_RATE = 0.62;
+/** §3.13-BOOK g-i: the seed's opening dwellings — its share of the households there are — placed
+ *  on the sector's register book by `openSeededBooks`, never a field on the housing market. */
+export const openingDwellingUnitsOf = (population: number): number =>
+  Math.round(Math.max(1, population / AVERAGE_HOUSEHOLD_SIZE) * HOME_OWNERSHIP_RATE);
 
 export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncomeLocal: number, population: number): HousingMarket {
-  const households = Math.max(1, population / AVG_HOUSEHOLD_SIZE);
+  const households = Math.max(1, population / AVERAGE_HOUSEHOLD_SIZE);
   const perHouseholdIncome = estimatedHouseholdIncomeLocal / households;
   const basePrice = Math.round((perHouseholdIncome * HOME_PRICE_TO_HOUSEHOLD_INCOME_MULTIPLE));
   return {
@@ -118,7 +121,6 @@ export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncome
     baselineHomePriceLocal: basePrice,
     priceIndex: 1.0,
     historicalPrices: Array(52).fill(basePrice),
-    ownerOccupiedUnits: Math.round(households * HOME_OWNERSHIP_RATE),
     mortgageOriginationVolumeLocal: estimatedHouseholdIncomeLocal * 0.05,
   };
 }

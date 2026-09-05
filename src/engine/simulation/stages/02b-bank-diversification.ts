@@ -21,6 +21,7 @@
  */
 
 import { sellerPayoffLadderOf } from '../../../domain/housing-clearing';
+import { dwellingUnitsOf } from '../../ledger/dwelling-ledger';
 import { matureInterbankLoans } from './interbank';
 import { currencyOf } from '../../../domain/geography';
 import { repoBookOf } from '../../ledger/contract-ledger';
@@ -356,7 +357,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // The household books' own week — derived amortization, measured losses, and
       // priced, capital-gated origination (mortgage demand off the real housing turnover).
       const household = runBankHouseholdLending(
-        bank, lending.sheet, reg, reg.unemploymentRate * (0.6 + riskFactor * 0.4), ctx.nextWeek
+        bank, lending.sheet, reg, reg.unemploymentRate * (0.6 + riskFactor * 0.4), ctx.nextWeek, dwellingUnitsOf(ctx.v2, regionId)
       );
       householdFlowsByBank.set(bank.ticker, {
         interestLocal: priorHouseholdInterestWeeklyLocal,

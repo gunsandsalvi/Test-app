@@ -2370,11 +2370,11 @@ function runSubUnitMarkets(
         const sellerParty = partyOfKey(l.sellerKey, origin, lookup);
         deliverGoods(sellerParty, buyer, subUnitId, l.units, book.clearedPriceLocal, reason);
         // §3.26b-i — a household's purchase of a dwelling is the dwelling changing hands: the
-        // GOOD wire above is the build consumed on receipt (W4's sink); the HOUSE wire is the
-        // asset that now has an owner, and the register moves by exactly it (W7).
+        // GOOD wire above is the build consumed on receipt (W4's sink); the DWELLING wire is the
+        // asset that now has an owner, and (§3.13-BOOK g-i) the sector's register row takes the
+        // lot at the cleared price in the same operation (W7).
         if (subUnitId === 'residential_construction' && buyer.kind === 'HOUSEHOLD') {
-          moveDwellings(sellerParty, buyer, buyerRegion, l.units, book.clearedPriceLocal, 'household purchase of a new dwelling');
-          ctx.updatedRegions[buyerRegion].housingMarket.ownerOccupiedUnits += l.units;
+          moveDwellings(ctx.v2, sellerParty, buyer, buyerRegion, l.units, book.clearedPriceLocal, 'household purchase of a new dwelling');
         }
       });
     });
