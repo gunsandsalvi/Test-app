@@ -42,8 +42,7 @@ import { institutionSpendableLocal } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, participantPartyOf, bankIdOfTickerFor } from './book-settlement';
 import { householdBookId, transferHolding } from '../../ledger/holdings-ledger';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
-import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
-import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
+import { buildDealerDeskBook, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
 
 import { indexFundDemand, indexFundsForBook, bookIndexIdsOf, indexFundsSeatedIn } from './etf-demand';
@@ -59,7 +58,6 @@ import { ladderTotalLocal } from '../../../engine2/tranches';
 import { householdParticipantId } from '../../../domain/participant-keys';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
-const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
 
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'equity';
@@ -267,10 +265,11 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
 
     // G3a/G3e: the banks' equity desks, and the float they and the other participants make up.
     const regionBanks = banksOf(ctx.prevActiveFirms, regionId);
-    const deskParticipants = buildDealerDeskParticipants({
-      ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
+    const deskBook = buildDealerDeskBook({
+      ctx, banks: regionBanks, book: BOOK, instruments,
       unitPriceOf: (i) => refPriceOf(regionCompanies[i]),
     });
+    const deskParticipants = deskBook.participants;
     const deskTickers = deskTickersOf(deskParticipants);
 
     // OWN7, second half: the desks' own books join the float now that they exist.
@@ -629,7 +628,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     settlePricedOfferings(regionId, 'EQUITY', offeringsByIssuerId, result, ctx,
       (o, clearedStat) => o.sizeLocal * clearedStat,
       (o, clearedStat) => underwritingFeeBps({
-        bookSpreadBps: DEALER_SPREAD_BPS,
+        bookSpreadBps: deskBook.bookWidthBps, // §3.26-e-ii: the desks' own width this week
         oneWeekPriceRiskBps: oneWeekPriceRiskBps({
           statKind: 'PRICE_LIKE', currentStat: clearedStat,
           weeklyMovePct: Math.abs(clearedStat - (priorPriceById.get(o.issuerId) ?? clearedStat)) / Math.max(1e-9, Math.abs(clearedStat)),

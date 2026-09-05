@@ -205,7 +205,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | D3.b a point is a trade, or is labelled as interpolated | `src/engine/nelsonSiegel.ts:curvePointAt` | ✅ |
 | D4 it is the benchmark other credit is spread to | `src/domain/pricing/bond.ts:zeroRateAt` | ✅ |
 | D5 repo collateral, at the smallest haircut of any asset | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
-| D6 VERIFY the bid-offer is a consequence, not a prior | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
+| D6 VERIFY the bid-offer is a consequence, not a prior | `src/domain/dealer-desk.ts:deskScheduleWidth` | ✅ |
 | **E1 a register: who holds how much of WHICH LINE** | `src/engine/sovereign-register.ts:forEachSovereignPosition` | ✅ |
 | E1.a · and ONE walk answers it, over every store that keeps one | `src/engine/sovereign-register.ts:forEachSovereignPosition` | ✅ |
 | E2 holder classes hold for different reasons | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:runSovereignBondClearingStage` | ✅ |
@@ -244,7 +244,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 
 ## 3. THE DIFF
 
-**74 rows: 39 ✅, 11 ⚠️, 24 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
+**74 rows: 40 ✅, 11 ⚠️, 23 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
 drifted three times by hand (25/15/27 against 28/12/27, then 30/13/25 against 31/12/25 in the very
 paragraph that lectured about drift): `check-atlas.sh` proves a citation RESOLVES and can say
 nothing about whether a mark is TRUE, which is §5's lesson, and the test is the answer to it.
@@ -403,7 +403,7 @@ fail and withdraws the unplaced paper. That is the more honest mechanism. But th
 survivable here is the overdraft, not a dealer's obligation — so the node is ❌ and the tree's own
 claim should be revisited when A3.b is fixed.
 
-### ✅ D3.a / D3.b (both closed) / ❌ D6 — THE CURVE HAD TWO OWNERS, ITS POINTS HAD NO PROVENANCE, AND THE SPREAD HAS NONE
+### ✅ D3.a / D3.b / D6 (all closed) — THE CURVE HAD TWO OWNERS, ITS POINTS HAD NO PROVENANCE, AND THE SPREAD WAS A CONSTANT
 
 D3.a is closed by §3.13-SOV row 5. It was: `07f` refitted `yieldCurveParams` through its bills plus
 four SYNTHETIC points read back off `zeroRates`, then wrote only `tenor3M` and left 2Y–30Y at 07c's
@@ -430,9 +430,14 @@ rather than a defect of this tree. (The player's position marks read the fit too
 which marks every position at its tranche's own print and deletes `priceSovereignBond` and
 `priceCorporateBond`.)
 
-D6 is the node this tree states most sharply and the code contradicts most plainly.
-`dealer-desk.ts:56`'s `DESK_SPREAD_BPS_BY_BOOK` states the sovereign spread as a constant, which is
-precisely "assuming the liquidity this system is supposed to generate". **Already §3 step 26.**
+D6 is closed by §9.26-e-i/ii. `DESK_SPREAD_BPS_BY_BOOK` stated the sovereign spread as a
+constant — 5bp charged on every fill as a fee, and the width of every desk's schedule — which was
+precisely "assuming the liquidity this system is supposed to generate". The fee is gone, and each
+desk's width is now its own carrying cost (`dealer-desk.ts:deskScheduleWidth`: financing at the
+cleared repo rate plus the tranche's measured weekly move at its bank's risk aversion), so the
+sovereign bid–offer is what the desks' competing schedules produce against the float — tightest
+where the paper moves least and the desks are deepest, which is the consequence the node asks
+for rather than the prior it forbade.
 
 ### ⚠️ A2 / A2.a / A2.b — A CALENDAR, NOT A PROGRAMME
 

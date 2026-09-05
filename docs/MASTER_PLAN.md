@@ -551,16 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-e-ii. **The width of a desk's schedule is what carrying the position costs it.** *(26-e-i is
-    in §9: the fee on the mid is gone.)* `dealer-desks.ts` sets every desk's `fullSizeStatRange`
-    — how far the level must move in its favour for it to go from flat to full — from
-    `DESK_SPREAD_BPS_BY_BOOK`, nine stated real-market widths. The width is what taking the
-    position costs the desk: financing it at the repo rate the world clears over the week until
-    it re-quotes, plus the risk it bears over that week — the instrument's own measured weekly
-    move (the print store carries no history per instrument yet; give it one) at its bank's own
-    risk aversion (`domain/preferences.ts`). The underwriting fee's `bookSpreadBps` term reads the
-    same width. dealer-desks C1/C3/C5, D5; the-clearing-engine E3; sovereign-credit D6;
-    corporate-credit D3.c.
 26-e-iii. **The FX pip and the ETF assembly cost are desks' widths.** `fx-funding.ts` and
     `05-unit-bidding.ts` (a converting firm, a household or a treasury buying abroad) pay a stated
     2bp pip to the region's banks by market share; `etf-flows.ts` sizes a basket's assembly cost
@@ -1378,6 +1368,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-e-ii — THE WIDTH OF A DESK'S SCHEDULE IS WHAT CARRYING THE POSITION COSTS IT.** The table's
+  second job: every desk's `fullSizeStatRange` — how far the level must move in its favour for it
+  to go from flat to full — was `DESK_SPREAD_BPS_BY_BOOK`'s nine literal real-market widths.
+  `domain/dealer-desk.ts:deskScheduleWidth` now: what financing the position costs the desk for
+  the week until it re-quotes (the region's own cleared repo rate) plus the risk it bears over
+  that week — the instrument's own measured one-week move (`prices.ts:weeklyPriceMoveOf`, nothing
+  before it has printed twice) at its bank's own risk aversion (`domain/preferences.ts`) — in the
+  book's own statistic (a price distance, or bps per unit of duration). `buildDealerDeskBook`
+  publishes the width the desks actually posted, capacity-weighted, and the underwriting fee's
+  `bookSpreadBps` (07b, 07d, 07e) reads it; the `spreadBps` argument and the five books'
+  `DEALER_SPREAD_BPS` are gone. dealer-desks B3 ⚠️→✅, C3 ❌→✅, C5 ❌→⚠️ (C4's adverse selection
+  still absent); the-clearing-engine E3 ❌→✅; sovereign-credit D6 ❌→✅ (tally 40/11/23);
+  corporate-credit D3.c stays ⚠️ (the skew moves with inventory, the width does not).
+  `test/desk-width.test.ts`. Gates green; no run (rule 11).
 
 **26-e-i — THE FEE ON THE MID GOES.** `DESK_SPREAD_BPS_BY_BOOK`'s first job was a fee: every book
   passed its stated width as `ClearingParams.dealerSpreadBps` and the kernel charged every

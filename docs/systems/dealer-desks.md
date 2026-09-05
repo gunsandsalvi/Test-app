@@ -92,14 +92,14 @@ checked by `scripts/check-atlas.sh`.
 | A4 it earns the spread and loses on the inventory | `src/engine/simulation/stages/dealer-desks.ts:applyDealerDeskFills` | ✅ |
 | B1 it expects two-way flow arriving at different times | `src/domain/dealer-desk.ts:DealerDeskPosition` | ✅ |
 | B2 it has information from seeing the flow | — | ❌ |
-| B3 the client pays for immediacy | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ⚠️ |
+| B3 the client pays for immediacy | `src/domain/dealer-desk.ts:deskScheduleWidth` | ✅ |
 | **B4 FORBID it does not quote because the mechanism needs somebody to** | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
 | C1 the quote comes from the desk's own state: inventory, funds, limit, view | `src/engine/simulation/stages/dealer-desks.ts:neutralFraction` | ⚠️ |
 | C2 inventory skews the quote | `src/engine/simulation/stages/dealer-desks.ts:priorPositions` | ✅ |
 | C2.a it mean-reverts its book without being told to | `src/engine/desk-register.ts:regionalDeskViewOf` | ✅ |
-| **C3 risk widens the quote** | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
+| C3 risk widens the quote | `src/domain/dealer-desk.ts:deskScheduleWidth` | ✅ |
 | **C4 adverse selection widens it** | — | ❌ |
-| **C5 the bid–offer is the OUTPUT of C1–C4** | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
+| C5 the bid–offer is the OUTPUT of C1–C4 | `src/domain/dealer-desk.ts:deskScheduleWidth` | ⚠️ |
 | C5.a FORBID no spread applied to a mid | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | D1 a position limit per instrument and in aggregate | `src/engine/desk-register.ts:deskGrossLocal` | ✅ |
 | D2 a capital charge on what it holds, and it is real | `src/engine/macro/banking.ts:bankTotalAssetsLocal` | ✅ |
@@ -129,7 +129,20 @@ sold what it did not have, and every fill, paydown, maturity, corporate action, 
 player trade is a wire that moves a row. The register marks them at the close like every other
 row, and the O-family audits see them by construction rather than by a second walk.
 
-### ❌ C5 / C3 / C4 / ✅ C5.a — THE BID–OFFER IS STILL A CONSTANT TABLE; IT IS NO LONGER CHARGED AS A FEE ON A MID
+### ⚠️ C5 / ❌ C4 / ✅ C3 / C5.a — THE BID–OFFER IS THE DESK'S OWN CARRYING COST; ADVERSE SELECTION IS STILL ABSENT
+
+*2026-09-05 (§9.26-e-ii). The table's second job is gone too. Every desk's `fullSizeStatRange`
+is `domain/dealer-desk.ts:deskScheduleWidth`: what financing the position costs it for the week
+until it re-quotes — the region's own cleared repo rate — plus the risk it bears over that week,
+the instrument's own measured one-week move (`engine2/prices.ts:weeklyPriceMoveOf`) at this bank's
+own risk aversion (`domain/preferences.ts`). A name that moved 3% last week is quoted three times
+wider than one that moved 1%, a risk-averse board quotes wider than a bold one, and a market that
+has not printed twice is quoted on its financing alone. C3 ✅. C5 ⚠️: the width is now the output
+of C1 (inventory, funds, limit), C2 (the skew) and C3 (risk); C4 — an informed client widening it
+— has no mechanism, because B2's flow is invisible. The underwriting fee's `bookSpreadBps` reads
+the same width, capacity-weighted over the desks that posted (`dealer-desks.ts:buildDealerDeskBook`).
+`DESK_SPREAD_BPS_BY_BOOK` now serves only the FX pip and the ETF assembly cost — §3 step 26-e-iii.*
+
 
 *2026-09-05 (§9.26-e-i). The fee on the mid is gone. `ClearingParams.dealerSpreadBps`, the
 kernels' `fillFee` lane (TypeScript and C, and the three worker paths that carried it) and
@@ -274,7 +287,7 @@ other — they only meet through the auction, and only via the anonymous aggrega
 is the larger, and it is the natural consumer of the IRS and CDS books that
 `interest-rate-swaps.md` B5 and `cds.md` B4 record as having no dealer.
 
-### ⚠️ E4 / B3 — TWO READS THAT NEARLY EXIST
+### ⚠️ E4 / ✅ B3 — TWO READS THAT NEARLY EXIST, ONE OF THEM NOW
 
 **E4.** Σ desk inventory is already inside the ownership identity: `audit/ownership.ts:47,51`
 folds the desks' CP and corporate-bond positions into `held` for O1's issued-versus-held check, so
@@ -286,9 +299,9 @@ for §3 step 38.**
 value whether or not a desk stood between the parties, so "the alternative is waiting for a
 natural counterparty" was paid for even when the natural counterparty was found.)* What a client
 now pays for immediacy is exactly what it crosses of the desk's schedule — the desk's reservation
-sits `neutralFraction × range` away from the level in its own favour — which is the right shape;
-but that `range` is still the constant table's width, so B3 stays ⚠️ until §3 step 26-e-ii makes
-the width the desk's own carrying cost.
+sits `neutralFraction × range` away from the level in its own favour — and since §9.26-e-ii that
+`range` is the desk's own carrying cost (`deskScheduleWidth`): the alternative to waiting for a
+natural counterparty is priced at what standing in for one costs. B3 ✅.
 
 ### ⚠️ A2 / C1 — ONE SCHEDULE, NOT TWO QUOTES
 

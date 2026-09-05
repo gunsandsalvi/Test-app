@@ -15,6 +15,7 @@ import { bankCashBufferRatioOf } from '../../macro/banking';
 import { Company, RegionId } from '../../../types';
 import {
   dealerDeskCapacityLocal, dealerDeskParticipantId, dealerDeskTicker, DESK_BOOK_KIND,
+  deskScheduleWidth,
 } from '../../../domain/dealer-desk';
 import { deskRowsOf, deskGrossLocal, bankBookAssetsLocal, type DeskRow } from '../../desk-register';
 import { LeadBankCandidate } from '../../../domain/primary-market';
@@ -26,6 +27,8 @@ import { pendingSettlementLocal } from './settlement';
 import { PartyRef } from './settlement';
 import { transferHolding, markHolding, deskBookId } from '../../ledger/holdings-ledger';
 import { defect } from '../../../domain/defect';
+import { riskAversionOf } from '../../../domain/preferences';
+import { weeklyPriceMoveOf } from '../../../engine2/prices';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
 import { instrumentNameOf } from '../../instrument-name';
 import { yearOfWeek } from '../../../domain/calendar';
@@ -76,22 +79,37 @@ function deskCapacityLocal(ctx: WeeklyStepContext, bank: Company, sheet: NonNull
  * at this week's printed level, goes to full capacity a spread away in its favour, and to flat a
  * spread away against it.
  */
-export function buildDealerDeskParticipants(args: {
+export interface DealerDeskBook {
+  participants: ClearingParticipant[];
+  /** §3.26-e-ii: the width the desks quoted each instrument at, capacity-weighted, in bps of its
+   *  statistic — the book's own secondary bid/ask, read off what was posted. */
+  widthBpsById: Map<InstrumentId, number>;
+  /** The same over the whole session: what "this book's bid/ask" is this week. */
+  bookWidthBps: number;
+}
+
+export function buildDealerDeskParticipants(args: Parameters<typeof buildDealerDeskBook>[0]): ClearingParticipant[] {
+  return buildDealerDeskBook(args).participants;
+}
+
+export function buildDealerDeskBook(args: {
   ctx: WeeklyStepContext;
   banks: Company[];
   book: string;
   instruments: ClearingInstrument[];
-  spreadBps: number;
   /** For a book that clears in UNITS rather than money (07e's shares): what one unit costs, so
    *  the desk's capital constraint — which is in dollars — can be posted as a size the auction
    *  understands. Omitted for the credit books, whose quantities already are dollars. */
   unitPriceOf?: (index: number) => number;
-}): ClearingParticipant[] {
-  const { ctx, banks, book, instruments, spreadBps } = args;
+}): DealerDeskBook {
+  const { ctx, banks, book, instruments } = args;
+  const widthWeighted = new Map<InstrumentId, { sum: number; cap: number }>();
+  let bookWidthSum = 0;
+  let bookWidthCap = 0;
   const unitPrice = (i: number) => Math.max(1e-9, args.unitPriceOf ? args.unitPriceOf(i) : 1);
   const liveFloatLocal = instruments.map((i, idx) => Math.max(0, i.tradableFloatLocal + (i.primaryOfferingLocal ?? 0)) * (args.unitPriceOf ? unitPrice(idx) : 1));
   const totalFloatLocal = liveFloatLocal.reduce((a, b) => a + b, 0);
-  if (totalFloatLocal <= 0) return [];
+  if (totalFloatLocal <= 0) return { participants: [], widthBpsById: new Map(), bookWidthBps: 0 };
 
   const participants: ClearingParticipant[] = [];
   const sessionIds = new Set(instruments.map((i) => i.id));
@@ -111,6 +129,10 @@ export function buildDealerDeskParticipants(args: {
     const settledCashLocal = bankReservesOf(ctx.v2, bank.id)
       + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
     const fundableLocal = Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * bankCashBufferRatioOf(bank));
+    // §3.26-e-ii: what this desk's week costs it — the region's cleared repo rate to finance the
+    // position, and this bank's own risk aversion on what the name moved last week.
+    const repoRateAnnual = ctx.updatedRegions[bank.region as RegionId].repoRateAnnual;
+    const riskAversion = riskAversionOf(bank.management);
 
     const currentHoldingsByInstrumentId = new Map<InstrumentId, number>();
     const demandByIndex: (ParticipantDemand | undefined)[] = new Array(instruments.length);
@@ -139,9 +161,15 @@ export function buildDealerDeskParticipants(args: {
       // already holds. Everything else about the quote follows from that anchor.
       const neutralFraction = Math.max(0, Math.min(1, priorLocal / maxHoldingLocal));
       const isYieldLike = inst.statKind === 'YIELD_LIKE';
-      const range = isYieldLike
-        ? Math.max(1, spreadBps)
-        : Math.max(1e-9, inst.currentStat * (spreadBps / 10000));
+      // §3.26-e-ii: the width is what carrying the position costs this desk, not a table's number.
+      const range = deskScheduleWidth({
+        statKind: inst.statKind, currentStat: inst.currentStat, durationYears: inst.durationYears,
+        repoRateAnnual, measuredWeeklyMove: weeklyPriceMoveOf(ctx.v2, inst.id), riskAversion,
+      });
+      const widthBps = isYieldLike ? range : (Math.abs(inst.currentStat) > 0 ? (range / Math.abs(inst.currentStat)) * 10000 : 0);
+      const w = widthWeighted.get(inst.id) ?? { sum: 0, cap: 0 };
+      w.sum += widthBps * roomLocal; w.cap += roomLocal; widthWeighted.set(inst.id, w);
+      bookWidthSum += widthBps * roomLocal; bookWidthCap += roomLocal;
       const reservationStat = isYieldLike
         ? inst.currentStat - neutralFraction * range
         : inst.currentStat + neutralFraction * range;
@@ -160,7 +188,9 @@ export function buildDealerDeskParticipants(args: {
       demandByIndex,
     });
   });
-  return participants;
+  const widthBpsById = new Map<InstrumentId, number>();
+  widthWeighted.forEach((w, id) => { if (w.cap > 0) widthBpsById.set(id, w.sum / w.cap); });
+  return { participants, widthBpsById, bookWidthBps: bookWidthCap > 0 ? bookWidthSum / bookWidthCap : 0 };
 }
 
 /**

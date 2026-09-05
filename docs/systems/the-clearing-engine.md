@@ -120,7 +120,7 @@ checked by `scripts/check-atlas.sh`.
 | D5 VERIFY Σ bought = Σ sold, Σ cash paid = Σ cash received | `src/engine/simulation/stages/settlement.ts:clearingHouseResidualLocal` | ✅ |
 | E1 the price is public | `src/engine/simulation/stages/07b-corporate-bond-clearing.ts:runCorporateBondClearingStage` | ✅ |
 | E2 one market's print is another's input | `src/engine/simulation/stages/index-calculation.ts:runIndexCalculationStage` | ✅ |
-| **E3 the bid–offer is a consequence, never a prior on a mid** | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
+| E3 the bid–offer is a consequence, never a prior on a mid | `src/domain/dealer-desk.ts:deskScheduleWidth` | ✅ |
 | **E4 VERIFY no trades → no new print; a stale mark is visibly stale** | `src/engine/simulation/stages/financial-clearing-engine.ts:runClearingKernel` | ❌ |
 | F1 a market clears at a stated point in the week | `src/engine/simulation/core.ts:advanceWeeklyStepProfiled` | ✅ |
 | F1.a a forward reference is an ordering defect | `src/engine/simulation/stage-deps.ts:DELIBERATE_PIPELINE_FIELDS` | ✅ |
@@ -203,16 +203,18 @@ over the 16-week reference, growing monotonically. This tree adds one thing to t
 node it violates is C4.b, and the reason a code sweep never found it is that a total function has
 no line at which it declines to answer.
 
-### ❌ E3 — THE BID–OFFER IS A TABLE
+### ✅ E3 (closed) — THE BID–OFFER WAS A TABLE
 
 `DESK_SPREAD_BPS_BY_BOOK` (`domain/dealer-desk.ts`) is eight stated real-market widths —
 sovereign 5, bill 2, corporate 15, loan 20, equity 8, FX 2. *(§9.26-e-i: it no longer reaches
 the auction as `ClearingParams.dealerSpreadBps`, charged on every fill as a fee — that parameter,
 the kernels' fee lane and the fee income paid by market share are deleted.)* It still reaches it
-as the desks' own `fullSizeStatRange` (`dealer-desks.ts`), where the desk's reservation is
-`currentStat ± neutralFraction × spreadBps`. So the quote width is a prior applied to last week's
-mid, which is the exact construction E3 forbids, and the desks' schedules — the thing the node
-says the spread should be READ OFF — are built from it instead. **§3 step 26-e-ii.**
+as the desks' own `fullSizeStatRange`. *§9.26-e-ii closed that half too: the width is
+`domain/dealer-desk.ts:deskScheduleWidth` — the desk's financing for the week at the cleared repo
+rate plus the instrument's measured weekly move at the bank's own risk aversion — so the
+schedules the spread is read off are built from the desk's own cost, and the bid–offer is what
+those schedules produce. The table's last readers (the FX pip, the ETF assembly cost) are §3 step
+26-e-iii.*
 
 **Already §3 step 26** (`dealer-desk.ts:117` is on its list). Second witness, with the mechanism
 named: it is not only a cost charged, it is the shape of the desks' curve.

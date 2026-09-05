@@ -57,8 +57,7 @@ import { buildEntityIndex } from '../../ledger/entity-index';
 
 import { institutionSpendableLocal, PartyRef } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, participantPartyOf, bankIdOfTickerFor, parHoldingRow, writeBackClearedFills } from './book-settlement';
-import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
-import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
+import { buildDealerDeskBook, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
 import { openDemandStaging, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat, unclearedAt } from './financial-clearing-engine';
 
@@ -82,7 +81,6 @@ import type { EntityId } from '../../../domain/ids';
  */
 const SENIOR_LIEN_DISCOUNT = 0.85;
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
-const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['leveraged loan'];
 
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'leveraged loan';
@@ -448,10 +446,11 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     });
 
     // G3a: the named banks' loan-trading desks, sized by their own headroom.
-    const deskParticipants = buildDealerDeskParticipants({
-      ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
+    const deskBook = buildDealerDeskBook({
+      ctx, banks: regionBanks, book: BOOK, instruments,
       unitPriceOf: (i) => openingPrice[i],
     });
+    const deskParticipants = deskBook.participants;
     const deskTickers = deskTickersOf(deskParticipants);
 
     // OWN7, second half: the desks' own books join the float now that they exist. A holder outside
@@ -513,7 +512,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     settlePricedOfferings(regionId, 'LEVERAGED_LOAN', offeringsByIssuerId, result, ctx,
       (o, clearedPrice) => o.sizeLocal * clearedPrice,
       (o, clearedPrice) => underwritingFeeBps({
-        bookSpreadBps: DEALER_SPREAD_BPS,
+        bookSpreadBps: deskBook.bookWidthBps, // §3.26-e-ii: the desks' own width this week
         oneWeekPriceRiskBps: oneWeekPriceRiskBps({
           statKind: 'PRICE_LIKE', currentStat: clearedPrice,
           // The concession THIS deal conceded, against the par it was struck at.

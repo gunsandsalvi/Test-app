@@ -64,7 +64,6 @@ import { issueTranche, retireTranche, commitLadder, drawRevolver } from '../../l
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
 import { discountBillProceedsLocal, billYieldFromPrice, isDiscountBill, recordPrimaryOffering } from '../../../domain/government';
-import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { CP_SINGLE_ISSUER_LIMIT, CP_SHARE_OF_TERM_SLEEVE, CP_FULL_SIZE_YIELD_RANGE_BPS, cpCreditPolicyShare, cpReservationYieldBps } from '../../../domain/commercial-paper';
@@ -78,7 +77,6 @@ import type { EntityId } from '../../../domain/ids';
 import type { Ticker } from '../../../domain/ids';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
-const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
 
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'bill';
@@ -353,7 +351,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       // G3a: the banks' bill desks — the same market makers, a different book.
       const deskParticipants = buildDealerDeskParticipants({
-        ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
+        ctx, banks: regionBanks, book: BOOK, instruments,
       });
       const deskTickers = deskTickersOf(deskParticipants);
 
@@ -1092,7 +1090,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       const cpDeskParticipants = buildDealerDeskParticipants({
         ctx, banks: cpBanks, book: CP_BOOK, instruments: cpInstruments,
-        spreadBps: DESK_SPREAD_BPS_BY_BOOK[CP_BOOK],
         unitPriceOf: (i) => openingPrice[i],
       });
       const cpDeskTickers = deskTickersOf(cpDeskParticipants);

@@ -180,7 +180,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | D3 a dealer intermediates, a real party | `src/engine/simulation/stages/dealer-desks.ts:buildDealerDeskParticipants` | ✅ |
 | D3.a it quotes both sides out of its own inventory | `src/engine/simulation/stages/dealer-desks.ts:applyDealerDeskFills` | ✅ |
 | D3.b bounded by its balance sheet and capital | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
-| D3.c its quote widens as its inventory fills | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ⚠️ |
+| D3.c its quote widens as its inventory fills | `src/engine/simulation/stages/dealer-desks.ts:neutralFraction` | ⚠️ |
 | D4 the dealer earns the bid-offer, and somebody pays it | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
 | D5 VERIFY an unsold seller keeps its paper | `src/engine/simulation/stages/financial-clearing-engine.ts:unsoldStaysWithHolder` | ✅ |
 | D6 two legs in the same pass (N9.a) | `src/engine/simulation/stages/book-settlement.ts:settleClearedBook` | ✅ |
@@ -347,14 +347,15 @@ real rating an opinion rather than a datum. **A4.c**: the change IS produced —
 `newsGenerator.ts:150`. No holder, desk or lender reads the CHANGE; every one of them re-reads the
 LEVEL from scratch each week. A downgrade is therefore a headline and never an event.
 
-### ⚠️ D3.c — THE DEALER'S SPREAD IS A CONSTANT PER BOOK
+### ⚠️ D3.c — THE QUOTE SKEWS WITH INVENTORY; ITS WIDTH DOES NOT YET
 
-`dealer-desk.ts:56`'s `DESK_SPREAD_BPS_BY_BOOK` is a fixed table, charged identically whatever the
-desk's inventory, capital or the week's flow. D3.b's capacity bound is real
-(`dealerDeskCapacityLocal`) and it bites; the PRICE of intermediation does not move with it, so a desk
-filling up gets smaller and never dearer. The node asks for a reason and the code has a rule.
-**Already named in §3 step 26** ("`dealer-desk.ts:117` charges a stated real-market spread table as a
-real cost in five books").
+*2026-09-05 (§9.26-e-i/ii): the constant table is out of this book — no fee on the mid, and each
+desk's width is its own carrying cost (`dealer-desk.ts:deskScheduleWidth`: financing at the repo
+rate plus the tranche's measured weekly move at the bank's risk aversion).* What a desk's inventory
+moves is the SKEW — `dealer-desks.ts:neutralFraction` puts its reservation `neutralFraction × width`
+from the level in its favour, so a full desk buys only well below and sells at the level. The width
+itself does not widen as the book fills (a fuller book is riskier to carry, and the node's "dearer"
+is that), so D3.c stays ⚠️; D3.b's capacity bound (`dealerDeskCapacityLocal`) is real and bites.
 
 ### ⚠️ D7 — EVERY BOOK SETTLES THE ACCRUED NOW; THE APPORTIONMENT IS STILL WEEKLY
 

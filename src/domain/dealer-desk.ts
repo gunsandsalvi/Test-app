@@ -51,10 +51,10 @@ import { asTicker } from './ids';
 const DEALER_DESK_SHARE_OF_BALANCE_SHEET = 0.25;
 
 /**
- * The bid/ask each book's desks charge on the gross flow they facilitate — one number per book,
- * read by that book's clearing adapter AND by the player's ticket, because they are the same
- * quote. It also sets the WIDTH of a desk's schedule: the level a spread away in the desk's
- * favour is where it goes to full capacity.
+ * §3.26-e-i/ii: what is left of this table is the FX conversion pip (`fx-funding.ts`,
+ * `05-unit-bidding.ts`) and the ETF basket's assembly cost (`etf-flows.ts`) — §3 step 26-e-iii
+ * deletes it. It was the fee every book charged on the mid (gone, 26-e-i) and the width of every
+ * desk's schedule (`deskScheduleWidth` below, 26-e-ii).
  */
 export const DESK_SPREAD_BPS_BY_BOOK: Record<string, number> = {
   'sovereign bond': 5,
@@ -150,3 +150,34 @@ export function dealerDeskCapacityLocal(args: {
   ));
 }
 
+/**
+ * §3.26-e-ii — THE WIDTH OF A DESK'S SCHEDULE IS WHAT CARRYING THE POSITION COSTS IT.
+ *
+ * A desk's schedule runs from its neutral level to full capacity over a width, and that width is
+ * the compensation it needs per unit of inventory it takes on until it re-quotes a week later:
+ * what financing the position costs it for that week — the region's own cleared repo rate — plus
+ * the risk it bears over that week, the instrument's own measured weekly move at this bank's own
+ * risk aversion (`domain/preferences.ts`). No stated width: a name that moved 3% last week is
+ * quoted three times wider than one that moved 1%, a risk-averse board quotes wider than a bold
+ * one, and a market that has not printed twice is quoted on its financing alone. That is what
+ * replaced nine literal real-market widths (dealer-desks C3, C5; the-clearing-engine E3).
+ *
+ * Returned in the book's own statistic: a price distance for a PRICE_LIKE book, a yield or spread
+ * distance in bps for a YIELD_LIKE one (the value cost per unit of duration).
+ */
+export function deskScheduleWidth(args: {
+  statKind: 'PRICE_LIKE' | 'YIELD_LIKE';
+  currentStat: number;
+  durationYears: number;
+  repoRateAnnual: number;
+  /** The instrument's last measured one-week move, as a fraction of its level; undefined before it has printed twice. */
+  measuredWeeklyMove: number | undefined;
+  riskAversion: number;
+}): number {
+  const financingShare = Math.max(0, args.repoRateAnnual) / 52;
+  const riskShare = Math.max(0, args.measuredWeeklyMove ?? 0) * Math.max(0, args.riskAversion);
+  const costShare = financingShare + riskShare;
+  if (args.statKind === 'PRICE_LIKE') return Math.max(1e-9, Math.abs(args.currentStat) * costShare);
+  const durationYears = Math.max(1 / 52, args.durationYears);
+  return Math.max(1e-9, (costShare / durationYears) * 10000);
+}

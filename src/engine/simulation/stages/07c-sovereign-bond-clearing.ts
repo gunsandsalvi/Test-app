@@ -60,7 +60,6 @@ import { stagePurchaseBudgetLocal } from './institutional-balance-sheet';
 import { pendingSettlementLocal, institutionUnsettledLessCollateralLocal } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, participantPartyOf, bankIdOfTickerFor } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
-import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
 import { positionKey } from './securities-lending';
 import { maxOverweightMultipleOf } from './asset-allocation';
@@ -86,7 +85,6 @@ const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
 const INSTITUTIONAL_REAL_RETURN_BPS = 150;
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
-const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['sovereign bond'];
 
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'sovereign bond';
@@ -549,7 +547,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // G3a: each bank's govvie desk, distinct from the investment book it also runs above.
     const deskParticipants = buildDealerDeskParticipants({
-      ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
+      ctx, banks: regionBanks, book: BOOK, instruments,
     });
     const deskTickers = deskTickersOf(deskParticipants);
 
