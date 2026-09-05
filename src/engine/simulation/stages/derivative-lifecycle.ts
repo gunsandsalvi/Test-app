@@ -20,7 +20,7 @@
 
 import { GameState, RegionId } from '../../../types';
 import { derivativesBookOf, strikeDerivatives, keepDerivatives } from '../../ledger/contract-ledger';
-import { bankSecuritiesParty } from '../../../domain/party';
+import { ccpOfContract } from '../../../domain/clearing-house';
 
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../domain/derivatives/contract';
@@ -203,9 +203,9 @@ export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameSt
 }
 
 /**
- * THE MARGIN GOES BACK WHEN THE CONTRACT DOES. Initial margin is the A side's own cash, held by
- * the B side for as long as the contract lives, so a contract that matures, terminates on an
- * event or is closed out has no margin left to require.
+ * THE MARGIN GOES BACK WHEN THE CONTRACT DOES. Initial margin is the A side's own cash, held for
+ * as long as the contract lives, so a contract that matures, terminates on an event or is closed
+ * out has no margin left to require.
  *
  * Nothing ever released it. The tree had exactly ONE margin payment — the posting — and no second
  * one anywhere, so every dollar a client ever posted stayed with the desk for good and the desk's
@@ -213,25 +213,27 @@ export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameSt
  * moved by the week's margin with no creator that could explain it.
  */
 /**
- * §3.17-i — THE POSTING, in one place for every class. Initial margin is the CLIENT'S money
- * sitting with the desk: A pays it to the dealer's securities account, reserves move and equity
- * does not, and the ledger holds it as a lien on that account for the contract's life
- * (`contract-ledger.ts:syncMarginLiens`) until `releaseInitialMargin` returns it. Only a bank on
- * the B side holds margin; a contract with none to post posts none.
+ * §3.17-i — THE POSTING, in one place for every class. §3.17-iv-a — POSTED TO THE CLEARING
+ * HOUSE: A pays its margin to the CCP of the contract's money (`clearing-house.ts:ccpOfContract`),
+ * whose cash it is until `releaseInitialMargin` returns it; the CCP's rows at the banks carry it
+ * (`accounts.ts:ccpDepositsAt`) and `O15` holds them to the contracts. Whoever the B side is: the
+ * dealer no longer holds a client's margin, so a contract between two non-banks posts too. A
+ * contract with none to post posts none. (B's own margin comes with the novation, 17-iv-b.)
  */
 export function postInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract): void {
   const marginLocal = initialMarginLocal(c);
-  if (!(marginLocal > MIN_LEG_LOCAL) || c.b.kind !== 'BANK') return;
-  pay(ctx, { payer: c.a, payee: bankSecuritiesParty(c.b), amount: marginLocal, currency: c.currency, reason: 'initial margin posted' });
+  if (!(marginLocal > MIN_LEG_LOCAL)) return;
+  pay(ctx, { payer: c.a, payee: ccpOfContract(c), amount: marginLocal, currency: c.currency, reason: 'initial margin posted' });
 }
 
 function releaseInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract, view: DerivativeLifecycleView): void {
   const marginLocal = initialMarginLocal(c);
-  // Held on the desk's own securities account, which is where the posting put it; a party that
-  // has ceased to exist has nowhere to receive it, the same rule the close-out legs follow.
-  if (!(marginLocal > MIN_LEG_LOCAL) || c.b.kind !== 'BANK' || view.partyState(c.a) === 'GONE') return;
+  // Held by the clearing house, which is where the posting put it; a party that has ceased to
+  // exist has nowhere to receive it, the same rule the close-out legs follow — the CCP keeps
+  // it, and it is the first resource the waterfall (17-iv-c) draws on.
+  if (!(marginLocal > MIN_LEG_LOCAL) || view.partyState(c.a) === 'GONE') return;
   pay(ctx, {
-    payer: bankSecuritiesParty(c.b),
+    payer: ccpOfContract(c),
     payee: c.a,
     amount: marginLocal,
     currency: c.currency,

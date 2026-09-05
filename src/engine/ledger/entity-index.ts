@@ -76,7 +76,7 @@ export function companyOfParty(index: EntityIndex, ref: PartyRef): Company | und
     case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES':
       return index.companyById.get(ref.id);
     case 'INSTITUTION': case 'SEGMENT': case 'HOUSEHOLD':
-    case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE':
+    case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': case 'CCP':
       return undefined;
     default: return assertNever(ref, 'companyOfParty');
   }
@@ -99,7 +99,7 @@ export function regionOfParty(index: EntityIndex, ref: PartyRef): RegionId | und
     case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES':
       return index.companyById.get(ref.id)?.region;
     case 'INSTITUTION': return index.institutionById.get(ref.id)?.region;
-    case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK':
+    case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CCP':
       return ref.region;
     case 'CLEARING_HOUSE': return undefined;
     default: return assertNever(ref, 'regionOfParty');

@@ -1,10 +1,9 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
-import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf, liveObligationPartiesOf, securityLoanBookOf } from '../ledger/contract-ledger';
+import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf, liveObligationPartiesOf, securityLoanBookOf, ccpSheetAt } from '../ledger/contract-ledger';
 import { accountKey } from '../ledger/accounts';
-import { bankSecuritiesPartyOf } from '../../domain/party';
-import { initialMarginLocal } from '../../domain/derivatives/registry';
+import { ccpFreeResourcesLocal } from '../../domain/clearing-house';
 import type { CurrencyCode } from '../../domain/geography';
 import { deskRowsOf } from '../desk-register';
 import { issuedSharesOf, marketCapAt } from '../../engine2/instruments';
@@ -406,7 +405,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
     switch (ref.kind) {
       case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': return companyById.has(ref.id);
       case 'INSTITUTION': return institutionById.has(ref.id);
-      case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': return regions.has(ref.region);
+      case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': case 'CCP': return regions.has(ref.region);
       default: return assertNever(ref, 'o8.partyExists');
     }
   };
@@ -494,7 +493,7 @@ function o5(state: GameState, week: number): AuditFinding[] {
     switch (p.kind) {
       case 'INSTITUTION': { const e = ents.get(p.id); return !!e && !e.isDefaulted; }
       case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': { const c = byId5.get(p.id); return !!c && (isActiveCompany(c) || openEstates.has(c.id)); }
-      case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': return true;
+      case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': case 'CCP': return true;
       default: return assertNever(p, 'o5.alive');
     }
   };
@@ -577,10 +576,11 @@ function o12(state: GameState, week: number): AuditFinding[] {
 }
 
 /**
- * O13 — §3.13-BOOK d5b/d5c. AN ACCOUNT LIEN IS THE CLAIM THAT BINDS IT. Per account row, the lien
- * equals what the books say the party only holds: a lender's stock-loan collateral per money
- * (d5b), a dealer's initial margin on its live derivatives per money (d5c). The books are the
- * liens' only writers, so a gap is a write that bypassed them, or a claim with no lien.
+ * O13 — §3.13-BOOK d5b. AN ACCOUNT LIEN IS THE CLAIM THAT BINDS IT. Per account row, the lien
+ * equals what the books say the party only holds: a lender's stock-loan collateral per money.
+ * (d5c's other claim — a dealer's initial margin on its live derivatives — is gone with
+ * §3.17-iv-a: the margin is the clearing house's cash, and O15 holds it to the contracts.) The
+ * books are the liens' only writers, so a gap is a write that bypassed them, or a claim with no lien.
  */
 function o13(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
@@ -593,9 +593,6 @@ function o13(state: GameState, week: number): AuditFinding[] {
   REGION_IDS.forEach((r) => securityLoanBookOf(v2, r).forEach((l) => {
     if (l.lender.kind === 'INSTITUTION') claim(l.lender, l.currency, Math.max(0, l.collateralLocal));
   }));
-  derivativesOf(v2).forEach((c) => {
-    if (c.b.kind === 'BANK') claim(bankSecuritiesPartyOf(c.b.id), c.currency, initialMarginLocal(c));
-  });
   let off = 0, offLocal = 0;
   const seen = new Set<string>();
   const A = v2.accounts;
@@ -607,6 +604,25 @@ function o13(state: GameState, week: number): AuditFinding[] {
   }
   expected.forEach((usd, k) => { if (!seen.has(k) && usd > 1) { off++; offLocal += usd; } });
   if (off) out.push({ family: 'O', check: 'O13 account liens equal the claims that bind them', week, usd: offLocal, message: `${off} account rows (${B(offLocal)}) carry a lien that disagrees with the collateral and margin the books say they hold` });
+  return out;
+}
+
+/**
+ * O15 — §3.17-iv-a. THE CLEARING HOUSE HOLDS THE MARGIN IT WAS POSTED. Per region, the CCP's cash
+ * at the banks covers the initial margin its live contracts posted to it: the posting is the one
+ * inflow and the release the one outflow, so cash below margin is a payment the lifecycle did not
+ * make or a contract that posted nothing it claims to have. Cash ABOVE margin is legitimate — a
+ * party that ceased to exist never took its margin back — and is what the waterfall (17-iv-c)
+ * draws on first.
+ */
+function o15(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const v2 = ensureV2(state);
+  REGION_IDS.forEach((r) => {
+    const sheet = ccpSheetAt(v2, r);
+    const shortLocal = -ccpFreeResourcesLocal(sheet);
+    if (shortLocal > AUDIT_BOOKS_TOLERANCE) out.push({ family: 'O', check: 'O15 the clearing house holds the margin it was posted', week, usd: shortLocal, message: `${r}: the clearing house holds ${B(sheet.cashLocal)} against ${B(sheet.marginHeldLocal)} of members' initial margin — ${B(shortLocal)} short` });
+  });
   return out;
 }
 
@@ -631,7 +647,7 @@ function o14(state: GameState, week: number): AuditFinding[] {
 }
 
 export function auditOwnership(state: GameState, week: number): AuditFinding[] {
-  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week), ...o13(state, week), ...o14(state, week)];
+  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week), ...o13(state, week), ...o14(state, week), ...o15(state, week)];
 }
 export type { RegionId };
 

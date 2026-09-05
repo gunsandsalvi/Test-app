@@ -19,8 +19,8 @@ import { RegionId } from './geography';
 export interface FxDealerBook {
   /** Net notional the desk is long in each foreign currency (negative = short). */
   netNotionalByRegion: Record<string, number>;
-  // §3.13-BOOK d5c: the initial margin the desk holds from clients is a LIEN on its securities
-  // account (`accounts.ts:accountLienOf`), written by the contract ledger; not a scalar here.
+  // §3.17-iv-a: the desk holds no client margin — it is the clearing house's cash
+  // (`clearing-house.ts:CcpSheet`); not a scalar here.
   /** Gross notional outstanding — a measurement of the one derivative book, kept beside the
    *  net so the spot desk reads one struct. */
   grossNotionalLocal: number;

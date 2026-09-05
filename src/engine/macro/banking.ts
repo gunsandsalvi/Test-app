@@ -130,7 +130,7 @@ export const LIQUIDITY_COVERAGE_RATIO = 1.0;
 
 /** Funding that runs in a stress month, weighted by how fast each kind of it runs. */
 export function stressedOutflowLocal(sheet: BankingSector, lines: DepositLines): number {
-  const wholesaleLocal = lines.corporateLocal + lines.institutionalLocal + lines.smeLocal + (sheet.clientMarginLocal ?? 0);
+  const wholesaleLocal = lines.corporateLocal + lines.institutionalLocal + lines.smeLocal + lines.ccpLocal;
   return Math.max(0, lines.householdLocal) * RETAIL_DEPOSIT_RUNOFF_RATE
     + Math.max(0, wholesaleLocal) * WHOLESALE_FUNDING_RUNOFF_RATE;
 }
@@ -548,7 +548,6 @@ export function evolveBankingSector(
     // silently dropped — two lines vanished every week until the identity caught it (804
     // violations). Same trap stage 08 documents; carried explicitly.
     centralBankLoanLocal: prevBanking.centralBankLoanLocal ?? 0,
-    clientMarginLocal: prevBanking.clientMarginLocal ?? 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
     // G3c: the rate this bank actually decided to pay, published so nothing else has to

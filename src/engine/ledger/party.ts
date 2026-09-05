@@ -38,7 +38,7 @@ import type { PartyRef } from '../../domain/party';
  */
 const PARTY_KINDS = [
   'COMPANY', 'BANK', 'BANK_CREDIT', 'BANK_SECURITIES', 'CLEARING_HOUSE',
-  'INSTITUTION', 'SEGMENT', 'HOUSEHOLD', 'GOVERNMENT', 'CENTRAL_BANK',
+  'INSTITUTION', 'SEGMENT', 'HOUSEHOLD', 'GOVERNMENT', 'CENTRAL_BANK', 'CCP',
 ] as const;
 // Compile-loud completeness (§7.241): a new PartyRef kind fails to build until this list names
 // it. Before this check, a missing kind was interned at index 0 — COMPANY — so its payments were
@@ -110,7 +110,7 @@ export function partyFromKey(key: string): PartyRef | undefined {
       return at < 0 ? undefined
         : { kind: 'SEGMENT', region: rest.slice(0, at) as RegionId, industry: rest.slice(at + 1) as Industry };
     }
-    case 'GOVERNMENT': case 'CENTRAL_BANK': case 'HOUSEHOLD': case 'CLEARING_HOUSE':
+    case 'GOVERNMENT': case 'CENTRAL_BANK': case 'HOUSEHOLD': case 'CLEARING_HOUSE': case 'CCP':
       return { kind, region: rest } as PartyRef;
     default:
       return undefined;

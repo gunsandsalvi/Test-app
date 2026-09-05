@@ -289,7 +289,7 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
       // pass through it the same way (a NAMED carrier holds its consignments; a pool's own
       // purchases and its carriage cannot be told apart on one aggregate party).
       case 'SEGMENT': return undefined;
-      case 'CLEARING_HOUSE': case 'CENTRAL_BANK': return p.region;
+      case 'CLEARING_HOUSE': case 'CENTRAL_BANK': case 'CCP': return p.region;
       case 'HOUSEHOLD': case 'GOVERNMENT': return undefined; // a sink: consumed on receipt
       default: return undefined;
     }

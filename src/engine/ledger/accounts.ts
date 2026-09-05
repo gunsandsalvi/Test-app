@@ -37,7 +37,7 @@
  */
 import { WeeklyStepContext } from '../simulation/stages/context';
 import type { EntityId } from '../../domain/ids';
-import { bankCreditParty, bankParty, bankPartyOf, bankSecuritiesParty, companyParty } from '../../domain/party';
+import { bankCreditParty, bankParty, bankPartyOf, bankSecuritiesParty, ccpParty, companyParty } from '../../domain/party';
 import { PartyRef } from './party';
 import { partyId, partyOf, partyKey, partyFromKey } from './party';
 import { RegionId, CurrencyCode, CURRENCY_CODES, currencyOf, NUMERAIRE } from '../../domain/geography';
@@ -319,10 +319,13 @@ export const poolCashOf = (v2: V2World, region: RegionId, industry: string): num
 /** The household sector's deposits (A3.4), in its own region's money. */
 export const householdDepositsOf = (v2: V2World, region: RegionId): number =>
   sectorCashOf(v2, { kind: 'HOUSEHOLD', region }, currencyOf(region));
+/** §3.17-iv-a: the clearing house's cash across the region's banks, in the region's money. */
+export const ccpCashOf = (v2: V2World, region: RegionId): number =>
+  sectorCashOf(v2, ccpParty(region), currencyOf(region));
 
 /** A bank's line of one sector kind: every such party's row at it, in the BANK's money — a
  *  deposit line is what the bank owes, and a bank keeps its book in one money. */
-function sectorDepositsAt(v2: V2World, bankTicker: Ticker, kind: 'SEGMENT' | 'HOUSEHOLD', currency: CurrencyCode): number {
+function sectorDepositsAt(v2: V2World, bankTicker: Ticker, kind: 'SEGMENT' | 'HOUSEHOLD' | 'CCP', currency: CurrencyCode): number {
   let total = 0;
   v2.accounts.bankRowsByParty.forEach((byBank, partyRef) => {
     if (!partyKeyOf(v2, partyRef).startsWith(kind + ':')) return;
@@ -343,6 +346,9 @@ export const smeDepositsAt = (v2: V2World, bankTicker: Ticker, currency: Currenc
 /** A bank's household deposit line: the household sector's row at it (A3.4). */
 export const householdDepositsAt = (v2: V2World, bankTicker: Ticker, currency: CurrencyCode): number =>
   sectorDepositsAt(v2, bankTicker, 'HOUSEHOLD', currency);
+/** §3.17-iv-a: the clearing house's row at a bank — the members' margin it keeps there. */
+export const ccpDepositsAt = (v2: V2World, bankTicker: Ticker, currency: CurrencyCode): number =>
+  sectorDepositsAt(v2, bankTicker, 'CCP', currency);
 
 // ---- A3.6c-ii — THE CORPORATE AND INSTITUTIONAL LINES ARE THE DEPOSITORS' ACCOUNTS. A bank's
 // corporate line is the sum of the accounts of the firms whose house bank it is (a resolved
@@ -395,6 +401,7 @@ export function depositLinesAt(
     corporateLocal: corporateDepositsAt(v2, companies, bank),
     institutionalLocal: institutionalDepositsAt(v2, entities, bank),
     smeLocal: smeDepositsAt(v2, bank.ticker, money),
+    ccpLocal: ccpDepositsAt(v2, bank.ticker, money),
   };
 }
 /** The lines in the week: the pass's own holders. */
@@ -511,7 +518,7 @@ export function cashOf(v2: V2World, c: Pick<Company, 'id'> & { isBankEntity?: bo
 }
 
 /** Which line of a bank's book (or of the central bank's) a row is. */
-export const ACCOUNT_CLASSES = ['CORPORATE', 'INSTITUTIONAL', 'SME', 'HOUSEHOLD', 'RESERVES', 'TREASURY', 'CREATED', 'SECURITIES', 'VOID'] as const;
+export const ACCOUNT_CLASSES = ['CORPORATE', 'INSTITUTIONAL', 'SME', 'HOUSEHOLD', 'RESERVES', 'TREASURY', 'CREATED', 'SECURITIES', 'CCP', 'VOID'] as const;
 export type AccountClass = typeof ACCOUNT_CLASSES[number];
 
 /** The bank a row sits at: a named bank, the central bank, or nowhere (transit, the house, issuance). */
@@ -753,6 +760,20 @@ export function buildAccountMirror(ctx: WeeklyStepContext): AccountStore {
       if (regionBanks.length === 0) { openRow(s, p, AT_NOWHERE, 'SME', money, poolCashOf(ctx.v2, region, seg.industry)); split.push(1); }
       s.splitOfParty.set(p, Float64Array.from(split));
     });
+    // §3.17-iv-a: the clearing house — a CARRIED row at each bank like a pool's, its members'
+    // margin landing on the banks by market share (a CCP keeps its cash across its settlement
+    // banks; there is no house bank).
+    {
+      const ccp = ccpParty(region);
+      const p = partyId(ccp);
+      const split: number[] = [];
+      regionBanks.forEach((b) => {
+        openRow(s, p, s.bankIdxOfBank.get(b.id)!, 'CCP', money, ctx.v2.accounts.balance[sectorRowAt(ctx.v2, ccp, b.ticker, money)]);
+        split.push(shareSum > 0 ? (b.bankMarketShare ?? 0) / shareSum : 1 / Math.max(1, regionBanks.length));
+      });
+      if (regionBanks.length === 0) { openRow(s, p, AT_NOWHERE, 'CCP', money, ccpCashOf(ctx.v2, region)); split.push(1); }
+      s.splitOfParty.set(p, Float64Array.from(split));
+    }
     // A3.5: the treasury's net position at the central bank — its persistent row.
     openCarried({ kind: 'GOVERNMENT', region }, AT_CENTRAL_BANK, 'TREASURY', money);
     openRow(s, partyId({ kind: 'CENTRAL_BANK', region }), AT_NOWHERE, 'VOID', money, 0);
@@ -919,7 +940,7 @@ export function settledTallies(s: AccountStore, fx: FxTable): SettledTallies {
         else if (p.kind === 'CLEARING_HOUSE') t.clearingHouseResidualLocal += d;
         break;
       }
-      case 'CORPORATE': case 'INSTITUTIONAL': case 'SME': case 'HOUSEHOLD':
+      case 'CORPORATE': case 'INSTITUTIONAL': case 'SME': case 'HOUSEHOLD': case 'CCP':
         if (bi === AT_NOWHERE) t.unresolvedLocal += d;
         break;
       case 'RESERVES': break;
@@ -946,6 +967,7 @@ export function projectBooks(ctx: WeeklyStepContext, s: AccountStore): void {
     const reg = ctx.updatedRegions[region]; if (!reg) return;
     landSectorRows({ kind: 'HOUSEHOLD', region });
     (reg.smePools ?? []).forEach((seg) => landSectorRows({ kind: 'SEGMENT', region, industry: seg.industry }));
+    landSectorRows(ccpParty(region));
   });
   ctx.updatedCompanies.forEach((c) => {
     if (c.isBankEntity && c.bankBalanceSheet) {

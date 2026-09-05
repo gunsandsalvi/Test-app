@@ -551,11 +551,19 @@ written from here):
     one commit each; 17-i (the margin a contract carries is the amount posted), 17-ii (initial
     margin is the reference's own move) and 17-iii (variation margin is the mark, for every
     class) are in §9. What is left, in order:
-17-iv. **THE CCP.** Novate every contract to the region's clearing house: each side faces the
-    CCP, initial margin is posted TO it, variation flows THROUGH it, and a member's default is
-    its waterfall (the defaulter's margin, then a default fund the members contribute to, then
-    mutualisation) rather than a bilateral close-out. The CCP is a real entity with a balance
-    sheet (C3), and C5 holds: its resources are finite.
+17-iv. **THE CCP** — split 2026-09-05, one commit each; 17-iv-a (the clearing house is a party
+    with a balance sheet, and holds the margin) is in §9. What is left, in order:
+17-iv-b. **NOVATION.** Each side faces the CCP: `DerivativeContract` names the house as its
+    counterparty on both legs (a contract's `a`/`b` stay the members; the house stands between
+    them for every payment), the B side posts its own initial margin too, and variation margin
+    flows THROUGH the house — A pays it, the house pays B — so the house is flat on marks by
+    construction and `O9` measures it so. C2, C2.a.
+17-iv-c. **THE WATERFALL AND THE DEFAULT FUND.** A member's default is the house's waterfall
+    rather than a bilateral close-out: the defaulter's margin (already the house's, and kept
+    when a party is GONE), then the defaulter's fund contribution, then the house's own capital,
+    then the survivors' contributions. The default fund is an obligation the members pay into,
+    sized cover-1 (the largest member's margin shortfall over a close-out move); running past
+    the end is a real event the news tells. C3 ✅, C4, C4.a, C5 — the CCP's resources are finite.
 17-v. **CAPACITY IS A CLEARING-MEMBER LIMIT (rule 5), and the market view:** open interest,
     margin held and net position per member, by class — the "stats on the derivative markets
     overall" the user asked for.
@@ -1628,6 +1636,28 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17-iv-a — THE CLEARING HOUSE IS A PARTY WITH A BALANCE SHEET, AND HOLDS THE MARGIN.** The
+region's derivatives central counterparty is a `PartyRef` (`party.ts` kind `CCP`, keyed by
+region; `ccpParty`), distinct from the cash books' `CLEARING_HOUSE` pass-through: it has CASH,
+rows at the region's banks carried week to week like a pool's, a leg landing by market share
+(`accounts.ts:buildAccountMirror`, a `CCP` account class), read as `ccpCashOf` and as a fifth
+deposit line on each bank (`DepositLines.ccpLocal`, `ccpDepositsAt`). Initial margin is posted
+TO it: `postInitialMargin` pays A's margin to the house of the contract's money
+(`domain/clearing-house.ts:ccpOfContract` — a contract states its currency, so the house that
+holds its margin is the one that keeps its books in it) and `releaseInitialMargin` has the house
+return it, whoever the B side is; a contract between two non-banks posts now too, and a GONE
+party's margin stays with the house. So the dealer holds no client margin: `clientMarginLocal`
+(a scalar beside the deposit lines, first a running total nothing reduced and then a read of a
+lien) and the lien on the desk's securities account (`syncMarginLiens`, the derivative half of
+`O13`) are deleted, `spendableDepositsOf` with them — every deposit is a depositor's rows and
+`depositsOf` is the money stock's read (M6 loses its "margin moved with no row" tail). The
+house's sheet is `CcpSheet` (cash held, margin held; `contract-ledger.ts:ccpSheetAt`), and `O15`
+holds its cash to the margin its live contracts posted. Atlas C3 ⚠️ (its default fund and
+capital are 17-iv-c's), D3 re-cited ✅, money A4 re-cited. `test/ccp.test.ts`: the key reads
+back, the house is the contract's money's, its cash is its rows and each bank's row is a line,
+the sheet off the books; `test/contract-ledger.test.ts`: a strike writes no dealer lien. Gates
+green; no run.
 
 **17-iii — VARIATION MARGIN IS THE MARK, FOR EVERY CLASS.** A swap and protection were worth
 zero between their weekly nets and were valued exactly once, at a counterparty's death,

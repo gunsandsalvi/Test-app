@@ -41,7 +41,7 @@ export function wireWorldOf(
       switch (ref.kind) {
         case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': return companyIds.has(ref.id);
         case 'INSTITUTION': return institutionIds.has(ref.id);
-        case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': return regions.has(ref.region);
+        case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': case 'CCP': return regions.has(ref.region);
         default: return assertNever(ref, 'wireWorld.partyExists');
       }
     },
@@ -62,7 +62,7 @@ export function wireWorldOf(
       switch (ref.kind) {
         case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES': companyIds.add(ref.id); return;
         case 'INSTITUTION': institutionIds.add(ref.id); return;
-        case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': return;
+        case 'SEGMENT': case 'HOUSEHOLD': case 'GOVERNMENT': case 'CENTRAL_BANK': case 'CLEARING_HOUSE': case 'CCP': return;
         default: return assertNever(ref, 'wireWorld.admit');
       }
     },

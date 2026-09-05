@@ -106,7 +106,7 @@ checked by `scripts/check-atlas.sh`.
 | A2.a a holder's own money | `src/engine/ledger/accounts.ts:homeCurrencyOf` | ✅ |
 | **A2.b FORBID two currencies are never added** | `src/domain/currency.ts:convert` | ✅ |
 | A3 fungible within its issuer and currency | `src/engine/ledger/accounts.ts:balanceOfIn` | ✅ |
-| A4 the money stock is a read | `src/domain/banking.ts:spendableDepositsOf` | ✅ |
+| A4 the money stock is a read | `src/domain/banking.ts:depositsOf` | ✅ |
 | B1 an account is (holder, issuer, currency) | `src/engine/ledger/accounts.ts:openRow` | ✅ |
 | B1.a several accounts; foreign currency is a real position | `src/engine/ledger/accounts.ts:rowsInCurrency` | ✅ |
 | B1.b VERIFY Σ(accounts at an issuer) = its money liability | `src/engine/audit/money.ts:m5` | ⚠️ |

@@ -53,6 +53,11 @@ export type PartyRef =
    *  dealer and the fee-earning desks settle against it, so it is flat by construction: a
    *  non-zero net is a leg some book forgot to name, reported rather than absorbed. */
   | { kind: 'CLEARING_HOUSE'; region: RegionId }
+  /** §3.17-iv-a — the region's derivatives CENTRAL COUNTERPARTY. Unlike `CLEARING_HOUSE` above
+   *  it is a real party with a balance: it holds its members' initial margin as cash at the
+   *  region's banks (rows carried like a sector's, `accounts.ts:buildAccountMirror`), and it can
+   *  be short of it. `domain/clearing-house.ts` reads its sheet. */
+  | { kind: 'CCP'; region: RegionId }
   /** §3.13-BOOK slice (c2b): the ONE arm keyed by an entity id rather than a ticker — an
    *  institution has no ticker the ledger uses, and this is the inconsistency `c-then` ends by
    *  making `PartyRef` a VIEW of the entity store rather than a parallel union. */
@@ -121,3 +126,5 @@ export const companyPartyOf = (id: EntityId): PartyOfKind<'COMPANY'> => ({ kind:
 export const bankPartyOf = (id: EntityId): PartyOfKind<'BANK'> => ({ kind: 'BANK', id });
 export const bankCreditPartyOf = (id: EntityId): PartyOfKind<'BANK_CREDIT'> => ({ kind: 'BANK_CREDIT', id });
 export const bankSecuritiesPartyOf = (id: EntityId): PartyOfKind<'BANK_SECURITIES'> => ({ kind: 'BANK_SECURITIES', id });
+/** §3.17-iv-a: a region's derivatives clearing house, from the region. */
+export const ccpParty = (region: RegionId): PartyOfKind<'CCP'> => ({ kind: 'CCP', region });

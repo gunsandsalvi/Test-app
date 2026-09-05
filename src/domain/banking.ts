@@ -192,8 +192,6 @@ export interface BankingSector {
    *  funding close, drawn when the week ends short of the buffer and repaid from excess cash. A
    *  named liability with a named creditor; wholesale money "from nobody" is gone. */
   centralBankLoanLocal?: number;
-  /** §5-CLOSE — FX clients' margin held by this bank's desk: their money, a liability. */
-  clientMarginLocal?: number;
   /** HH — a reported weekly FLOW (not a stock): interest this bank paid its household
    *  depositors, at its own deposit rate. Part of measured household income. */
   householdDepositInterestWeeklyLocal?: number;
@@ -445,36 +443,26 @@ export const MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER = 0.25;
 export const MORTGAGE_MIN_LOSS_SEVERITY = 0.05;
 
 /** The household book's risk-weighted footprint, per-kind. */
-/** Every deposit-class liability on a sheet — the household, corporate, institutional and SME
- *  lines and the clients' margin held. ONE definition (§7.373): the money audit's snapshot
- *  omitted the margin line while its week-end read included it, and the whole margin STOCK
- *  printed as "unexplained" money every week the desks held any. */
-export const depositsOf = (s: BankingSector, lines: DepositLines): number =>
-  lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.smeLocal + (s.clientMarginLocal ?? 0);
+/** Every deposit-class liability on a sheet — the household, corporate, institutional, SME and
+ *  clearing-house lines. ONE definition (§7.373): the money audit's snapshot once omitted a line
+ *  its week-end read included, and the whole stock of that line printed as "unexplained" money
+ *  every week. §3.17-iv-a: the desks' `clientMarginLocal` — a scalar beside the lines, and the
+ *  one deposit that was not money — is gone; a client's initial margin is the clearing house's
+ *  cash, a depositor's row like any other, so every deposit here is money and `depositsOf` is
+ *  the money stock's read (`money-and-settlement.md` A4). */
+export const depositsOf = (_s: BankingSector, lines: DepositLines): number =>
+  lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.smeLocal + lines.ccpLocal;
 
-/**
- * THE MONEY STOCK'S SHARE of a bank's deposits: what its customers can actually SPEND.
- *
- * Posted margin is the client's money and the bank's liability, so `depositsOf` counts it and the
- * balance-sheet identity needs it there. It is NOT money: it is encumbered collateral the client
- * cannot pay anyone with, and the cash behind it sits on the desk's own securities account, which
- * every settlement tally reads as the bank's own. Counting it as money therefore put the same
- * dollars on both sides of the identity — the stock did not move when a client posted margin,
- * while the tallies said the bank had absorbed it, and the difference was the money family's last
- * unexplained line.
- */
-export const spendableDepositsOf = (s: BankingSector, lines: DepositLines): number =>
-  depositsOf(s, lines) - (s.clientMarginLocal ?? 0);
-
-/** §5-WIRES A3.6c — A BANK'S DEPOSIT LINES, READ OFF THE LEDGER. The four classes are the
- *  depositors' accounts at the bank: the household sector's row, the pools' rows, and the
- *  firms' and institutions' accounts whose house bank it is (`depositLinesAt`, ledger/accounts.ts).
- *  A sheet-taking function that needs a line takes this beside the sheet, as it takes the cash. */
-export interface DepositLines { householdLocal: number; corporateLocal: number; institutionalLocal: number; smeLocal: number }
-export const ZERO_DEPOSIT_LINES: DepositLines = { householdLocal: 0, corporateLocal: 0, institutionalLocal: 0, smeLocal: 0 };
+/** §5-WIRES A3.6c — A BANK'S DEPOSIT LINES, READ OFF THE LEDGER. The five classes are the
+ *  depositors' accounts at the bank: the household sector's row, the pools' rows, the clearing
+ *  house's row (§3.17-iv-a), and the firms' and institutions' accounts whose house bank it is
+ *  (`depositLinesAt`, ledger/accounts.ts). A sheet-taking function that needs a line takes this
+ *  beside the sheet, as it takes the cash. */
+export interface DepositLines { householdLocal: number; corporateLocal: number; institutionalLocal: number; smeLocal: number; ccpLocal: number }
+export const ZERO_DEPOSIT_LINES: DepositLines = { householdLocal: 0, corporateLocal: 0, institutionalLocal: 0, smeLocal: 0, ccpLocal: 0 };
 export const addDepositLines = (a: DepositLines, b: DepositLines): DepositLines => ({
   householdLocal: a.householdLocal + b.householdLocal, corporateLocal: a.corporateLocal + b.corporateLocal,
-  institutionalLocal: a.institutionalLocal + b.institutionalLocal, smeLocal: a.smeLocal + b.smeLocal,
+  institutionalLocal: a.institutionalLocal + b.institutionalLocal, smeLocal: a.smeLocal + b.smeLocal, ccpLocal: a.ccpLocal + b.ccpLocal,
 });
 
 /** §5-WIRES D — THE LOAN BOOKS ARE READS. A stored sum of stored rows can disagree with its rows

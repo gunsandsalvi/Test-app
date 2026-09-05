@@ -55,6 +55,7 @@ function partyLabel(p: PartyRef): string {
     case 'HOUSEHOLD': return `${p.region} households`;
     case 'GOVERNMENT': return `the ${p.region} treasury`;
     case 'CENTRAL_BANK': return `the ${p.region} central bank`;
+    case 'CCP': return `the ${p.region} clearing house`;
     default: return p.kind.toLowerCase().replace(/_/g, ' ');
   }
 }

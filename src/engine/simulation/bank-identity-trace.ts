@@ -49,7 +49,7 @@ export function bankIdentityTraceEnabled(): boolean {
  * cannot verify — and it is why this is typed before the rename runs.
  */
 const FIELD_SIGNS: Record<keyof ReturnType<typeof fieldsOf>, 1 | -1> = {
-  depositsLocal: 1, corporateDepositsLocal: 1, institutionalDepositsLocal: 1, clientMarginLocal: 1,
+  depositsLocal: 1, corporateDepositsLocal: 1, institutionalDepositsLocal: 1, ccpDepositsLocal: 1,
   smeDepositsLocal: 1, centralBankLoanLocal: 1, bankEquityLocal: 1, srfBorrowingLocal: 1, repoBorrowedLocal: 1,
   businessLoanBookLocal: -1, consumerLoanBookLocal: -1, sovHoldingsLocal: -1, cashReservesLocal: -1,
   repoLentLocal: -1, onRrpLendingLocal: -1, sovereignAccruedCouponLocal: -1, deskInventoryAbsLocal: -1,
@@ -63,7 +63,7 @@ export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLin
   return {
     depositsLocal: lines.householdLocal, corporateDepositsLocal: lines.corporateLocal,
     institutionalDepositsLocal: lines.institutionalLocal,
-    clientMarginLocal: bs.clientMarginLocal ?? 0, smeDepositsLocal: lines.smeLocal,
+    ccpDepositsLocal: lines.ccpLocal, smeDepositsLocal: lines.smeLocal,
     centralBankLoanLocal: bs.centralBankLoanLocal ?? 0, bankEquityLocal: bs.bankEquityLocal,
     srfBorrowingLocal: bs.srfBorrowingLocal ?? 0, repoBorrowedLocal: bs.repoBorrowedLocal ?? 0,
     businessLoanBookLocal: businessLoanBookOf(bs, facilityBookLocal), consumerLoanBookLocal: consumerLoanBookOf(bs),
@@ -80,7 +80,7 @@ export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLin
 export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, deskLocal: number): number {
   return (
     lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
-    + (bs.clientMarginLocal ?? 0) + lines.smeLocal + (bs.centralBankLoanLocal ?? 0)
+    + lines.ccpLocal + lines.smeLocal + (bs.centralBankLoanLocal ?? 0)
     + bs.bankEquityLocal + (bs.srfBorrowingLocal ?? 0) + (bs.repoBorrowedLocal ?? 0)
     - businessLoanBookOf(bs, facilityBookLocal) - consumerLoanBookOf(bs) - sovLocal - cashLocal
     - (bs.repoLentLocal ?? 0) - (bs.onRrpLendingLocal ?? 0)

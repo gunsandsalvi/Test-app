@@ -70,7 +70,7 @@ export function closeSeedMoney(
       // funding residual is struck on the rounded lines.
       const lines = depositLinesAt(v2, companies, institutionalEntities, b);
       const otherDepositsLocal = Math.round(Math.max(0, lines.corporateLocal)) + Math.round(Math.max(0, lines.institutionalLocal))
-        + Math.max(0, lines.smeLocal) + Math.max(0, s.clientMarginLocal ?? 0) + Math.max(0, s.centralBankLoanLocal ?? 0);
+        + Math.max(0, lines.smeLocal) + Math.max(0, lines.ccpLocal) + Math.max(0, s.centralBankLoanLocal ?? 0);
       const needLocal = bankTotalAssetsLocal(s, openingCashOf(s), facilityBookOf(v2, b.id), seedBankBookLocalOf(s)) - s.bankEquityLocal - (s.repoBorrowedLocal ?? 0) - (s.srfBorrowingLocal ?? 0) - otherDepositsLocal;
       let lineLocal = 0;
       if (needLocal >= 0) {

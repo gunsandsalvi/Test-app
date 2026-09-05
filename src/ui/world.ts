@@ -10,7 +10,7 @@ import { GameState, Company, InstitutionalEntity, Region, RegionId } from '../ty
 import { derivativesOf } from '../engine/ledger/contract-ledger';
 import { loanBooksOf } from '../domain/banking';
 import { entityCashOf, poolCashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../engine/ledger/accounts';
-import { spendableDepositsOf } from '../domain/banking';
+import { depositsOf } from '../domain/banking';
 import { V2World, ensureV2, rowOf, ringFill, revHistFill, regionOf as regionCodeOf, typeOf, instrumentRefOf } from '../engine2/world';
 import { bookHeadOf, instrumentIdAt } from '../engine2/holdings';
 import { REGION_IDS } from '../domain/geography';
@@ -131,7 +131,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     const s = c.bankBalanceSheet;
     put(`bank:${c.id}:capital ratio`, s.bankCapitalRatio);
     put(`bank:${c.id}:nim`, s.netInterestMarginPct);
-    put(`bank:${c.id}:deposits`, spendableDepositsOf(s, stateDepositLines(state, c)));
+    put(`bank:${c.id}:deposits`, depositsOf(s, stateDepositLines(state, c)));
     put(`bank:${c.id}:reserves`, bankReservesOf(ensureV2(state), c.id));
     put(`bank:${c.id}:central bank loan`, s.centralBankLoanLocal ?? 0);
     put(`bank:${c.id}:loans`, loanBooksOf(s, facilityBookOf(ensureV2(state), c.id)));

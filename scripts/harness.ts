@@ -2386,7 +2386,7 @@ function runHarness() {
         // books (stages/settlement.ts), so the line has real reserves behind it and excluding it
         // would leave the ASSET unmatched — the mirror of the error this comment used to record.
         // HH4d: wholesale funding is a real liability line split out of the deposit label.
-        lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + (bs.clientMarginLocal ?? 0) + lines.smeLocal + (bs.centralBankLoanLocal ?? 0) + bs.bankEquityLocal + (bs.srfBorrowingLocal ?? 0) + (bs.repoBorrowedLocal ?? 0)
+        lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.ccpLocal + lines.smeLocal + (bs.centralBankLoanLocal ?? 0) + bs.bankEquityLocal + (bs.srfBorrowingLocal ?? 0) + (bs.repoBorrowedLocal ?? 0)
         - businessLoanBookOf(bs, facilityBookLocal) - consumerLoanBookOf(bs) - sovLocal - reservesLocal
         - (bs.repoLentLocal ?? 0) - (bs.onRrpLendingLocal ?? 0)
         // CAL: a sovereign coupon earned and not yet paid is this bank's asset against the
@@ -2407,7 +2407,7 @@ function runHarness() {
         const gb = (v: number | undefined) => ((v ?? 0) / 1e9).toFixed(1);
         console.log(`  [bank-identity] w${w} ${c.ticker} resid ${(residualLocal / 1e9).toFixed(2)}B: hhDep ${gb(lines.householdLocal)}B`
           + ` corp ${gb(lines.corporateLocal)}B inst ${gb(lines.institutionalLocal)}B`
-          + ` sme ${gb(lines.smeLocal)}B margin ${gb(bs.clientMarginLocal)}B`
+          + ` sme ${gb(lines.smeLocal)}B ccp ${gb(lines.ccpLocal)}B`
           + ` cbloan ${gb(bs.centralBankLoanLocal)}B eq ${gb(bs.bankEquityLocal)}B`
           + ` srf ${gb(bs.srfBorrowingLocal)}B repoB ${gb(bs.repoBorrowedLocal)}B`
           + ` || bizL ${gb(businessLoanBookOf(bs, facilityBookLocal))}B consL ${gb(consumerLoanBookOf(bs))}B`

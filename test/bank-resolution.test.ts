@@ -36,7 +36,7 @@ const SOV = 20;
 // A3.6c: the deposit lines are reads of the depositors' accounts; here they are stated beside
 // the sheet — 80 of household money and 15 of corporate unless said.
 const linesOf = (over: Partial<DepositLines> = {}): DepositLines =>
-  ({ householdLocal: 80, corporateLocal: 15, institutionalLocal: 0, smeLocal: 0, ...over });
+  ({ householdLocal: 80, corporateLocal: 15, institutionalLocal: 0, smeLocal: 0, ccpLocal: 0, ...over });
 const identityResidual = (s: BankingSector, cashLocal = CASH, lines = linesOf(), facilityBookLocal = FAC, sovLocal = SOV) =>
   bankAssumedLiabilitiesLocal(s, lines) + (s.centralBankLoanLocal ?? 0) + s.bankEquityLocal - bankSheetAssetsLocal(s, cashLocal, facilityBookLocal, sovLocal);
 
@@ -113,7 +113,7 @@ test('the transfer closes both sheets: acquirer takes every line, target keeps o
   aCash += cash; A.bankEquityLocal += cash; fCash -= cash; F.bankEquityLocal -= cash;
   // The depositors re-key to the acquirer: its corporate and institutional lines are theirs now.
   const aLines = linesOf({ householdLocal: 210, corporateLocal: 30, institutionalLocal: 5 });
-  const fLeft: DepositLines = { householdLocal: 0, corporateLocal: 0, institutionalLocal: 0, smeLocal: 0 };
+  const fLeft: DepositLines = { householdLocal: 0, corporateLocal: 0, institutionalLocal: 0, smeLocal: 0, ccpLocal: 0 };
   // The facilities follow the books: the ladders now name the acquirer as lender (moveFacilityLender at the stage).
   const aFac = FAC + FAC, fFac = 0;
   assert.ok(Math.abs(identityResidual(A, aCash, aLines, aFac, aBook)) < 1e-9, `acquirer residual ${identityResidual(A, aCash, aLines, aFac, aBook)}`);

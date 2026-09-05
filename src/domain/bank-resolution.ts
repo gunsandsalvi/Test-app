@@ -51,7 +51,7 @@ export function bankSheetAssetsLocal(sheet: BankingSector, cashLocal: number, fa
  *  Wholesale money and equity are the two the plan decides. */
 export function bankAssumedLiabilitiesLocal(sheet: BankingSector, lines: DepositLines): number {
   return lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
-    + lines.smeLocal + (sheet.clientMarginLocal ?? 0)
+    + lines.smeLocal + lines.ccpLocal
     + (sheet.repoBorrowedLocal ?? 0) + (sheet.srfBorrowingLocal ?? 0);
 }
 

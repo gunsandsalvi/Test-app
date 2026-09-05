@@ -13,7 +13,7 @@ import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { issueHolding, transferHolding, retireHolding, lienUnitsOf } from '../src/engine/ledger/holdings-ledger';
 import { bankPartyOf } from '../src/domain/party';
 import { accountLienOf, partyLienLocal } from '../src/engine/ledger/accounts';
-import { bookTradeInvoices, tradeInvoicesOf, settleTradeInvoices, commitCapital, lpCommitmentsOf, drawCommitment, returnCommitment, liveObligationPartiesOf, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, publishPrimeBrokerageBook, primeBrokerageBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
+import { bookTradeInvoices, tradeInvoicesOf, settleTradeInvoices, commitCapital, lpCommitmentsOf, drawCommitment, returnCommitment, liveObligationPartiesOf, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, publishPrimeBrokerageBook, primeBrokerageBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf, ccpMarginHeldLocal } from '../src/engine/ledger/contract-ledger';
 import type { WeeklyStepContext } from '../src/engine/simulation/stages/context';
 import type { DerivativeContract } from '../src/domain/derivatives/contract';
 import { asEntityId, asInstrumentId } from '../src/domain/ids';
@@ -228,7 +228,7 @@ test('a repo pledge is a lien on the borrower\'s row: it cannot be sold under, i
   }
 });
 
-test('§3.13-BOOK d5c: a client\'s initial margin is a lien on the dealer\'s securities account for the contract\'s life', () => {
+test('§3.17-iv-a: a strike writes no lien on the dealer — the margin is the clearing house\'s, held to the live contracts', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
   const a = { kind: 'INSTITUTION' as const, id: asEntityId('INST-A') };
   const dealer = asEntityId('USA_BANK1'), other = asEntityId('USA_BANK2');
@@ -242,15 +242,17 @@ test('§3.13-BOOK d5c: a client\'s initial margin is a lien on the dealer\'s sec
     };
     strikeDerivatives(ctx, [forward]);
     const marginLocal = 1e6 * 0.02;
-    assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: dealer }, 'USD'), marginLocal, 'the strike wrote the lien');
-    assert.equal(partyLienLocal(v2, { kind: 'BANK_SECURITIES', id: dealer }), marginLocal);
-    // A resolution novates the book: the lien follows the dealer.
+    assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: dealer }, 'USD'), 0, 'the dealer holds no client margin');
+    assert.equal(partyLienLocal(v2, { kind: 'BANK_SECURITIES', id: dealer }), 0);
+    assert.equal(ccpMarginHeldLocal(v2, 'USA'), marginLocal, 'the USD clearing house holds the margin the contract posted');
+    assert.equal(ccpMarginHeldLocal(v2, 'EUR'), 0, 'the contract settles in dollars, so no other house holds any');
+    // A resolution novates the book: the margin stays where it is — with the house, not the dealer.
     novateDerivatives(ctx, (p) => (p.kind === 'BANK' && p.id === dealer ? { kind: 'BANK', id: other } : p));
-    assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: dealer }, 'USD'), 0);
-    assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: other }, 'USD'), marginLocal);
-    // The contract settles away: the margin is returned and the lien with it.
-    keepDerivatives(ctx, []);
     assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: other }, 'USD'), 0);
+    assert.equal(ccpMarginHeldLocal(v2, 'USA'), marginLocal);
+    // The contract settles away: the house holds nothing against it.
+    keepDerivatives(ctx, []);
+    assert.equal(ccpMarginHeldLocal(v2, 'USA'), 0);
   } finally {
     setActiveWireWorld(undefined);
   }

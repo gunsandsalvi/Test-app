@@ -21,7 +21,7 @@ import { riskAversionOf } from '../../../../domain/preferences';
 import { regionReferenceOf } from '../../../../domain/derivatives/contract';
 import { bankBookAssetsLocal } from '../../../desk-register';
 import type { EntityId } from '../../../../domain/ids';
-import { bankPartyOf, bankSecuritiesPartyOf, companyParty } from '../../../../domain/party';
+import { bankPartyOf, companyParty } from '../../../../domain/party';
 import { RegionId } from '../../../../types';
 import { institutionProfile } from '../../../../domain/institution-profiles';
 import { InstitutionalEntity } from '../../../../domain/institutions';
@@ -45,7 +45,7 @@ import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { initialMarginLocal, withInitialMargin, postInitialMargin } from '../derivative-lifecycle';
 import { derivativesBookOf, strikeDerivatives, tradeInvoicesOf } from '../../../ledger/contract-ledger';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
-import { cashOf, bankReservesOf, partyLienLocal } from '../../../ledger/accounts';
+import { cashOf, bankReservesOf } from '../../../ledger/accounts';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
 import { fxBasisInstrumentId } from '../../../../domain/instrument-keys';
@@ -417,15 +417,12 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty, vie
     // writing the result back silently reverted every balance-sheet line settlement had moved
     // since — measured at exactly the week's SME origination, -160.5M on the largest dealer in
     // week 1, on 11 banks, growing every week.
-    // THE LINE IS A READ OF THE LIVE BOOK, not a running total. It used to ACCUMULATE each
-    // week's new margin and nothing ever subtracted from it, so a desk's margin liability grew
-    // for ever while the contracts behind it matured away — two representations of one quantity,
-    // and the one on the sheet could only diverge. §3.13-BOOK d5c: the margin the desk holds is
-    // the LIEN on its securities account, which the contract ledger set from the contracts that
-    // are actually live, this week's strikes included — the line is that read.
+    // §3.17-iv-a: the desk holds no client margin — it is the clearing house's cash, a row at
+    // the banks like any depositor's (`accounts.ts:ccpDepositsAt`). The `clientMarginLocal`
+    // line that stood here, first a running total nothing ever reduced and then a read of a
+    // lien on the desk's securities account, is gone with it.
     const nextSheet = {
       ...sheet,
-      clientMarginLocal: partyLienLocal(ctx.v2, bankSecuritiesPartyOf(bank.id)),
       fxDealerBook: desk.book,
     };
     // The company IS the write; the channel copy in `companyUpdates` was dead post-08.

@@ -9,7 +9,7 @@ import { bankSovereignBookLocal } from '../../engine/sovereign-register';
 
 import { Company, InstitutionalEntity, Region } from '../../types';
 
-import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksLocal, addDepositLines, ZERO_DEPOSIT_LINES } from '../../domain/banking';
+import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksLocal, addDepositLines, ZERO_DEPOSIT_LINES, depositsOf } from '../../domain/banking';
 import { FunctionModule } from '../fn';
 import { Card, Hint, KV, Tabs, T, mono } from '../ui';
 import { statementLocal, pct, pctLevel, ratio, changePct, money } from '../format';
@@ -61,12 +61,12 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
   if (active === 'bank sheet' && bank) {
     const sov = bankSovereignBookLocal(ensureV2(world.state), c.id);
     const lines = stateDepositLines(world.state, c);
-    const deposits = lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.smeLocal;
+    const deposits = depositsOf(bank, lines);
     const desks = deskGrossLocal(ensureV2(world.state), c.id); // §3.13-BOOK d3d: register rows
     const reservesLocal = bankReservesOf(ensureV2(world.state), c.id);
     const facilityBookLocal = facilityBookOf(ensureV2(world.state), c.id);
     const assets = loanBooksOf(bank, facilityBookLocal) + sov + reservesLocal + (bank.repoLentLocal ?? 0) + (bank.sovereignAccruedCouponLocal ?? 0) + desks + (bank.primeBrokerageLoansLocal ?? 0);
-    const liabilities = deposits + (bank.clientMarginLocal ?? 0) + (bank.centralBankLoanLocal ?? 0) + (bank.repoBorrowedLocal ?? 0) + (bank.srfBorrowingLocal ?? 0);
+    const liabilities = deposits + (bank.centralBankLoanLocal ?? 0) + (bank.repoBorrowedLocal ?? 0) + (bank.srfBorrowingLocal ?? 0);
     body = (<>
       <Statement units="USD millions · the live sheet" asOf={formatDate(world.state.currentWeek)} lines={[
         { label: 'Business loans', usd: businessLoanBookOf(bank, facilityBookLocal) },
@@ -82,7 +82,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
         { label: 'Corporate deposits', usd: lines.corporateLocal },
         { label: 'Institutional deposits', usd: lines.institutionalLocal },
         { label: 'Small-business deposits', usd: lines.smeLocal },
-        { label: 'Client margin held', usd: bank.clientMarginLocal ?? 0 },
+        { label: 'Clearing-house deposits', usd: lines.ccpLocal },
         { label: 'Central bank loan', usd: bank.centralBankLoanLocal ?? 0 },
         { label: 'Repo borrowed · facility', usd: (bank.repoBorrowedLocal ?? 0) + (bank.srfBorrowingLocal ?? 0) },
         { label: 'Total liabilities', usd: liabilities, total: true },
