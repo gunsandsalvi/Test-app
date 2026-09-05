@@ -238,7 +238,8 @@ worth adding to that step's walk rather than becoming a step of its own.
 `overdraft-sweep.ts:73` lends to **a fund of any kind** whose close balance is negative:
 `if (fund.region !== regionId || fund.isDefaulted || !fund.homeBankId) return fund;` — no
 kind test — and the draw goes on the region's prime-brokerage book past the struck line at a
-penalty. The node is satisfied in letter (the lender is named and the loan is priced) and broken
+penalty — since §9.20-ii only to the broker's own leverage room, and refused past it. The node
+is satisfied in letter (the lender is named, the loan is priced, the lender can say no) and broken
 in spirit: the registry states a fact about the kind that a different file contradicts every week
 an index fund overspends, which `etf-demand.ts:85` says happens routinely. **§3 step 37-MARGIN**,
 small: either the sweep respects the kind's `leverage` row, or the row stops claiming `NONE`.

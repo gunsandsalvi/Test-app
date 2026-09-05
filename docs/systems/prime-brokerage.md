@@ -108,9 +108,9 @@ checked by `scripts/check-atlas.sh`.
 | E1 an exposure per client, and the broker knows it | `src/domain/prime-brokerage.ts:lentByBroker` | ✅ |
 | E2 concentrated positions are worth less in liquidation | `src/engine/simulation/stages/prime-brokerage.ts:concentration` | ✅ |
 | **E3 multi-broker: each lender underestimates the true leverage** | — | ❌ |
-| E4 FORBID no unlimited exposure | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
+| E4 FORBID no unlimited exposure | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` · `src/engine/macro/banking.ts:leverageHeadroomLocal` | ✅ |
 
-Counts: 10 `✅` · 7 `⚠️` · 10 `❌`.
+Counts: 11 `✅` · 6 `⚠️` · 10 `❌`.
 
 ---
 
@@ -221,16 +221,16 @@ broker's line does fund the collateral, which is the node's economics, but the p
 short sale land in the fund's own cash at 07e rather than being held by the broker, and the
 borrow is arranged by the fund directly with the lender.
 
-### ⚠️ E4 — THE LIMIT EXISTS IN THE MORNING AND IS WAIVED AT THE CLOSE
+### ✅ E4 — THE LIMIT EXISTS IN THE MORNING, AND THE CLOSE LENDS TO THE BROKER'S ROOM
 
 `lineLocal = min(maxDrawnLocal(fundEquity, haircut), brokerRoomLocal)` is a real two-sided limit and
 `leverageHeadroomLocal` is the broker's own balance-sheet constraint, so E4 holds for the struck
-line. It does not hold for the day: `overdraft-sweep.ts:77` lends whatever the fund spent, with
-no reference to `brokerRoomLocal` and no reference to the fund's equity — only a penalty rate. A
-broker with no capacity left still funds the whole draw. The morning pass then re-prices the
-enlarged balance, which is the file's stated defence, but between the two the exposure was
-genuinely unlimited. **§3 step 37-MARGIN**, and it is the same step as C3/D1 above — both are the
-sweep refusing to let anything fail.
+line. *2026-09-05 (§9.20-ii):* it holds for the day too. The close sweep lends a fund's overdraft
+past the struck line at a penalty, but only to the room the broker's own equity still supports —
+the same `leverageHeadroomLocal`, consumed across every draw the sweep reaches — and refuses the
+rest, recorded on the fund's run. The FUND's side of the limit (its equity, the haircut) is still
+not consulted at the close: that is C3/D1's — a margin call that is not met should liquidate, not
+refinance — **§3 step 37-MARGIN**.
 
 ### ❌ D4 — THE LOSS CHAIN IS UNMEASURED BECAUSE THERE IS NO LOSS
 

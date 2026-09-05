@@ -112,7 +112,7 @@ checked by `scripts/check-atlas.sh`.
 | B1.b VERIFY Σ(accounts at an issuer) = its money liability | `src/engine/audit/money.ts:m5` | ⚠️ |
 | B2 a balance is carried and changes only by a named movement | `src/engine/ledger/accounts.ts:projectBooks` | ✅ |
 | B3 a balance can be negative | `src/engine/ledger/accounts.ts:treasuryNetOf` | ✅ |
-| B3.a a customer overdrawn is borrowing — a **credit decision** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
+| B3.a a customer overdrawn is borrowing — a **credit decision** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` · `src/engine/macro/banking.ts:leverageHeadroomLocal` | ✅ |
 | B3.b a bank overdrawn at the CB borrows, priced by the corridor | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ⚠️ |
 | **B3.c FORBID an overdraft is never a silent negative** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ✅ |
 | C1 a payment is an instruction | `src/engine/simulation/stages/settlement.ts:PaymentInstruction` | ✅ |
@@ -135,7 +135,7 @@ checked by `scripts/check-atlas.sh`.
 | D3 VERIFY Σ(wires in) − Σ(wires out) = Δ holdings | `src/engine/audit/wires.ts:auditWires` | ✅ |
 | **D4 FORBID no move without a wire** | `src/engine/ledger/wire.ts:activeWireJournal` | ✅ |
 | **E1 a payer that cannot pay is a real state** | — | ❌ |
-| E1.a it does not silently not happen or silently overdraw | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
+| E1.a it does not silently not happen or silently overdraw | `src/domain/banking.ts:OverdraftStreak` | ✅ |
 | E1.b the payee has a receivable that did not arrive | `src/engine/simulation/stages/trade-settlement.ts:runTradeSettlementStage` | ✅ |
 | E2 settlement is final | `src/engine/simulation/stages/settlement.ts:journalAppendRow` | ✅ |
 | E2.a an error is corrected by a new payment | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
@@ -167,25 +167,20 @@ exist. Capital calls (`pe-lifecycle.ts:184`), variation margin
 (`derivative-lifecycle.ts:payThroughHouse`, through the clearing house since §9.17-iv-b) and every clearing fee (`book-settlement.ts:126`) are
 ordinary `pay` calls today. The historical hole recorded in the plan is closed.
 
-**What is not there is the refusal.** `applySettledRow` (accounts.ts:666) tests only that both
-parties have rows; `side`/`leg` (accounts.ts:675, 690) then add the delta with **no balance test
-anywhere**, so a payer with nothing pays anyway and the row goes negative. The close sweep
-(`overdraft-sweep.ts`) converts every negative it finds into a facility draw, a prime-brokerage
-draw or an SME facility draw — and none of the three can be refused: the fund's leg is written
-whether or not it is inside its line (`overdraft-sweep.ts:86`, "past the line it is still
-funded"), the pool's is split across the region's banks by market share with no test at all, and
-the firm's revolver is created out of nothing at its house bank. A bank short of reserves reaches
-`raiseCentralBankLoanLocal` (`bank-lending.ts:917`), which is still four lines and lends the
-shortfall unconditionally.
+**The refusal exists now on the non-bank paths** *(2026-09-05, §9.20-ii)*. `applySettledRow`
+(accounts.ts:666) still tests only that both parties have rows and the row goes negative; but the
+close sweep (`overdraft-sweep.ts`) no longer converts every negative it finds. Each lender — the
+firm's house bank, the fund's broker, each of the region's banks for a pool's share — lends to the
+room its own equity supports under the leverage floor (`leverageHeadroomLocal`, consumed in the
+order the sweep reaches the draws) and REFUSES past it. A refused draw stands negative through the
+close and is recorded on the party's run (`OverdraftStreak.refusedLocal`) beside what was lent,
+where the news tells it. So B3.a is a decision, and E1.a holds: nothing silently overdraws.
 
-So B3.c is genuinely satisfied — no negative is silent, every one has a named lender and a rate —
-and B3.a's "credit **decision**" is not: there is no decision, there is a conversion. E1 has no
-code at all, and the consequence is that **the liquidity dimension of this model has no failure
-state.** A firm, a fund, a pool and a bank all pay whatever they owe forever.
-
-Not itself a §3 step for the non-bank paths. The bank path is **Already §3 step 20-LLR**; the
-firm/fund/pool paths **become a §3 step** (small: the sweep already knows the size and the lender,
-what it lacks is a "no").
+What is still absent is E1 itself — what a party in that state IS. A firm whose bank refused it
+is in default of payment, and nothing yet reads the refusal as one: the negative balance carries
+to next week's close and is offered to the same lender again. That, and the bank path (a bank
+short of reserves still reaches `raiseCentralBankLoanLocal`, which lends the shortfall
+unconditionally), are **§3 step 20-LLR**, which owns the funding channel end to end.
 
 **Two corrections to 20-LLR's own text, from reading the code today.** (1) The step says the
 facility carries "no penalty rate"; there is one — `CENTRAL_BANK_LOAN_PENALTY_BPS = 100` over

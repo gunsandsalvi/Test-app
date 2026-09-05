@@ -1,12 +1,19 @@
 /**
- * M4 — NO BALANCE STANDS NEGATIVE AT THE CLOSE. A payer whose settled balance is below
- * zero has spent its bank's money; that is credit ALREADY extended, and the only choice left is
- * to name and price it (the 02b overdraft conversion's rule,, applied at the close to
- * every holder kind). A firm's overdraft becomes a revolver draw at its house bank; a fund's
- * becomes a prime-brokerage draw at its broker, past the struck line at a penalty; a pool's
- * becomes an SME facility draw at the region's banks. Every one is a loan that creates a
- * deposit — BANK_CREDIT → the holder, the asset on the bank in the same statement — so the
- * balance is zero at settlement and the money that was spent has a lender.
+ * M4 — NO BALANCE STANDS NEGATIVE UNNAMED AT THE CLOSE. A payer whose settled balance is below
+ * zero has spent its bank's money; that is credit ALREADY extended, and the close names and
+ * prices it (the 02b overdraft conversion's rule, applied at the close to every holder kind).
+ * A firm's overdraft becomes a revolver draw at its house bank; a fund's becomes a
+ * prime-brokerage draw at its broker, past the struck line at a penalty; a pool's becomes an
+ * SME facility draw at the region's banks. Every one is a loan that creates a deposit —
+ * BANK_CREDIT → the holder, the asset on the bank in the same statement.
+ *
+ * §3.20-ii — THE LENDER HAS A CAPACITY, AND IT CAN SAY NO. A bank lends here to the balance
+ * sheet its equity still supports under the leverage floor (`leverageHeadroomLocal`, the same
+ * room every other book of the bank is bounded by), consumed in the order the sweep reaches
+ * the draws; a draw past it is REFUSED. A refused draw is not silent: the party's balance stands
+ * negative through the close, and the refusal is recorded on its run (`OverdraftStreak.refusedLocal`)
+ * beside what was lent, where the news tells it. What a payer in that state IS — a default of
+ * payment — is §3 step 20-LLR's, which owns the funding channel; this pass is the lender's side.
  */
 import { WeeklyStepContext } from './context';
 import { primeBrokerageBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
@@ -27,6 +34,10 @@ import { banksOf } from '../../../domain/company';
 import type { Ticker } from '../../../domain/ids';
 import { partyKey } from '../../ledger/party';
 import { rollOverdraftStreaks } from '../../../domain/banking';
+import { leverageHeadroomLocal } from '../../macro/banking';
+import { bankReservesOf } from '../../ledger/accounts';
+import { facilityBookOf } from '../../../engine2/tranches';
+import { bankBookAssetsLocal } from '../../desk-register';
 
 /** What a broker charges over its standing line for a balance it did not agree to fund. */
 const OVERDRAFT_PENALTY_BPS = 200;
@@ -45,6 +56,22 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
   const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   // §3.15b-iii: who the close swept, and for how much — the week's non-performances, by party.
   const swept = new Map<string, number>();
+  // §3.20-ii: who the close REFUSED, and for how much — the balance that stands negative.
+  const refused = new Map<string, number>();
+  const note = (m: Map<string, number>, key: string, usd: number): void => { if (usd > 1) m.set(key, (m.get(key) ?? 0) + usd); };
+  // §3.20-ii: each lender's room, read once off its own sheet and consumed as the sweep lends.
+  const roomByBank = new Map<EntityId, number>();
+  const lend = (bank: { id: EntityId; bankBalanceSheet?: import('../../../domain/banking').BankingSector }, wantLocal: number): number => {
+    let room = roomByBank.get(bank.id);
+    if (room === undefined) {
+      room = bank.bankBalanceSheet
+        ? leverageHeadroomLocal(bank.bankBalanceSheet, bankReservesOf(v2, bank.id), facilityBookOf(v2, bank.id), bankBookAssetsLocal(v2, bank.id))
+        : 0;
+    }
+    const granted = Math.max(0, Math.min(wantLocal, room));
+    roomByBank.set(bank.id, room - granted);
+    return granted;
+  };
 
   // ---- 1. Firms: a revolver draw at the house bank (the 02b conversion, at the close). ----
   ctx.updatedCompanies.forEach((c) => {
@@ -56,14 +83,18 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     const homeBank = companyById.get(c.homeBankId);
     if (!homeBank) return defect(`firm ${c.id} banks at ${c.homeBankId}, which is not an entity`);
     const marginBps = facilityMarginBpsFor(v2, c, reg, homeBank);
+    // §3.20-ii: the house bank lends to its room and refuses the rest.
+    const grantedLocal = lend(homeBank, drawLocal);
+    note(refused, partyKey(companyParty(c)), drawLocal - grantedLocal);
+    if (grantedLocal <= 1) return;
     // §3.16-i: a TAP of the firm's one revolver at its house bank — the sweep used to write a
     // fresh facility per firm per week, each at its own struck margin.
-    drawRevolver(v2, { id: c.id, ticker: c.ticker, region: c.region }, homeBank.id, drawLocal, { marginBps, week: ctx.nextWeek }, 'overdraft converted to a facility draw');
-    swept.set(partyKey(companyParty(c)), drawLocal);
+    drawRevolver(v2, { id: c.id, ticker: c.ticker, region: c.region }, homeBank.id, grantedLocal, { marginBps, week: ctx.nextWeek }, 'overdraft converted to a facility draw');
+    swept.set(partyKey(companyParty(c)), grantedLocal);
     pay(ctx, {
       payer: bankCreditParty(homeBank),
       payee: companyParty(c),
-      amount: drawLocal,
+      amount: grantedLocal,
       currency: currencyOf(c.region),
       reason: 'overdraft converted to facility draw at the close',
     });
@@ -86,7 +117,11 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       const brokerBankId = broker.id;
       const balanceLocal = entityCashOf(ctx.v2, fund) + pendingLocal({ kind: 'INSTITUTION', id: fund.id });
       if (balanceLocal >= -1) return fund;
-      const drawLocal = -balanceLocal;
+      const wantLocal = -balanceLocal;
+      // §3.20-ii: the broker lends to its room and refuses the rest.
+      const drawLocal = lend(broker, wantLocal);
+      note(refused, partyKey({ kind: 'INSTITUTION', id: fund.id }), wantLocal - drawLocal);
+      if (drawLocal <= 1) return fund;
       swept.set(partyKey({ kind: 'INSTITUTION', id: fund.id }), drawLocal);
       const withinLineLocal = Math.min(fund.primeBrokerageAvailableLocal ?? 0, drawLocal);
       pay(ctx, {
@@ -127,10 +162,14 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       const balanceLocal = poolCashOf(ctx.v2, regionId, seg.industry) + pendingLocal({ kind: 'SEGMENT', region: regionId, industry: seg.industry });
       if (balanceLocal >= -1 || !(totalShare > 0)) return;
       const drawLocal = -balanceLocal;
-      swept.set(partyKey({ kind: 'SEGMENT', region: regionId, industry: seg.industry }), drawLocal);
+      const poolKey = partyKey({ kind: 'SEGMENT', region: regionId, industry: seg.industry });
       banks.forEach((b) => {
-        const shareLocal = drawLocal * ((b.bankMarketShare ?? 0) / totalShare);
+        const wantLocal = drawLocal * ((b.bankMarketShare ?? 0) / totalShare);
+        // §3.20-ii: each bank lends its share to its own room and refuses the rest.
+        const shareLocal = lend(b, wantLocal);
+        note(refused, poolKey, wantLocal - shareLocal);
         if (shareLocal <= 1) return;
+        note(swept, poolKey, shareLocal);
         const rows = smeDrawByBank.get(b.ticker) ?? [];
         rows.push({ industry: seg.industry, poolId: smePoolId(regionId, seg.industry), usd: shareLocal });
         smeDrawByBank.set(b.ticker, rows);
@@ -170,5 +209,5 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
   });
 
   // §3.15b-iii: the runs, rolled once — a party swept again extends its run, a clean close ends it.
-  ctx.overdraftStreaks = rollOverdraftStreaks(ctx.overdraftStreaks, swept, ctx.nextWeek);
+  ctx.overdraftStreaks = rollOverdraftStreaks(ctx.overdraftStreaks, swept, ctx.nextWeek, refused);
 }

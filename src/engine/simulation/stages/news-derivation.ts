@@ -370,11 +370,13 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: 'living on its bank',
       category: 'CREDIT',
       title: `${who} closes a ${run.weeks === 3 ? 'third' : `${run.weeks}th`} week in overdraft`,
-      description: `${who} has ended ${run.weeks} weeks running with its account below zero at the close, each time converted to ${how}: ${M(run.drawnLocal)} this week, ${M(run.drawnRunLocal)} over the run`
+      description: `${who} has ended ${run.weeks} weeks running with its account below zero at the close, converted to ${how}: ${M(run.drawnLocal)} this week, ${M(run.drawnRunLocal)} over the run`
+        // §3.20-ii: what the lender would not fund stands unpaid.
+        + (run.refusedLocal > 1e5 ? `; its lender refused ${M(run.refusedLocal)} this week, which stands unpaid` : '')
         + (c ? `. Cash ${M(cashOf(ctx.v2, c))} against ${M(c.annualRevenue)} of revenue; coverage ${c.interestCoverage.toFixed(2)}×, rated ${c.creditRating}.` : '.'),
       cause: `Its payments at the close exceeded what its account held, ${run.weeks} weeks in a row.`,
       refs,
-      materialityLocal: run.drawnRunLocal,
+      materialityLocal: run.drawnRunLocal + run.refusedRunLocal,
       impactRegion: rid, affectedTicker: c?.ticker ?? fund?.ticker,
       urgent: run.weeks >= 6,
     });

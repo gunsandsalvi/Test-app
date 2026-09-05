@@ -584,14 +584,21 @@ export interface BankLoan {
  * spent its bank's money, and the sweep names and prices that as a facility draw, a prime-
  * brokerage draw or an SME facility draw (`overdraft-sweep.ts`). A party swept in consecutive
  * weeks is a party living on its bank, and the run — not the week — is the story.
+ *
+ * §3.20-ii — and the lender can REFUSE: what it would not lend stands negative on the party
+ * through the close, recorded here beside what it lent. A week in which a party was refused is
+ * a week in the run whether or not anything was lent.
  */
 export interface OverdraftStreak {
-  /** Consecutive weeks swept, this week included. */
+  /** Consecutive weeks swept or refused, this week included. */
   weeks: number;
   lastWeek: number;
   /** This week's draw, and the draws summed over the run. */
   drawnLocal: number;
   drawnRunLocal: number;
+  /** §3.20-ii: what the lender refused this week — the balance left standing negative — and over the run. */
+  refusedLocal: number;
+  refusedRunLocal: number;
 }
 
 /** The streaks after this week's sweep: a party swept again extends its run, one swept for the
@@ -601,10 +608,14 @@ export function rollOverdraftStreaks(
   prev: Readonly<Record<string, OverdraftStreak>> | undefined,
   sweptByParty: ReadonlyMap<string, number>,
   week: number,
+  refusedByParty: ReadonlyMap<string, number> = new Map(),
 ): Record<string, OverdraftStreak> {
   const out: Record<string, OverdraftStreak> = {};
-  sweptByParty.forEach((drawnLocal, key) => {
-    if (!(drawnLocal > 0)) return;
+  const keys = new Set<string>([...sweptByParty.keys(), ...refusedByParty.keys()]);
+  keys.forEach((key) => {
+    const drawnLocal = Math.max(0, sweptByParty.get(key) ?? 0);
+    const refusedLocal = Math.max(0, refusedByParty.get(key) ?? 0);
+    if (!(drawnLocal > 0) && !(refusedLocal > 0)) return;
     const p = prev?.[key];
     const continues = p !== undefined && p.lastWeek === week - 1;
     out[key] = {
@@ -612,6 +623,8 @@ export function rollOverdraftStreaks(
       lastWeek: week,
       drawnLocal,
       drawnRunLocal: (continues ? p.drawnRunLocal : 0) + drawnLocal,
+      refusedLocal,
+      refusedRunLocal: (continues ? (p.refusedRunLocal ?? 0) : 0) + refusedLocal,
     };
   });
   return out;

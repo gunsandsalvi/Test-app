@@ -549,16 +549,6 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-20-ii. **EVERY OVERDRAFT LENDER GETS REAL CAPACITY.** `overdraft-sweep.ts` lends with no headroom
-    test at all: a firm's close-of-day revolver tap, a fund's prime-brokerage draw past its line,
-    a pool's SME facility draw are all funded by the house bank whatever its capital and reserve
-    position. The lender's capacity is what `banking.ts:leverageHeadroomLocal` already says it is;
-    a draw past it is refused, and the refused party's instruction is a non-performance the
-    settlement close records (`ctx.overdraftStreaks` already counts the sweeps). What a refused
-    non-performance DOES to the payer — a firm that cannot pay is in default of payment — is
-    20-LLR's, which owns the funding channel; this step is the lender's side only. (The LOLR's
-    own capacity, which this step's first draft also named, is 20-LLR's whole subject and is
-    not duplicated here.)
 20-iii. **OCCUPATIONAL SUPPLY GETS MOBILITY.** `labor-market.ts` fixes each occupation's labour
     force at `totalLaborForce × share` and a shortage in one occupation is permanent: seekers go
     to zero, hiring stops, and nothing moves a person from an occupation with idle seekers to one
@@ -1535,6 +1525,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20-ii — EVERY OVERDRAFT LENDER LENDS TO ITS ROOM AND REFUSES PAST IT.** The close sweep funded
+  every negative balance it found — a firm's revolver tap, a fund's prime-brokerage draw past its
+  line, a pool's SME draw split by market share — whatever the lender's capital. Now each lender's
+  room is read once off its own sheet (`banking.ts:leverageHeadroomLocal`, the bound every other
+  book of the bank already carries) and consumed in the order the sweep reaches the draws; what
+  it would not lend is REFUSED and stands negative through the close, recorded on the party's run
+  (`OverdraftStreak.refusedLocal/refusedRunLocal`; a refused week is a week in the run, and the
+  news tells the refusal beside the draw). The bank's sheet and the contract books move only by
+  what was lent. What a refused payer IS — a default of payment, and the bank path's own
+  unconditional central-bank loan — is 20-LLR's. `money-and-settlement.md` B3.a ✅, E1.a ✅ (E1
+  stays ❌ for 20-LLR), `prime-brokerage.md` E4 ✅ (11 ✅ · 6 ⚠️ · 10 ❌), `fund-shares.md` F2,
+  `the-derivative-layer.md` D4, `banks-lending.md` A3.a texts updated. Gates green; no run.
 
 **20-i-b — THE ESTATE'S STOCK SELLS WHERE THE GOODS SELL.** The inventory was the last stated price
   in a death: a slice per week at `1 − min(0.9, hurdle × turnoverWeeks / 52)` off book, pro rata to

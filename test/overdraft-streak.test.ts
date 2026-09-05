@@ -5,14 +5,23 @@ import { rollOverdraftStreaks, overdraftRunIsTold } from '../src/domain/banking'
 
 test('a run extends on consecutive sweeps, restarts after a clean week, and ends when the party is not swept', () => {
   let s = rollOverdraftStreaks(undefined, new Map([['COMPANY:A', 5e6], ['COMPANY:B', 1e6]]), 10);
-  assert.deepEqual(s['COMPANY:A'], { weeks: 1, lastWeek: 10, drawnLocal: 5e6, drawnRunLocal: 5e6 });
+  assert.deepEqual(s['COMPANY:A'], { weeks: 1, lastWeek: 10, drawnLocal: 5e6, drawnRunLocal: 5e6, refusedLocal: 0, refusedRunLocal: 0 });
   s = rollOverdraftStreaks(s, new Map([['COMPANY:A', 2e6]]), 11);
-  assert.deepEqual(s['COMPANY:A'], { weeks: 2, lastWeek: 11, drawnLocal: 2e6, drawnRunLocal: 7e6 });
+  assert.deepEqual(s['COMPANY:A'], { weeks: 2, lastWeek: 11, drawnLocal: 2e6, drawnRunLocal: 7e6, refusedLocal: 0, refusedRunLocal: 0 });
   assert.equal(s['COMPANY:B'], undefined, 'a clean close ends the run');
   s = rollOverdraftStreaks(s, new Map([['COMPANY:A', 1e6], ['COMPANY:B', 3e6]]), 13);
   assert.equal(s['COMPANY:A'].weeks, 1, 'a week skipped is a run that ended and a new one');
   assert.equal(s['COMPANY:B'].weeks, 1);
   assert.equal(rollOverdraftStreaks(s, new Map([['COMPANY:A', 0]]), 14)['COMPANY:A'], undefined, 'a zero draw is not a sweep');
+});
+
+test('§3.20-ii: a refused draw is a week in the run, recorded beside what was lent', () => {
+  let s = rollOverdraftStreaks(undefined, new Map([['COMPANY:A', 3e6]]), 20, new Map([['COMPANY:A', 2e6], ['COMPANY:C', 4e6]]));
+  assert.deepEqual(s['COMPANY:A'], { weeks: 1, lastWeek: 20, drawnLocal: 3e6, drawnRunLocal: 3e6, refusedLocal: 2e6, refusedRunLocal: 2e6 });
+  assert.deepEqual(s['COMPANY:C'], { weeks: 1, lastWeek: 20, drawnLocal: 0, drawnRunLocal: 0, refusedLocal: 4e6, refusedRunLocal: 4e6 }, 'refused everything: still a party that did not perform');
+  s = rollOverdraftStreaks(s, new Map(), 21, new Map([['COMPANY:C', 1e6]]));
+  assert.deepEqual(s['COMPANY:C'], { weeks: 2, lastWeek: 21, drawnLocal: 0, drawnRunLocal: 0, refusedLocal: 1e6, refusedRunLocal: 5e6 });
+  assert.equal(s['COMPANY:A'], undefined);
 });
 
 test('a run is told when it becomes one and each time it doubles', () => {

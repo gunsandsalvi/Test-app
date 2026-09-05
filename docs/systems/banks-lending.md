@@ -196,14 +196,14 @@ step; it is here because C's price and B2's constraint set are what it distorts.
 ### ❌ A3.a / A3.b — A COMMITTED LINE IS A FREE OPTION
 
 `committedLineHeadroomLocal` bounds ONE of the three draw paths (`stage08-back.ts:1189`, the liquidity
-shortfall). The other two do not consult it at all: a withdrawn refinancing draws the whole maturing
-principal (`stage08-back.ts:1613`), and `overdraft-sweep.ts` converts any negative balance into a
-new facility tranche with no headroom test whatever — which §3 step 20 already names
-("`overdraft-sweep.ts` lends with no headroom test at all"). Beyond that, **no undrawn commitment
+shortfall). A withdrawn refinancing does not consult it at all: it draws the whole maturing
+principal (`stage08-back.ts:1613`). The close sweep's tap tests the BANK's room since §9.20-ii
+(`leverageHeadroomLocal`, refused past it) but not the LINE's — the committed amount is still not an
+object anywhere. Beyond that, **no undrawn commitment
 exists as an object**: there is no line, no limit and no unused balance on either book, so the bank
 holds no capital against it, cannot report it, and cannot be surprised by a drawdown. The bank's
-side of step 20's "real capacity" is this node. **Already §3 step 20** for the capacity half; the
-commitment as an object is new and small, and belongs with it.
+side of step 20's "real capacity" landed as §9.20-ii; the commitment as an object is new and small,
+and is what is left of this node.
 
 ### ❌ F3 — NO LARGE-EXPOSURE LIMIT, AND THE CODE SAYS SO
 

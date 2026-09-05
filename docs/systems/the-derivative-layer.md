@@ -278,14 +278,15 @@ the row says `⚠️`.
 **Already §3 step 17**, which requires initial margin to be *"the reference's own volatility over
 a close-out horizon, scaled by the portfolio's netting"*.
 
-### ⚠️ D4 / D4.a — A MARGIN CALL IS ALWAYS MET, BECAUSE IT BECOMES A LOAN
+### ⚠️ D4 / D4.a — A MARGIN CALL IS MET BY A LOAN, AS FAR AS THE LENDER'S ROOM GOES
 
 `payThroughHouse` journals the variation-margin leg unconditionally; there is no cash test and no failure
 path. A payer who cannot fund it goes negative and `overdraft-sweep.ts:runOverdraftSweep` converts
 the shortfall into credit — a revolver draw for a firm, a prime-brokerage draw for a fund
 (the sweep's own fund arm; the separate close sweep in `prime-brokerage.ts` was never called and
-§3 step 19-ii deleted it), an SME facility for a pool. That is a real
-answer to the *first* half of D4 and it is a good one: the money has a lender.
+§3 step 19-ii deleted it), an SME facility for a pool — to the lender's own leverage room, and
+refuses past it (§9.20-ii; the refusal stands on the party's run). That is a real answer to the
+*first* half of D4: the money has a lender, and the lender can say no.
 
 **The second half has no code at all.** No position is ever closed for non-payment; the only
 close-out triggers in `settleDerivativeClass` are maturity, a profile event, and a counterparty
