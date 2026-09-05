@@ -12,7 +12,7 @@ import { facilityBookOf, materializeGovLadder } from '../../../engine2/tranches'
  */
 
 import { GameState, RegionId } from '../../../types';
-import { getSimulationDate } from '../../formatters';
+import { dateOfWeek } from '../../../domain/calendar';
 import { evolveRegionMacro } from '../../macro/evolution';
 import { computeOccupationDemand } from './shared-helpers';
 import { WeeklyStepContext } from './context';
@@ -156,7 +156,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
       week: ctx.nextWeek,
       // The WORLD'S date, not the operator's clock. A wall-clock timestamp inside GameState made
       // two same-seed runs hash differently and masked a real determinism check.
-      timestamp: getSimulationDate(ctx.nextWeek).toISOString(),
+      timestamp: dateOfWeek(ctx.nextWeek).toISOString(),
       category: 'MACRO',
       message: `[MACRO] ${regionId} GDP Breakdown:`,
       deltaText: diagnosticString,

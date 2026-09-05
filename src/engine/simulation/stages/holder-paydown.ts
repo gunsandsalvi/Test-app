@@ -31,7 +31,7 @@ import { transferHolding, HoldingKind } from '../../ledger/holdings-ledger';
 import type { EntityId } from '../../../domain/ids';
 import type { InstrumentId } from '../../../domain/ids';
 import { instrumentNameOf } from '../../instrument-name';
-import { yearOfSimulationWeek } from '../../formatters';
+import { yearOfWeek } from '../../../domain/calendar';
 
 export function reconcileHolderPrincipal(args: {
   ctx: WeeklyStepContext;
@@ -93,7 +93,7 @@ export function reconcileHolderPrincipal(args: {
     const issuer = issuerOfInstrument.get(instrumentId);
     if (trace && heldLocal - outstandingLocal > 1e9) {
       // §3.14: the paper by name, not the issuer by ticker — one issuer has many tranches.
-      console.log(`  [paydown] ${deskBook} ${instrumentNameOf(ctx.v2, instrumentId, () => issuer?.ticker, yearOfSimulationWeek) ?? instrumentId} held ${(heldLocal / 1e6).toFixed(0)}M out ${(outstandingLocal / 1e6).toFixed(0)}M`
+      console.log(`  [paydown] ${deskBook} ${instrumentNameOf(ctx.v2, instrumentId, () => issuer?.ticker, yearOfWeek) ?? instrumentId} held ${(heldLocal / 1e6).toFixed(0)}M out ${(outstandingLocal / 1e6).toFixed(0)}M`
         + `${!issuer ? ' SKIP:no-issuer' : issuer.isBankEntity ? ' SKIP:bank' : ` cash ${(cashOf(ctx.v2, issuer) / 1e6).toFixed(0)}M`}`);
     }
     if (!issuer) return;

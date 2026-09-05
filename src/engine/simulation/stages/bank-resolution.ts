@@ -27,7 +27,7 @@ import { assumeBankBooks } from '../../ledger/bank-transfer';
 import { reassignConsignments } from './goods-arrival';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { banksOf } from '../../../domain/company';
-import { getSimulationDate } from '../../formatters';
+import { dateOfWeek } from '../../../domain/calendar';
 import { WeeklyStepContext } from './context';
 import { novateDerivatives, publishRepoBook, repoBookOf, primeBrokerageBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
 import { pay, runSettlementStage } from './settlement';
@@ -249,7 +249,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     });
     ctx.diagnosticLogs.push({
       week,
-      timestamp: getSimulationDate(week).toISOString(),
+      timestamp: dateOfWeek(week).toISOString(),
       category: 'CREDIT',
       message: `Bank resolved: ${bank.name} -> ${acquirer.name}`,
       deltaText: '',

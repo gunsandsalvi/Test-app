@@ -1,18 +1,13 @@
 /**
- * AU — THE ONE UI CALENDAR. The engine counts weeks; the UI never shows one (§5-AU, user rule).
- * Week 0 is 1 January 2027; every date, month and duration on screen maps through here.
+ * AU — THE UI'S DATE FORMATS. The engine counts weeks; the UI never shows one (§5-AU, user rule).
+ * §3.15-iv: the epoch is the domain's (`domain/calendar.ts`, week 0 = 1 January 2027) and this
+ * file only spells a date; every date, month and duration on screen maps through here.
  */
 
-const START = Date.UTC(2027, 0, 1);
-const WEEK_MS = 7 * 24 * 3600 * 1000;
+import { dateOfWeek } from '../domain/calendar';
+export { dateOfWeek, yearOfWeek } from '../domain/calendar';
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-export function dateOfWeek(week: number): Date {
-  return new Date(START + Math.max(0, week) * WEEK_MS);
-}
-
-/** 2027 — the year a week falls in; a maturity's year in a name (§3.14). */
-export const yearOfWeek = (week: number): number => dateOfWeek(week).getUTCFullYear();
 
 /** "2 Apr 2027" */
 export function formatDate(week: number): string {

@@ -28,7 +28,7 @@ import { transferHolding, markHolding, deskBookId } from '../../ledger/holdings-
 import { defect } from '../../../domain/defect';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
 import { instrumentNameOf } from '../../instrument-name';
-import { yearOfSimulationWeek } from '../../formatters';
+import { yearOfWeek } from '../../../domain/calendar';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import type { InstrumentId } from '../../../domain/ids';
 import type { Ticker } from '../../../domain/ids';
@@ -284,7 +284,7 @@ export function applyDealerDeskFills(args: {
       const floatById = new Map(args.instruments.map((i2) => [i2.id, i2.tradableFloatLocal]));
       // §3.14: the paper by the name a market would use, the id where it has none (an equity).
       const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
-      const nameOf = (id: string) => instrumentNameOf(ctx.v2, id, (issuerId) => companyById.get(issuerId)?.ticker, yearOfSimulationWeek) ?? id;
+      const nameOf = (id: string) => instrumentNameOf(ctx.v2, id, (issuerId) => companyById.get(issuerId)?.ticker, yearOfWeek) ?? id;
       prior.forEach((p, instrumentId) => {
         if (Math.abs(p.inventoryLocal) < 25e6) return;
         console.log(`    [desk-prior] ${bank.ticker} ${nameOf(instrumentId)} held ${(p.inventoryLocal / 1e6).toFixed(1)}M`

@@ -3,7 +3,7 @@ import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../dom
 import type { EntityId } from '../../domain/ids';
 import { companyParty, bankPartyOf } from '../../domain/party';
 import { stashSeedRevenueHistory, drainSeedRevenueHistories, drainSeedRings, peekSeedRing, typeRefOf } from '../../engine2/world';
-import { getSimulationDate } from '../formatters';
+import { dateOfWeek } from '../../domain/calendar';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
 import { PREMIUM_TO_SURPLUS_RATIO, INSTITUTIONAL_CAPITAL_RATIO } from '../../domain/institutions';
@@ -1805,7 +1805,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       {
         week: 1,
         // Sim calendar, never wall clock — see 02-region-macro's twin comment.
-        timestamp: getSimulationDate(1).toISOString(),
+        timestamp: dateOfWeek(1).toISOString(),
         category: 'EXECUTION',
         message: 'Engine Initialized: Multi-Region Macro <-> Micro Feedback Loop Active (Jan 05, 2026)',
         deltaText: '200 Corporate Issuers • 4 Nelson-Siegel Yield Curves • 9 Commodities Desk',

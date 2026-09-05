@@ -23,7 +23,7 @@ import { materializeLadder, facilityBookOf, issuerIdOf } from '../../../engine2/
 import { rebuildLadder } from '../../ledger/tranche-ledger';
 import { pay } from './settlement';
 import { GameState, DebtTranche, RegionId, ItemizedHolding } from '../../../types';
-import { getSimulationDate } from '../../formatters';
+import { dateOfWeek } from '../../../domain/calendar';
 import { isAntitrustBlocked, isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { checkForMerger } from '../merger';
 import { bumpRegister } from './register-index';
@@ -556,7 +556,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   ctx.diagnosticLogs.push({
     week: ctx.nextWeek,
     // Sim calendar, never wall clock — see 02-region-macro's twin comment.
-    timestamp: getSimulationDate(ctx.nextWeek).toISOString(),
+    timestamp: dateOfWeek(ctx.nextWeek).toISOString(),
     category: 'MICRO',
     message: `Merger Executed: ${acquirer.name} acquired ${target.name}`,
     deltaText: '',

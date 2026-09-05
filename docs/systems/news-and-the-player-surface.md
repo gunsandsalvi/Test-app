@@ -80,7 +80,7 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 prints: prices that cleared, with instrument, time and unit | `src/ui/world.ts:recordTape` | ✅ |
+| A1 prints: prices that cleared, with instrument, time and unit | `src/domain/calendar.ts:dateOfWeek` | ✅ |
 | A1.a a stale mark must be visibly stale | `src/ui/objects/market.tsx:totalUnitsDemandedThisWeek` | ⚠️ |
 | A2 its own positions and balances, as the register holds them | `src/ui/functions/holders.tsx:CompanyHolders` | ⚠️ |
 | A3 public state: issuer, central bank, rating agency | `src/ui/objects/centralbank.tsx:centralbank` | ✅ |
@@ -284,7 +284,10 @@ module's `kindWords`), and a tranche has peers — its issuer's ladder, its clas
 every fixed-income view (the tranche, its screener, the ladder, an institution's holdings) shows
 the cleared PRICE and what it implies side by side — an OAS or discount margin on corporate
 paper, a yield on a sovereign — through one read, `engine/credit-price.ts:paperQuoteOf`, off the
-one price store; unprinted paper shows a dash, never par.
+one price store; unprinted paper shows a dash, never par. §9.15-iv: ONE calendar —
+`domain/calendar.ts` holds the epoch (week 0 = 1 January 2027, the user's rule) and both the
+UI's date formats and the engine's news and filing labels read it; the engine's own start date,
+a year earlier, is gone, and with it a dead second bond-name grammar.
 
 ### Also marked, briefly
 

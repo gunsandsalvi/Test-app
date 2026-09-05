@@ -182,8 +182,8 @@ export interface TradeableInstrument {
  * `KRLN 4.75% 2031`, a loan (or a bank facility, which is a loan) `KRLN L+350 2029`, a bill
  * `USA 3M bill`, commercial paper `KRLN 3M CP`, and a sovereign bond `USA 4.75% 2031`. ONE
  * function, so the tranche view, the ladder, every holders list, the desk traces and the news
- * cannot each spell it. The calendar is the caller's (`yearOfWeek`): the UI's and the engine's
- * still differ by a year (§3.15 unifies them), and this file owns neither.
+ * cannot each spell it. `yearOfWeek` is the caller's read of the one calendar (`calendar.ts`):
+ * the UI passes it on the DISPLAY week (the burn-in shifted off), a trace on the raw week.
  */
 export interface NamedPaper {
   rateType: 'FIXED' | 'FLOATING';

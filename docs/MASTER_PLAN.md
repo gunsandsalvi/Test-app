@@ -548,9 +548,6 @@ written from here):
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
 15. **Search by asset, price and spread together** (rule 9) — split 2026-09-05, one commit each:
-15-iv. **One calendar.** `formatters.ts:7` and `ui/calendar.ts:5` differ by a year; the engine's
-    traces and the UI's dates disagree about which year a week is in, and step 14's names take
-    the caller's. One epoch, in the domain, read by both.
 15-v. **`statements.tsx:174` calls engine interning in render** — stop it.
 15b. **News slice 2.** The derivation cites the books and ranks by size; what it still cannot
     tell is a story that develops. Follow-ups through an estate, an auction that failed or came
@@ -1647,6 +1644,17 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**15-iv — ONE CALENDAR.** `domain/calendar.ts` holds the epoch — week 0 is 1 January 2027, the
+user's rule — with `dateOfWeek` and `yearOfWeek`; `ui/calendar.ts` keeps only the UI's spellings
+of a date and reads the epoch from there; `engine/formatters.ts` loses `SIMULATION_START_DATE`
+(5 January 2026, a year earlier, week 1), `getSimulationDate` and `yearOfSimulationWeek`, and its
+news dates and quarter-filing labels read the same epoch; the four news timestamps and the two
+traces read `dateOfWeek`/`yearOfWeek` directly. `formatBondName` — a second bond-name grammar,
+`KRLN 4.75 '31`, that nothing called — is deleted (step 14 is the one). What remains different is
+the WEEK, not the calendar: the UI formats the display week (the burn-in shifted off), the
+engine's news timestamps the raw week; those timestamps are read by nothing on the surface.
+Gates green; no run.
 
 **15-iii — THE UI UNIT ERRORS.** Each at its cause. `commodity.tsx` and `fx.tsx` rendered
 `change1W`, an ABSOLUTE move in the unit, through `pctLevel`; the move shown is now that over the

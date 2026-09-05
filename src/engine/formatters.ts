@@ -1,8 +1,8 @@
-import type { Ticker } from '../domain/ids';
 /**
- * High-Precision Institutional Financial Formatter Engine
- * Eliminates raw floats, turn notation, unparsed LaTeX, and provides uniform calendar timelines across the platform.
+ * The engine's text formatters — for the news it writes and the filings it labels.
+ * §3.15-iv: the calendar is the domain's (`domain/calendar.ts`); this file only spells a date.
  */
+import { dateOfWeek, yearOfWeek } from '../domain/calendar';
 
 /** §3.15-iii: a number that is not there prints as NOT THERE. These used to print `$0.00`,
  *  `0.00%`, `0.0 bps`, `0.0x` and `100.00%` for a NaN or an undefined — a bracket as a print
@@ -10,40 +10,26 @@ import type { Ticker } from '../domain/ids';
  *  print the dash. */
 export const MISSING = '—';
 
-// Anchor simulation start to Jan 5, 2026 (Week 1 = Jan 5, 2026)
-export const SIMULATION_START_DATE = new Date(2026, 0, 5); // Jan 5, 2026
-
-/** §3.14: the calendar year a week falls in, on the ENGINE's calendar (the traces' one). */
-export const yearOfSimulationWeek = (week: number): number => getSimulationDate(week).getFullYear();
-
-export function getSimulationDate(week: number): Date {
-  const safeWeek = Math.max(1, Math.floor(week || 1));
-  const date = new Date(SIMULATION_START_DATE.getTime());
-  date.setDate(date.getDate() + (safeWeek - 1) * 7);
-  return date;
-}
-
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** "Jan 08, 2027" — a week's date on the one calendar. */
 export function formatSimulationDate(week: number): string {
-  const d = getSimulationDate(week);
-  const month = MONTH_NAMES[d.getMonth()];
-  const day = String(d.getDate()).padStart(2, '0');
-  const year = d.getFullYear();
-  return `${month} ${day}, ${year}`;
+  const d = dateOfWeek(week);
+  const month = MONTH_NAMES[d.getUTCMonth()];
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${month} ${day}, ${d.getUTCFullYear()}`;
 }
 
 export function formatSimulationDateShort(week: number): string {
-  const d = getSimulationDate(week);
-  const month = MONTH_NAMES[d.getMonth()];
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${month} ${day}`;
+  const d = dateOfWeek(week);
+  return `${MONTH_NAMES[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 
 /**
- * Returns formatted quarter filing label (e.g. "Q1 '25 (Mar 31)", "Q2 '25 (Jun 30)")
+ * Returns formatted quarter filing label (e.g. "Q1 '27 (Mar 31)", "Q2 '27 (Jun 30)"), counting
+ * quarters from the epoch's year.
  */
-export function formatQuarterFilingDate(quarterIndex: number, startYear: number = SIMULATION_START_DATE.getFullYear()): string {
+export function formatQuarterFilingDate(quarterIndex: number, startYear: number = yearOfWeek(0)): string {
   const totalQuarters = Math.max(0, quarterIndex);
   const yearOffset = Math.floor(totalQuarters / 4);
   const qNum = (totalQuarters % 4) + 1;
@@ -58,15 +44,6 @@ export function formatQuarterFilingDate(quarterIndex: number, startYear: number 
   };
 
   return `Q${qNum} '${shortYear} (${quarterDates[qNum]})`;
-}
-
-export function formatBondName(ticker: Ticker, couponRate: number | undefined, maturityWeek: number, currentWeek: number, rateType: 'FIXED' | 'FLOATING'): string {
-  const yearsRemaining = Math.max(0, (maturityWeek - currentWeek) / 52);
-  const maturityYear = getSimulationDate(currentWeek).getFullYear() + Math.round(yearsRemaining);
-  if (rateType === 'FIXED') {
-    return `${ticker} ${((couponRate ?? 0) * 100).toFixed(2)} '${String(maturityYear).slice(-2)}`;
-  }
-  return `${ticker} FRN '${String(maturityYear).slice(-2)}`;
 }
 
 /**
