@@ -5,6 +5,8 @@ import { Card, KV, Link, Stat, StatGrid } from '../ui';
 import { num, count, money } from '../format';
 import { World } from '../world';
 import { ObjectHeader, FunctionTiles, RegionLink } from './common';
+import { ensureV2 } from '../../engine2/world';
+import { tradeInvoicesOf } from '../../engine/ledger/contract-ledger';
 
 export interface Lane { from: string; to: string; ratePerTonne: number; inTransitUnits: number; shipments: number; invoicesLocal: number }
 
@@ -22,7 +24,7 @@ function lanesOf(world: World): Map<string, Lane> {
     const l = out.get(`${from}>${to}`);
     if (l) { l.inTransitUnits += g.units; l.shipments++; }
   });
-  (world.state.tradeInvoices ?? []).forEach((inv) => { const l = out.get(`${inv.sellerRegion}>${inv.buyerRegion}`); if (l) l.invoicesLocal += inv.amountCurrency * (inv.bookedUsdPerCurrency ?? 1); });
+  tradeInvoicesOf(ensureV2(world.state)).forEach((inv) => { const l = out.get(`${inv.sellerRegion}>${inv.buyerRegion}`); if (l) l.invoicesLocal += inv.amountCurrency * (inv.bookedUsdPerCurrency ?? 1); });
   return out;
 }
 

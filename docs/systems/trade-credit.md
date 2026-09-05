@@ -81,7 +81,7 @@ supplier's place in the estate.
 
 | Node | Code | |
 |---|---|---|
-| A1 delivered now, paid later; a receivable and a payable | `src/engine/simulation/stages/05-unit-bidding.ts:tradeInvoicesBooked` · `src/engine/ledger/contract-ledger.ts:bookTradeInvoices` | ✅ |
+| A1 delivered now, paid later; a receivable and a payable | `src/engine/simulation/stages/05-unit-bidding.ts:tradeInvoicesBooked` · `src/engine2/obligations.ts:writeInvoiceRow` · `src/engine/ledger/contract-ledger.ts:tradeInvoicesOf` | ✅ |
 | A2 both sit on real balance sheets | `src/engine/companyGenerator.ts:accountsReceivable` | ⚠️ |
 | **A3 terms, and a discount that is an implicit interest rate** | `src/domain/trade-invoice.ts:paymentTermWeeks` | ⚠️ |
 | A4 unsecured credit the supplier decided to extend | `src/domain/trade-invoice.ts:creditAffordableWeeks` | ✅ |
@@ -182,7 +182,7 @@ refusing them is a decision.
 ### ❌ C4 — THE CHEAPEST CHECK IN THE SYSTEM IS NOT TAKEN
 
 Nothing anywhere sums receivables against payables. The identity holds trivially inside
-`state.tradeInvoices` (one object per obligation, read from both sides), which is the right
+the invoice book (`contract-ledger.ts:tradeInvoicesOf`, one row per obligation, read from both sides), which is the right
 representation — but it does **not** hold against the balance sheets the model reports, because
 those carry `annualRevenue × 0.08 × {0.6, 0.4}` instead (see A2 below). So the world has two
 receivable books, one real and one stated, and the check that would have exposed that in one line
@@ -192,7 +192,7 @@ families, not just to the standing reads.
 ### ⚠️ A2 — THE REPORTED BALANCE SHEET DOES NOT SHOW THE REAL INVOICE BOOK
 
 `companyGenerator.ts:231-233` puts every firm's receivables at 4.8% of revenue and payables at 3.2%,
-for ever. The real book is `state.tradeInvoices`. Two representations of one quantity (rule 4), and
+for ever. The real book is the contract store's (`tradeInvoicesOf`). Two representations of one quantity (rule 4), and
 the stated one is what the player sees and what `changeInWorkingCapital` is computed from. Recorded
 in full in `firm-fundamentals.md` C1's diff; **the same §3 step** closes both.
 

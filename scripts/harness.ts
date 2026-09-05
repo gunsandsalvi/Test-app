@@ -130,7 +130,7 @@ import { isPubliclyListed, isActiveCompany, banksOf } from '../src/domain/compan
 import { ensureV2 } from '../src/engine2/world';
 import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
 import { issuedSharesOf, etfSharesOutstandingOf } from '../src/engine2/instruments';
-import { derivativesOf, repoBookOf } from '../src/engine/ledger/contract-ledger';
+import { derivativesOf, repoBookOf, tradeInvoicesOf } from '../src/engine/ledger/contract-ledger';
 import { issuerSpreadAtOnCurve } from '../src/engine/credit-price';
 import { forEachContract } from '../src/engine2/contracts';
 import { sovereignCouponByBond, weeklyInterestExpenseLocal, decomposeGovernmentSpending } from '../src/domain/government';
@@ -1297,7 +1297,7 @@ const xbModule: HarnessModule = (() => {
       const groupOf = new Map<string, string>();
       s.companies.forEach((c) => { groupOf.set(c.id, c.parentId ?? c.id); });
       let intraLocal = 0; let crossLocal = 0;
-      (s.tradeInvoices ?? []).forEach((inv) => {
+      tradeInvoicesOf(ensureV2(s)).forEach((inv) => {
         if (inv.sellerRegion === inv.buyerRegion) return;
         const usd = Math.max(0, inv.amountCurrency * inv.bookedUsdPerCurrency);
         crossLocal += usd;
@@ -1740,7 +1740,7 @@ const indModule: HarnessModule = (() => {
     }
 
     out.push('--- IND12: trade credit, and who carries it ---');
-    const invoices = s.tradeInvoices ?? [];
+    const invoices = tradeInvoicesOf(ensureV2(s));
     let domesticLocal = 0, crossLocal = 0, termSum = 0;
     const receivableById = new Map<EntityId, number>();
     const payableById = new Map<EntityId, number>();

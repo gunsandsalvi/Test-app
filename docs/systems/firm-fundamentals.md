@@ -181,7 +181,7 @@ accountsPayable    = workingCapitalLocal * 0.4
 ```
 
 Every firm in the world reports receivables at 4.8% of revenue and payables at 3.2%, for ever,
-whatever its invoice book says — and the real invoice book exists (`state.tradeInvoices`, see
+whatever its invoice book says — and the real invoice book exists (`contract-ledger.ts:tradeInvoicesOf`, see
 `trade-credit.md`). So there are two representations of one quantity (rule 4): the real one that
 moves cash, and the stated one the player and the cash-flow statement read. `changeInWorkingCapital`
 at `:262` is computed from the stated pair, so the quarterly cash-flow statement's operating line is

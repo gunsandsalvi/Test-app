@@ -14,15 +14,15 @@
  * columnar store for the six is slice d4c's.
  */
 import type { V2World } from '../../engine2/world';
-import { rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
+import { kindEpochOf, writeInvoiceRow, materializeInvoice, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import type { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
 import type { RepoContract } from '../../domain/repo';
 import type { SecurityLoan } from '../../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../../domain/prime-brokerage';
-import type { TradeInvoice } from '../../domain/trade-invoice';
 import { bankPartyOf, companyPartyOf } from '../../domain/party';
+import type { TradeInvoice } from '../../domain/trade-invoice';
 import { resolvePartyRef } from './wire';
 import { defect } from '../../domain/defect';
 
@@ -34,8 +34,8 @@ import { defect } from '../../domain/defect';
  * `GameState.derivativesBook` is gone: the store rides the world into next week and every clone.
  */
 const ROW: unique symbol = Symbol('obligation row');
-type Rowed = DerivativeContract & { [ROW]?: number };
-const tagRow = (c: DerivativeContract, r: number): DerivativeContract => {
+type Rowed = { [ROW]?: number };
+const tagRow = <T extends object>(c: T, r: number): T => {
   Object.defineProperty(c, ROW, { value: r, enumerable: false, writable: true, configurable: true });
   return c;
 };
@@ -186,19 +186,40 @@ export function publishPrimeBrokerageBook(v2: V2World, regionId: RegionId, book:
   relinkKindInRegion(v2, 'PRIME_BROKERAGE', regionId, rows);
 }
 
+/**
+ * §3.13-BOOK d4c-v — THE TRADE INVOICES ARE ROWS OF THE CONTRACT STORE. The outstanding book is
+ * the kind's rows materialized in insertion order and memoised on the KIND's epoch — a book of
+ * ~170k invoices is not rebuilt because a derivative marked. Each object names its row (the tag),
+ * which is how the settlement hands the survivors back. `GameState.tradeInvoices` is gone.
+ */
+const invoiceMemo = new WeakMap<V2World, { epoch: number; book: TradeInvoice[] }>();
+export function tradeInvoicesOf(v2: V2World): TradeInvoice[] {
+  const epoch = kindEpochOf(v2, 'TRADE_INVOICE');
+  let memo = invoiceMemo.get(v2);
+  if (!memo || memo.epoch !== epoch) {
+    memo = { epoch, book: rowsOfKind(v2, 'TRADE_INVOICE').map((r) => tagRow(materializeInvoice(v2, r), r)) };
+    invoiceMemo.set(v2, memo);
+  }
+  return memo.book;
+}
+
 /** The week's invoices join the outstanding book: every seller and buyer resolves. */
-export function bookTradeInvoices(state: { tradeInvoices?: TradeInvoice[] }, invoices: readonly TradeInvoice[]): void {
-  if (!state.tradeInvoices) state.tradeInvoices = [];
+export function bookTradeInvoices(v2: V2World, invoices: readonly TradeInvoice[]): void {
   for (const inv of invoices) {
     resolvePartyRef(companyPartyOf(inv.sellerId), `trade invoice seller`);
     resolvePartyRef(companyPartyOf(inv.buyerId), `trade invoice buyer`);
-    state.tradeInvoices.push(inv);
+    writeInvoiceRow(v2, inv);
   }
 }
 
-/** What is still owed after the week's settlement: the invoices not yet paid or written off. */
-export function settleTradeInvoices(state: { tradeInvoices?: TradeInvoice[] }, stillOutstanding: TradeInvoice[]): void {
-  state.tradeInvoices = stillOutstanding;
+/** What is still owed after the week's settlement: the invoices not yet paid or written off,
+ *  each one an object the book handed out; every other invoice row is freed. */
+export function settleTradeInvoices(v2: V2World, stillOutstanding: readonly TradeInvoice[]): void {
+  const rows = stillOutstanding.map((inv) => {
+    const r = (inv as Rowed)[ROW];
+    return r === undefined ? defect(`trade invoice ${inv.sellerId}>${inv.buyerId} is not on the contract store`) : r;
+  });
+  relinkKind(v2, 'TRADE_INVOICE', rows);
 }
 
 /** A capital call draws on a limited partner's commitment; the payment beside it is the LP's. */

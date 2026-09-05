@@ -15,7 +15,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
-import { settleTradeInvoices } from '../../ledger/contract-ledger';
+import { settleTradeInvoices, tradeInvoicesOf } from '../../ledger/contract-ledger';
 import type { EntityId } from '../../../domain/ids';
 import { companyPartyOf } from '../../../domain/party';
 import { CURRENCY_BY_REGION, CurrencyCode } from '../../../domain/geography';
@@ -28,7 +28,8 @@ import { pay } from './settlement';
 export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext): void {
   ctx.tradeInvoiceFxGainLocal = 0;
   ctx.tradeInvoiceWriteOffLocal = 0;
-  const outstanding = state.tradeInvoices ?? [];
+  // §3.13-BOOK d4c-v: the outstanding book is the store's rows.
+  const outstanding = tradeInvoicesOf(ctx.v2);
   if (outstanding.length === 0) return;
 
   const usdPerCurrency: Record<string, number> = {};
@@ -84,5 +85,5 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
     ctx.tradeInvoiceFxGainLocal += settledLocal - bookedLocal;
   });
 
-  settleTradeInvoices(state, stillOutstanding); // §3.13-BOOK d4b: the contract ledger's door
+  settleTradeInvoices(ctx.v2, stillOutstanding); // §3.13-BOOK d4b: the contract ledger's door
 }

@@ -1,7 +1,7 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
-import { derivativesOf, repoBookOf, primeBrokerageBookOf } from '../ledger/contract-ledger';
+import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf } from '../ledger/contract-ledger';
 import type { CounterpartyRef } from '../../domain/party';
 import { deskRowsOf } from '../desk-register';
 import { deskBankIdOf } from '../ledger/holdings-ledger';
@@ -430,7 +430,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
     });
   });
   (state.estates ?? []).forEach((e) => e.claims.forEach((cl) => { if (!partyExists(cl.holder)) bump('estate claim holders'); }));
-  (state.tradeInvoices ?? []).forEach((inv) => {
+  tradeInvoicesOf(ensureV2(state)).forEach((inv) => {
     if (!entityExists(inv.buyerId)) bump('invoice buyers');
     if (!entityExists(inv.sellerId)) bump('invoice sellers');
   });

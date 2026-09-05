@@ -2643,7 +2643,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   // same order the spread produced, without copying tens of thousands of live entries weekly.
   if (!state.goodsInTransit) state.goodsInTransit = [];
   for (const sh of ctx.shipmentsDispatched) state.goodsInTransit.push(sh);
-  bookTradeInvoices(state, ctx.tradeInvoicesBooked); // §3.13-BOOK d4b: the contract ledger's door
+  bookTradeInvoices(ctx.v2, ctx.tradeInvoicesBooked); // §3.13-BOOK d4b: the contract ledger's door
 
   // DER/rule 4: ONE realised-vol estimator (domain/volatility.ts). The local copy that stood here
   // carried its own 0.16 fallback, so a market with too little history was reported as being at

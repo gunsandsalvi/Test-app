@@ -517,13 +517,12 @@ written from here):
         are `state.derivativesBook`, an object array with one lifecycle writer). d4a (one party
         union and one key across the bilateral books) is in §9. What is left, in order:
     d4c. **ONE STORE** — one kind per commit, in this order; d4c-i (the derivatives), d4c-ii
-        (the repo book), d4c-iii (the stock-loan book) and d4c-iv (the prime-brokerage book) are in §9.
+        (the repo book), d4c-iii (the stock-loan book), d4c-iv (the prime-brokerage book) and d4c-v
+        (the trade invoices) are in §9.
         `engine2/obligations.ts` is the store: kind, class, region, money, party A, party B,
         size, strike, units, settled mark, struck and maturity weeks, the reference and the term;
         each kind below adds its own columns where it has them and joins the same chains, door
         (`contract-ledger.ts`) and liveness check.
-    d4c-v. **THE TRADE INVOICES** (`state.tradeInvoices`): seller, buyer, the sub-unit, the invoice
-        currency and amount, the booked rate, booked and due weeks.
     d4c-vi. **THE CAPITAL COMMITMENTS** (`peFund.lpCommitments`): fund, LP, committed, drawn — and
         one liveness check (`O5`) over every kind on the store. A derivative is in the INDEX and
         the CONTRACT store, never in the position book: nothing is held, and its check is `O9`'s
@@ -1720,6 +1719,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d4c-v — THE TRADE INVOICES ARE ROWS OF THE CONTRACT STORE.** `GameState.tradeInvoices`
+is deleted. An invoice is a row of `engine2/obligations.ts` — the seller as A, the buyer as B, the
+face in the invoice currency as the size, the booked rate as the strike, the goods as the
+reference (a fifth reference kind, the sub-unit), booked and due as the weeks — plus the one
+column this kind adds, the buyer's region (the seller's is the row's). The store gained a
+per-kind epoch beside its own: a book of ~170k invoices is memoised on ITS writes
+(`contract-ledger.ts:tradeInvoicesOf`), not rebuilt because a derivative marked. An invoice has
+no id: the object the book hands out names its row, and the settlement hands the survivors
+back (`settleTradeInvoices(v2, stillOutstanding)`, the rest freed) the way the derivatives'
+lifecycle does. Seven readers (the settlement, the estates' receivables, the FX-forward
+exposures, `O8`, the lane view, the harness twice) read the store. Byte-identical. Gates green;
+no run.
 
 **13-BOOK d4c-iv — THE PRIME-BROKERAGE BOOK IS ROWS OF THE CONTRACT STORE.**
 `Region.primeBrokerageBook` is deleted. A line is a row of `engine2/obligations.ts` — the broker

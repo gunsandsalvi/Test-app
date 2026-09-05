@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
 import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
-import { bookTradeInvoices, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, publishPrimeBrokerageBook, primeBrokerageBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
+import { bookTradeInvoices, tradeInvoicesOf, settleTradeInvoices, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, publishPrimeBrokerageBook, primeBrokerageBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
 import type { WeeklyStepContext } from '../src/engine/simulation/stages/context';
 import type { DerivativeContract } from '../src/domain/derivatives/contract';
 import { asEntityId, asInstrumentId } from '../src/domain/ids';
@@ -26,11 +26,20 @@ test('an invoice between two firms the world holds is booked; one naming a firm 
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
   setActiveWireWorld(wireWorldOf(v2, [{ id: asEntityId('USA_ACME') }, { id: asEntityId('USA_BOLT') }], []));
   try {
-    const state: { tradeInvoices?: TradeInvoice[] } = {};
-    bookTradeInvoices(state, [invoice('USA_ACME', 'USA_BOLT')]);
-    assert.equal(state.tradeInvoices?.length, 1);
-    assert.throws(() => bookTradeInvoices(state, [invoice('USA_ACME', 'USA_NOBODY')]), /no entity, region or bank/);
-    assert.equal(state.tradeInvoices?.length, 1, 'the refused invoice is not on the book');
+    const first = invoice('USA_ACME', 'USA_BOLT');
+    bookTradeInvoices(v2, [first]);
+    // §3.13-BOOK d4c-v: the book is rows of the contract store, read back as the invoice it was.
+    assert.deepEqual(tradeInvoicesOf(v2), [first]);
+    assert.throws(() => bookTradeInvoices(v2, [invoice('USA_ACME', 'USA_NOBODY')]), /no entity, region or bank/);
+    assert.equal(tradeInvoicesOf(v2).length, 1, 'the refused invoice is not on the book');
+    const second = { ...invoice('USA_BOLT', 'USA_ACME'), weekDue: 9 };
+    bookTradeInvoices(v2, [second]);
+    const book = tradeInvoicesOf(v2);
+    assert.deepEqual(book, [first, second], 'insertion order');
+    // The settlement hands back the survivors it was given; the paid one's row is freed.
+    settleTradeInvoices(v2, [book[1]]);
+    assert.deepEqual(tradeInvoicesOf(v2), [second]);
+    assert.throws(() => settleTradeInvoices(v2, [first]), /not on the contract store/);
   } finally {
     setActiveWireWorld(undefined);
   }

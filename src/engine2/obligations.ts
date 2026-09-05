@@ -21,6 +21,8 @@ import type { DerivativeContract, DerivativeReference, DerivativeParty } from '.
 import type { RepoContract, RepoPledge, RepoParty } from '../domain/repo';
 import type { SecurityLoan } from '../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../domain/prime-brokerage';
+import type { TradeInvoice } from '../domain/trade-invoice';
+import type { CurrencyCode } from '../domain/geography';
 import { bankPartyOf } from '../domain/party';
 import { currencyOf } from '../domain/geography';
 import { partyFromKey, partyKey } from '../engine/ledger/party';
@@ -33,7 +35,7 @@ export interface ObligationStore {
   used: number;
   freeHead: number;
   /** What kind of obligation the row is: 'DERIVATIVE' (d4c-i), 'REPO' (d4c-ii), 'STOCK_LOAN' (d4c-iii),
-   *  'PRIME_BROKERAGE' (d4c-iv); the other two kinds join in order. */
+   *  'PRIME_BROKERAGE' (d4c-iv), 'TRADE_INVOICE' (d4c-v); the commitments join last. */
   kindRef: RefColumn<TypeRef>;
   /** The kind's own class — a derivative's `DerivativeClassId`. */
   classRef: RefColumn<TypeRef>;
@@ -51,7 +53,8 @@ export interface ObligationStore {
   settledMark: Float64Array;
   struckWeek: Int32Array;
   maturityWeek: Int32Array;
-  /** The reference, typed by class: 0 RATE, 1 ISSUER, 2 COMMODITY, 3 REGION; and what it names. */
+  /** The reference, typed by class: 0 RATE, 1 ISSUER, 2 COMMODITY, 3 REGION, 4 SUB_UNIT (the goods a
+   *  trade invoice is for); and what it names. */
   refKind: Int8Array;
   refText: (string | undefined)[];
   /** The term bucket its market quotes (`'s5'`, `'3M'`, `''`). */
@@ -69,8 +72,13 @@ export interface ObligationStore {
   /** §3.13-BOOK d4c-iv — the share of a prime-brokerage client's collateral the broker will not lend
    *  against this week; NaN for every other kind. */
   haircut: Float64Array;
+  /** §3.13-BOOK d4c-v — the region an obligation is paid INTO where it differs from `regionRef`: a
+   *  trade invoice's buyer region (its seller's is the row's region); ABSENT_REF for every other kind. */
+  toRegionRef: RefColumn<RegionRef>;
   /** Bumped by every write, so a materialized view can tell whether it is current. */
   epoch: number;
+  /** d4c-v — the same, per kind: a memo of one kind's rows need not rebuild when another kind moved. */
+  kindEpoch: Map<TypeRef, number>;
   next: Int32Array;
   /** Live chain per kind ref, in insertion order. */
   headByKind: Map<TypeRef, number>;
@@ -106,7 +114,7 @@ export function newObligationStore(): ObligationStore {
     refKind: new Int8Array(cap), refText: new Array(cap), termKey: new Array(cap), id: new Array(cap),
     pledges: new Array(cap), epoch: 0,
     instrRef: newRefColumn<InstrRef>(cap, -1), positionAtStrike: new Float64Array(cap).fill(Number.NaN), recalledWeek: new Int32Array(cap).fill(-1),
-    haircut: new Float64Array(cap).fill(Number.NaN),
+    haircut: new Float64Array(cap).fill(Number.NaN), toRegionRef: newRefColumn<RegionRef>(cap, -1), kindEpoch: new Map(),
     next: new Int32Array(cap).fill(-1),
     headByKind: new Map(), tailByKind: new Map(), rowById: new Map(),
   };
@@ -125,7 +133,7 @@ function grow(S: ObligationStore): void {
   const rk = new Int8Array(cap); rk.set(S.refKind); S.refKind = rk;
   S.refText.length = cap; S.termKey.length = cap; S.id.length = cap; S.pledges.length = cap;
   S.instrRef = gR(S.instrRef); S.positionAtStrike = gF(S.positionAtStrike, Number.NaN); S.recalledWeek = gI(S.recalledWeek, -1);
-  S.haircut = gF(S.haircut, Number.NaN);
+  S.haircut = gF(S.haircut, Number.NaN); S.toRegionRef = gR(S.toRegionRef);
   S.next = gI(S.next, -1);
   S.cap = cap;
 }
@@ -134,6 +142,18 @@ function allocRow(S: ObligationStore): number {
   if (S.freeHead >= 0) { const r = S.freeHead; S.freeHead = S.next[r]; S.next[r] = -1; return r; }
   if (S.used >= S.cap) grow(S);
   return S.used++;
+}
+
+/** Every write bumps the store's epoch and the written kind's own. */
+function bump(S: ObligationStore, kindRef: TypeRef): void {
+  S.epoch++;
+  S.kindEpoch.set(kindRef, (S.kindEpoch.get(kindRef) ?? 0) + 1);
+}
+
+/** One kind's write count — what a memo of that kind's rows keys on. */
+export function kindEpochOf(v2: V2World, kind: string): number {
+  const kindRef = v2.refs.types.idByString.get(kind);
+  return kindRef === undefined ? 0 : (v2.obligations.kindEpoch.get(kindRef as TypeRef) ?? 0);
 }
 
 function appendToKind(S: ObligationStore, kindRef: TypeRef, r: number): void {
@@ -156,8 +176,8 @@ export function rowsOfKind(v2: V2World, kind: string): number[] {
 /** Relink one kind's chain to exactly `kept` (in order), freeing every other live row of it. */
 export function relinkKind(v2: V2World, kind: string, kept: readonly number[]): void {
   const S = mutableObligations(v2);
-  S.epoch++;
   const kindRef = internType(v2, kind);
+  bump(S, kindRef);
   const keep = new Set(kept);
   for (let r = S.headByKind.get(kindRef) ?? -1; r >= 0; ) {
     const nxt = S.next[r];
@@ -174,6 +194,7 @@ function freeRow(S: ObligationStore, r: number): void {
   S.notional[r] = 0; S.strike[r] = 0; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
   S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = ''; S.pledges[r] = undefined;
   S.instrRef[r] = ABSENT_REF; S.positionAtStrike[r] = Number.NaN; S.recalledWeek[r] = -1;
+  S.haircut[r] = Number.NaN; S.toRegionRef[r] = ABSENT_REF;
   S.next[r] = S.freeHead; S.freeHead = r;
 }
 
@@ -206,7 +227,7 @@ export function writeDerivativeRow(v2: V2World, c: DerivativeContract): number {
   S.termKey[r] = c.termKey; S.id[r] = c.id;
   S.rowById.set(c.id, r);
   appendToKind(S, kindRef, r);
-  S.epoch++;
+  bump(S, kindRef);
   return r;
 }
 
@@ -214,14 +235,14 @@ export function writeDerivativeRow(v2: V2World, c: DerivativeContract): number {
 export function writeSettledMark(v2: V2World, r: number, markLocal: number | undefined): void {
   const S = mutableObligations(v2);
   S.settledMark[r] = markLocal === undefined ? Number.NaN : markLocal;
-  S.epoch++;
+  bump(S, S.kindRef[r]);
 }
 
 /** A novation re-points a row's party (ledger-internal). */
 export function writeDerivativeParties(v2: V2World, r: number, a: DerivativeParty, b: DerivativeParty): void {
   const S = mutableObligations(v2);
   S.aRef[r] = internPartyKey(v2, partyKey(a)); S.bRef[r] = internPartyKey(v2, partyKey(b));
-  S.epoch++;
+  bump(S, S.kindRef[r]);
 }
 
 // ---- §3.13-BOOK d4c-ii — THE REPO BOOK: lender as A, borrower (a bank) as B, principal as the
@@ -249,7 +270,7 @@ export function writeRepoRow(v2: V2World, c: RepoContract): number {
   S.pledges[r] = c.collateral.map((p) => ({ bondId: p.bondId, faceLocal: p.faceLocal }));
   S.rowById.set(c.id, r);
   appendToKind(S, kindRef, r);
-  S.epoch++;
+  bump(S, kindRef);
   return r;
 }
 
@@ -261,7 +282,7 @@ export function writeRepoTerms(v2: V2World, r: number, c: RepoContract): void {
   S.notional[r] = c.principalLocal; S.strike[r] = c.rateAnnual;
   S.struckWeek[r] = c.struckWeek | 0; S.maturityWeek[r] = c.maturityWeek | 0;
   S.pledges[r] = c.collateral.map((p) => ({ bondId: p.bondId, faceLocal: p.faceLocal }));
-  S.epoch++;
+  bump(S, S.kindRef[r]);
 }
 
 /** One repo row materialized back to the contract the stages and the domain helpers read. */
@@ -296,7 +317,7 @@ export function writeLoanRow(v2: V2World, l: SecurityLoan): number {
   S.recalledWeek[r] = l.recalledWeek === undefined ? -1 : l.recalledWeek | 0;
   S.rowById.set(l.id, r);
   appendToKind(S, kindRef, r);
-  S.epoch++;
+  bump(S, kindRef);
   return r;
 }
 
@@ -306,7 +327,7 @@ export function writeLoanTerms(v2: V2World, r: number, l: SecurityLoan): void {
   S.aRef[r] = internPartyKey(v2, partyKey(l.lender)); S.bRef[r] = internPartyKey(v2, partyKey(l.borrower));
   S.notional[r] = l.collateralLocal; S.strike[r] = l.feeBps; S.units[r] = l.shares;
   S.positionAtStrike[r] = l.lenderPositionAtStrike; S.recalledWeek[r] = l.recalledWeek === undefined ? -1 : l.recalledWeek | 0;
-  S.epoch++;
+  bump(S, S.kindRef[r]);
 }
 
 /** One loan row materialized back to the loan the stage and the settlement read. */
@@ -343,7 +364,7 @@ export function writePrimeBrokerageRow(v2: V2World, l: PrimeBrokerageLine): numb
   S.haircut[r] = l.haircutRate;
   S.rowById.set(l.id, r);
   appendToKind(S, kindRef, r);
-  S.epoch++;
+  bump(S, kindRef);
   return r;
 }
 
@@ -353,7 +374,7 @@ export function writePrimeBrokerageTerms(v2: V2World, r: number, l: PrimeBrokera
   const S = mutableObligations(v2);
   S.aRef[r] = internPartyKey(v2, partyKey(bankPartyOf(l.brokerId))); S.bRef[r] = internPartyKey(v2, partyKey({ kind: 'INSTITUTION', id: l.fundId }));
   S.notional[r] = l.drawnLocal; S.strike[r] = l.rateAnnual; S.struckWeek[r] = l.struckWeek | 0; S.haircut[r] = l.haircutRate;
-  S.epoch++;
+  bump(S, S.kindRef[r]);
 }
 
 /** One line row materialized back to the line the sessions and the sweeps read. */
@@ -365,6 +386,46 @@ export function materializePrimeBrokerageLine(v2: V2World, r: number): PrimeBrok
   return {
     id: S.id[r], regionId: regionOf(v2, S.regionRef[r]) as RegionId, brokerId: broker.id, fundId: fund.id,
     drawnLocal: S.notional[r], haircutRate: S.haircut[r], rateAnnual: S.strike[r], struckWeek: S.struckWeek[r],
+  };
+}
+
+// ---- §3.13-BOOK d4c-v — THE TRADE INVOICES: the seller as A, the buyer as B, the face in the
+// invoice currency as the size, the booked rate as the strike, the goods as the reference, the
+// buyer's region as the row's second region. An invoice has no id of its own: a reader that hands
+// one back names its row (the ledger's tag), never a string. ----
+
+/** Write an invoice as a new row (ledger-internal). Returns the row. */
+export function writeInvoiceRow(v2: V2World, inv: TradeInvoice): number {
+  const S = mutableObligations(v2);
+  const currencyId = CURRENCY_ID[inv.currency as CurrencyCode];
+  if (currencyId === undefined) return defect(`trade invoice ${inv.sellerId}>${inv.buyerId} is in ${inv.currency}, which is no currency`);
+  const r = allocRow(S);
+  const kindRef = internType(v2, 'TRADE_INVOICE');
+  S.kindRef[r] = kindRef; S.classRef[r] = kindRef; S.regionRef[r] = internRegion(v2, inv.sellerRegion);
+  S.toRegionRef[r] = internRegion(v2, inv.buyerRegion);
+  S.currencyId[r] = currencyId;
+  S.aRef[r] = internPartyKey(v2, partyKey({ kind: 'COMPANY', id: inv.sellerId })); S.bRef[r] = internPartyKey(v2, partyKey({ kind: 'COMPANY', id: inv.buyerId }));
+  S.notional[r] = inv.amountCurrency; S.strike[r] = inv.bookedUsdPerCurrency; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
+  S.struckWeek[r] = inv.weekBooked | 0; S.maturityWeek[r] = inv.weekDue | 0;
+  S.refKind[r] = 4; S.refText[r] = inv.subUnitId; S.termKey[r] = ''; S.id[r] = '';
+  S.instrRef[r] = ABSENT_REF as InstrRef; S.positionAtStrike[r] = Number.NaN; S.recalledWeek[r] = -1; S.haircut[r] = Number.NaN;
+  appendToKind(S, kindRef, r);
+  bump(S, kindRef);
+  return r;
+}
+
+/** One invoice row materialized back to the invoice the settlement and the exposures read. */
+export function materializeInvoice(v2: V2World, r: number): TradeInvoice {
+  const S = v2.obligations;
+  const seller = partyFromKey(partyKeyOf(v2, S.aRef[r]));
+  const buyer = partyFromKey(partyKeyOf(v2, S.bRef[r]));
+  if (seller?.kind !== 'COMPANY' || buyer?.kind !== 'COMPANY') return defect(`trade invoice row ${r} names a party that is no firm`);
+  return {
+    sellerId: seller.id, sellerRegion: regionOf(v2, S.regionRef[r]) as RegionId,
+    buyerId: buyer.id, buyerRegion: regionOf(v2, S.toRegionRef[r]) as RegionId,
+    subUnitId: S.refText[r] ?? '', currency: currencyOfId(S.currencyId[r]),
+    amountCurrency: S.notional[r], bookedUsdPerCurrency: S.strike[r],
+    weekBooked: S.struckWeek[r], weekDue: S.maturityWeek[r],
   };
 }
 
@@ -385,7 +446,7 @@ export function relinkKindInRegion(v2: V2World, kind: string, regionId: string, 
   S.headByKind.delete(kindRef); S.tailByKind.delete(kindRef);
   for (const r of others) appendToKind(S, kindRef, r);
   for (const r of kept) appendToKind(S, kindRef, r);
-  S.epoch++;
+  bump(S, kindRef);
 }
 
 /** One row materialized back to the object the class profiles price. */

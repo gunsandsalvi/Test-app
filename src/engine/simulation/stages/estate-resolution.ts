@@ -14,6 +14,7 @@
  * goods — and the discount a buyer takes is the return it needs for the time it is tied up.
  */
 
+import { tradeInvoicesOf } from '../../ledger/contract-ledger';
 import { assertNever } from '../../../domain/defect';
 import { bankParty, bankSecuritiesParty, companyParty, companyPartyOf } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
@@ -172,7 +173,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   const receivablesBySellerLocal = new Map<string, number>();
   estates.forEach((e) => { if (e.closedWeek === undefined) receivablesBySellerLocal.set(e.ticker, 0); });
   if (receivablesBySellerLocal.size > 0) {
-    (state.tradeInvoices ?? []).forEach((iv) => {
+    tradeInvoicesOf(ctx.v2).forEach((iv) => {
       const acc = receivablesBySellerLocal.get(iv.sellerId);
       if (acc === undefined) return;
       receivablesBySellerLocal.set(iv.sellerId, acc + iv.amountCurrency * iv.bookedUsdPerCurrency);

@@ -43,7 +43,7 @@ import { fxWeeklySigma } from '../../../../domain/fx-market';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { initialMarginLocal } from '../derivative-lifecycle';
-import { derivativesBookOf, strikeDerivatives } from '../../../ledger/contract-ledger';
+import { derivativesBookOf, strikeDerivatives, tradeInvoicesOf } from '../../../ledger/contract-ledger';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { cashOf, bankReservesOf } from '../../../ledger/accounts';
 import { facilityBookOf } from '../../../../engine2/tranches';
@@ -202,7 +202,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
   // place of a mandate one. Same auction, same basis: a corporate bidding for a hedge widens it
   // for the fund managers, which is what a shared dealer balance sheet means.
   const corporateExposure = corporateExposureByRegion(
-    [...(state.tradeInvoices ?? []), ...ctx.tradeInvoicesBooked], week);
+    [...tradeInvoicesOf(ctx.v2), ...ctx.tradeInvoicesBooked], week);
   const corpGapByTicker = new Map<EntityId, Map<RegionId, number>>();
   const corpToleranceByTicker = new Map<EntityId, Map<RegionId, number>>();
   ctx.updatedCompanies.forEach((c) => {

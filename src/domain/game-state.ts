@@ -61,9 +61,8 @@ export interface GameState {
    *  "BASE/QUOTE". The model's one real measure of how deep a currency pair is, and what the
    *  invoice-currency choice is priced against. */
   fxPairIlliquidity: Record<string, number>;
-  /** XB3a-5 — cross-border sales delivered and not yet paid for, in the market's own emergent
-   *  invoice currency, due on terms derived from the buyer's own credit. */
-  tradeInvoices: import('./trade-invoice').TradeInvoice[];
+  // §3.13-BOOK d4c-v: the trade invoices — sales delivered and not yet paid for — are rows of
+  // the world's contract store, read through `contract-ledger.ts:tradeInvoicesOf`; not a field.
   /** G5 — open and just-closed workouts, carried across weeks. §7.274: REQUIRED — the optional
    *  form let a state without the field compile, and the `?? []` default at context creation
    *  silently reset every open workout (§4.0 Tier 1 item 3's resetting-default trap). */
