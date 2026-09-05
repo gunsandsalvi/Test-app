@@ -551,14 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-f-iv-b. **THE CAPEX BASKET IS THE INDUSTRY'S, AND A CAPITAL GOOD HAS A LIFE.** `capexBasketWeight`
-    is "the share of ANY buyer's capex basket" (`industry-registry.ts:60`): a steel mill and a
-    software firm buy the same mix of heavy equipment, buildings, fleet and software, and no
-    tree names it. The registry says what each industry's capital is made of (the way it says
-    each product's recipe), `05-unit-bidding.ts:1381` splits a buyer's capex by ITS industry's
-    mix, the seed's register is that mix, and a capital good carries its own `usefulLifeYears`
-    (a building's is not a server's; today one sector life stamps every vintage, and a carrier's
-    fleet life is `FREIGHT_ASSET_SPEC`'s by exception). goods.md's capex rows re-marked.
 26-f-iv-c. **CAPACITY READS THE VINTAGES WHOSE KIND SERVES THE LINE.** (A4's cost of
     misallocation, A5's value.) A line's capacity is `unitsPerNetPpeDollar × net plant` of the
     WHOLE register (`05-unit-bidding.ts:976`), so a steel mill's heavy equipment merged into a
@@ -1368,6 +1360,32 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-f-iv-b — THE CAPEX BASKET IS THE INDUSTRY'S, AND A CAPITAL GOOD HAS A LIFE.**
+  `capexBasketWeight` — "the share of ANY buyer's capex basket", one mix for a refinery and a
+  software firm alike — is gone. `IndustrySpec.capitalMix` says what each of the sixteen
+  industries' plant is made of (stated the way its recipes are, rule 15), a profile firm's is its
+  profile's (`PROFILE_CAPITAL_MIX`: premises and systems; a carrier's hulls), and
+  `industry-registry.ts:capitalMixOf(lines, profile)` is the one accessor (by revenue share,
+  normalised; `sectorCapitalMix` for the public seed whose lines are dealt after its books,
+  `registryCapitalMix` before any buyer exists, `capitalMixOfFirms` for the authoritative seed's
+  split of a region's investment by its firms' own capex). Stage 05 splits each buyer's capex bid
+  by it and each SME pool's by its industry's; stage 03 sizes the capital-goods industries by it;
+  the seed builds the register in it. A capital good carries `SubUnitSpec.usefulLifeYears` (a
+  building's 40, heavy equipment's 18, automation's 12, a fleet's 10, software's 5 — the presence
+  of a life is what makes a good a capital good, `isCapitalGood`), the vintage takes the good's
+  own life at commissioning (`usefulLifeYearsOfGood`) and the seed's register wears each kind
+  over its own; `usefulLifeYearsOf(firm)` is left to the tax schedule's class life and a
+  carrier's hulls at the seed. The step's own test found a routing defect and closed it: a
+  purchase's kind was the GOOD's question ("does any recipe consume this?" —
+  `purchaseKindOf`), and four of the five capital goods are in somebody's recipe, so a
+  manufacturer's heavy equipment, a retailer's automation and every firm's software landed as
+  input LOTS that only a firm whose own recipe lists them ever drew (the dead-lot defect the
+  function was written to end) and only construction ever became plant; it is the BUYER's
+  question now (its own recipe consumes it → an input; a life → plant; else operating), asked
+  at both landing sites. the-capital-programme C1 re-cited, A4 text; goods.md carries no capex
+  row to re-mark. `test/capital-mix.test.ts`, `test/plant.test.ts` (each kind half worn over its
+  own life). Gates green; no run (rule 11).
 
 **26-f-iv-a — A VINTAGE HAS A KIND.** (rule 10 split of 26-f-iv into a/b/c; b and c in §3.)
   `PlantVintage.kind` is the CAPITAL_GOOD sub-unit the vintage was made from, and the construction

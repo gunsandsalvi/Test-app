@@ -1,9 +1,8 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, ProductLine, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE, REGION_IDS_SEED_ORDER } from '../types';
-import { CAPEX_SUPPLIER_WEIGHTS } from '../domain/market-microstructure';
 import { stashSeedIssuedShares, seedIssuedSharesOf } from './ledger/instrument-ledger';
 import { stashSeedRing, peekSeedRing } from '../engine2/world';
 import { stashOpeningCash, openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf, seedSovereignBookLocalOf } from './ledger/accounts';
-import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf, industryOfSubUnit } from '../domain/industry-registry';
+import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf, industryOfSubUnit, sectorCapitalMix, usefulLifeYearsOfGood } from '../domain/industry-registry';
 import { defect } from '../domain/defect';
 import { callProtectionForIssue } from '../domain/call-protection';
 import { isInvestmentGrade } from './simulation/stages/asset-allocation';
@@ -12,8 +11,7 @@ import { getInitialRegions, CORPORATE_TAX_RATE_BY_REGION } from './macro/initial
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
 import { getRegionProductivityPerCapitaLocal } from './bootstrap/population';
 import { SECTOR_PPE_INTENSITY } from './simulation/constants';
-import { usefulLifeYearsOf } from '../domain/company-week/capital-programme';
-import { seedPlantVintages, plantGrossLocal, plantNetLocal, plantAccumulatedDepreciationLocal, plantDepreciationAnnualLocal, type PlantVintage } from '../domain/plant';
+import { seedPlantVintages, seedMixOf, plantGrossLocal, plantNetLocal, plantAccumulatedDepreciationLocal, plantDepreciationAnnualLocal, type PlantVintage } from '../domain/plant';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from './equity-valuation';
 import { UNIVERSE_SCALE, PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
@@ -481,8 +479,9 @@ export function generateInitialCompanies(
       // to revenue; a stationary plant is half worn (`seedPlantVintages`), so its gross is twice
       // that, and gross, net and accumulated depreciation are READS of the register at the seed
       // week — the stated 45% worn fraction is gone.
-      // §3.26-f-iv-a: in the mix of capital goods every buyer's capex is split into (iv-b makes it the industry's).
-      const seedPlant = seedPlantVintages(2 * tmpl.revBase * ppeIntensity, usefulLifeYearsOf({ sector: tmpl.sector }), SEED_WEEK, CAPEX_SUPPLIER_WEIGHTS);
+      // §3.26-f-iv-b: in its sector's industries' capital mix (its lines are dealt after the books
+      // are struck), each capital good at its own life.
+      const seedPlant = seedPlantVintages(2 * tmpl.revBase * ppeIntensity, SEED_WEEK, seedMixOf(sectorCapitalMix(tmpl.sector), usefulLifeYearsOfGood));
       const initialGrossPPELocal = plantGrossLocal(seedPlant, SEED_WEEK);
       const initialAccumulatedDepreciationLocal = plantAccumulatedDepreciationLocal(seedPlant, SEED_WEEK);
       const initialNetPPELocal = plantNetLocal(seedPlant, SEED_WEEK);
@@ -1263,7 +1262,7 @@ export function generatePrivateCompanies(
     const ppeIntensity = SECTOR_PPE_INTENSITY[sector] ?? 0.5;
     // §3.26-f-ii — the register: net plant `revBase × intensity`, half worn (a carve-out's plant
     // is existing plant), at the opening week. The stated 35% worn fraction is gone.
-    const plant = seedPlantVintages(2 * Math.round(revBase * ppeIntensity), usefulLifeYearsOf({ sector }), openingWeek, CAPEX_SUPPLIER_WEIGHTS);
+    const plant = seedPlantVintages(2 * Math.round(revBase * ppeIntensity), openingWeek, seedMixOf(INDUSTRY_REGISTRY[seed.industry].capitalMix, usefulLifeYearsOfGood));
     // §3.26-f-i — EBIT off the one schedule on the plant just seeded (it was `revBase × 0.045`).
     const da = plantDepreciationAnnualLocal(plant, openingWeek);
     const ebit = Math.max(1, ebitda - da);

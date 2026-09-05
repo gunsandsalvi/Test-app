@@ -146,7 +146,7 @@ import { RepoContract } from '../src/domain/repo';
 // §7.246: the instrument reads the engine's own definitions instead of re-hardcoding them.
 import { mortgageSeverityAtLtv, vintageCurrentLtv, householdBookRwaLocal } from '../src/domain/banking';
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS } from '../src/engine/macro/banking';
-import { CAPEX_SUPPLIER_WEIGHTS } from '../src/domain/market-microstructure';
+import { VIEW_CAPITAL_GOOD_IDS } from '../src/domain/industry-registry';
 import { centralBankAssetsLocal, centralBankFxReservesLocal } from '../src/domain/central-bank';
 import { centralBankBookLocal, centralBankSovereignAssetsLocal, centralBankPositions, bankSovereignBookLocal, bankSovereignPositions, bankSovereignFaceByBond, lienFaceLocal } from '../src/engine/sovereign-register';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
@@ -1678,7 +1678,7 @@ const indModule: HarnessModule = (() => {
         // TWO REPRESENTATIONS OF INVESTMENT? The seed sizes each capex industry from the demand
         // solve; the firms bid their OWN capex figure. If those disagree the sector was built to
         // supply one number and asked for another (rule 4).
-        const capexCats = Object.keys(CAPEX_SUPPLIER_WEIGHTS); // §7.246: the registry's list, not a copy
+        const capexCats = [...VIEW_CAPITAL_GOOD_IDS]; // §7.246: the registry's list, not a copy
         const seededLocal = capexCats.reduce((a, su) => a + ((s.regions[r].categoryDemand?.[su]?.demandLevelAnnualLocal) ?? 0), 0);
         out.push(`      capex industries sized for ${B(seededLocal)}/yr of demand; firms bid ${B(capexA)}/yr = ${(seededLocal > 0 ? capexA / seededLocal : 0).toFixed(2)}x what was built`);
         capexCats.forEach(su => {

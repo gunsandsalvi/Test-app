@@ -91,7 +91,7 @@ checked by `scripts/check-atlas.sh`.
 | B3 capacity utilisation is a reason | `src/domain/company-week/capital-programme.ts:shortageCapexMultiple` | ⚠️ |
 | **B4 uncertainty delays it — the option to wait** | — | ❌ |
 | **B5 FORBID no investment rate** | `src/domain/company-week/capital-programme.ts:baselineGrowthCapexToRevenueRatio` | ❌ |
-| C1 a purchase from a named capital-goods seller | `src/engine/simulation/stages/05-unit-bidding.ts:capexBuyers` | ✅ |
+| C1 a purchase from a named capital-goods seller | `src/engine/simulation/stages/05-unit-bidding.ts:capexBuyers` · `src/domain/industry-registry.ts:capitalMixOf` | ✅ |
 | C1.a demand now, capacity later | `src/domain/company-week/capital-programme.ts:commissionCapital` | ✅ |
 | C2 paid in cash, out of an account, in a currency | `src/engine2/stage08-back.ts:makeCashPoster` | ✅ |
 | C3 a lag between spend and capacity | `src/domain/industry-registry.ts:commissioningLeadWeeksOf` | ✅ |
@@ -236,14 +236,23 @@ sub-unit the purchase named, stamped on the construction lot at landing (`05-uni
 commissioning, one vintage per kind per week; the seed builds the register in the mix the firm buys
 with, a carrier's fleet as `commercial_fleet`; every move keeps the kind.
 
-What the record now shows is why A4 stays ⚠️: every firm's mix is the SAME basket
-(`capexBasketWeight`, "the share of any buyer's capex basket" — **§3 step 26-f-iv-b**), and capacity
-does not read kinds: `sellPlantToBidders` sells to same-region, same-sector peers, a merger moves
-vintages across sectors, and a buyer converts them into capacity at **its own** `unitsPerNetPpeDollar`
-on the whole register — a steel mill's plant becomes whatever the buyer makes (**26-f-iv-c**). A5 is
-the same shape: a vintage is carried at cost less wear and never revalued against what it can
-produce; the only write-down is `capacityRetirement`'s scrap of a share mothballed for a year (now
-the oldest vintages, by vintage).
+*2026-09-05 (§9.26-f-iv-b):* and the mix is the INDUSTRY's — `IndustrySpec.capitalMix`, what each
+industry's plant is made of, stated the way its recipes are; `capitalMixOf` reads a firm's from its
+lines by revenue share (a profile firm's from its profile), stage 05 splits each buyer's capex bid by
+it, stage 03 sizes the capital-goods industries by it, the seed builds the register in it — and each
+capital good has its own life (`SubUnitSpec.usefulLifeYears`: a building's forty years, a server's
+five), stamped on the vintage at commissioning. The one basket every buyer shared
+(`capexBasketWeight`) is gone. With it went a routing defect the step's own test found: a purchase's
+kind was the GOOD's question ("does any recipe consume this?"), so four of the five capital goods
+landed as input lots nobody drew; it is the buyer's (`purchaseKindOf`), and a manufacturer's heavy
+equipment is plant.
+
+What keeps A4 ⚠️ is that capacity does not read kinds: `sellPlantToBidders` sells to same-region,
+same-sector peers, a merger moves vintages across sectors, and a buyer converts them into capacity at
+**its own** `unitsPerNetPpeDollar` on the whole register — a steel mill's plant becomes whatever the
+buyer makes (**§3 step 26-f-iv-c**). A5 is the same shape: a vintage is carried at cost less wear and
+never revalued against what it can produce; the only write-down is `capacityRetirement`'s scrap of a
+share mothballed for a year (now the oldest vintages, by vintage).
 
 ### ❌ D4 / E4 — THE TWO VERIFY NODES ARE NEVER MEASURED
 

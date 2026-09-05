@@ -24,7 +24,7 @@ import { BackLanes } from './stage08-lanes';
 import { isActiveCompany, isPubliclyListed, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare, TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../domain/call-protection';
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
-import { industryOfSubUnit, firmInputIntensities, financingProfileOf } from '../domain/industry-registry';
+import { industryOfSubUnit, firmInputIntensities, financingProfileOf, usefulLifeYearsOfGood } from '../domain/industry-registry';
 import { curvePointAt } from '../engine/nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../engine/pricing';
 import { annuityFactor, zeroRateAt } from '../domain/pricing';
@@ -43,7 +43,7 @@ import { defect } from '../domain/defect';
 import { setClearedPrice, clearedPriceOf } from './prices';
 import { rowSpreadBps, issuerSpreadAtOnCurve } from '../engine/credit-price';
 import { partyId } from '../engine/ledger/party';
-import { planCapitalProgramme, capacityRetirement, usefulLifeYearsOf } from '../domain/company-week/capital-programme';
+import { planCapitalProgramme, capacityRetirement } from '../domain/company-week/capital-programme';
 import { commissionVintage, retireWornPlant, scrapPlantShare, plantGrossLocal, plantAccumulatedDepreciationLocal } from '../domain/plant';
 import { learningUpdate, seedCumulativeUnits } from '../domain/company-week/learning';
 import { creditMetrics, revolverDrawLocal, isInDefault } from '../domain/company-week/credit-standing';
@@ -1942,12 +1942,10 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const worn = retireWornPlant(comp.plant, nextWeek);
     // §3.26-f-iv-a — one vintage per KIND of capital good that entered service this week: the
     // lots the front pass commissioned (its rule, `entersServiceWeek <= nextWeek`), grouped.
+    // §3.26-f-iv-b — each at the capital good's OWN life (a building's forty years, a server's five).
     let newPlant = worn.plant;
-    {
-      const lifeYears = usefulLifeYearsOf(comp);
-      for (const lot of [...(comp.assetsUnderConstruction ?? []), ...(weekUpdate?.capexUnderConstruction ?? [])]) {
-        if (lot.entersServiceWeek <= nextWeek) newPlant = commissionVintage(newPlant, lot.valueLocal, nextWeek, lifeYears, lot.kind);
-      }
+    for (const lot of [...(comp.assetsUnderConstruction ?? []), ...(weekUpdate?.capexUnderConstruction ?? [])]) {
+      if (lot.entersServiceWeek <= nextWeek) newPlant = commissionVintage(newPlant, lot.valueLocal, nextWeek, usefulLifeYearsOfGood(lot.kind), lot.kind);
     }
     // §3.26-f-iii — both are transformations on the plant ledger, so W6 closes: what wore out
     // left the register, what entered service left the queue and joined it.

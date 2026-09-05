@@ -56,8 +56,16 @@ export interface SubUnitSpec {
   shelfLifeWeeks?: number;
   /** Absent = STANDARD via the lookup default (the legacy table only listed exceptions). */
   householdPriceTier?: HouseholdPriceTier;
-  /** Share of any buyer's capex basket this category takes (capital-goods categories only). */
-  capexBasketWeight?: number;
+  /**
+   * §3.26-f-iv-b — YEARS a unit of this capital good serves before it is fully worn (a building's
+   * forty, a server's five): the life its vintages depreciate over. Capital-goods categories
+   * only, and its presence is what makes a good a CAPITAL GOOD (`purchaseKindOf`). A
+   * technological primitive like the commissioning lead below (rule 2). It replaces
+   * `capexBasketWeight`, "the share of ANY buyer's capex basket" — one basket for every buyer,
+   * a steel mill's and a software firm's alike; what each industry's capital is made of is the
+   * industry's own (`IndustrySpec.capitalMix`).
+   */
+  usefulLifeYears?: number;
   /**
    * Weeks from a capital good ARRIVING to it entering service.
    *
@@ -175,12 +183,23 @@ interface IndustrySpec {
   /** `rndShareOfGrowthCapex`: the share of growth investment this industry books as
    *  R&D rather than plant (the tech industries; absent = none). */
   financingProfile: { fixedRateTilt: number; maxPayoutRatio: number; rndShareOfGrowthCapex?: number };
+  /**
+   * §3.26-f-iv-b — WHAT THIS INDUSTRY'S PLANT IS MADE OF: the share of its capital spend that
+   * goes to each capital good (`purchaseKindOf` = CAPITAL_GOOD), stated per industry the way its
+   * products' recipes are (rule 15: a registry holds structure). It was one basket for every
+   * buyer (`capexBasketWeight`): a refinery and a software firm bought the same mix of heavy
+   * equipment, buildings, fleet and software. Read by `capitalMixOf` for a firm (its lines'
+   * industries, by revenue share), by the SME pools directly, by the seed's register and by the
+   * weekly capex bids; normalised on read, so the shares need only be relative.
+   */
+  capitalMix: Record<string, number>;
   subUnits: SubUnitSpec[];
 }
 
 export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   Energy: {
     sector: 'Energy',
+    capitalMix: { heavy_equipment: 0.45, commercial_construction: 0.35, industrial_automation: 0.10, commercial_fleet: 0.05, enterprise_software: 0.05 },
     smeShareOfActivity: 0.15,
     financingProfile: { fixedRateTilt: 1.15, maxPayoutRatio: 0.7 },
     subUnits: [
@@ -238,6 +257,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   MaterialsChemicals: {
     sector: 'Industrials',
+    capitalMix: { heavy_equipment: 0.40, commercial_construction: 0.25, industrial_automation: 0.25, commercial_fleet: 0.05, enterprise_software: 0.05 },
     smeShareOfActivity: 0.25,
     financingProfile: { fixedRateTilt: 1.1, maxPayoutRatio: 0.55 },
     subUnits: [
@@ -312,6 +332,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   IndustrialsMachinery: {
     sector: 'Industrials',
+    capitalMix: { industrial_automation: 0.35, heavy_equipment: 0.30, commercial_construction: 0.20, enterprise_software: 0.10, commercial_fleet: 0.05 },
     smeShareOfActivity: 0.42,
     financingProfile: { fixedRateTilt: 1.05, maxPayoutRatio: 0.5 },
     subUnits: [
@@ -323,7 +344,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.2, CORPORATE: 0.8 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 12_000,
-        capexBasketWeight: 0.3,
+        usefulLifeYears: 18,
         commissioningLeadWeeks: 6,
         productionLeadWeeks: 8,
         revenueMechanism: 'UNIT_SALE',
@@ -336,7 +357,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 40_000,
-        capexBasketWeight: 0.2,
+        usefulLifeYears: 12,
         commissioningLeadWeeks: 10,
         productionLeadWeeks: 6,
         revenueMechanism: 'UNIT_SALE',
@@ -345,6 +366,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   AerospaceDefense: {
     sector: 'Industrials',
+    capitalMix: { industrial_automation: 0.35, heavy_equipment: 0.25, commercial_construction: 0.20, enterprise_software: 0.15, commercial_fleet: 0.05 },
     smeShareOfActivity: 0.14,
     financingProfile: { fixedRateTilt: 1.1, maxPayoutRatio: 0.45 },
     subUnits: [
@@ -374,6 +396,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   AutomotiveTransport: {
     sector: 'Consumer',
+    capitalMix: { industrial_automation: 0.40, heavy_equipment: 0.25, commercial_construction: 0.15, commercial_fleet: 0.10, enterprise_software: 0.10 },
     smeShareOfActivity: 0.22,
     financingProfile: { fixedRateTilt: 1.05, maxPayoutRatio: 0.45 },
     subUnits: [
@@ -396,7 +419,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.1, CORPORATE: 0.9 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 15_000,
-        capexBasketWeight: 0.1,
+        usefulLifeYears: 10,
         commissioningLeadWeeks: 2,
         productionLeadWeeks: 6,
         revenueMechanism: 'UNIT_SALE',
@@ -405,6 +428,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   TechHardwareSemis: {
     sector: 'Tech',
+    capitalMix: { industrial_automation: 0.45, commercial_construction: 0.25, enterprise_software: 0.15, heavy_equipment: 0.10, commercial_fleet: 0.05 },
     smeShareOfActivity: 0.12,
     financingProfile: { fixedRateTilt: 0.9, maxPayoutRatio: 0.3, rndShareOfGrowthCapex: 0.4 },
     subUnits: [
@@ -435,6 +459,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   SoftwareDigitalServices: {
     sector: 'Tech',
+    capitalMix: { enterprise_software: 0.55, commercial_construction: 0.25, industrial_automation: 0.15, commercial_fleet: 0.03, heavy_equipment: 0.02 },
     smeShareOfActivity: 0.35,
     financingProfile: { fixedRateTilt: 0.8, maxPayoutRatio: 0.2, rndShareOfGrowthCapex: 0.4 },
     subUnits: [
@@ -445,7 +470,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         label: "Enterprise Software & Cloud",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.1, CORPORATE: 0.9 },
         deliveryMode: 'DIGITAL',
-        capexBasketWeight: 0.15,
+        usefulLifeYears: 5,
         commissioningLeadWeeks: 4,
         productionLeadWeeks: 0,
         revenueMechanism: 'SUBSCRIPTION',
@@ -464,6 +489,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   Telecommunications: {
     sector: 'Tech',
+    capitalMix: { heavy_equipment: 0.30, commercial_construction: 0.30, enterprise_software: 0.20, industrial_automation: 0.15, commercial_fleet: 0.05 },
     smeShareOfActivity: 0.1,
     financingProfile: { fixedRateTilt: 1.2, maxPayoutRatio: 0.75 },
     subUnits: [
@@ -482,6 +508,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   HealthcarePharma: {
     sector: 'Consumer',
+    capitalMix: { industrial_automation: 0.30, commercial_construction: 0.30, enterprise_software: 0.20, heavy_equipment: 0.15, commercial_fleet: 0.05 },
     smeShareOfActivity: 0.38,
     financingProfile: { fixedRateTilt: 1.0, maxPayoutRatio: 0.45 },
     subUnits: [
@@ -524,6 +551,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   ConsumerStaples: {
     sector: 'Consumer',
+    capitalMix: { industrial_automation: 0.30, commercial_construction: 0.25, heavy_equipment: 0.20, commercial_fleet: 0.15, enterprise_software: 0.10 },
     smeShareOfActivity: 0.28,
     financingProfile: { fixedRateTilt: 1.1, maxPayoutRatio: 0.65 },
     subUnits: [
@@ -557,6 +585,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   ConsumerDiscretionaryRetail: {
     sector: 'Consumer',
+    capitalMix: { commercial_construction: 0.40, enterprise_software: 0.20, commercial_fleet: 0.15, industrial_automation: 0.15, heavy_equipment: 0.10 },
     smeShareOfActivity: 0.52,
     financingProfile: { fixedRateTilt: 0.95, maxPayoutRatio: 0.4 },
     subUnits: [
@@ -588,6 +617,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   LuxuryGoods: {
     sector: 'Consumer',
+    capitalMix: { commercial_construction: 0.40, industrial_automation: 0.25, enterprise_software: 0.20, heavy_equipment: 0.10, commercial_fleet: 0.05 },
     smeShareOfActivity: 0.2,
     financingProfile: { fixedRateTilt: 0.95, maxPayoutRatio: 0.5 },
     subUnits: [
@@ -608,6 +638,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   MediaEntertainment: {
     sector: 'Consumer',
+    capitalMix: { enterprise_software: 0.40, commercial_construction: 0.35, industrial_automation: 0.15, heavy_equipment: 0.05, commercial_fleet: 0.05 },
     smeShareOfActivity: 0.45,
     financingProfile: { fixedRateTilt: 0.85, maxPayoutRatio: 0.3 },
     subUnits: [
@@ -632,6 +663,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
    */
   PersonalConsumerServices: {
     sector: 'Consumer',
+    capitalMix: { commercial_construction: 0.45, enterprise_software: 0.20, commercial_fleet: 0.15, industrial_automation: 0.10, heavy_equipment: 0.10 },
     smeShareOfActivity: 0.72,
     financingProfile: { fixedRateTilt: 0.9, maxPayoutRatio: 0.4 },
     subUnits: [
@@ -676,6 +708,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
    */
   BusinessSupportServices: {
     sector: 'Industrials',
+    capitalMix: { enterprise_software: 0.40, commercial_construction: 0.30, commercial_fleet: 0.15, industrial_automation: 0.10, heavy_equipment: 0.05 },
     smeShareOfActivity: 0.58,
     financingProfile: { fixedRateTilt: 0.85, maxPayoutRatio: 0.45 },
     subUnits: [
@@ -718,6 +751,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   RealEstateConstruction: {
     sector: 'Industrials',
+    capitalMix: { commercial_construction: 0.40, heavy_equipment: 0.35, commercial_fleet: 0.15, industrial_automation: 0.05, enterprise_software: 0.05 },
     smeShareOfActivity: 0.78,
     financingProfile: { fixedRateTilt: 1.2, maxPayoutRatio: 0.75 },
     subUnits: [
@@ -787,7 +821,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         label: "Commercial & Infrastructure Construction",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.45, CORPORATE: 0.55 },
         deliveryMode: 'IN_PLACE',
-        capexBasketWeight: 0.25,
+        usefulLifeYears: 40,
         commissioningLeadWeeks: 13,
         productionLeadWeeks: 52,
         revenueMechanism: 'UNIT_SALE',
@@ -1002,14 +1036,15 @@ export function smePoolEmployment(industry: Industry, annualRevenueLocal: number
  * different input and not a copy of this.
  *
  * The two terms that are easy to get wrong, both stated once here: investment goes where capex is
- * ACTUALLY spent (the capital-goods basket, `CAPEX_SUPPLIER_WEIGHTS`) rather than spread over
+ * ACTUALLY spent (the capital mix — §3.26-f-iv-b: the buyers' own industries', `capitalMixOfFirms`,
+ * or the registry's average before any buyer exists) rather than spread over
  * every corporate-bought good; and a corporate purchase of a NON-capital good is INTERMEDIATE
  * demand, which the Leontief solve produces from the recipes, so putting it in final demand as
  * well counts it twice from the other side.
  */
 export function seedDemandFromCIG(
   C: number, I: number, G: number,
-  capexSupplierWeights: Record<string, number>
+  capitalMix: Record<string, number>
 ): {
   householdBySubUnit: Record<string, number>;
   /** The government's own procurement, per sub-unit — its budget is this over 52. */
@@ -1030,7 +1065,7 @@ export function seedDemandFromCIG(
     const gov = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
     householdBySubUnit[su.unitId] = hh;
     governmentBySubUnit[su.unitId] = gov;
-    finalBySubUnit[su.unitId] = hh + gov + (capexSupplierWeights[su.unitId] ?? 0) * I;
+    finalBySubUnit[su.unitId] = hh + gov + (capitalMix[su.unitId] ?? 0) * I;
   }));
   return { householdBySubUnit, governmentBySubUnit, finalBySubUnit,
     totalOutputBySubUnit: totalOutputFromFinalDemand(finalBySubUnit) };
@@ -1069,9 +1104,100 @@ export function totalOutputFromFinalDemand(finalDemandBySubUnit: Record<string, 
   defect('the input-output matrix did not converge — some product consumes more than a dollar per dollar of output');
 }
 
-const CAPEX_ORDER = ['heavy_equipment', 'industrial_automation', 'commercial_construction', 'enterprise_software', 'commercial_fleet'];
-export const VIEW_CAPEX_SUPPLIER_WEIGHTS: Record<string, number> =
-  Object.fromEntries(CAPEX_ORDER.map(id => [id, byId.get(id)!.capexBasketWeight!]));
+/** §3.26-f-iv-b — the capital goods: every sub-unit with a life. A capital good that some recipe
+ *  also consumes (`purchaseKindOf` gives the recipe precedence at the lot) is still bid for as
+ *  capital by every buyer's mix — the two questions are different ones. */
+export const VIEW_CAPITAL_GOOD_IDS: readonly string[] = allSubUnits.filter((su) => su.usefulLifeYears !== undefined).map((su) => su.unitId);
+export const isCapitalGood = (unitId: string): boolean => byId.get(unitId)?.usefulLifeYears !== undefined;
+
+/** The years a capital good serves — the life its vintages wear over. A good with none is not a
+ *  capital good, and asking is a defect at the site. */
+export function usefulLifeYearsOfGood(unitId: string): number {
+  return byId.get(unitId)?.usefulLifeYears ?? defect(`${unitId} is no capital good: it has no useful life to wear over`);
+}
+
+const normalisedMix = (mix: Record<string, number>): Record<string, number> => {
+  const total = Object.values(mix).reduce((a, w) => a + Math.max(0, w), 0);
+  if (!(total > 0)) return {};
+  return Object.fromEntries(Object.entries(mix).filter(([, w]) => w > 0).map(([k, w]) => [k, w / total]));
+};
+
+/** §3.26-f-iv-b — what a firm that makes nothing keeps as plant: premises and systems for a
+ *  bank, an insurer or a manager; hulls, depots and systems for a carrier. The profile's own,
+ *  beside its input basket (`PROFILE_INPUT_BASKET`). */
+const PROFILE_CAPITAL_MIX: Record<string, Record<string, number>> = {
+  BANK: { commercial_construction: 0.6, enterprise_software: 0.4 },
+  INSURER: { commercial_construction: 0.55, enterprise_software: 0.45 },
+  ASSET_MANAGER: { commercial_construction: 0.4, enterprise_software: 0.6 },
+  CARRIER: { commercial_fleet: 0.85, commercial_construction: 0.1, enterprise_software: 0.05 },
+};
+
+const capitalMixByLines = new WeakMap<object, Record<string, number>>();
+
+/**
+ * §3.26-f-iv-b — THE ONE ACCESSOR for "what is this firm's capital made of": its lines'
+ * industries' mixes by revenue share if it makes anything, its profile's if it does not — the
+ * same shape as `firmInputIntensities`. Normalised: the shares sum to one. Stage 05 splits a
+ * buyer's capex bid by it, stage 03 sizes the capital-goods industries by it, and the seed
+ * builds the register in it.
+ */
+export function capitalMixOf(
+  productLines: { subUnitId: string; revenueShare?: number }[] | undefined,
+  profileKey: string
+): Record<string, number> {
+  const lines = productLines ?? [];
+  if (lines.length > 0) {
+    const memo = capitalMixByLines.get(lines as object);
+    if (memo !== undefined) return memo;
+    const out: Record<string, number> = {};
+    lines.forEach((l) => {
+      const industry = industryOfSubUnit(l.subUnitId);
+      const mix = industry ? INDUSTRY_REGISTRY[industry].capitalMix : {};
+      Object.entries(mix).forEach(([good, share]) => {
+        out[good] = (out[good] ?? 0) + (l.revenueShare ?? 1) * share;
+      });
+    });
+    const normalised = normalisedMix(out);
+    capitalMixByLines.set(lines as object, normalised);
+    return normalised;
+  }
+  return normalisedMix(PROFILE_CAPITAL_MIX[profileKey] ?? {});
+}
+
+/** A sector's industries' mixes, averaged — the seed's register for a firm whose lines are not
+ *  yet dealt (the public seed deals them after the books are struck). */
+export function sectorCapitalMix(sector: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  (Object.values(INDUSTRY_REGISTRY) as IndustrySpec[]).filter((spec) => spec.sector === sector).forEach((spec) => {
+    Object.entries(normalisedMix(spec.capitalMix)).forEach(([good, share]) => { out[good] = (out[good] ?? 0) + share; });
+  });
+  return normalisedMix(out);
+}
+
+/** The registry's own average over every industry — the placeholder seed's split of aggregate
+ *  investment before any firm exists, and the last resort when a region has no capex to read. */
+export function registryCapitalMix(): Record<string, number> {
+  const out: Record<string, number> = {};
+  (Object.values(INDUSTRY_REGISTRY) as IndustrySpec[]).forEach((spec) => {
+    Object.entries(normalisedMix(spec.capitalMix)).forEach(([good, share]) => { out[good] = (out[good] ?? 0) + share; });
+  });
+  return normalisedMix(out);
+}
+
+/** What a set of firms' capital spend is made of: each firm's mix, weighted by its capex — the
+ *  authoritative seed's split of the region's investment (`seedDemandFromCIG`). */
+export function capitalMixOfFirms(
+  firms: readonly { capex: number; productLines?: { subUnitId: string; revenueShare?: number }[]; profileKey: string }[]
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  firms.forEach((f) => {
+    const w = Math.max(0, f.capex);
+    if (!(w > 0)) return;
+    Object.entries(capitalMixOf(f.productLines, f.profileKey)).forEach(([good, share]) => { out[good] = (out[good] ?? 0) + w * share; });
+  });
+  const mix = normalisedMix(out);
+  return Object.keys(mix).length > 0 ? mix : registryCapitalMix();
+}
 
 
 const TIER_ORDER = ['refined_products', 'household_chemicals', 'food_beverage', 'household_essentials', 'pharmaceuticals', 'agricultural_commodities', 'luxury_goods'];
@@ -1194,16 +1320,24 @@ export function annualCarryingCostRateOf(unitId: string): number {
  *                   delivery and depreciates over its life.
  *   OPERATING     — everything else a business buys and uses. Expensed; its cost already lives
  *                   in the operating margin and its cash in settled purchases.
+ *
+ * §3.26-f-iv-b — THE QUESTION IS THE BUYER'S. It used to be asked of the good alone: "does ANY
+ * recipe consume this?" — and four of the five capital goods are in somebody's recipe, so a
+ * manufacturer's heavy equipment, a retailer's automation and every firm's software landed as
+ * input LOTS that only a firm whose own recipe lists them ever drew (the rest sat for ever — the
+ * dead-lot defect this function was written to end), and only construction ever became plant. A
+ * purchase is an input if THIS buyer's own recipe (its lines' inputs, or its profile's basket)
+ * consumes it; a capital good otherwise if it has a life; operating otherwise.
  */
 type PurchaseKind = 'RECIPE_INPUT' | 'CAPITAL_GOOD' | 'OPERATING';
 
-const recipeInputIds = new Set<string>(
-  allSubUnits.flatMap(su => Object.keys(su.recipeInputs ?? {}))
-);
-
-export function purchaseKindOf(unitId: string): PurchaseKind {
-  if (recipeInputIds.has(unitId)) return 'RECIPE_INPUT';
-  if (byId.get(unitId)?.capexBasketWeight !== undefined) return 'CAPITAL_GOOD';
+export function purchaseKindOf(
+  unitId: string,
+  buyerProductLines: { subUnitId: string; revenueShare?: number }[] | undefined,
+  buyerProfileKey: string
+): PurchaseKind {
+  if (firmInputIntensities(buyerProductLines, buyerProfileKey)[unitId] !== undefined) return 'RECIPE_INPUT';
+  if (byId.get(unitId)?.usefulLifeYears !== undefined) return 'CAPITAL_GOOD';
   return 'OPERATING';
 }
 

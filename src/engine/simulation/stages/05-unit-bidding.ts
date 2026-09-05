@@ -33,10 +33,10 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { plantNetLocal } from '../../../domain/plant';
 import { purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
 import { pay, payByIds, internReason, PartyRef } from './settlement';
-import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
+import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { channelMarginRate, shelfPriceLocal, DISTRIBUTION_SUBUNIT_ID } from '../../../domain/distribution';
 import { subUnitSpecOf } from '../../../domain/industry-registry';
-import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
+import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities, capitalMixOf, INDUSTRY_REGISTRY, isCapitalGood } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryLocal, fullStaffingCapHeads, banksOf } from '../../../domain/company';
 import { WeeklyStepContext, CompanyWeekUpdate } from './context';
@@ -229,7 +229,7 @@ function addInputInventory(v2: V2World, update: CompanyWeekUpdate, baseComp: Com
   // Only material that will be CONSUMED is inventory. A machine delivered is capital; a
   // general operating purchase is used and expensed. Writing all three as lots is what made a
   // third of the world's purchases immortal.
-  const kind = purchaseKindOf(subUnitId);
+  const kind = purchaseKindOf(subUnitId, baseComp.productLines, profileKeyOf(baseComp)); // §3.26-f-iv-b: the buyer's question
   if (kind === 'CAPITAL_GOOD') {
     // A capital good that has ARRIVED is not yet plant. It is installed and commissioned
     // first, so it lands as construction in progress with the week it enters service on it.
@@ -736,7 +736,7 @@ function settleContracts(
   const dead: number[] = [];
   // Per-sub-unit registry facts, read once instead of per contract.
   const contractLeadWeeks = productionLeadWeeksOf(subUnitId);
-  const isCapitalGoodCategory = purchaseKindOf(subUnitId) === 'CAPITAL_GOOD';
+  const isCapitalGoodCategory = isCapitalGood(subUnitId);
   const m = rows.length;
 
   // ---- PRE: every object read, once, into lanes (refs resolve per unique ref per week).
@@ -909,7 +909,6 @@ function buildRegionSupplyPlans(
   supplierExpectedUnitPriceLocal: number,
   week: number,
   isCapexSupplierCategory: boolean,
-  capexSupplierWeight: number | undefined,
   wk: WeekResolution
 ): SupplyPlan[] {
   const plans: SupplyPlan[] = [];
@@ -1347,7 +1346,6 @@ function buildRegionDemandPlans(
   referencePriceLocal: number,
   contractUnitsByCustomer: Map<string, number>,
   isCapexSupplierCategory: boolean,
-  capexSupplierWeight: number | undefined,
   isRecipeInputCategory: boolean,
   govShare: number,
   hhShare: number,
@@ -1381,7 +1379,8 @@ function buildRegionDemandPlans(
     let demandLocal: number;
     if (isCapexSupplierCategory) {
       const realCapexLocal = (comp.maintenanceCapex ?? 0) + (comp.growthCapex ?? 0);
-      demandLocal = (realCapexLocal / 52) * capexSupplierWeight!;
+      // §3.26-f-iv-b: this buyer's capex in ITS industry's capital mix, not one basket for all.
+      demandLocal = (realCapexLocal / 52) * (capitalMixOf(comp.productLines, profileKeyOf(comp))[subUnitId] ?? 0);
     } else if (isRecipeInputCategory) {
       demandLocal = computeRecipeInputNeedLocal(comp, subUnitId, week);
     } else {
@@ -1431,7 +1430,7 @@ function buildRegionDemandPlans(
     (reg.smePools || []).forEach(segment => {
       const segCapexLocal = segment.capexLocal ?? 0;
       if (segCapexLocal <= 0) return;
-      const demandUnits = ((segCapexLocal / 52) * capexSupplierWeight!) / referencePriceLocal;
+      const demandUnits = ((segCapexLocal / 52) * (INDUSTRY_REGISTRY[segment.industry].capitalMix[subUnitId] ?? 0)) / referencePriceLocal;
       if (demandUnits <= 0.001) return;
       plans.push({
         key: privateSegmentOfferId(regionId, segment.industry),
@@ -1674,8 +1673,7 @@ function runSubUnitMarkets(
   const { nextWeek } = ctx;
 
   const isRecipeInputCategory = Object.values(CATEGORY_INPUT_REQUIREMENTS).some(reqs => reqs?.[subUnitId] !== undefined);
-  const capexSupplierWeight = CAPEX_SUPPLIER_WEIGHTS[subUnitId];
-  const isCapexSupplierCategory = capexSupplierWeight !== undefined;
+  const isCapexSupplierCategory = isCapitalGood(subUnitId);
   const massTonnes = sourcing.unitMassTonnes[subUnitId] ?? 0;
 
   // --- 1. Each book's anchor price, read before anything this week moves it.
@@ -1713,7 +1711,7 @@ function runSubUnitMarkets(
     supplyPlans.push(...buildRegionSupplyPlans(
       v2,
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId], demandState.smoothedUnitPriceLocal,
-      nextWeek, isCapexSupplierCategory, capexSupplierWeight, wk));
+      nextWeek, isCapexSupplierCategory, wk));
   });
 
   // --- 3. Contracts settle, against what each supplier actually HAS: its opening stock plus
@@ -1753,7 +1751,7 @@ function runSubUnitMarkets(
     demandPlans.push(...buildRegionDemandPlans(
       v2,
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId],
-      contractUnitsByCustomer, isCapexSupplierCategory, capexSupplierWeight, isRecipeInputCategory,
+      contractUnitsByCustomer, isCapexSupplierCategory, isRecipeInputCategory,
       govShare, hhShare, nextWeek
     ));
   });
@@ -2245,7 +2243,7 @@ function runSubUnitMarkets(
     const custUp = wk.updateOf(comp);
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + units;
     custUp.purchasesLocal = (custUp.purchasesLocal ?? 0) + landedCost;
-    if (purchaseKindOf(subUnitId) === 'CAPITAL_GOOD') custUp.capexPurchasesLocal = (custUp.capexPurchasesLocal ?? 0) + landedCost;
+    if (isCapitalGood(subUnitId)) custUp.capexPurchasesLocal = (custUp.capexPurchasesLocal ?? 0) + landedCost;
     const owed = deferredPurchaseLocal.get(plan.key!) ?? 0;
     if (owed > 0) custUp.tradePayableBookedLocal = (custUp.tradePayableBookedLocal ?? 0) + owed;
   });

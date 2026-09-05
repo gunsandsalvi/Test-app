@@ -114,9 +114,11 @@ export const SECTOR_PPE_USEFUL_LIFE_YEARS: Record<Sector, number> = {
  * The life the schedule runs a firm's plant over — ONE owner of the read. A carrier's plant is
  * its fleet, so its life is the fleet's own (`FREIGHT_ASSET_SPEC`: a ship's 25 years, a truck's
  * 10) — the seed struck the carrier's EBIT at that life while the engine ran it at its sector's
- * 18, two schedules for one fleet. Every other firm's is its sector's. §3.26-f-ii: the life is
- * stamped on the vintage when it enters service (`domain/plant.ts`), so this is read at
- * commissioning and at the seed, and a vintage that changes hands keeps the life it was built with.
+ * 18, two schedules for one fleet. Every other firm's is its sector's. §3.26-f-iv-b: a vintage's
+ * life is the CAPITAL GOOD's own (`industry-registry.ts:usefulLifeYearsOfGood` — a building's forty
+ * years, a server's five), stamped when it enters service and kept when it changes hands; this
+ * read is what is left for the firm as a whole — the tax schedule's class life (the double-declining
+ * rate in `income-statement.ts:corporateTax`), and a carrier's hulls at the seed.
  */
 export function usefulLifeYearsOf(firm: { sector: Sector; carrierFleet?: { assets: readonly { mode: FreightMode }[] } }): number {
   const fleet = firm.carrierFleet?.assets;

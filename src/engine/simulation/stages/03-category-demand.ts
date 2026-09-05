@@ -9,11 +9,10 @@ import { GameState, RegionId } from '../../../types';
 import { currencyOf } from '../../../domain/geography';
 import { categoryPriceTier, HouseholdPriceTier } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { formSupplyRelationships } from './shared-helpers';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING, EMPLOYER_PAYROLL_TAX_RATE } from '../../bootstrap/national-accounts';
 import { isActiveCompany } from '../../../domain/company';
-import { firmInputIntensities } from '../../../domain/industry-registry';
+import { firmInputIntensities, capitalMixOf, isCapitalGood, registryCapitalMix } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
 import { decomposeGovernmentSpending } from '../../../domain/government';
 import { pay } from './settlement';
@@ -181,7 +180,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         // stage 05's fallback bid unappropriated money for these — §1.4's two representations,
         // and the unbounded one won (§7.245).
         totalGovWeight += su.buyerMix.GOVERNMENT;
-        if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) return;
+        if (isCapitalGood(su.unitId)) return;
         hhWeightByTier[categoryPriceTier(su.unitId)] += su.buyerMix.HOUSEHOLD;
       });
     });
@@ -207,7 +206,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
 
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
-        if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) {
+        if (isCapitalGood(su.unitId)) {
           // RULE 3 — INVESTMENT WAS REPRESENTED TWICE, and this is where the second copy lived.
           //
           // The level was CARRIED FORWARD UNCHANGED from the seed — a frozen placeholder — while
@@ -222,7 +221,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           // top would be the double count this comment originally warned about.
           const capexDemandLocal = ctx.updatedCompanies.reduce((a, c) => (
             c.region === regionId && isActiveCompany(c)
-              ? a + ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)) * CAPEX_SUPPLIER_WEIGHTS[su.unitId]
+              // §3.26-f-iv-b: each buyer's capex in ITS industry's mix, the split stage 05 bids.
+              ? a + ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)) * (capitalMixOf(c.productLines, profileKeyOf(c))[su.unitId] ?? 0)
               : a), 0);
           // §7.245 — THE GOVERNMENT'S CAPEX-CATEGORY DEMAND IS APPROPRIATED, LIKE EVERYWHERE
           // ELSE. This branch used to `return` before the govBudgetByCategory write, so the five
@@ -235,7 +235,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           govBudgetByCategory[su.unitId] = suCapexGovDemand / 52;
           allTargets[su.unitId] = (capexDemandLocal > 0
             ? capexDemandLocal
-            : (reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelAnnualLocal ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId])))
+            : (reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelAnnualLocal ?? (I * (registryCapitalMix()[su.unitId] ?? 0))))
             + suCapexGovDemand;
           smoothingByCategory[su.unitId] = 0.08;
           return;

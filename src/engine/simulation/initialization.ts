@@ -1,6 +1,7 @@
 
+import { profileKeyOf } from './stages/profiles';
 import { plantNetLocal } from '../../domain/plant';
-import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
+import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
 import type { EntityId } from '../../domain/ids';
 import { companyParty, bankPartyOf } from '../../domain/party';
 import { stashSeedRevenueHistory, drainSeedRevenueHistories, drainSeedRings, peekSeedRing, typeRefOf } from '../../engine2/world';
@@ -91,7 +92,7 @@ import type { PartyRef } from '../ledger/party';
 import { reasonText } from './stages/settlement';
 import { ensureV2 } from '../../engine2/world';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
-import { INDUSTRY_REGISTRY, smePoolEmployment, industryOfSubUnit, seedDemandFromCIG } from '../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, smePoolEmployment, industryOfSubUnit, seedDemandFromCIG, capitalMixOfFirms } from '../../domain/industry-registry';
 import { getRegionProductivityPerCapitaLocal, remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../bootstrap/population';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
@@ -214,7 +215,8 @@ function seedRegionCategoryDemand(
     // the same fix has to be made three times is itself the defect.
     const { householdBySubUnit: householdFinalDemandBySubUnit, governmentBySubUnit,
       finalBySubUnit: finalDemandBySubUnit, totalOutputBySubUnit } =
-      seedDemandFromCIG(C, I, G, CAPEX_SUPPLIER_WEIGHTS);
+      // §3.26-f-iv-b: the region's investment is split the way its firms' own capex is.
+      seedDemandFromCIG(C, I, G, capitalMixOfFirms(companies.filter(c => c.region === regionId).map((c) => ({ capex: c.capex, productLines: c.productLines, profileKey: profileKeyOf(c) }))));
     Object.entries(governmentBySubUnit).forEach(([unitId, annualLocal]) => {
       govBudgetByCategory[unitId] = annualLocal / 52;
     });

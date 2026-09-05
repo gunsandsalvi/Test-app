@@ -188,21 +188,30 @@ export function slicePlant(plant: readonly PlantVintage[], fraction: number): { 
  * state the seed opens in (§7.4) — is one vintage a year, each `gross / life`, spread evenly over
  * the life: ages ½, 1½, …, (life − ½) years, so the register is exactly half worn (its net is
  * `gross / 2`) and its year's charge is `gross / life`. The stated 45% and 35% worn fractions the
- * seed carried were this shape asserted; here it is built. §3.26-f-iv-a: in the MIX of capital
- * goods the firm buys with (`mixByKind`, weights normalised), one set of yearly vintages per kind.
+ * seed carried were this shape asserted; here it is built. §3.26-f-iv-a/b: in the MIX of capital
+ * goods the firm's plant is made of, each kind at its OWN life (weights normalised) — one set of
+ * yearly vintages per kind, each set half worn over its own life.
  */
-export function seedPlantVintages(grossLocal: number, usefulLifeYears: number, week: number, mixByKind: Record<string, number>): PlantVintage[] {
-  const life = Math.max(1, Math.round(usefulLifeYears));
+export function seedPlantVintages(
+  grossLocal: number, week: number, mix: readonly { kind: string; weight: number; usefulLifeYears: number }[]
+): PlantVintage[] {
   if (!(grossLocal > 0)) return [];
-  const kinds = Object.entries(mixByKind).filter(([, w]) => w > 0);
-  const total = kinds.reduce((a, [, w]) => a + w, 0);
+  const kinds = mix.filter((m) => m.weight > 0);
+  const total = kinds.reduce((a, m) => a + m.weight, 0);
   if (!(total > 0)) return [];
   const out: PlantVintage[] = [];
-  for (const [kind, w] of kinds) {
-    const costLocal = (grossLocal * w / total) / life;
+  for (const m of kinds) {
+    const life = Math.max(1, Math.round(m.usefulLifeYears));
+    const costLocal = (grossLocal * m.weight / total) / life;
     for (let k = life - 1; k >= 0; k--) {
-      out.push({ costLocal, enteredServiceWeek: week - (k * 52 + 26), usefulLifeYears: life, kind });
+      out.push({ costLocal, enteredServiceWeek: week - (k * 52 + 26), usefulLifeYears: life, kind: m.kind });
     }
   }
   return mergePlant(out, []);
+}
+
+/** A capital mix (`industry-registry.ts:capitalMixOf`) as the seed's vintages want it: each kind
+ *  with its own life. */
+export function seedMixOf(mix: Record<string, number>, lifeOf: (kind: string) => number): { kind: string; weight: number; usefulLifeYears: number }[] {
+  return Object.entries(mix).filter(([, w]) => w > 0).map(([kind, weight]) => ({ kind, weight, usefulLifeYears: lifeOf(kind) }));
 }

@@ -12,6 +12,7 @@
  * whose inputs have not arrived is constrained by the machinery stage 08 already has.
  */
 
+import { profileKeyOf } from './profiles';
 import { arrivePlant } from '../../ledger/plant-ledger';
 import { GameState } from '../../../types';
 import { asTicker } from '../../../domain/ids';
@@ -110,7 +111,8 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     // whole-array rebuilds (the GC was 10% of the weekly step before this pass).
     // What arrives is routed by what it IS — a machine crossing an ocean becomes PP&E the
     // week it lands, not a lot nobody consumes.
-    const kind = purchaseKindOf(shipment.subUnitId);
+    // §3.26-f-iv-b: what the purchase IS is the buyer's question — its own recipe, or a capital good.
+    const kind = purchaseKindOf(shipment.subUnitId, buyer?.productLines, buyer ? profileKeyOf(buyer) : 'OPERATING');
     if (toEstate && kind !== 'RECIPE_INPUT') {
       // A machine or an operating purchase landing at a receivership has no plant to enter and
       // no week to be used in: scrapped by wire on landing (the estate's own account paid for it).

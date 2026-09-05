@@ -282,7 +282,7 @@ function buildCarrierCompany(
   // (a stationary fleet, `seedPlantVintages`), opened at the seed week; the stated 35% is gone.
   // §3.26-f-i — and its depreciation is the one schedule on that register: the same number the
   // engine will charge this carrier every week, so it opens in the shape it runs.
-  const plant = seedPlantVintages(grossPPELocal, usefulLifeYearsOf({ sector: 'Industrials', carrierFleet: { assets } }), openingWeek, { commercial_fleet: 1 });
+  const plant = seedPlantVintages(grossPPELocal, openingWeek, [{ kind: 'commercial_fleet', weight: 1, usefulLifeYears: usefulLifeYearsOf({ sector: 'Industrials', carrierFleet: { assets } }) }]);
   const depreciation = plantDepreciationAnnualLocal(plant, openingWeek);
   const ebit = ebitda - depreciation;
 

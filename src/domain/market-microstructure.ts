@@ -2,7 +2,7 @@
  *  them. The input-output and capex-basket tables are views onto the industry registry. */
 
 import { RegionId } from './geography';
-import { VIEW_CATEGORY_INPUT_REQUIREMENTS, VIEW_CAPEX_SUPPLIER_WEIGHTS } from './industry-registry';
+import { VIEW_CATEGORY_INPUT_REQUIREMENTS } from './industry-registry';
 import type { EntityId } from './ids';
 
 export interface UnitBid {
@@ -131,11 +131,9 @@ export interface SupplyRelationship {
   relationshipStrength: number;
 }
 
-// Every company's capex (equipment, automation/software, fleet, construction) is a purchase
-// from real capital-goods-producing sub-units, not an abstract demand signal — this is the
-// basket weighting used to split any buyer's weekly capex dollars across those categories.
-// BP1a: derived from the industry registry (capexBasketWeight per capital-goods sub-unit).
-export const CAPEX_SUPPLIER_WEIGHTS: Record<string, number> = VIEW_CAPEX_SUPPLIER_WEIGHTS;
+// §3.26-f-iv-b: every company's capex is a purchase from real capital-goods-producing sub-units,
+// split by ITS industry's capital mix (`industry-registry.ts:capitalMixOf`); the one basket every
+// buyer shared (`CAPEX_SUPPLIER_WEIGHTS`) is gone.
 
 
 

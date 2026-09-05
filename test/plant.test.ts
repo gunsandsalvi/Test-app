@@ -15,7 +15,7 @@ const near = (a: number, b: number, msg = '', tol = 1e-6) =>
   assert.ok(Math.abs(a - b) <= tol * Math.max(1, Math.abs(b)), `${a} vs ${b}${msg ? ` — ${msg}` : ''}`);
 
 test('the seed is a derivation: a stationary plant is half worn and its charge is gross over life', () => {
-  const plant = seedPlantVintages(1_200, 12, 100, { heavy_equipment: 1 });
+  const plant = seedPlantVintages(1_200, 100, [{ kind: 'heavy_equipment', weight: 1, usefulLifeYears: 12 }]);
   assert.equal(plant.length, 12, 'one vintage a year');
   near(plantGrossLocal(plant, 100), 1_200);
   near(plantNetLocal(plant, 100), 600, 'half worn — the 45% and 35% the seed stated were this shape asserted');
@@ -25,7 +25,7 @@ test('the seed is a derivation: a stationary plant is half worn and its charge i
 });
 
 test('gross = net + accumulated, at every week, by construction', () => {
-  const plant = seedPlantVintages(2_400, 7, 50, { heavy_equipment: 3, enterprise_software: 1 });
+  const plant = seedPlantVintages(2_400, 50, [{ kind: 'heavy_equipment', weight: 3, usefulLifeYears: 7 }, { kind: 'enterprise_software', weight: 1, usefulLifeYears: 5 }]);
   for (const w of [50, 51, 120, 400, 900]) {
     near(plantGrossLocal(plant, w), plantNetLocal(plant, w) + plantAccumulatedDepreciationLocal(plant, w));
   }
@@ -59,7 +59,7 @@ test('commissioning appends this week\'s vintage at the firm\'s own life, and a 
 });
 
 test('a scrap retires the OLDEST vintages first, exactly the share of gross', () => {
-  const plant = seedPlantVintages(1_200, 12, 100, { heavy_equipment: 1 }); // twelve vintages of 100
+  const plant = seedPlantVintages(1_200, 100, [{ kind: 'heavy_equipment', weight: 1, usefulLifeYears: 12 }]); // twelve vintages of 100
   const { plant: left, scrappedCostLocal, scrappedNetLocal } = scrapPlantShare(plant, 0.25, 100);
   near(scrappedCostLocal, 300);
   near(plantGrossLocal(left, 100), 900);
@@ -68,7 +68,7 @@ test('a scrap retires the OLDEST vintages first, exactly the share of gross', ()
 });
 
 test('a slice moves a fraction of every vintage and conserves cost and age; a merge folds registers in age order', () => {
-  const a = seedPlantVintages(600, 3, 100, { commercial_fleet: 1 });
+  const a = seedPlantVintages(600, 100, [{ kind: 'commercial_fleet', weight: 1, usefulLifeYears: 3 }]);
   const { taken, kept } = slicePlant(a, 0.3);
   near(plantGrossLocal(taken, 100), 180);
   near(plantGrossLocal(kept, 100), 420);
@@ -81,14 +81,20 @@ test('a slice moves a fraction of every vintage and conserves cost and age; a me
 });
 
 test('§3.26-f-iv-a: the seed is built in a mix of kinds, and a slice or a merge keeps every kind', () => {
-  const plant = seedPlantVintages(1_000, 5, 100, { heavy_equipment: 3, enterprise_software: 1 });
-  assert.equal(plant.length, 10, 'yearly vintages per kind');
+  const plant = seedPlantVintages(1_000, 100, [{ kind: 'heavy_equipment', weight: 3, usefulLifeYears: 5 }, { kind: 'enterprise_software', weight: 1, usefulLifeYears: 2 }]);
+  assert.equal(plant.length, 7, 'yearly vintages per kind, each over its OWN life (§3.26-f-iv-b)');
   const byKind = (p: PlantVintage[]) => p.reduce((m, v) => { m[v.kind] = (m[v.kind] ?? 0) + v.costLocal; return m; }, {} as Record<string, number>);
   near(byKind(plant).heavy_equipment, 750);
   near(byKind(plant).enterprise_software, 250);
   const { taken } = slicePlant(plant, 0.2);
   near(byKind(taken).heavy_equipment, 150, 'a slice takes every kind pro rata');
   const merged = mergePlant(plant, taken);
-  assert.equal(merged.length, 10, 'same week, life and kind fold; a kind never folds into another');
+  assert.equal(merged.length, 7, 'same week, life and kind fold; a kind never folds into another');
   near(byKind(merged).enterprise_software, 300);
+});
+
+test('§3.26-f-iv-b: each kind is half worn over its own life, so the charge is Σ cost/life per kind', () => {
+  const plant = seedPlantVintages(1_000, 100, [{ kind: 'commercial_construction', weight: 1, usefulLifeYears: 40 }, { kind: 'enterprise_software', weight: 1, usefulLifeYears: 5 }]);
+  near(plantNetLocal(plant, 100), 500, 'half worn whatever the lives');
+  near(plantDepreciationAnnualLocal(plant, 100), 500 / 40 + 500 / 5, 'the building wears slowly, the software fast');
 });

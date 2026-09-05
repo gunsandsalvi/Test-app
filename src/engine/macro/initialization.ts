@@ -10,10 +10,10 @@ import { weeklyInterestExpenseLocal, govTrancheView } from '../../domain/governm
 import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
 import { governmentPayrollWeeklyLocal, governmentObligationsWeeklyLocal } from '../../domain/government';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
-import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, smePoolEmployment, seedDemandFromCIG } from '../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, smePoolEmployment, seedDemandFromCIG, registryCapitalMix } from '../../domain/industry-registry';
 import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT, seedPoolLeverageStrata, SME_POOL_STRATA_COUNT } from '../bootstrap/firms';
 import { generate52WeekHistory } from './utils';
-import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS, CategoryDemandState } from '../../domain/market-microstructure';
+import { createSeedCategoryDemandState, CategoryDemandState } from '../../domain/market-microstructure';
 import { INITIAL_WEATHER } from './weather';
 import {
   getRegionPopulation, getRegionProductivityPerCapitaLocal, getRegionBirthRateAnnual, getRegionDeathRateAnnual,
@@ -157,7 +157,7 @@ function createInitialCategoryDemand(
   // Leontief solve are stated once in `seedDemandFromCIG`; this is the PLACEHOLDER seed, which
   // `simulation/initialization.ts` overwrites once the real firms and government exist.
   const { householdBySubUnit: householdFinalDemand, finalBySubUnit: finalDemand, totalOutputBySubUnit: totalOutput } =
-    seedDemandFromCIG(C, I, G, CAPEX_SUPPLIER_WEIGHTS);
+    seedDemandFromCIG(C, I, G, registryCapitalMix()); // no buyer exists yet: the registry's average
 
   const cd: Record<string, CategoryDemandState> = {};
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
