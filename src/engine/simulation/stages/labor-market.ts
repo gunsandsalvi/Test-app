@@ -493,6 +493,8 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     };
     const carriedVacanciesByOcc = { ...hiresByOcc };
     const nextTenureStrataByOcc = {} as Record<OccupationType, TenureStratum[]>;
+    /** §3.20-iii: each occupation's own search this week, kept for the mobility pass and the strata. */
+    const own = {} as Record<OccupationType, { employedBefore: number; separations: number; openVacancies: number; seekers: number }>;
 
     OCCUPATIONS.forEach((occ) => {
       const supplyForOcc = totalLaborForce * (shares[occ] ?? BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] ?? 0.2);
@@ -516,6 +518,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const hires = Math.max(0, Math.min(matches, openVacancies, seekers));
 
       hiresByOcc[occ] = hires;
+      own[occ] = { employedBefore, separations, openVacancies, seekers };
       // LABOR_TRACE=1 — the two sides of the flow, per (region, occupation): which one drives
       // a monotone unemployment climb is the whole question.
       if (process.env.LABOR_TRACE === '1' && (separations > 1e4 || hires > 1e4)) {
@@ -525,6 +528,39 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
           + ` matches ${(matches / 1e3).toFixed(0)}k`);
       }
 
+    });
+
+    // ---- 3b. §3.20-iii: MOBILITY BETWEEN OCCUPATIONS — the same search, one occupation over.
+    // A seeker its own occupation could not place this week searches the vacancies the OTHER
+    // occupations left unfilled, through the same matching function, and enters the new
+    // occupation at tenure zero — the bottom of its experience cross-section, which is what
+    // retraining costs: the entry wage, and not a coefficient. It is slower than own-occupation
+    // search by construction (a second pass over what the first left) and it runs from where
+    // the idle seekers are to where the open vacancies are, so a shortage in one occupation is
+    // relieved by the surplus in another instead of standing for ever. The labour force's
+    // occupation shares are the STATE this flow moves: they were a wage-gap drift at three
+    // stated speeds in `evolution.ts`, which nothing measured and which went with this. ----
+    {
+      const unmatched = {} as Record<OccupationType, number>;
+      const unfilled = {} as Record<OccupationType, number>;
+      OCCUPATIONS.forEach((occ) => {
+        unmatched[occ] = Math.max(0, own[occ].seekers - hiresByOcc[occ]);
+        unfilled[occ] = Math.max(0, own[occ].openVacancies - hiresByOcc[occ]);
+      });
+      const moved = occupationalMobility(unmatched, unfilled);
+      const nextShares = { ...shares } as Record<OccupationType, number>;
+      OCCUPATIONS.forEach((occ) => {
+        hiresByOcc[occ] += moved.into[occ];
+        nextShares[occ] = Math.max(0, (shares[occ] ?? BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] ?? 0.2)
+          + (moved.into[occ] - moved.outOf[occ]) / totalLaborForce);
+      });
+      reg.occupationLaborForceShare = nextShares;
+    }
+
+    // ---- 3c. DIST 1(b) and the carried vacancies, on the flows the two passes produced. ----
+    OCCUPATIONS.forEach((occ) => {
+      const { employedBefore, separations, openVacancies } = own[occ];
+      const hires = hiresByOcc[occ];
       // ---- DIST 1(b): THE EXPERIENCE CROSS-SECTION MOVES ON THE REAL FLOWS. ----
       //
       // Every worker in an occupation earned the same wage, so a tier split of them was
@@ -851,4 +887,39 @@ export function runLaborReconciliationStage(state: GameState, ctx: WeeklyStepCon
     const employers = ctx.updatedCompanies.filter((c) => c.region === regionId && isActiveCompany(c));
     reconcileEmploymentView(reg, employers);
   });
+}
+
+/**
+ * §3.20-iii — THE FLOW BETWEEN OCCUPATIONS. Each occupation's idle seekers (what its own search
+ * left unmatched) are spread over the other occupations' open vacancies (what their own search
+ * left unfilled) in proportion, each opening facing the other occupations' idle seekers the same
+ * way, and every (from, to) pair matches through the labour market's one matching function.
+ * Symmetric across occupations — the model has no skill ladder to read a distance from — and
+ * capped by both sides of every pair, so no seeker moves twice and no opening fills twice.
+ */
+export function occupationalMobility(
+  unmatched: Record<OccupationType, number>, unfilled: Record<OccupationType, number>
+): { into: Record<OccupationType, number>; outOf: Record<OccupationType, number> } {
+  const zero = (): Record<OccupationType, number> => ({ GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0, SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0 });
+  const into = zero(); const outOf = zero();
+  let S = 0, V = 0;
+  OCCUPATIONS.forEach((occ) => { S += Math.max(0, unmatched[occ] ?? 0); V += Math.max(0, unfilled[occ] ?? 0); });
+  if (!(S > 0) || !(V > 0)) return { into, outOf };
+  OCCUPATIONS.forEach((from) => {
+    const seekers = Math.max(0, unmatched[from] ?? 0);
+    const reachable = V - Math.max(0, unfilled[from] ?? 0);
+    if (!(seekers > 0) || !(reachable > 0)) return;
+    OCCUPATIONS.forEach((to) => {
+      const openings = Math.max(0, unfilled[to] ?? 0);
+      if (to === from || !(openings > 0)) return;
+      const facing = S - Math.max(0, unmatched[to] ?? 0);
+      const seekersHere = seekers * (openings / reachable);
+      const vacanciesHere = facing > 0 ? openings * (seekers / facing) : 0;
+      if (!(seekersHere > 0) || !(vacanciesHere > 0)) return;
+      const matches = MATCHING_EFFICIENCY * Math.pow(vacanciesHere, MATCHING_ELASTICITY) * Math.pow(seekersHere, 1 - MATCHING_ELASTICITY);
+      const moved = Math.max(0, Math.min(matches, seekersHere, vacanciesHere));
+      into[to] += moved; outOf[from] += moved;
+    });
+  });
+  return { into, outOf };
 }

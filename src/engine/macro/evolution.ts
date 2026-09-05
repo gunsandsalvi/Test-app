@@ -412,21 +412,11 @@ export function evolveRegionMacro(
   // nobody's decision. The pools pass through untouched.
   const newOccupationPools = currentOccupationPools;
 
-  // X4: Retraining friction — slow, asymmetric flow between pools
-  const avgWageIndex = (Object.values(newOccupationPools) as OccupationPool[]).reduce((s, p) => s + p.wageIndex, 0) / 5;
-  const newLaborForceShares: Record<OccupationType, number> = { ...currentLaborForceShares };
-  (Object.keys(newOccupationPools) as OccupationType[]).forEach(occ => {
-    const wageGapVsAvg = newOccupationPools[occ].wageIndex / Math.max(0.01, avgWageIndex) - 1;
-    const retrainingSpeed = occ === 'GENERAL' ? 0.015 : (occ === 'SPECIALIZED_PROFESSIONAL' || occ === 'TECHNICAL_ENGINEERING') ? 0.003 : 0.008;
-    newLaborForceShares[occ] = ((currentLaborForceShares[occ] ?? defaultOccupationShares[occ]) + wageGapVsAvg * retrainingSpeed);
-  });
-
-  const shareSum = Object.values(newLaborForceShares).reduce((s, v) => s + v, 0);
-  if (shareSum > 0) {
-    (Object.keys(newLaborForceShares) as OccupationType[]).forEach(occ => {
-      newLaborForceShares[occ] = Number((newLaborForceShares[occ] / shareSum).toFixed(4));
-    });
-  }
+  // §3.20-iii: the occupation shares are the labour market's own state now — moved by the
+  // mobility pass in `labor-market.ts` (idle seekers searching the other occupations' open
+  // vacancies) and passed through here untouched. The wage-gap drift at three stated speeds
+  // that sat here moved nobody anyone could count.
+  const newLaborForceShares = currentLaborForceShares;
 
   // Private-Sector Segments evolution driven by specific demand signals & occupational wage costs
   // HH3: the real book change — this week's derived sum against last week's (both written by

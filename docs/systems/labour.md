@@ -89,7 +89,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 hours of a named person's time to a named firm | `src/engine/simulation/stages/labor-market.ts:employedByOccBefore` | ⚠️ |
 | A2 the price is the wage, per unit of time, in a currency | `src/engine/bootstrap/labor-and-wages.ts:getBaseAnnualWageLocal` | ✅ |
 | A3 labour is heterogeneous: skill, sector, region | `src/domain/region-macro.ts:OCCUPATION_TYPES` | ⚠️ |
-| A3.a so unemployment and vacancies can be high at once | `src/engine/simulation/stages/labor-market.ts:fillRatioByOcc` | ✅ |
+| A3.a so unemployment and vacancies can be high at once | `src/engine/simulation/stages/labor-market.ts:fillRatioByOcc` · `src/engine/simulation/stages/labor-market.ts:occupationalMobility` | ✅ |
 | A4 the relationship persists — employment is a state | `src/domain/company.ts:employeeCount` | ⚠️ |
 | **B1 a household decides whether to work, given the wage** | `src/engine/macro/evolution.ts:participationDrift` | ❌ |
 | B2 the workforce is finite | `src/domain/region-macro.ts:laborForceCount` | ✅ |
@@ -212,6 +212,13 @@ the five occupations.
 
 None of this is a missing mechanism; it is the same aggregation A2.d records in `households.md`,
 and it closes there.
+
+*2026-09-05 (§9.20-iii):* the occupations are no longer sealed. A seeker its own occupation could
+not place searches the vacancies the others left open, through the same matching function
+(`occupationalMobility`), and enters at tenure zero — the bottom of the experience cross-section is
+what retraining costs. The labour-force shares are the state that flow moves; the wage-gap drift at
+three stated speeds in `evolution.ts` is gone. A3.a's simultaneity survives it: mobility is a
+second pass over what the first left, so a shortage is relieved over weeks, not cleared.
 
 ### ⚠️ B5 / D4 — TWO VERIFY NODES NOBODY READS
 

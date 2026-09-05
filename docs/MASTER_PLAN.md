@@ -549,14 +549,6 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-20-iii. **OCCUPATIONAL SUPPLY GETS MOBILITY.** `labor-market.ts` fixes each occupation's labour
-    force at `totalLaborForce × share` and a shortage in one occupation is permanent: seekers go
-    to zero, hiring stops, and nothing moves a person from an occupation with idle seekers to one
-    with open vacancies. Mobility is a flow between occupations, from the one whose wage and
-    vacancy rate say it is over-supplied to the one that is short, at a rate that takes time
-    (retraining is search with a longer lag); the shares become a state the flow moves, not a
-    constant. Closes `labour.md` A3.a's second half — a shortage can be relieved.
-
 20b. **The interbank unsecured market.** The last boundary line's named successor, and it was
     never built: surplus banks lend to short ones at policy plus the borrower's own spread, and
     only what no bank will lend reaches a standing facility. Today a short bank goes straight to
@@ -1525,6 +1517,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20-iii — OCCUPATIONAL SUPPLY MOVES TO WHERE THE VACANCIES ARE.** Step 20 is closed with this.
+  Each occupation's labour force was `totalLaborForce × share`, the share drifting in
+  `evolution.ts` by the occupation's wage gap to the average at three stated speeds (0.015 /
+  0.008 / 0.003 a week) — a coefficient reading a price, not a person reading a vacancy — so a
+  shortage stood: seekers at zero, hiring stopped, idle seekers next door. Now the labour stage
+  runs a second matching pass (`labor-market.ts:occupationalMobility`): what each occupation's
+  own search left unmatched is spread over what the others' left unfilled, each pair matched
+  through the one matching function and capped by both sides, and the movers enter the new
+  occupation at tenure zero (the entry wage is what retraining costs — DIST 1(b)'s bottom
+  cohort, no new number). The shares are the state the flow moves, written by the labour stage
+  and passed through by evolution untouched; the X4 drift is deleted. Slower than own search by
+  construction, from where the idle are to where the openings are. Test: conservation, no move
+  within an occupation, both-side caps, search not transfer. `labour.md` A3.a re-cited with a
+  note. Gates green; no run.
 
 **20-ii — EVERY OVERDRAFT LENDER LENDS TO ITS ROOM AND REFUSES PAST IT.** The close sweep funded
   every negative balance it found — a firm's revolver tap, a fund's prime-brokerage draw past its
