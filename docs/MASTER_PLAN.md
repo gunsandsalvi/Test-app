@@ -548,11 +548,6 @@ written from here):
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
 15. **Search by asset, price and spread together** (rule 9) — split 2026-09-05, one commit each:
-15-iii. **The UI unit errors the audit found.** `commodity.tsx:37` and `fx.tsx:29` render an
-    absolute move with `pctLevel` (a $2 move prints "200.0%"), `:39` prints an 0–100 field as
-    "4800%", `macro.tsx:79` shows home ownership as "0.6%", `:63` reports a permanent 0.0% current
-    account, `all.tsx:46` guesses a unit by magnitude, and `formatters.ts:97,150,163,178` render
-    NaN as `$0.00` / `0.00%` / `100.00% Par`.
 15-iv. **One calendar.** `formatters.ts:7` and `ui/calendar.ts:5` differ by a year; the engine's
     traces and the UI's dates disagree about which year a week is in, and step 14's names take
     the caller's. One epoch, in the domain, read by both.
@@ -1258,9 +1253,10 @@ step that owns its node; where it does not yet, the step below is the owner.
     Large.
 
 37-BOP. **THERE IS NO BALANCE OF PAYMENTS.** (cross-border D1/D2/D3/D3.a/D4.) `currentAccountPctGdp`
-    has **no writer at all** — seeded 0, rendered on two screens, permanently 0.0%. No financial
-    account exists. §3 step 15 lists that 0.0% among UI FORMATTING errors, which is the symptom and
-    not the cause (rule 12). Every ingredient exists and is unjoined: exports and imports from real
+    had **no writer at all** — seeded 0, rendered on two screens, permanently 0.0% — and §9.15-iii
+    deleted the field and its two prints (the screens show the trade balance, a read); the
+    current account is this step's to build as a READ of the transactions, never a stored field.
+    No financial account exists. Every ingredient exists and is unjoined: exports and imports from real
     fills, income via the register, and `fx-clearing` already computes each entity's change in
     foreign holdings by issuer region. Small-to-medium, and it is the read that would have shown
     every cross-border defect this atlas found by hand.
@@ -1651,6 +1647,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**15-iii — THE UI UNIT ERRORS.** Each at its cause. `commodity.tsx` and `fx.tsx` rendered
+`change1W`, an ABSOLUTE move in the unit, through `pctLevel`; the move shown is now that over the
+prior print, and the FX stat says the absolute move beside it. `inventoryLevelPct` is the one
+field stored in percent points (0–100, `evolution.ts` clamps it so) and its two prints divide by a
+hundred. `housingMarket.ownershipRatePct` was a FRACTION (0.62) named `…Pct`, and the one reader
+that believed the name divided it by a hundred — renamed `ownershipRate` at its six sites and in
+`housing.md`. `currentAccountPctGdp` was seeded 0, written by nothing and shown twice as a fact
+(atlas E1): DELETED with its two prints; the macro page and the region statement show the trade
+balance as a share of GDP, a read of real fills, and 37-BOP builds the current account as a read
+(cross-border D1 re-cited to `tradeBalance`, still ❌). `all.tsx` guessed a rate's unit by
+magnitude (`|v| ≤ 5 → %`) — the guess is gone, the depth floor prints the stored number. The six
+engine formatters printed `$0.00`, `0.00%`, `0.0 bps`, `0.0x` and `100.00%` for a NaN or an
+undefined; they print `—` (`formatters.ts:MISSING`, `test/formatters.test.ts`). Gates green; no
+run.
 
 **15-ii — PRICE AND DM/OAS SIDE BY SIDE IN EVERY FIXED-INCOME VIEW.** One read,
 `credit-price.ts:paperQuoteOf`: the tranche's cleared price per unit of face off the one price

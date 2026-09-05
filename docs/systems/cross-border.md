@@ -104,7 +104,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 a bank funds in one currency and lends in another | `src/engine/simulation/stages/fx-squaring.ts:squareInterbankFxPositions` | ⚠️ |
 | C4 a direct investment buys a firm outright | `src/engine/simulation/stages/foreign-direct-investment.ts:runForeignDirectInvestment` | ✅ |
 | C5 income flows across the border | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` | ✅ |
-| **D1 the current account is a read of actual transactions** | `src/domain/region-macro.ts:currentAccountPctGdp` | ❌ |
+| **D1 the current account is a read of actual transactions** | `src/domain/region-macro.ts:tradeBalance` | ❌ |
 | **D2 the financial account is the other side** | — | ❌ |
 | **D3 VERIFY D1 + D2 = 0 as a consequence** | — | ❌ |
 | D3.a a residual that has to be plugged is a lost leg | `src/engine/simulation/stages/fx-clearing.ts:residualByPair` | ⚠️ |
@@ -125,12 +125,10 @@ checked by `scripts/check-atlas.sh`.
 
 ### ❌ D1 / D2 / D3 / D4 — THERE IS NO BALANCE OF PAYMENTS. THE CURRENT ACCOUNT IS THE LITERAL ZERO IT WAS SEEDED WITH
 
-`grep -rn currentAccountPctGdp src/` returns **four lines and no writer**:
-
-    src/engine/macro/initialization.ts:580:    currentAccountPctGdp: 0,
-    src/domain/region-macro.ts:772:  currentAccountPctGdp: number;
-    src/ui/functions/macro.tsx:69:   <KV k="current account" hint="of gdp" v={pctLevel(r.currentAccountPctGdp)} />
-    src/ui/functions/statements.tsx:226: { label: 'Current account, share of GDP', …
+`currentAccountPctGdp` had four lines and no writer — seeded 0, typed, rendered twice — and was
+**deleted 2026-09-05 (§9.15-iii)**; the surface now shows `tradeBalance` (exports − imports off real
+fills, `06-fx-and-trade.ts`) as a share of GDP, which is the one external read that exists. D1 is
+still ❌: a current account is that plus the income account, and nothing computes it.
 
 It is set to `0` at the seed, never touched by any stage, and rendered on two screens. There is no
 financial account at all — no field, no computation — so D3's identity has nothing to be an

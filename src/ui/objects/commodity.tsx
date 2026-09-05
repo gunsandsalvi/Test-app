@@ -2,12 +2,14 @@
 
 import { defineObject } from './registry';
 import { Card, KV, Link, Stat, StatGrid } from '../ui';
-import { pctLevel, num, count } from '../format';
+import { pctLevel, pct, num, count } from '../format';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, ringed, words } from './common';
 
 type Commodity = import('../../types').GameState['commodities'][number];
 
 const balanceWord = (b: Commodity['supplyDemandBalance']): string => (b.startsWith('Deficit') ? 'tight' : b.startsWith('Surplus') ? 'oversupplied' : 'balanced');
+/** The week's move as a fraction of the prior print (`change1W` is absolute, in the unit). */
+const weeklyMove = (c: Commodity): number | undefined => { const prior = c.spotPrice - c.change1W; return prior > 0 ? c.change1W / prior : undefined; };
 const balanceRank = (b: Commodity['supplyDemandBalance']): number => (b.startsWith('Deficit') ? -1 : b.startsWith('Surplus') ? 1 : 0);
 
 export const commodity = defineObject<Commodity>({
@@ -34,9 +36,12 @@ export const commodity = defineObject<Commodity>({
       { key: 'name', label: 'commodity', render: (r, _w, nav) => <Link to={{ type: 'commodity', id: r.id }} nav={nav}>{r.obj.name}</Link>, value: (r) => r.obj.name },
       { key: 'spot', label: 'spot', render: (r) => num(r.obj.spotPrice), value: (r) => r.obj.spotPrice },
       { key: 'unit', label: 'unit', render: (r) => r.obj.unit, value: (r) => r.obj.unit },
-      { key: 'move', label: '1w', render: (r) => pctLevel(r.obj.change1W, 1), value: (r) => r.obj.change1W },
+      // §3.15-iii: `change1W` is an ABSOLUTE move in the commodity's own unit; the move a reader
+      // compares across commodities is that over the prior print.
+      { key: 'move', label: '1w', render: (r) => pct(weeklyMove(r.obj), 1), value: (r) => weeklyMove(r.obj) ?? 0 },
       { key: 'bal', label: 'balance', render: (r) => balanceWord(r.obj.supplyDemandBalance), value: (r) => balanceRank(r.obj.supplyDemandBalance) },
-      { key: 'stock', label: 'stock', render: (r) => pctLevel(r.obj.inventoryLevelPct, 0), value: (r) => r.obj.inventoryLevelPct },
+      // §3.15-iii: `inventoryLevelPct` is stored in PERCENT POINTS (0–100), the one such field.
+      { key: 'stock', label: 'stock', render: (r) => pctLevel(r.obj.inventoryLevelPct / 100, 0), value: (r) => r.obj.inventoryLevelPct },
     ],
   },
   overview({ obj: c, nav }) {
@@ -47,7 +52,7 @@ export const commodity = defineObject<Commodity>({
         <StatGrid>
           <Stat label="spot" value={num(c.spotPrice)} sub={<ChangeSub series={hist} />} />
           <Stat label="3m forward" value={num(c.futures3M)} sub={c.spotPrice > 0 ? `${pctLevel(c.futures3M / c.spotPrice - 1)} vs spot` : ''} />
-          <Stat label="balance" value={balanceWord(c.supplyDemandBalance)} sub={`stock ${pctLevel(c.inventoryLevelPct, 0)}`} neg={balanceRank(c.supplyDemandBalance) < 0} />
+          <Stat label="balance" value={balanceWord(c.supplyDemandBalance)} sub={`stock ${pctLevel(c.inventoryLevelPct / 100, 0)}`} neg={balanceRank(c.supplyDemandBalance) < 0} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="curve" hint="1m · 3m · 6m" v={`${num(c.futures1M)} · ${num(c.futures3M)} · ${num(c.futures6M)}`} />

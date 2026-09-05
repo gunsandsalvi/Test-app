@@ -7,11 +7,14 @@
 import { useState } from 'react';
 import { FunctionModule } from '../fn';
 import { Card, Hint, Link, Muted, Num, T, mono } from '../ui';
-import { money, num, pct } from '../format';
+import { money, num } from '../format';
 import { objectOf, refOfIdentifier, OBJECT_TYPES } from '../objects';
 
 const MONEY_KEY = /USD$|^cash$|^totalDebt$|^marketCap$|Revenue$|^ebitda$|^ebit$|^netIncome$|^capex$|Capex$|^currentLiabilities$|^rndExpense$|^treasuryHoldings$/;
-const RATE_KEY = /Rate$|Ratio$|Pct$|Share$|Margin$|^leverage$|Growth$|^inflation$|^coreInflation$|^nairu$|^savingsRate$/;
+// §3.15-iii: no RATE_KEY. It rendered a key that looked like a rate as a percentage when the value
+// was "small enough" — a unit guessed by magnitude, which printed a 0–100 field as itself and a
+// fraction over five as a bare number. The depth floor shows the number the engine stores; the
+// key says the unit, and an overview that knows the unit formats it.
 
 function walk(root: unknown, path: string[]): unknown {
   let cur: unknown = root;
@@ -43,7 +46,7 @@ function kindOf(v: unknown): string {
 
 function Scalar({ k, v, world, nav }: { k: string; v: unknown; world: import('../world').World; nav: import('../ui').Nav }) {
   if (typeof v === 'number') {
-    const text = MONEY_KEY.test(k) ? money(v, 2) : RATE_KEY.test(k) && Math.abs(v) <= 5 ? pct(v, 2) : num(v, Number.isInteger(v) ? 0 : 4);
+    const text = MONEY_KEY.test(k) ? money(v, 2) : num(v, Number.isInteger(v) ? 0 : 4);
     return <Num neg={v < 0}>{text}</Num>;
   }
   if (typeof v === 'string') {

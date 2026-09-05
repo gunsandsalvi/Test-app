@@ -100,8 +100,8 @@ checked by `scripts/check-atlas.sh`.
 | C4 the actor is a named party in the register and the accounts | `src/domain/party.ts:PartyRef` | ❌ |
 | D1 a history that is a read, not a log that can drift | `src/ui/world.ts:Tape` | ⚠️ |
 | D2 performance computed from real positions and real prices | `src/domain/portfolio.ts:Portfolio` | ❌ |
-| D3 VERIFY anything shown is reproducible from the state | `src/ui/functions/statements.tsx:currentAccountPctGdp` | ⚠️ |
-| **E1 FORBID no display-only number** | `src/ui/functions/macro.tsx:currentAccountPctGdp` | ❌ |
+| D3 VERIFY anything shown is reproducible from the state | `src/ui/functions/statements.tsx:RegionStatements` | ⚠️ |
+| **E1 FORBID no display-only number** | `src/ui/functions/macro.tsx:macro` | ❌ |
 | E2 FORBID no scripted narrative | `src/engine/simulation/initialization.ts:newsFeed` | ⚠️ |
 | E3 FORBID no surface that changes the model | `src/ui/world.ts:worldOf` | ✅ |
 
@@ -154,10 +154,10 @@ it"*) but names only the options; the account, the party and the fill are not na
 E1 forbids a number on the surface with no derivation behind it. Two on the region page have no
 derivation at all — not a wrong one, none:
 
-- **`currentAccountPctGdp`** — `initialization.ts:580` sets it to `0`, nothing writes it, and
-  `macro.tsx:69` and `statements.tsx:226` both render it. It prints `0.0%` forever. See
-  `cross-border.md` §3: this is not a formatter defect, it is that the model has no external
-  accounts.
+- **`currentAccountPctGdp`** — was seeded `0`, written by nothing, and rendered on the macro page
+  and the region statement as a fact. **Deleted 2026-09-05 (§9.15-iii)**: the two screens show the
+  trade balance as a share of GDP, which is a read of real fills; the current account itself is
+  `cross-border.md` §3's absence and §3.37-BOP's to build as a read of the transactions.
 - **`fxReservesLocal`** — `macro/initialization.ts:581` sets it to `estimatedNominalGdpLocal * 0.002`
   once, at the seed. No stage writes it. It is shown on the macro page and again on the central-bank
   page (`centralbank.tsx:64`). A central bank's reserves are a *position*, and this one has never
@@ -167,11 +167,10 @@ Both are read by a person as facts about the world, which is what makes E1 a FOR
 style rule. A5.a is the same defect from the other side: what IS published is published instantly
 and exactly, straight off the state object.
 
-**Already §3 step 15 for the current account**, listed among UI unit errors — but the entry treats
-it as a rendering problem. Rule 12: the cause is the missing mechanism, and it belongs in
-cross-border's step. `fxReservesLocal` is named nowhere. **Both become part of that step**; the second
-also wants a decision (a central bank with no reserves position is a legitimate design — then delete
-the field rather than show it).
+Rule 12: the cause is the missing mechanism, and it belongs in cross-border's step (37-BOP); 15-iii
+took the display-only field off the surface and left the mechanism there. `fxReservesLocal` is named
+nowhere and stays ❌ here; it wants a decision (a central bank with no reserves position is a
+legitimate design — then delete the field rather than show it).
 
 D3 is `⚠️` rather than `❌` because the surface is otherwise unusually good at this: `ui/world.ts`
 reads through typed selectors off the register and the accounts (`householdDepositsOf`,

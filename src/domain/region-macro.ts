@@ -136,7 +136,9 @@ export interface HousingMarket {
   baselineHomePriceLocal: number;
   priceIndex: number;
   historicalPrices: number[];
-  ownershipRatePct: number;
+  /** §3.15-iii: the owner-occupier share of households, a FRACTION (0.62) — it was named `…Pct`
+   *  and one reader divided it by a hundred. */
+  ownershipRate: number;
   mortgageOriginationVolumeLocal: number;
   /**
    * HSG — the BEST mortgage quote in this region last week, annual.
@@ -791,7 +793,9 @@ export interface Region {
   tradeBalance: number;
   exportsLocal: number;
   importsLocal: number;
-  currentAccountPctGdp: number;
+  // §3.15-iii: `currentAccountPctGdp` is DELETED — seeded 0, written by nothing, shown on two
+  // screens as a fact. The trade balance above is the read that exists; a current account is
+  // §3.37-BOP's to build, and it will be a read of the transactions, never a stored field.
   fxReservesLocal: number;
   govEmploymentGrowthRate?: number;
   fiscalStanceScore: number;

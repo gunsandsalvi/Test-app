@@ -138,7 +138,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // which is the transmission the omission was suppressing in the first place.
     const housingMarket = reg.housingMarket;
     const owningHouseholds = housingMarket
-      ? (Math.max(0, reg.totalPopulation) / AVERAGE_HOUSEHOLD_SIZE) * Math.max(0, housingMarket.ownershipRatePct)
+      ? (Math.max(0, reg.totalPopulation) / AVERAGE_HOUSEHOLD_SIZE) * Math.max(0, housingMarket.ownershipRate)
       : 0;
     const housingStockLocal = owningHouseholds * Math.max(0, housingMarket?.medianHomePriceLocal ?? 0);
     const mortgageLocal = hs.mortgageDebtLocal ?? 0;

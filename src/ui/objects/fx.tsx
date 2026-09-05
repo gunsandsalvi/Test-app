@@ -2,10 +2,13 @@
 
 import { defineObject } from './registry';
 import { Card, KV, Link, Stat, StatGrid } from '../ui';
-import { pctLevel, num, bps } from '../format';
+import { pctLevel, pct, num, bps } from '../format';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, ringed } from './common';
 
 type FxPair = import('../../types').GameState['fxPairs'][number];
+
+/** §3.15-iii: `change1W` is an ABSOLUTE move in the rate; the move shown is that over the prior rate. */
+const weeklyMove = (p: FxPair): number | undefined => { const prior = p.rate - p.change1W; return prior > 0 ? p.change1W / prior : undefined; };
 
 export const fx = defineObject<FxPair>({
   type: 'fx',
@@ -24,7 +27,7 @@ export const fx = defineObject<FxPair>({
     columns: [
       { key: 'name', label: 'pair', render: (r, _w, nav) => <Link to={{ type: 'fx', id: r.id }} nav={nav}>{r.obj.pair}</Link>, value: (r) => r.obj.pair },
       { key: 'rate', label: 'rate', render: (r) => num(r.obj.rate, 4), value: (r) => r.obj.rate },
-      { key: 'move', label: '1w', render: (r) => pctLevel(r.obj.change1W, 2), value: (r) => r.obj.change1W },
+      { key: 'move', label: '1w', render: (r) => pct(weeklyMove(r.obj), 2), value: (r) => weeklyMove(r.obj) ?? 0 },
       { key: 'basis', label: 'basis bp', render: (r) => bps(r.obj.basisSpreadBps), value: (r) => r.obj.basisSpreadBps ?? 0 },
     ],
   },
@@ -35,7 +38,7 @@ export const fx = defineObject<FxPair>({
         <ObjectHeader name={p.pair} sub={<>currency pair · <RegionLink id={p.base} nav={nav} /> against <RegionLink id={p.quote} nav={nav} /></>} />
         <StatGrid>
           <Stat label="rate" value={num(p.rate, 4)} sub={<ChangeSub series={p.historicalRates ?? []} />} />
-          <Stat label="1 week" value={pctLevel(p.change1W, 2)} sub="move" neg={p.change1W < 0} />
+          <Stat label="1 week" value={pct(weeklyMove(p), 2)} sub={`move · ${num(p.change1W, 4)} in the rate`} neg={p.change1W < 0} />
           <Stat label="basis" value={`${bps(p.basisSpreadBps)}bp`} sub="cross-currency" />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>

@@ -66,8 +66,9 @@ export const macro: FunctionModule = {
       <SectionLabel>external</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
         <KV k="exports · imports" hint="annualised" v={`${money(r.exportsLocal)} · ${money(r.importsLocal)}`} />
-        <KV k="trade balance" v={money(r.tradeBalance)} />
-        <KV k="current account" hint="of gdp" v={pctLevel(r.currentAccountPctGdp)} />
+        {/* §3.15-iii: the trade balance is a read of real fills; the "current account" that stood
+            beside it was a stored zero nothing wrote (atlas E1), deleted — §3.37-BOP builds the read. */}
+        <KV k="trade balance" hint={gdp > 0 ? `${pct(r.tradeBalance / gdp, 1)} of gdp` : undefined} v={money(r.tradeBalance)} />
         <KV k="fx reserves" v={money(r.fxReservesLocal)} />
         <KV k="the currency" v={world.state.fxPairs.filter((p) => p.pair.includes(r.currency)).slice(0, 3).map((p, i) => <span key={p.pair}>{i ? ' · ' : ''}<Link to={{ type: 'fx', id: p.pair }} nav={nav}>{p.pair}</Link></span>)} />
       </Card>
@@ -77,7 +78,7 @@ export const macro: FunctionModule = {
         <KV k="net worth" hint={sub('household net worth')} v={money(hs?.netWorthLocal)} />
         <KV k="debt to income" v={ratio(hs?.householdDebtToIncomeRatio, 2)} />
         <KV k="savings rate" v={pctLevel(hs?.savingsRate)} />
-        <KV k="home ownership" v={pctLevel((hm?.ownershipRatePct ?? 0) / 100, 0)} />
+        <KV k="home ownership" v={pctLevel(hm?.ownershipRate, 0)} />
       </Card>
       <SectionLabel>banks</SectionLabel>
       <Card style={{ padding: '2px 0' }}>

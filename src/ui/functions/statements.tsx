@@ -236,7 +236,8 @@ function RegionStatements({ world, r, tab, nav }: { world: World; r: Region; tab
       { label: 'GDP', usd: gdp, total: true },
       { label: 'Unemployment', text: pctLevel(r.unemploymentRate) },
       { label: 'Inflation · core', text: `${pctLevel(r.inflation)} · ${pctLevel(r.coreInflation)}` },
-      { label: 'Current account, share of GDP', text: pctLevel(r.currentAccountPctGdp) },
+      // §3.15-iii: the trade balance is the external read that exists; a current account is 37-BOP's.
+      { label: 'Trade balance, share of GDP', text: gdp > 0 ? pct(r.tradeBalance / gdp, 1) : '—' },
     ]} />;
   } else if (active === 'treasury') {
     body = <Statement units="USD millions · weekly flows" asOf={asOf} lines={[

@@ -4,6 +4,12 @@ import type { Ticker } from '../domain/ids';
  * Eliminates raw floats, turn notation, unparsed LaTeX, and provides uniform calendar timelines across the platform.
  */
 
+/** §3.15-iii: a number that is not there prints as NOT THERE. These used to print `$0.00`,
+ *  `0.00%`, `0.0 bps`, `0.0x` and `100.00%` for a NaN or an undefined — a bracket as a print
+ *  (rule 3), and par for a bond nobody priced. The UI's own formatters (`ui/format.ts`) already
+ *  print the dash. */
+export const MISSING = '—';
+
 // Anchor simulation start to Jan 5, 2026 (Week 1 = Jan 5, 2026)
 export const SIMULATION_START_DATE = new Date(2026, 0, 5); // Jan 5, 2026
 
@@ -99,7 +105,7 @@ export function formatCurrency(
     symbol?: string;
   }
 ): string {
-  if (val === undefined || val === null || isNaN(val)) return '$0.00';
+  if (val === undefined || val === null || isNaN(val)) return MISSING;
 
   const symbol = options?.symbol ?? '$';
   const showSign = options?.showSign ?? false;
@@ -129,7 +135,7 @@ export function formatCurrency(
 }
 
 export function formatStockPrice(price: number | undefined | null): string {
-  if (price === undefined || price === null || isNaN(price)) return '$0.00';
+  if (price === undefined || price === null || isNaN(price)) return MISSING;
   return `$${price.toFixed(2)}`;
 }
 
@@ -137,7 +143,7 @@ export function formatBps(
   bps: number | undefined | null,
   options?: { showPlus?: boolean; showSign?: boolean; precision?: number }
 ): string {
-  if (bps === undefined || bps === null || isNaN(bps)) return '0.0 bps';
+  if (bps === undefined || bps === null || isNaN(bps)) return MISSING;
   const showPlus = options?.showPlus ?? options?.showSign ?? true;
   const precision = options?.precision ?? 1;
   const sign = bps > 0 && showPlus ? '+' : '';
@@ -158,7 +164,7 @@ export function formatPercent(
     precision?: number;
   }
 ): string {
-  if (val === undefined || val === null || isNaN(val)) return '0.00%';
+  if (val === undefined || val === null || isNaN(val)) return MISSING;
   const showSign = options.showSign ?? false;
   const precision = options.precision ?? 2;
   const pct = options.isDecimal ? val * 100 : val;
@@ -171,7 +177,7 @@ export function formatMultiple(
   suffix: string = 'x',
   precision: number = 1
 ): string {
-  if (val === undefined || val === null || isNaN(val)) return `0.0${suffix}`;
+  if (val === undefined || val === null || isNaN(val)) return MISSING;
   return `${val.toFixed(precision)}${suffix}`;
 }
 
@@ -179,6 +185,6 @@ export function formatParPrice(
   price: number | undefined | null,
   precision: number = 2
 ): string {
-  if (price === undefined || price === null || isNaN(price)) return '100.00%';
+  if (price === undefined || price === null || isNaN(price)) return MISSING;
   return `${price.toFixed(precision)}% Par`;
 }

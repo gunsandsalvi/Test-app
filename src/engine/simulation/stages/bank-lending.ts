@@ -494,7 +494,7 @@ export function migrateHouseholdDebtAtSeed(
   const housingStockLocal = hs.housingStockLocal && hs.housingStockLocal > 0
     ? hs.housingStockLocal
     : (reg.housingMarket
-      ? (Math.max(0, reg.totalPopulation) / AVERAGE_HOUSEHOLD_SIZE) * Math.max(0, reg.housingMarket.ownershipRatePct) * Math.max(0, reg.housingMarket.medianHomePriceLocal)
+      ? (Math.max(0, reg.totalPopulation) / AVERAGE_HOUSEHOLD_SIZE) * Math.max(0, reg.housingMarket.ownershipRate) * Math.max(0, reg.housingMarket.medianHomePriceLocal)
       : 0);
   // Seeded as the engine's own shape: NET mortgage credit — buyers' new loans at the
   // origination LTV minus sellers' remaining loans (at the book's average LTV) the sales retire.

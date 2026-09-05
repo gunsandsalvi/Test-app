@@ -114,7 +114,7 @@ export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncome
     baselineHomePriceLocal: basePrice,
     priceIndex: 1.0,
     historicalPrices: Array(52).fill(basePrice),
-    ownershipRatePct: HOME_OWNERSHIP_RATE,
+    ownershipRate: HOME_OWNERSHIP_RATE,
     mortgageOriginationVolumeLocal: estimatedHouseholdIncomeLocal * 0.05,
   };
 }
@@ -553,7 +553,6 @@ function buildRegion(regionId: RegionId): Region {
     tradeBalance: 0,
     exportsLocal: 0,
     importsLocal: 0,
-    currentAccountPctGdp: 0,
     fxReservesLocal: Math.round((estimatedNominalGdpLocal * 0.002)),
     fiscalStanceScore: 0,
     // FRM: an outcome of this region's own seeded position, through the weekly rater's own

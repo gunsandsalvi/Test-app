@@ -129,7 +129,7 @@ computed identically in two places (`household-balance-sheet.ts:147-150` and
 `bank-lending.ts:501`):
 
 ```
-owningHouseholds = (totalPopulation / AVERAGE_HOUSEHOLD_SIZE) * housingMarket.ownershipRatePct;
+owningHouseholds = (totalPopulation / AVERAGE_HOUSEHOLD_SIZE) * housingMarket.ownershipRate;
 housingStockLocal  = owningHouseholds * housingMarket.medianHomePriceLocal;
 ```
 
@@ -138,7 +138,7 @@ Three consequences, each of which is a node above:
 - **A1 / E1.** There is no house, so there is no owner. The wire ledger's asset-kind union
   actually **declares** `'HOUSE'` (`ledger/wire.ts:18,22`) and no wire of that kind is ever
   written — `grep -w HOUSE src` finds the two declarations and nothing else. A dwelling never
-  changes hands; ownership is `ownershipRatePct`, a number.
+  changes hands; ownership is `ownershipRate`, a number.
 - **A4.** The "stock" is a function of **population and a constant**. `HOME_OWNERSHIP_RATE = 0.62`
   is written once at initialization (`macro/initialization.ts:118`) and never written again — the
   only other reads spread `prevHousing`. So the number of dwellings moves only when the population
@@ -230,7 +230,7 @@ supplier can serve it, and it lands in the CPI basket — so D3 is genuinely ✅
 payment to real landlord firms.
 
 What is missing is the join to A1. The landlord is a *firm producing a service*, not the owner of
-a dwelling somebody lives in, and the owner/renter split is `ownershipRatePct`, frozen at 0.62
+a dwelling somebody lives in, and the owner/renter split is `ownershipRate`, frozen at 0.62
 forever. So a household can never buy the house it rents, tenure never changes, and rent and
 ownership are two unconnected markets over the same absent asset. Closes with 26b.
 
