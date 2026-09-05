@@ -826,7 +826,6 @@ function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
     currentPrice: company.stockPrice,
     notional: company.stockPrice * 1000,
     marginRequirement: company.stockPrice * 1000 * 0.2,
-    expectedWeeklyCarryLocal: 0,
   };
   let state = executeTrade(seedState, posData);
   const preNav = state.portfolio.navLocal;

@@ -96,7 +96,7 @@ checked by `scripts/check-atlas.sh`.
 | C1.a acting means entering a market that must clear | `src/engine/simulation/trade.ts:executionDetails` | ❌ |
 | C2 an action requires the means | `src/engine/simulation/trade.ts:updatedCash` | ❌ |
 | **C2.a FORBID no privileged actor** | `src/engine/simulation/trade.ts:adjustBankReserves` | ❌ |
-| C3 an action's consequences propagate like anyone else's | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` · `src/engine/carryCalculator.ts:calculateExpectedCarry` | ❌ |
+| C3 an action's consequences propagate like anyone else's | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` · `src/engine/simulation/stages/12-portfolio-and-positions.ts:carryRead` | ❌ |
 | C4 the actor is a named party in the register and the accounts | `src/domain/party.ts:PartyRef` | ❌ |
 | D1 a history that is a read, not a log that can drift | `src/ui/world.ts:Tape` | ⚠️ |
 | D2 performance computed from real positions and real prices | `src/domain/portfolio.ts:Portfolio` | ❌ |
@@ -123,7 +123,9 @@ of it every week *(2026-09-05, §9.26-a: at the register's prints — a sovereig
 position is worth what its tranche's own book struck, paper the book has never printed keeps the
 mark it had, the sensitivity is the paper's own schedule at the print's yield, and the credit/rates
 split of a move is measured off the tranche's own spread change rather than written as 70/30 — the
-two formula pricers it read are deleted)*; `13-news-and-turn-summary.ts:26-40` rolls the NAV forward and writes a
+two formula pricers it read are deleted; §9.26-b: and its carry is READ — the paper's own coupon,
+margin or dividend against the region's cleared repo rate, a short's against the lending book's
+fee for the name — `carryCalculator.ts`'s invented spread world is deleted)*; `13-news-and-turn-summary.ts:26-40` rolls the NAV forward and writes a
 `turnSummary` with a margin alert. And `engine/simulation/trade.ts:executeTrade` — the only thing
 that could ever open a position — **has zero callers.** `grep -rn executeTrade src/` returns its
 own definition and nothing else.

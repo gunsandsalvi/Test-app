@@ -13,7 +13,6 @@ import { marketCapAt } from '../../../engine2/instruments';
 import { ensureV2 } from '../../../engine2/world';
 import { trancheIdOf, ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
 import { assertNever } from '../../../domain/defect';
-import { calculateExpectedCarry } from '../../carryCalculator';
 import { getUnifiedInitialMarginRate } from '../../dealers';
 import { calculateCompositeIndices } from '../../macro/indices';
 import { WeeklyStepContext } from './context';
@@ -24,6 +23,32 @@ import { SOVEREIGN_PAYMENTS_PER_YEAR } from '../../../domain/government';
 import { asInstrumentId } from '../../../domain/ids';
 import { defect } from '../../../domain/defect';
 
+
+/**
+ * §3.26-b — CARRY IS READ. What a position pays is its paper's own terms — a coupon on face, a
+ * margin over the rate, a dividend on value — and what holding it costs is the rate this world
+ * clears: the region's GC repo rate (`repoRateAnnual`, one owner) for a long, and for a short the
+ * borrow fee the lending book struck for that name plus the income the short owes. The invented
+ * world this replaces (`carryCalculator.ts`, deleted): policy + 50bp "repo", + 40bp, + 20bp, a
+ * 375bp loan margin and a 150bp CDS by default, and 0.8%/1.5% short drags. A short with no
+ * borrow struck is a defect, not a free position.
+ */
+function carryRead(args: {
+  direction: 'LONG' | 'SHORT';
+  valueLocal: number;
+  incomeWeeklyLocal: number;
+  repoRateAnnual: number;
+  borrowFeeBps: number | undefined;
+  what: string;
+}): { weeklyCarryLocal: number; financingLocal: number } {
+  if (args.direction === 'LONG') {
+    const financingLocal = (args.valueLocal * args.repoRateAnnual) / 52;
+    return { weeklyCarryLocal: args.incomeWeeklyLocal - financingLocal, financingLocal };
+  }
+  const feeBps = args.borrowFeeBps ?? defect(`${args.what} is short with no borrow struck for it`);
+  const financingLocal = (args.valueLocal * feeBps) / 10000 / 52 + args.incomeWeeklyLocal;
+  return { weeklyCarryLocal: -financingLocal, financingLocal };
+}
 
 export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2 = ensureV2(state);
@@ -70,12 +95,14 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
           delta = pos.direction === 'LONG' ? posValueLocal : -posValueLocal;
 
-          const carryEst = calculateExpectedCarry('EQUITY', pos.direction, posValueLocal, {
-            policyRate: updatedRegions[pos.region].policyRate,
-            dividendYield: comp.dividendYield || 0.018
+          const carryEst = carryRead({
+            direction: pos.direction, valueLocal: posValueLocal,
+            incomeWeeklyLocal: (posValueLocal * comp.dividendYield) / 52,
+            repoRateAnnual: updatedRegions[pos.region].repoRateAnnual,
+            borrowFeeBps: updatedRegions[pos.region].borrowFeeBpsByCompanyId?.[comp.id],
+            what: `${pos.symbol} equity`,
           });
-
-          weeklyFinancing = carryEst.components.financingCostLocal;
+          weeklyFinancing = carryEst.financingLocal;
           ctx.attributionCarry += carryEst.weeklyCarryLocal;
 
           marginReq = posValueLocal * marginRate;
@@ -147,12 +174,14 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             // The sensitivity is the paper's own schedule at the print's own yield — a derivative
             // of the mark, not a point on a curve.
             dv01 = pos.quantity * dv01PerUnitFace(terms, currentPrice / 100) * fxRateToUsd * dir;
-            const carryEst = calculateExpectedCarry('CORP_BOND', pos.direction, posValueLocal, {
-              policyRate: reg.policyRate,
-              couponRate: terms.annualCouponRate,
-              cdsSpreadBps: comp.cdsSpreadBps
+            const carryEst = carryRead({
+              direction: pos.direction, valueLocal: posValueLocal,
+              incomeWeeklyLocal: (pos.quantity * fxRateToUsd * terms.annualCouponRate) / 52,
+              repoRateAnnual: reg.repoRateAnnual,
+              borrowFeeBps: reg.borrowFeeBpsByCompanyId?.[trancheIdOf(v2, trRow)],
+              what: `${pos.symbol} bond`,
             });
-            weeklyFinancing = carryEst.components.financingCostLocal;
+            weeklyFinancing = carryEst.financingLocal;
             ctx.attributionCarry += carryEst.weeklyCarryLocal;
             // §3.26-a: the move is split by MEASUREMENT, not by a 70/30 that was written down. What
             // the tranche's own spread change explains at this week's curve is credit; the rest is
@@ -168,11 +197,15 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
           } else {
             // §3.13 row 3: marked at the price THIS LOAN cleared at (07d), never a price
             // linearised out of a cleared margin — `bond.md` N7.b's forbidden direction.
-            const carryEst = calculateExpectedCarry('LEVERAGED_LOAN', pos.direction, posValueLocal, {
-              policyRate: reg.policyRate,
-              cdsSpreadBps: Number.isNaN(TS.floatingMarginBps[trRow]) ? 200 : TS.floatingMarginBps[trRow]
+            // The loan's coupon is the rate plus its own margin — `trancheTerms` reads both.
+            const carryEst = carryRead({
+              direction: pos.direction, valueLocal: posValueLocal,
+              incomeWeeklyLocal: (pos.quantity * fxRateToUsd * terms.annualCouponRate) / 52,
+              repoRateAnnual: reg.repoRateAnnual,
+              borrowFeeBps: reg.borrowFeeBpsByCompanyId?.[trancheIdOf(v2, trRow)],
+              what: `${pos.symbol} loan`,
             });
-            weeklyFinancing = carryEst.components.financingCostLocal;
+            weeklyFinancing = carryEst.financingLocal;
             ctx.attributionCarry += carryEst.weeklyCarryLocal;
             // §3.26-a: a floater has no rate leg — its price moves with its margin, and its
             // coupon moves with the rate. The whole move is credit; the 80/20 is gone.
@@ -206,11 +239,14 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
         dv01 = pos.quantity * dv01PerUnitFace(terms, currentPrice / 100) * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
 
-        const carryEst = calculateExpectedCarry('GOV_BOND', pos.direction, posValueLocal, {
-          policyRate: updatedRegions[pos.region].policyRate,
-          couponRate: fixedRate
+        const carryEst = carryRead({
+          direction: pos.direction, valueLocal: posValueLocal,
+          incomeWeeklyLocal: (pos.quantity * fxRateToUsd * fixedRate) / 52,
+          repoRateAnnual: updatedRegions[pos.region].repoRateAnnual,
+          borrowFeeBps: pos.trancheId ? updatedRegions[pos.region].borrowFeeBpsByCompanyId?.[pos.trancheId] : undefined,
+          what: `${pos.region} sovereign`,
         });
-        weeklyFinancing = carryEst.components.financingCostLocal;
+        weeklyFinancing = carryEst.financingLocal;
         ctx.attributionCarry += carryEst.weeklyCarryLocal;
 
         const pnlMove = unrealizedPnL - prevPnL;

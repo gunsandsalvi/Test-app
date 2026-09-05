@@ -551,12 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-b. **The carry is read, not calculated.** `carryCalculator.ts` (138 lines) is an invented
-    spread/yield world beside the cleared one: policy + 50bp "repo", + 40bp, + 20bp, a 375bp loan
-    margin and a 150bp CDS by default, 0.8%/1.5% short drags. A position's carry is its paper's
-    own coupon or margin (the tranche's terms) or the equity's dividend, less its financing at the
-    rate the world clears (`repoRateAnnual`), and a short's borrow at the securities-lending book's
-    fee. Reads only.
 26-c. **A name with no protection book has no CDS spread.** `stage08-back.ts:1910` falls back to
     the five-year cash spread, destroying the basis by construction; `companyGenerator.ts:539`
     seeds the CDS as `oas ± random`. `Company.cdsSpreadBps` is undefined until the protection
@@ -1388,6 +1382,18 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-b — THE CARRY IS READ, NOT CALCULATED.** `carryCalculator.ts` (138 lines, deleted) was an
+  invented spread/yield world beside the cleared one: policy + 50bp "repo" for equity, + 40bp for
+  bonds, + 20bp for sovereigns, a 375bp loan margin and a 150bp CDS by default, 0.8%/1.5% short
+  drags, a 1.8% dividend yield when the company had none. A position's weekly carry is now a read
+  (`12-portfolio:carryRead`): what its paper pays — the tranche's own coupon or rate-plus-margin
+  on FACE (`trancheTerms`), a sovereign's own coupon, an equity's own dividend on value — less what
+  holding it costs at the rate this world clears, the region's GC repo rate (`repoRateAnnual`, one
+  owner); a short pays the borrow fee the securities-lending book struck for that name or tranche
+  (`borrowFeeBpsByCompanyId`) plus the income it owes, and a short with no borrow struck is a
+  defect, not a free position. `Position.expectedWeeklyCarryLocal` (declared, never written)
+  deleted. Gates green; no run (rule 11).
 
 **26-a — THE PLAYER'S MARKS ARE THE REGISTER'S PRINTS.** `12-portfolio` marked a sovereign
   position through `priceSovereignBond` — the fitted curve at the position's remaining tenor,

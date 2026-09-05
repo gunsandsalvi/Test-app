@@ -55,7 +55,6 @@ export interface Position {
   unrealizedPnL: number;
   realizedPnL: number;
   weeklyFinancingCost: number;
-  expectedWeeklyCarryLocal?: number;
   
   // Delta / DV01
   delta?: number;
