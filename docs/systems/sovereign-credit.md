@@ -202,7 +202,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | **D2 the yield is DERIVED from the price and never sets it** | `src/domain/pricing/bond.ts:yieldFromPrice` | ✅ |
 | D3 the curve is a fit through observed points | `src/engine/simulation/stages/sovereign-curve.ts:runSovereignCurveStage` | ✅ |
 | **D3.a one owner of the curve** | `src/engine/simulation/stages/sovereign-curve.ts:runSovereignCurveStage` | ✅ |
-| D3.b a point is a trade, or is labelled as interpolated | `src/engine/nelsonSiegel.ts:calculateNelsonSiegelZeroRate` | ❌ |
+| D3.b a point is a trade, or is labelled as interpolated | `src/engine/nelsonSiegel.ts:curvePointAt` | ✅ |
 | D4 it is the benchmark other credit is spread to | `src/domain/pricing/bond.ts:zeroRateAt` | ✅ |
 | D5 repo collateral, at the smallest haircut of any asset | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
 | D6 VERIFY the bid-offer is a consequence, not a prior | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
@@ -244,7 +244,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 
 ## 3. THE DIFF
 
-**74 rows: 38 ✅, 11 ⚠️, 25 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
+**74 rows: 39 ✅, 11 ⚠️, 24 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
 drifted three times by hand (25/15/27 against 28/12/27, then 30/13/25 against 31/12/25 in the very
 paragraph that lectured about drift): `check-atlas.sh` proves a citation RESOLVES and can say
 nothing about whether a mark is TRUE, which is §5's lesson, and the test is the answer to it.
@@ -403,7 +403,7 @@ fail and withdraws the unplaced paper. That is the more honest mechanism. But th
 survivable here is the overdraft, not a dealer's obligation — so the node is ❌ and the tree's own
 claim should be revisited when A3.b is fixed.
 
-### ✅ D3.a (closed) / ❌ D3.b / D6 — THE CURVE HAD TWO OWNERS AND THE SPREAD HAS NONE
+### ✅ D3.a / D3.b (both closed) / ❌ D6 — THE CURVE HAD TWO OWNERS, ITS POINTS HAD NO PROVENANCE, AND THE SPREAD HAS NONE
 
 D3.a is closed by §3.13-SOV row 5. It was: `07f` refitted `yieldCurveParams` through its bills plus
 four SYNTHETIC points read back off `zeroRates`, then wrote only `tenor3M` and left 2Y–30Y at 07c's
@@ -412,12 +412,22 @@ from the other, with `P6` measuring all twenty points disagreeing. `sovereign-cu
 owner now: both sessions clear against the standing curve and deposit what they observed, and it
 fits once through all of it and publishes every field as a read.
 
-D3.b is the same defect one level down and is not yet in a step: `calculateNelsonSiegelZeroRate`
-is called at 15 sites to produce a rate for a tenor nobody traded — a coupon at `11-fiscal:615,656`,
-a make-whole discount rate at `call-protection.ts:96`, a refinancing's fair rate at
-`stage08-back.ts:1432` — and **no consumer can tell an interpolated point from a cleared one**,
-because the return type is a number. Worth adding to step 25: the fit should return points that
-carry their own provenance.
+D3.b is closed by §9.25. It was the same defect one level down: `calculateNelsonSiegelZeroRate`
+produced a number for any tenor, and no consumer could tell a trade from the fit's opinion. Now
+`Region.sovereignCurve` records the week and the tenors the standing fit was made through, and
+`nelsonSiegel.ts:curvePointAt` hands back a point with its provenance — `TRADED` (a tranche within
+a week of that tenor cleared in the fit's week), `INTERPOLATED` between two trades, `EXTRAPOLATED`
+beyond them, `UNTRADED` on the seed's curve. The coupon of a new issue (`11-fiscal`) and the
+make-whole's discount rate (`stage08-back.ts`) read a point rather than a number. Two things the
+provenance found on the way in: an uncleared BILL used to deposit `zeroRates.tenor3M` — the previous
+fit's own output, at the wrong tenor — as an observation (D3.a's shape inside the fit), and a bond
+book with nothing to trade deposited the solver's bracket while the price store refused it; only a
+trade is a point now. And both sessions anchor a tranche on its OWN last print, taking the curve's
+point only for paper that has never traded. Still reading the fit as a number: the player's
+position marks (`12-portfolio`, `priceSovereignBond` / `priceCorporateBond`) and
+`domain/pricing/bond.ts:zeroRateAt`, which interpolates linearly between the five published
+points of the fit — a second interpolator over one curve, a lead for `bond.md`'s benchmark row
+rather than a defect of this tree.
 
 D6 is the node this tree states most sharply and the code contradicts most plainly.
 `dealer-desk.ts:56`'s `DESK_SPREAD_BPS_BY_BOOK` states the sovereign spread as a constant, which is

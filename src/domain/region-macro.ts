@@ -990,6 +990,10 @@ export interface Region {
     tenor10Y: number;
     tenor30Y: number;
   };
+  /** §3.25 — what the standing fit was made through: the week, and the tenors that cleared in
+   *  it. A point read off the curve says from this whether it is a trade or the fit's opinion
+   *  (`nelsonSiegel.ts:curvePointAt`). The seed's curve has traded nothing. */
+  sovereignCurve: { fittedWeek: number; tradedTenorsYears: number[] };
   historicalZeroCurves: {
     week: number;
     tenor3M: number;

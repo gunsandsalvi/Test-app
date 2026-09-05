@@ -1257,6 +1257,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     tradeBalance: region.tradeBalance ?? 0,
     yieldCurveParams: newCurveParams,
     zeroRates: newZeroRates,
+    sovereignCurve: region.sovereignCurve,
     weather: updatedWeather,
     historicalPolicyRates: histPolicy,
     historicalInflation: histInf,

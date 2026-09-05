@@ -38,6 +38,11 @@ export function runSovereignCurveStage(ctx: WeeklyStepContext): void {
     // region's term structure that does not move week to week.
     const fitted = fitNelsonSiegelParams(points, reg.yieldCurveParams.lambda);
     reg.yieldCurveParams = fitted;
+    // §3.25: the tenors this fit was made through, so a point read off it carries its provenance.
+    reg.sovereignCurve = {
+      fittedWeek: ctx.nextWeek,
+      tradedTenorsYears: [...new Set(points.map((p) => p.tenorYears))].sort((a, b) => a - b),
+    };
     reg.zeroRates = {
       ...reg.zeroRates,
       ...Object.fromEntries(PUBLISHED_TENORS.map(([field, years]) => [field, calculateNelsonSiegelZeroRate(years, fitted)])),

@@ -1,7 +1,7 @@
 import { stashOpeningCash, stashSeedHouseholdLine, stashSeedGovLadder, stashSeedCentralBankBook, stashSeedSovereignBookLocal } from '../ledger/accounts';
 import { govBondTrancheId } from '../../domain/sovereign-id';
 import { SEED_BUSINESS_LOAN_BOOK_TO_GDP, SEED_CONSUMER_LOAN_BOOK_TO_GDP } from '../../domain/stated';
-import { calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
+import { calculateTenorZeroRates, curvePointAt, TradedCurve } from '../nelsonSiegel';
 import { openingSovereignRating } from './evolution';
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, SmePool, Industry, GovDebtTranche } from '../../types';
@@ -324,6 +324,8 @@ function buildRegion(regionId: RegionId): Region {
 
   const yieldCurveParams = getRegionYieldCurveParams(regionId);
   const zeroRates = calculateTenorZeroRates(yieldCurveParams);
+  // §3.25: the seed's curve has traded nothing; every point read off it says so.
+  const sovereignCurve: TradedCurve & { tradedTenorsYears: number[] } = { fittedWeek: 0, tradedTenorsYears: [] };
   const neutralRate = getRegionNeutralRate(regionId);
   const policyRate = getRegionInitialPolicyRate(regionId);
   const gdpGrowth = getRegionProductivityGrowth(regionId);
@@ -364,7 +366,7 @@ function buildRegion(regionId: RegionId): Region {
   const govDebtTranches: GovDebtTranche[] = GOV_DEBT_TENOR_WEIGHTS.map(({ tenorYears, tenorWeeks, weight }) => ({
     id: govBondTrancheId(regionId, tenorYears, 'INIT'),
     principalLocal: Math.round((totalGovDebtLocal * weight)),
-    couponRate: Number(calculateNelsonSiegelZeroRate(tenorYears, yieldCurveParams).toFixed(4)),
+    couponRate: Number(curvePointAt(tenorYears, yieldCurveParams, sovereignCurve).rate.toFixed(4)),
     // §3.13-SOV: the two dates are ONE span, so they are rounded ONCE. Rounding each end
     // separately made an odd tenor a week longer than it claimed — a 13-week bill seeded at
     // origination −7 and maturity +7 is a 14-week bill, and `(maturity − origination) / 52` then
@@ -655,6 +657,7 @@ function buildRegion(regionId: RegionId): Region {
     weather: INITIAL_WEATHER[regionId],
     yieldCurveParams,
     zeroRates,
+    sovereignCurve,
     historicalZeroCurves: [{ week: 1, ...zeroRates }],
     wealthDistribution: seedWealthDistribution,
     housingMarket: createHousingMarket(regionId, estimatedHouseholdIncomeLocal, totalPopulation),

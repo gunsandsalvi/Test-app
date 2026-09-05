@@ -176,7 +176,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         id: b.key,
         outstandingLocal: outstandingByBond.get(b.key) ?? 0,
         tradableFloatLocal: outstandingByBond.get(b.key) ?? 0,
-        currentStat: billPriceAtYieldBps(b, billCurrentYieldBps(b)),
+        // §3.25: the bill's own last print where it has one; the standing curve's point — the
+        // fit's opinion at its tenor — only for paper that has never traded.
+        currentStat: clearedPriceOf(ctx.v2, b.key) ?? billPriceAtYieldBps(b, billCurrentYieldBps(b)),
         statKind: 'PRICE_LIKE',
         durationYears: b.years,
       }));
@@ -500,11 +502,12 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const placedLocal = Math.max(0, result.primaryOutcomeById.get(b.key)?.marketTakeLocal ?? 0);
         const traded = (inst?.tradableFloatLocal ?? 0) > 0 || placedLocal > 0;
         if (px !== undefined && traded && px > 0 && isFinite(px)) setClearedPrice(ctx.v2, b.key, px);
-        return {
-          tenorYears: b.years,
-          yield: px === undefined ? reg.zeroRates.tenor3M : billYieldFromPrice(px, b.years),
-        };
-      });
+        // §3.25: only a TRADE is a point on the curve. A bill that did not clear used to deposit
+        // `zeroRates.tenor3M` — the previous fit's own output, at the wrong tenor — as if it had
+        // been observed, which is D3.a's defect one level down.
+        if (px === undefined || !traded || !(px > 0) || !isFinite(px)) return undefined;
+        return { tenorYears: b.years, yield: billYieldFromPrice(px, b.years) };
+      }).filter((p): p is { tenorYears: number; yield: number } => p !== undefined);
       // §3.13-SOV row 5 / §3.25 — the bill session deposits what it cleared and fits nothing. It
       // used to refit `yieldCurveParams` through these points plus four SYNTHETIC ones read off
       // `zeroRates` — a fit through the previous fit's own output — and then write only `tenor3M`,
@@ -516,7 +519,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       if (process.env.BILL_TRACE === '1') {
         console.log(`  [bill-trace] ${regionId} w${ctx.nextWeek}: ` + activeBills.map((b) => {
           const px = result.printById.get(b.key)?.stat;
-          return `${b.key} px=${px === undefined ? 'none' : px.toFixed(8)} y=${(billPoints.find((p) => p.tenorYears === b.years)!.yield * 100).toFixed(4)}%`;
+          const pt = billPoints.find((p) => p.tenorYears === b.years);
+          return `${b.key} px=${px === undefined ? 'none' : px.toFixed(8)} y=${pt ? (pt.yield * 100).toFixed(4) + '%' : 'no trade'}`;
         }).join(' | '));
       }
 

@@ -143,3 +143,52 @@ export function priceSovereignBond(
     dv01,
   };
 }
+
+/**
+ * §3.25 — A CURVE POINT SAYS WHETHER IT WAS TRADED OR INTERPOLATED.
+ *
+ * The fit is one owner's (`sovereign-curve.ts`), made once a week through every point the week's
+ * sessions actually cleared. A rate read off it at an arbitrary tenor is a real fact only where a
+ * trade stood; everywhere else it is the fit's opinion between (or beyond) the trades. The number
+ * alone could not say which — a coupon, a make-whole discount, a refinancing's fair rate all read
+ * `calculateNelsonSiegelZeroRate` and got a number — so a consumer that must not price off an
+ * invented point could not tell. A point now carries its provenance.
+ */
+export type CurvePointProvenance =
+  /** A tranche at this tenor cleared in the week the standing fit was made. */
+  | { kind: 'TRADED'; week: number; tenorYears: number }
+  /** The fit between two traded tenors. */
+  | { kind: 'INTERPOLATED'; week: number; between: [number, number] }
+  /** The fit beyond the nearest traded tenor. */
+  | { kind: 'EXTRAPOLATED'; week: number; nearest: number }
+  /** Nothing has ever cleared: the seed's curve. */
+  | { kind: 'UNTRADED' };
+
+export interface CurvePoint { rate: number; provenance: CurvePointProvenance }
+
+/** What the standing fit was made through: the week, and the tenors that traded in it. */
+export interface TradedCurve { fittedWeek: number; tradedTenorsYears: readonly number[] }
+
+/** Two tenors are one rung on this clock when they are within a week of each other (rule 8). */
+const CLOCK_WEEK_YEARS = 1 / 52;
+
+export function curvePointAt(tenorYears: number, params: NelsonSiegelParams, traded: TradedCurve): CurvePoint {
+  const rate = calculateNelsonSiegelZeroRate(tenorYears, params);
+  const tenors = traded.tradedTenorsYears;
+  if (tenors.length === 0) return { rate, provenance: { kind: 'UNTRADED' } };
+  let nearest = tenors[0];
+  let below: number | undefined;
+  let above: number | undefined;
+  for (const t of tenors) {
+    if (Math.abs(t - tenorYears) < Math.abs(nearest - tenorYears)) nearest = t;
+    if (t <= tenorYears && (below === undefined || t > below)) below = t;
+    if (t >= tenorYears && (above === undefined || t < above)) above = t;
+  }
+  if (Math.abs(nearest - tenorYears) <= CLOCK_WEEK_YEARS + 1e-12) {
+    return { rate, provenance: { kind: 'TRADED', week: traded.fittedWeek, tenorYears: nearest } };
+  }
+  if (below !== undefined && above !== undefined) {
+    return { rate, provenance: { kind: 'INTERPOLATED', week: traded.fittedWeek, between: [below, above] } };
+  }
+  return { rate, provenance: { kind: 'EXTRAPOLATED', week: traded.fittedWeek, nearest } };
+}

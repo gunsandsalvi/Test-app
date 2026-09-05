@@ -24,7 +24,7 @@ import { isActiveCompany, isPubliclyListed, ANTITRUST_SHARE_THRESHOLD, peakCateg
 import { callProtectionForIssue, callPricePerDollar } from '../domain/call-protection';
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
 import { industryOfSubUnit, firmInputIntensities, financingProfileOf } from '../domain/industry-registry';
-import { calculateNelsonSiegelZeroRate } from '../engine/nelsonSiegel';
+import { curvePointAt } from '../engine/nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../engine/pricing';
 import { annuityFactor, zeroRateAt } from '../domain/pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../engine/formatters';
@@ -1351,7 +1351,9 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       if (!(amountLocal > 0)) return 0;
       // §3.18-ii: the rung's own remaining life — a live rung has at least the clock's one week.
       const remainingYears = Math.max(1 / 52, (TS.maturityWeek[r] - state.currentWeek) / 52);
-      const riskFree = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams);
+      // §3.25: the make-whole is a contractual formula on the curve, so the fit's point is what
+      // it discounts at — and the point says whether that tenor traded.
+      const riskFree = curvePointAt(remainingYears, reg.yieldCurveParams, reg.sovereignCurve).rate;
       return amountLocal * (callPricePerDollar(viewOf(r), state.currentWeek, riskFree) - 1);
     };
     /**

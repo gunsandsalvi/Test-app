@@ -15,7 +15,7 @@ import { materializeGovLadder, ladderRowsOf, trancheIdOf } from '../../../engine
 import { govBillTrancheId, govBondTrancheId } from '../../../domain/sovereign-id';
 import { GameState, RegionId, GovDebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
-import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
+import { curvePointAt } from '../../nelsonSiegel';
 import { generateWeeklyNews } from '../../newsGenerator';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
@@ -630,7 +630,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         newTranches.push({
           id: govBillTrancheId(regionId, weeks, nextWeek),
           principalLocal: principal,
-          couponRate: Number((tenorYears <= 0.3 ? reg.zeroRates.tenor3M : calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams)).toFixed(4)),
+          // §3.25: the coupon is struck on the standing curve's point at the bill's tenor — a
+          // trade where one stood, the fit's opinion elsewhere; the auction prices the paper.
+          couponRate: Number(curvePointAt(tenorYears, reg.yieldCurveParams, reg.sovereignCurve).rate.toFixed(4)),
           originationWeek: nextWeek,
           maturityWeek: nextWeek + weeks,
           // §3.13-SOV: a sovereign is a bond and says so. FIXED because its coupon is locked at
@@ -675,7 +677,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           newTranches.push({
             id: govBondTrancheId(regionId, tenorYears, nextWeek),
             principalLocal: principal,
-            couponRate: calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams), // priced off the region's own real curve
+            couponRate: curvePointAt(tenorYears, reg.yieldCurveParams, reg.sovereignCurve).rate, // §3.25: the standing curve's point at the tenor; the auction prices the paper
             originationWeek: nextWeek,
             maturityWeek: nextWeek + tenorWeeks,
               // §3.13-SOV: a sovereign is a bond (`bond.md` N5.a fixed, N13.a all claims equal).

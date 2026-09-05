@@ -52,6 +52,7 @@ export const curve = defineObject<Region>({
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           {TENORS.map((t) => <KV key={t} k={t.toLowerCase()} v={pctLevel(tenorRate(r, t), 2)} />)}
+          <KV k="traded this week" hint="the rest is the fit" v={r.sovereignCurve && r.sovereignCurve.tradedTenorsYears.length > 0 ? r.sovereignCurve.tradedTenorsYears.map((y) => (y < 1 ? `${Math.round(y * 52)}w` : `${y.toFixed(y % 1 === 0 ? 0 : 1)}y`)).join(' · ') : 'nothing'} />
           <KV k="overnight repo" v={pctLevel(r.repoRateAnnual, 2)} />
           <KV k="expected inflation" hint="the market's, annual" v={pctLevel(r.expectedInflation, 2)} />
           <KV k="dot plot" hint="1y · 2y" v={`${pctLevel(r.dotPlot1Y, 2)} · ${pctLevel(r.dotPlot2Y, 2)}`} />

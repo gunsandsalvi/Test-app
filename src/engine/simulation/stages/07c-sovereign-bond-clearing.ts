@@ -338,7 +338,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         b.outstandingLocal - (nonParticipantById.get(b.id) ?? 0) - (unheldById.get(b.id) ?? 0)),
       // PUB: the treasury's own offering — every dollar of THIS BOND no book holds yet.
       primaryOfferingLocal: unheldById.get(b.id) ?? 0,
-      currentStat: priceAtYieldBps(b, curveYieldBpsOf(b)), // price per unit of face
+      // §3.25: the bond's own last print where it has one; the standing curve's point only for
+      // paper that has never traded. Price per unit of face.
+      currentStat: clearedPriceOf(ctx.v2, b.id) ?? priceAtYieldBps(b, curveYieldBpsOf(b)),
       statKind: 'PRICE_LIKE',
       durationYears: b.years,
       // No floor or ceiling — nominal sovereign yields have gone genuinely negative in real
@@ -590,6 +592,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         // §3.21: a book with nothing to trade has no clearing level, and what comes back is the
         // numerical bracket. Such a bond KEEPS the price it had rather than taking that print.
         if (traded && px > 0 && isFinite(px)) setClearedPrice(ctx.v2, b.id, px);
+        // §3.25: and only a trade is a point on the curve — the bracket of a book with nothing
+        // to trade used to be deposited as an observation while the price store refused it.
+        if (!traded || !(px > 0) || !isFinite(px)) return undefined;
         return { tenorYears: b.years, yield: yieldFromPrice(termsOf(b), px) };
       })
       .filter((p): p is { tenorYears: number; yield: number } => p !== undefined);

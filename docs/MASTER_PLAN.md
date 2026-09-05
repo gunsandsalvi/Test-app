@@ -551,15 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-25. **A CURVE POINT SAYS WHETHER IT WAS TRADED OR INTERPOLATED.** *(The two-owners half is DONE —
-    §9.13-SOV row 5. `sovereign-curve.ts` fits once through every cleared point and publishes every
-    field as a read of it, and `P6` is now the guard on that rather than a measurement of it.)*
-    What is left is the atlas's D3.b, one level down: `calculateNelsonSiegelZeroRate` is called at
-    15 sites to produce a rate for a tenor nobody traded — a coupon at `11-fiscal`, a make-whole
-    discount at `call-protection.ts:96`, a refinancing's fair rate at `stage08-back.ts:1432` — and
-    **no consumer can tell an interpolated point from a cleared one, because the return type is a
-    number.** A fitted curve should hand back points that carry their own provenance, so a
-    mechanism that must not price off an invented point can say so.
 26. **The remaining formula prices, deleted — and WHAT PLANT IS, decided once.** *(11e's last
     slice folded in here, deliberately: the seed and every birth assign `grossPPEUSD` with no
     wire and there is no asset kind for plant — `ASSET_KINDS` carries `HOUSE`, not plant. You
@@ -1380,6 +1371,23 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**25 — A CURVE POINT SAYS WHETHER IT WAS TRADED OR INTERPOLATED.** `Region.sovereignCurve` records
+  the week and the tenors the standing fit was made through (`sovereign-curve.ts` writes it beside
+  the fit; the seed's has traded nothing), and `nelsonSiegel.ts:curvePointAt` hands back a point
+  with its provenance — TRADED where a tranche within a week of the tenor cleared in the fit's
+  week (the clock's own resolution, rule 8), INTERPOLATED between two trades, EXTRAPOLATED beyond
+  them, UNTRADED on the seed's curve. A new issue's coupon (`11-fiscal`, bills and bonds) and the
+  make-whole's discount rate (`stage08-back.ts`) read a point, not a number; the curve view lists
+  the tenors that traded. Found on the way in and fixed: an uncleared bill deposited
+  `zeroRates.tenor3M` — the previous fit's own output, at the wrong tenor — as an observed point
+  (D3.a's shape inside the fit), and a bond book with nothing to trade deposited the solver's
+  bracket while the price store refused it; only a trade is a point on the curve now. Both
+  sessions anchor a tranche on its OWN last print (`clearedPriceOf`) and take the curve's point only
+  for paper that has never traded. Still reading the fit as a bare number: the player's position
+  marks (`12-portfolio`) and `pricing/bond.ts:zeroRateAt`'s linear interpolation between the five
+  published points — recorded in sovereign-credit's D3 diff as leads. sovereign-credit D3.b ❌→✅.
+  `test/curve-provenance.test.ts`. Gates green; no run (rule 11).
 
 **24-ii — THE SEEKERS HAVE A RESERVATION.** A matched seeker accepts nothing below its outside
   option — the benefit this world already pays it, `UNEMPLOYMENT_REPLACEMENT_RATE` of the going
