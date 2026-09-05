@@ -96,7 +96,7 @@ checked by `scripts/check-atlas.sh`.
 | C1.a acting means entering a market that must clear | `src/engine/simulation/trade.ts:executionDetails` | ❌ |
 | C2 an action requires the means | `src/engine/simulation/trade.ts:updatedCash` | ❌ |
 | **C2.a FORBID no privileged actor** | `src/engine/simulation/trade.ts:adjustBankReserves` | ❌ |
-| C3 an action's consequences propagate like anyone else's | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` | ❌ |
+| C3 an action's consequences propagate like anyone else's | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` · `src/engine/carryCalculator.ts:calculateExpectedCarry` | ❌ |
 | C4 the actor is a named party in the register and the accounts | `src/domain/party.ts:PartyRef` | ❌ |
 | D1 a history that is a read, not a log that can drift | `src/ui/world.ts:Tape` | ⚠️ |
 | D2 performance computed from real positions and real prices | `src/domain/portfolio.ts:Portfolio` | ❌ |
