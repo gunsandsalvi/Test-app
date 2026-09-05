@@ -80,14 +80,15 @@ export interface Dealer {
 }
 
 // 1$ is 1$: subUnitId here is the REAL industry input category a company's own productLines/
-// CATEGORY_INPUT_REQUIREMENTS recipe draws down (see 04-input-output.ts) — not just a demand-
+// CATEGORY_INPUT_REQUIREMENTS recipe draws down (stage 05's recipe buyers) — not just a demand-
 // side price-discovery proxy. Every producedCommodityId-tagged company (see companyGenerator.ts)
 // carries a matching productLines entry for its commodity's linked subUnitId, so "the company you
 // can trade" and "the company that really supplies this industrial input" are the same named
-// actor, and stage04 sources its real weekly supply directly from these commodities' own
-// weeklySupplyUnits/spotPrice instead of an independently invented figure.
+// actor. §3.22/23: the commodity's spot and weekly units are a READ of that sub-unit's auction
+// (`domain/commodity-spot.ts`); nothing sources a sub-unit's supply from the commodity — its
+// producers make it, and stage 04's second supply into a segment pool is deleted.
 // §6: `industrial_automation` is no longer in this table — it is a plain sub-unit category
-// whose supply and demand clear in stages 04/05 like any other; the pseudo-commodity entry and
+// whose supply and demand clear in stage 05 like any other; the pseudo-commodity entry and
 // its bespoke branches in evolution.ts pretended it was a tradable spot commodity, which it
 // never was.
 // BP1a: the WORKING copy, initialized from the registry-derived base below; init calibrates it.

@@ -193,9 +193,10 @@ input bid (`computeRecipeInputNeedLocal`, same shape), the intermediate-demand s
 
 Two separate defects that compound.
 
-**The shortage is inert.** `front-core.ts:667` measures `physicalFulfillment` from the real FIFO
-draw, `:671` mins it with stage 04's `mktFulfill`, `:673` smooths it into
-`newInputSupplyConstraintFactor`, and `stage08-back.ts:2282` stores it on the company. It is then
+**The shortage is inert.** `front-core.ts` measures `physicalFulfillment` from the real FIFO
+draw, smooths it into `newInputSupplyConstraintFactor` (§9.23: stage 04's market ratio, which was
+min'd in here, is deleted with the stage — the draw is the only fulfilment now), and
+`stage08-back.ts` stores it on the company. It is then
 read by **`src/ui/functions/lines.tsx:33` and nothing else** — no production decision, no revenue
 term, no capacity term. A firm that received none of an input it needs makes exactly as much as a
 firm that received all of it. B1.b's "a shortage is a real state" is true of the field and false
@@ -233,8 +234,10 @@ new flow convention.
 ### ❌ G1 / G1.a — THERE IS NO PPI. ONE INDEX WEARS BOTH NAMES
 
 `grep -ri 'ppi\|producerPrice' src` returns nothing. The model publishes a household CPI
-(`price-index.ts`), correctly built on the **shelf** price, and one other price aggregate: stage
-04's `newPriceIndex`, which is a formula (§3 step 23) read only by the UI. So:
+(`price-index.ts`), correctly built on the **shelf** price, and no other price aggregate (§9.23
+deleted stage 04's formula index; a category carries one index, `clearedInputPriceIndex`, its own
+cleared price against its seed, and the market view reads a buyer's input prices through its
+recipe). So:
 
 - there is no production-weighted, factory-gate index at all;
 - real output is deflated by the consumer index — `11-fiscal:174`,
@@ -246,8 +249,7 @@ new flow convention.
 
 The inputs for a real PPI are all present and already measured per sub-unit:
 `demandState.exWorksUnitPriceLocal` (05-unit-bidding:2306) is the factory gate, and
-`totalUnitsSuppliedThisWeek` is the production weight. **§3 step 37-BENCHMARK** — small, and it is
-the measurement §3 step 23 will need to prove it deleted the right index.
+`totalUnitsSuppliedThisWeek` is the production weight. **§3 step 37-BENCHMARK** — small.
 
 ### ⚠️ B4 / ❌ B1.d / ⚠️ E4 — THREE THINGS THAT (MOSTLY) NEVER HAPPEN TO A UNIT
 

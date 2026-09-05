@@ -135,9 +135,9 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       // The decomposition of the worst gaps: stock by part (output, lots, transit, pool) before and
       // after, the transformations, the wires' net.
       gaps.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
-      const partsNow: Record<string, [number, number, number, number]> = {}; goodsUnitsByKey(state, partsNow);
+      const partsNow: Record<string, [number, number, number]> = {}; goodsUnitsByKey(state, partsNow);
       gaps.slice(0, 5).forEach(([key, g]) => {
-        const f = flows[key]; const pn = partsNow[key] ?? [0, 0, 0, 0];
+        const f = flows[key]; const pn = partsNow[key] ?? [0, 0, 0];
         const [rg, sb] = key.split('|');
         let receipts = 0;
         const byId = entities().companyById;
@@ -153,7 +153,7 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
           console.log(`  [goods-kind-trace] in by holder kind: ${kinds}; in transit now: ${(state.goodsInTransit ?? []).filter((s2) => s2.subUnitId === sb).length} consignments`);
           console.log(`  [goods-firm-trace] ${rows.length} firms off: ` + rows.slice(0, 6).map(([tk, d]: [string, number]) => `${tk} ${d.toFixed(1)} in ${(inBy[tk] ?? 0).toFixed(1)} rec ${(recBy[tk] ?? 0).toFixed(1)} [${[...(reasonsBy[tk] ?? [])].join(',')}] ${byTicker.get(asTicker(tk))?.isDefaulted ? 'DEAD' : ''}${byTicker.get(asTicker(tk))?.sector ?? ''}`).join(' | '));
         }
-        console.log(`  [goods-trace] w${week} ${key.replace('|', ' ')}: wires in ${(w.goodsInUnitsByKey?.[key] ?? 0).toFixed(1)} out ${(w.goodsOutUnitsByKey?.[key] ?? 0).toFixed(1)} delivered ${(w.goodsDeliveredByKey?.[key] ?? 0).toFixed(1)} | lot receipts ${receipts.toFixed(1)} | gap ${g.toFixed(1)} | stock prev ${(prev.goodsUnitsByKey![key] ?? 0).toFixed(1)} now ${(now[key] ?? 0).toFixed(1)} (out ${pn[0].toFixed(1)} lots ${pn[1].toFixed(1)} transit ${pn[2].toFixed(1)} pool ${pn[3].toFixed(1)}) | produced ${(f?.producedUnits ?? 0).toFixed(1)} consumed ${(f?.consumedUnits ?? 0).toFixed(1)} scrapped ${(f?.scrappedUnits ?? 0).toFixed(1)} | wires net ${(nets[key] ?? 0).toFixed(1)}`);
+        console.log(`  [goods-trace] w${week} ${key.replace('|', ' ')}: wires in ${(w.goodsInUnitsByKey?.[key] ?? 0).toFixed(1)} out ${(w.goodsOutUnitsByKey?.[key] ?? 0).toFixed(1)} delivered ${(w.goodsDeliveredByKey?.[key] ?? 0).toFixed(1)} | lot receipts ${receipts.toFixed(1)} | gap ${g.toFixed(1)} | stock prev ${(prev.goodsUnitsByKey![key] ?? 0).toFixed(1)} now ${(now[key] ?? 0).toFixed(1)} (out ${pn[0].toFixed(1)} lots ${pn[1].toFixed(1)} transit ${pn[2].toFixed(1)}) | produced ${(f?.producedUnits ?? 0).toFixed(1)} consumed ${(f?.consumedUnits ?? 0).toFixed(1)} scrapped ${(f?.scrappedUnits ?? 0).toFixed(1)} | wires net ${(nets[key] ?? 0).toFixed(1)}`);
       });
     }
     if (gaps.length > 0) {

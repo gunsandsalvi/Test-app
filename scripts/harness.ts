@@ -128,7 +128,6 @@ import { HouseholdLoanPool, MortgageVintage } from '../src/domain/banking';
 import { executeTrade } from "../src/engine/simulation/trade";
 import { isPubliclyListed, isActiveCompany, banksOf } from '../src/domain/company';
 import { ensureV2 } from '../src/engine2/world';
-import { segmentStockLocal } from '../src/engine/ledger/goods-ledger';
 import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
 import { issuedSharesOf, etfSharesOutstandingOf } from '../src/engine2/instruments';
 import { derivativesOf, repoBookOf, publishRepoBook, tradeInvoicesOf, bankAtHouseLocal, houseViewOf } from '../src/engine/ledger/contract-ledger';
@@ -2064,7 +2063,7 @@ const spiralModule: HarnessModule = {
       }
       REGION_IDS_SEED_ORDER.forEach((region) => {
         const r = state.regions[region];
-        const movers: { id: string; ratio: number; p: number; idx: number; inv: number; short: number }[] = [];
+        const movers: { id: string; ratio: number; p: number; idx: number; short: number }[] = [];
         Object.entries(r.categoryDemand).forEach(([id, cd]) => {
           const p = cd.unitPriceLocal ?? 0;
           const key = `${region}:${id}`;
@@ -2074,7 +2073,6 @@ const spiralModule: HarnessModule = {
             const demanded = cd.totalUnitsDemandedThisWeek ?? 0;
             movers.push({
               id, ratio: p / prev, p, idx: cd.clearedInputPriceIndex,
-              inv: segmentStockLocal(ensureV2(state), region, id),
               short: demanded > 0 ? supplied / demanded : 1,
             });
           }
@@ -2082,7 +2080,7 @@ const spiralModule: HarnessModule = {
         });
         movers.sort((a, b) => b.ratio - a.ratio);
         const line = movers.slice(0, 5)
-          .map((m) => `${m.id} x${m.ratio.toFixed(2)} p${m.p.toFixed(0)} idx${m.idx.toFixed(1)} s/d${m.short.toFixed(2)} inv${(m.inv / 1e9).toFixed(1)}B`)
+          .map((m) => `${m.id} x${m.ratio.toFixed(2)} p${m.p.toFixed(0)} idx${m.idx.toFixed(1)} s/d${m.short.toFixed(2)}`)
           .join(' | ');
         console.log(`  [px] w${w} ${region} ${line}`);
       });

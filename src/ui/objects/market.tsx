@@ -5,8 +5,7 @@ import { Card, KV, Link, Stat, StatGrid } from '../ui';
 import { money, pctLevel, num, count } from '../format';
 import { World, regionOf, tapeSeries } from '../world';
 import { REGION_IDS, type RegionId } from '../../domain/geography';
-import { ensureV2 } from '../../engine2/world';
-import { segmentStockLocal } from '../../engine/ledger/goods-ledger';
+import { CATEGORY_INPUT_REQUIREMENTS } from '../../domain/market-microstructure';
 import { INDUSTRY_REGISTRY, industryOfSubUnit } from '../../domain/industry-registry';
 import { categoryPriceTier } from '../../domain/industry';
 import { isActiveCompany } from '../../domain/company';
@@ -93,6 +92,13 @@ export const market = defineObject<Market>({
     const mix = spec?.buyerMix;
     const ph = d.priceHistory ?? [];
     const wk = ph.length > 1 && ph[ph.length - 2] > 0 ? ph[ph.length - 1] / ph[ph.length - 2] - 1 : undefined;
+    // §3.23: what this good's makers pay for their inputs is the inputs' own cleared prices, read
+    // through the recipe — not a formula index beside the auction.
+    const recipe = Object.entries(CATEGORY_INPUT_REQUIREMENTS[m.subUnitId] ?? {});
+    const recipeWeight = recipe.reduce((s, [, w]) => s + (w ?? 0), 0);
+    const inputPriceIndex = recipeWeight > 0
+      ? recipe.reduce((s, [cat, w]) => s + (w ?? 0) * (world.state.regions[m.region as RegionId]?.categoryDemand[cat]?.clearedInputPriceIndex ?? 1), 0) / recipeWeight
+      : undefined;
     const tier = categoryPriceTier(m.subUnitId);
     return (
       <>
@@ -107,8 +113,7 @@ export const market = defineObject<Market>({
           <KV k="household spend" hint="annualised" v={money(d.householdDemandLocal)} />
           <KV k="corporate spend" hint="annualised" v={money(d.corporateDemandLocal)} />
           <KV k="ex-works price" hint="before freight" v={num(d.exWorksUnitPriceLocal)} />
-          <KV k="stock in warehouses" v={money(segmentStockLocal(ensureV2(world.state), m.region as RegionId, m.subUnitId))} />
-          <KV k="input cost pressure" v={num(d.inputCostPressure, 2)} />
+          <KV k="input prices" hint="vs seed, recipe-weighted" v={inputPriceIndex !== undefined ? num(inputPriceIndex, 2) : '—'} />
           <KV k="named sellers" v={count(sellers.length)} onTap={() => nav.go('sellers')} />
         </Card>
         <FunctionTiles nav={nav} tiles={[

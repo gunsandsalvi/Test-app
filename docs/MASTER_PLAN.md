@@ -222,7 +222,7 @@ find a section, and do not add new `§7.N` ids — a new decision cites the rule
 reason in a comment; `stage-deps.ts` annotates deliberate backward edges. Groups:
 - **Macro & credit** — 01-macro-feedback, 02-region-macro, 02b-bank-diversification, labor-market,
   prime-brokerage. Region evolution, the administered policy rate, per-bank books, GC repo, labour.
-- **Real economy** — 03-category-demand, 04-input-output, trade-settlement, goods-arrival,
+- **Real economy** — 03-category-demand, trade-settlement, goods-arrival,
   sourcing-intent, freight-clearing, **05-unit-bidding** (THE goods auction: five books per
   sub-unit, per-lot settlement, contracts, capex bids), 06-fx-and-trade, 07-commodities.
 - **Financial books** — 07b corp bonds, 07c sovereigns (the curve's owner), 07d loans, 07f bills+CP,
@@ -551,12 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-23. **The input price index dies into the cleared price.** `04-input-output.ts:129` sets a price
-    index by formula and smooths it, a second representation of what stage 05 actually clears, with
-    no cash leg and a third inventory stock behind it. *(§9.22: 04's production line now reads the
-    commodity's cleared supply value — the commodity's share of LAST week's cleared supply, a loop
-    with a one-week lag — and carries the region's weather yield loss; both go with the block when
-    the index dies.)*
 24. **Labour clears on the wage.** `labor-market.ts:587-596` applies one fill ratio per occupation
     identically to every employer, so `offeredWageIndex` has ZERO effect on hiring — paying more only
     lowers quits. Labour is rationed by posted vacancies, not cleared on price, and the comment at
@@ -1390,6 +1384,25 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**23 — THE INPUT PRICE INDEX DIES INTO THE CLEARED PRICE.** Stage `04-input-output` is deleted
+  whole, because every part of it was a second representation of what stage 05 clears: its demand
+  was `demandLevelAnnualLocal × recipe intensity / 52` — the same Leontief intermediate demand
+  stage 03 folds into the level and 05 clears as named recipe buyers' bids; its supply was the
+  commodity's `weeklySupplyUnits × spotPrice` (since §9.22 a share of LAST week's cleared supply, a
+  loop); its stock was a segment-pool row that 04 alone produced into, drew from and decayed
+  (`setSegmentStock`/`segmentStock*`, the seed's tenth-of-demand opening stock and
+  `SEED_OPENING_STOCK_SHARE`, the audit snapshot's pool term — all gone); its price index
+  `newPriceIndex = 0.85 × old + 0.15 × (1 + 0.4 × (bid/available − 1))` was read by nothing but the
+  market view; its fulfilment ratio was min'd into the kernel's `newInputSupplyConstraintFactor`
+  beside the real FIFO draw's (both kernels, `mktFulfill` lane deleted; the factor is the draw's
+  alone and is still inert — goods B1.b, 37-SMALL). `CategoryDemandState` loses
+  `inputCostPressure`, `upstreamScarcityIndex`, `_fulfillmentRatio`; a category carries ONE index,
+  `clearedInputPriceIndex` (05's cleared landed price against its seed), and the market view reads
+  a buyer's input prices as its inputs' cleared indices weighted by its recipe. The weather yield
+  loss lives in 05's pipeline alone. commodities-spot D2/D2.a/F2 re-cited (still ❌: the
+  commodity's own stock is 37-COMMODITY's), E1 and the goods B1.b/G1 diffs updated. Gates green;
+  no run (rule 11).
 
 **22 — COMMODITY SPOT IS A READ OF THE GOODS AUCTION.** `evolveCommodity` multiplied last week's
   spot by `exp(0.4 × (growth + noise) + 0.12 × (clearingRatio − 1))`, reading the sub-unit's cleared

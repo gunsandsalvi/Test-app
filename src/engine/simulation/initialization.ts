@@ -81,8 +81,6 @@ import { newWireJournal, setActiveWireJournal, setActiveWireWorld, hasActiveWire
 import { wireWorldOf } from '../ledger/wire-world';
 import { registerCompanyEquity, registerFundShares, seedIssuedSharesOf } from '../ledger/instrument-ledger';
 import { stashSeedCommitments, drainSeedCommitments } from '../ledger/contract-ledger';
-import { produceGoods, setSegmentStock } from '../ledger/goods-ledger';
-import { SEED_OPENING_STOCK_SHARE } from '../../domain/stated';
 import { issuedSharesOf } from '../../engine2/instruments';
 import { seedLadder } from '../ledger/tranche-ledger';
 import { seedBook, issuerOfHoldingRow } from '../ledger/holdings-ledger';
@@ -391,19 +389,6 @@ function openSeededBooks(state: GameState): void {
     // §3.13-BOOK d4c-vi: the private funds' LP commitments, struck on the contract store now
     // that every institution they name resolves.
     drainSeedCommitments(v2, state.institutionalEntities ?? []);
-    // §3.13-BOOK f5: every category's opening stock — a tenth of its annual demand, at the price
-    // it opens at — on the region's segment, produced into being by the seed.
-    (Object.keys(state.regions) as RegionId[]).forEach((regionId) => {
-      const reg = state.regions[regionId];
-      if (!reg) return;
-      Object.entries(reg.categoryDemand).forEach(([sub, cd]) => {
-        const price = Math.max(1e-9, (cd as { unitPriceLocal?: number }).unitPriceLocal ?? 1);
-        const units = (cd.demandLevelAnnualLocal * SEED_OPENING_STOCK_SHARE) / price;
-        if (!(units > 0)) return;
-        produceGoods(regionId, sub, units);
-        setSegmentStock(v2, regionId, sub, units, price);
-      });
-    });
     // §3.13-BOOK d3a — THE CENTRAL BANKS' BOOKS, opened by wire like every other holder's: each
     // bond the seed's close sized (`seedCentralBankBookOf`) is issued by the treasury to the
     // central bank at its face. The stash dies here; the rows are the book from now on.

@@ -30,19 +30,14 @@ export interface CategoryDemandState {
   demandGrowthAnnual: number;
   demandHistory: number[];
   crowdingIntensity: number;
-  // §3.13-BOOK f5: the category's unsold stock is a GOOD row on the region's segment
-  // (`goods-ledger.ts:segmentStockLocal`), in units; not a value here.
-  inputCostPressure: number;
   /** This category's unit price at initialization — the FIXED baseline clearedInputPriceIndex is
    *  measured against. Stored once and never rewritten (S8). */
   baseUnitPriceLocal?: number;
-  clearedInputPriceIndex: number; // 1.0 = baseline; this category's own real auction clearing price vs its baseline unit price — set unconditionally every week by 05-unit-bidding.ts for every category
-  // 04-input-output.ts's OWN smoothed upstream scarcity/glut index for its input-category
-  // categories (upstream_extraction, specialty_metals) — kept separate from
-  // clearedInputPriceIndex above (used to collide: 05-unit-bidding.ts overwrote the very same
-  // field with an unrelated same-week auction price ratio for every category, corrupting
-  // stage04's own smoothed self-reference the following week).
-  upstreamScarcityIndex?: number;
+  /** 1.0 = baseline: this category's own cleared landed price against `baseUnitPriceLocal`, set
+   *  every week by stage 05 for every category. §3.23: the ONE price index a category carries —
+   *  stage 04's formula index (`upstreamScarcityIndex`, `inputCostPressure`, `_fulfillmentRatio`)
+   *  is deleted; a buyer's input prices are its inputs' own cleared prices, read through its recipe. */
+  clearedInputPriceIndex: number;
   /**
    * What this good actually cost in this region this week: the volume-weighted average of every
    * price its buyers paid, across the local book AND their fills in the world book (XB3a). It is
@@ -85,7 +80,6 @@ export interface CategoryDemandState {
    *  §3.22: read by `domain/commodity-spot.ts` — a commodity's spot is this price, weighted by the
    *  units each origin supplied, in the numéraire. */
   exWorksUnitPriceLocal?: number;
-  _fulfillmentRatio?: number; // transient, read by AA3 same week, not persisted
   totalUnitsSuppliedThisWeek?: number;
   totalUnitsDemandedThisWeek?: number;
 }
@@ -101,15 +95,13 @@ export function createSeedCategoryDemandState(
   demandLevelAnnualLocal: number,
   demandGrowthAnnual: number,
   unitPriceLocal: number
-): CategoryDemandState & { upstreamScarcityIndex: number; unitPriceLocal: number } {
+): CategoryDemandState & { unitPriceLocal: number } {
   return {
     demandLevelAnnualLocal,
     demandGrowthAnnual,
     demandHistory: [demandLevelAnnualLocal],
     crowdingIntensity: 0.1,
-    inputCostPressure: 0,
     clearedInputPriceIndex: 1.0,
-    upstreamScarcityIndex: 1.0,
     unitPriceLocal,
     // XB3a: both books open on the bootstrap price, so week 1 is the first week either of them
     // moves. Seeding the local book anywhere else would be a §7.4 cold start — a step change on

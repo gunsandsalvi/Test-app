@@ -112,7 +112,7 @@ export function nativeFrontCore(
     S.executionQuality0, S.inputConstraint0, S.fulfillEMA0, S.recurringBase0,
     S.baselineGrowthRatioResolved, S.baselineEbitdaMarginResolved, S.openingNetPpeLocal, S.taxBasisOpenLocal,
     S.carryforwardLocal, S.usefulLifeYears, S.baselineInputRateSum, S.perWorkerAnnualLocal, S.perWorkerBaselineAnnualLocal,
-    S.mktUnitPrice, S.mktFulfill, S.mktCrowding, S.mktExists, S.suppliedMask,
+    S.mktUnitPrice, S.mktCrowding, S.mktExists, S.suppliedMask,
     S.policyRate, S.effectiveTaxRate,
     S.trStart, S.trPrincipal, S.trAnnualRate, S.trIsFloating, S.trIsFacility,
     S.trIsCP, S.trMatWeek, S.trPeriodWeeks, S.trAnchorWeek,

@@ -333,9 +333,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         demandGrowthAnnual: growthAnnual,
         demandHistory: [...prevHistory.slice(-25), newLevel],
         crowdingIntensity,
-        inputCostPressure: existingEntry?.inputCostPressure ?? 0,
         clearedInputPriceIndex: existingEntry?.clearedInputPriceIndex ?? 1.0,
-        upstreamScarcityIndex: existingEntry?.upstreamScarcityIndex ?? 1.0,
         corporateDemandLocal: corporateDemandByCategory[cat] ?? 0,
         // The household leg, measured at its owner (the cohort budgets) — stage 05's bid ladder
         // reads THIS. Capex categories have no household buyer, so absent means zero.

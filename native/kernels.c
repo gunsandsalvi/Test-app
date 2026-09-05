@@ -384,7 +384,7 @@ static napi_value FrontCore(napi_env env, napi_callback_info info){
   NEXT_F64(execQ0); NEXT_F64(inputC0); NEXT_F64(fulfillEMA0); NEXT_F64(recurringBase0);
   NEXT_F64(baseGrowthRatio); NEXT_F64(baseMarginA); NEXT_F64(openNetPpe); NEXT_F64(taxBasisOpen);
   NEXT_F64(carryOpen); NEXT_F64(usefulLife); NEXT_F64(baseInputRateSum); NEXT_F64(perWorker); NEXT_F64(perWorkerBase);
-  NEXT_F64(mktUnitPrice); NEXT_F64(mktFulfill); NEXT_F64(mktCrowding); NEXT_U8(mktExists); NEXT_U8(suppliedMask);
+  NEXT_F64(mktUnitPrice); NEXT_F64(mktCrowding); NEXT_U8(mktExists); NEXT_U8(suppliedMask);
   NEXT_F64(policyRate); NEXT_F64(effTaxRate);
   NEXT_I32(trStart); NEXT_F64(trPrincipal); NEXT_F64(trAnnualRate); NEXT_U8(trIsFloating); NEXT_U8(trIsFacility);
   NEXT_U8(trIsCP); NEXT_I32(trMatWeek); NEXT_I32(trPeriodWeeks); NEXT_I32(trAnchorWeek);
@@ -483,15 +483,6 @@ static napi_value FrontCore(napi_env env, napi_callback_info info){
       int si = plSub[p];
       avgCrowdingIntensity += (si >= 0 && mktExists[mktBase + si] ? mktCrowding[mktBase + si] : 0) * plShare[p];
     }
-    double relevantFulfillment = 1; int sawNeedingLine = 0;
-    for (int p = plLo; p < plHi; p++){
-      int si = plSub[p];
-      if (si < 0 || RECIPE_START[si] == RECIPE_START[si+1]) continue;
-      sawNeedingLine = 1;
-      double f = mktExists[mktBase + si] ? mktFulfill[mktBase + si] : 1;
-      if (f < relevantFulfillment) relevantFulfillment = f;
-    }
-    if (!sawNeedingLine) relevantFulfillment = 1;
     double physicalFulfillment = 1.0, realInputConsumptionCostUSD = 0;
     int lotRow = lotRowA[row];
     for (int p = plLo; p < plHi; p++){
@@ -549,9 +540,8 @@ static napi_value FrontCore(napi_env env, napi_callback_info info){
         for (int c2 = 0; c2 < nCosts; c2++) realInputConsumptionCostUSD += fcCosts[c2];
       }
     }
-    double combinedFulfillment = jmin(relevantFulfillment, physicalFulfillment);
     FinputCons[row] = realInputConsumptionCostUSD;
-    double newInputSupplyConstraintFactor = inputC0[row] * 0.7 + combinedFulfillment * 0.3;
+    double newInputSupplyConstraintFactor = inputC0[row] * 0.7 + physicalFulfillment * 0.3;
     for (int sh = shStart[row]; sh < shStart[row+1]; sh++){
       double rev = shSupplierRevenue[sh], inv = shInvUSD[sh];
       if (inv > rev * 0.15){

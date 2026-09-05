@@ -28,7 +28,6 @@ import { runBankDiversificationStage } from './stages/02b-bank-diversification';
 import { runCategoryDemandStage } from './stages/03-category-demand';
 import { runLaborMarketStage, runLaborReconciliationStage } from './stages/labor-market';
 import { runCentralBankStage } from './stages/central-bank';
-import { runInputOutputStage } from './stages/04-input-output';
 import { runUnitBiddingStage } from './stages/05-unit-bidding';
 import { runFxAndTradeStage } from './stages/06-fx-and-trade';
 import { runCommoditiesStage } from './stages/07-commodities';
@@ -241,7 +240,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // just struck, before the books that clear them open.
   run('relative-value', () => runRelativeValueStage(state, ctx));
   run('03-category-demand', () => runCategoryDemandStage(state, ctx));
-  run('04-input-output', () => runInputOutputStage(state, ctx));
   // XB3a: the week's first two passes. A buyer forms its sourcing plan against observed prices
   // and books the freight it implies; the rate clears against real carrier capacity; the goods
   // auction then prices every origin at the landed cost that rate produces. No lag, no iteration.

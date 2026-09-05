@@ -152,7 +152,6 @@ export interface FrontSeam {
 
   // per-week region×sub-unit market tables
   mktUnitPrice: Float64Array;   // ?? 1
-  mktFulfill: Float64Array;     // ?? 1
   mktCrowding: Float64Array;    // ?? 0
   mktExists: Uint8Array;
   suppliedMask: Uint8Array;     // region×NSUB: a real public supplier exists
@@ -297,7 +296,6 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     perWorkerAnnualLocal: lane64(n),
     perWorkerBaselineAnnualLocal: lane64(n),
     mktUnitPrice: lane64(R * NSUB),
-    mktFulfill: lane64(R * NSUB),
     mktCrowding: lane64(R * NSUB),
     mktExists: lane8(R * NSUB),
     suppliedMask: lane8(R * NSUB),
@@ -345,11 +343,9 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
       if (cd) {
         S.mktExists[at] = 1;
         S.mktUnitPrice[at] = cd.unitPriceLocal ?? 1;
-        S.mktFulfill[at] = cd._fulfillmentRatio ?? 1;
         S.mktCrowding[at] = cd.crowdingIntensity ?? 0;
       } else {
         S.mktUnitPrice[at] = 1;
-        S.mktFulfill[at] = 1;
       }
       if (supplied?.has(SUBUNITS[si])) S.suppliedMask[at] = 1;
     }
@@ -634,18 +630,9 @@ export function runFrontCore(
       avgCrowdingIntensity += (si >= 0 && S.mktExists[mktBase + si] ? S.mktCrowding[mktBase + si] : 0) * S.plShare[p];
     }
 
-    // fulfillment + FIFO over the static recipe CSR, in line order then recipe-entry order
-    let relevantFulfillment = 1;
-    let sawNeedingLine = false;
-    for (let p = plLo; p < plHi; p++) {
-      const si = S.plSub[p];
-      if (si < 0 || RECIPE_START[si] === RECIPE_START[si + 1]) continue;
-      sawNeedingLine = true;
-      const f = S.mktExists[mktBase + si] ? S.mktFulfill[mktBase + si] : 1;
-      if (f < relevantFulfillment) relevantFulfillment = f;
-    }
-    if (!sawNeedingLine) relevantFulfillment = 1;
-
+    // FIFO over the static recipe CSR, in line order then recipe-entry order. §3.23: the
+    // fulfilment is the real draw's alone — stage 04's market ratio, which was min'd in here,
+    // is deleted with the stage.
     let physicalFulfillment = 1.0;
     let realInputConsumptionCostLocal = 0;
     const lotRow = S.lotRow[row];
@@ -669,9 +656,8 @@ export function runFrontCore(
         for (const lotCostLocal of drawn.costsLocal) realInputConsumptionCostLocal += lotCostLocal;
       }
     }
-    const combinedFulfillment = Math.min(relevantFulfillment, physicalFulfillment);
     F.measuredInputConsumptionWeeklyLocal[row] = realInputConsumptionCostLocal;
-    let newInputSupplyConstraintFactor = (S.inputConstraint0[row] * 0.7 + combinedFulfillment * 0.3);
+    let newInputSupplyConstraintFactor = (S.inputConstraint0[row] * 0.7 + physicalFulfillment * 0.3);
 
     for (let sh = S.shStart[row]; sh < S.shStart[row + 1]; sh++) {
       const rev = S.shSupplierRevenue[sh];
