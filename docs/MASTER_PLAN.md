@@ -548,15 +548,8 @@ written from here):
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
 16b. **Insurance is a market, not three price-takers** — split 2026-09-05; 16b-i (the book and
-    the price: an insurer quotes a rate off its own losses and its own capital, and its premiums
-    and claims are its own) is in §9. What is left:
-16b-ii. **THE MARKET.** A policy moves to the insurer that prices lower. Each week the share of
-    every insurer's book that renews (`INSURANCE_POLICY_TERM_WEEKS`, a year's policies renewing
-    one week at a time) plus the growth of what there is to insure re-shops: it goes to the
-    lowest quote with CAPACITY — the cover an insurer's surplus can stand behind at its own rate,
-    `surplus × PREMIUM_TO_SURPLUS_RATIO / rate` — and past that to the next lowest. An insurer
-    with no surplus has no capacity and loses its renewals: it loses book before it loses its
-    licence.
+    the price) and 16b-ii (the market: a policy moves to the insurer that prices lower) are in
+    §9. What is left:
 16b-iii. **VERIFY, in §6 and the harness:** premium shares move week to week (the harness
     prints each region's insurers' cover shares and their weekly change), and an insurer under a
     capital action loses book first (the measure: cover share against surplus share, by insurer).
@@ -1641,6 +1634,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**16b-ii — A POLICY MOVES TO THE INSURER THAT PRICES LOWER.** `institutions.ts:
+placeInsuranceRenewals`: each week every book's renewing slice (a year's policies, one week's
+worth at a time — `INSURANCE_POLICY_TERM_WEEKS`) and the growth of what there is to insure go to
+the lowest quote with CAPACITY, the cover its surplus can stand behind at its own rate
+(`surplus × PREMIUM_TO_SURPLUS_RATIO / rate`, less what it keeps), then to the next lowest; an
+insurer with no surplus writes nothing and loses its renewals, so it loses book before it loses
+its licence; a quote of zero writes nothing (nobody sells cover for nothing); a base that fell
+faster than a term's renewals squeezes every book to it; cover nobody can write is unplaced and
+pays no premium (`Region.insuranceUnplacedCoverLocal`, a read of the market's outcome). The stage
+quotes every insurer first (16b-i) and places against those quotes, so next week's premiums are
+next week's cover at next week's price. Tests: the cheaper insurer takes every renewal, the
+insurer with no surplus keeps only what has not renewed, capacity binds and the next quote takes
+the rest. Gates green; no run.
 
 **16b-i — AN INSURER HAS A BOOK, A PRICE AND ITS OWN LOSSES.** The three insurers were price-
 takers: each wrote the premium its capital let it (`surplus × PREMIUM_TO_SURPLUS_RATIO`), the

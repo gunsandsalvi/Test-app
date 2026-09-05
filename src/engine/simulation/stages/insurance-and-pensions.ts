@@ -36,7 +36,7 @@ import { companyParty } from '../../../domain/party';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
 import { isActiveCompany, managedEntityIdsOf } from '../../../domain/company';
-import { corporateInsurableBaseLocal, householdInsurableBaseLocal, quoteInsuranceRate, nextLossPerCover, PREMIUM_TO_SURPLUS_RATIO, InsuranceBook } from '../../../domain/institutions';
+import { corporateInsurableBaseLocal, householdInsurableBaseLocal, quoteInsuranceRate, nextLossPerCover, placeInsuranceRenewals, PREMIUM_TO_SURPLUS_RATIO, InsuranceBook } from '../../../domain/institutions';
 import { entityRequiredReturn } from './asset-allocation';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS } from '../../bootstrap/population';
@@ -177,9 +177,8 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     // ---- Insurers: what the float cost each of them (a stat, not a cash move — the cash
     // arrived through the legs above), its experience moved one policy-term's step toward what
     // its book cost it this week, and its PRICE for next week re-quoted off that experience and
-    // its own capital's hurdle. The cover it carries follows what there is to insure, at its
-    // share — until 16b-ii lets a policy move to whoever quotes lower. ----
-    weeks.forEach((w) => {
+    // its own capital's hurdle. ----
+    const quotes = weeks.map((w) => {
       const e = insurerEntities.find((x) => x.id === w.id)!;
       const book = e.insurance!;
       // Recorded for `entityRequiredReturn`: what the float COST this insurer, which is what
@@ -188,11 +187,16 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       const realisedLossPerCover = w.coverLocal > 0 ? (w.claimLocal * 52) / w.coverLocal : book.lossPerCoverAnnual;
       const lossPerCoverAnnual = nextLossPerCover(book.lossPerCoverAnnual, realisedLossPerCover);
       const hurdle = entityRequiredReturn(e, institutionTotalAssetsLocal(ctx, e));
-      bookByEntityId.set(w.id, {
-        coverLocal: totalBaseLocal * (w.coverLocal / coverTotalLocal),
-        lossPerCoverAnnual,
-        rateAnnual: quoteInsuranceRate({ lossPerCoverAnnual, requiredReturnAnnual: hurdle, premiumToSurplus: PREMIUM_TO_SURPLUS_RATIO }),
-      });
+      const rateAnnual = quoteInsuranceRate({ lossPerCoverAnnual, requiredReturnAnnual: hurdle, premiumToSurplus: PREMIUM_TO_SURPLUS_RATIO });
+      return { id: w.id, coverLocal: w.coverLocal, rateAnnual, lossPerCoverAnnual, surplusLocal: e.equityCapitalLocal };
+    });
+    // ---- §3.16b-ii — THE MARKET. This week's renewals and the growth of what there is to
+    // insure go to the lowest quote with the capacity to write them; an insurer with no surplus
+    // writes nothing and loses its renewals. Cover nobody can write is unplaced. ----
+    const placed = placeInsuranceRenewals(quotes, totalBaseLocal);
+    reg.insuranceUnplacedCoverLocal = Math.round(placed.unplacedLocal);
+    quotes.forEach((q) => {
+      bookByEntityId.set(q.id, { coverLocal: placed.coverById.get(q.id) ?? 0, lossPerCoverAnnual: q.lossPerCoverAnnual, rateAnnual: q.rateAnnual });
     });
 
     // ---- Pensions: contributions out of wages, benefits back to the people who earned them. ----

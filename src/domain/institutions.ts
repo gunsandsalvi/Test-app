@@ -305,3 +305,38 @@ export function openInsuranceBook(args: {
   const rateAnnual = args.regionBaseLocal > 0 ? regionPremiumsAnnual / args.regionBaseLocal : 0;
   return { coverLocal: args.regionBaseLocal * share, rateAnnual, lossPerCoverAnnual: rateAnnual * args.seedLossRatio };
 }
+
+/**
+ * §3.16b-ii — THE MARKET. A policy moves to the insurer that prices lower. Each week the slice
+ * of every book that RENEWS (a year's policies, one week's worth at a time) and the growth of
+ * what there is to insure re-shop: they go to the lowest quote with CAPACITY — the cover an
+ * insurer's surplus can stand behind at its own rate, `surplus × premiumToSurplus / rate`, less
+ * what it keeps — and past that to the next lowest. An insurer with no surplus has no capacity
+ * and loses its renewals: it loses book before it loses its licence. Cover nobody can write is
+ * unplaced, and pays nobody a premium.
+ */
+export function placeInsuranceRenewals(
+  insurers: readonly { id: string; coverLocal: number; rateAnnual: number; surplusLocal: number }[],
+  regionBaseLocal: number,
+  termWeeks: number = INSURANCE_POLICY_TERM_WEEKS,
+  premiumToSurplus: number = PREMIUM_TO_SURPLUS_RATIO,
+): { coverById: Map<string, number>; unplacedLocal: number } {
+  const base = Math.max(0, regionBaseLocal);
+  const retained = new Map<string, number>();
+  let retainedTotal = 0;
+  insurers.forEach((i) => { const keep = Math.max(0, i.coverLocal) * (1 - 1 / termWeeks); retained.set(i.id, keep); retainedTotal += keep; });
+  // What there is to insure fell faster than a term's renewals: every book keeps its share of it.
+  const squeeze = retainedTotal > base && retainedTotal > 0 ? base / retainedTotal : 1;
+  let pool = base - retainedTotal * squeeze;
+  const coverById = new Map<string, number>();
+  insurers.forEach((i) => coverById.set(i.id, (retained.get(i.id) ?? 0) * squeeze));
+  const byPrice = [...insurers].sort((a, b) => a.rateAnnual - b.rateAnnual || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const i of byPrice) {
+    if (!(pool > 0)) break;
+    // Nobody sells cover for nothing: a quote of zero (no loss experience at all) writes nothing.
+    const capacity = i.rateAnnual > 0 ? Math.max(0, (Math.max(0, i.surplusLocal) * premiumToSurplus) / i.rateAnnual - (coverById.get(i.id) ?? 0)) : 0;
+    const take = Math.min(pool, capacity);
+    if (take > 0) { coverById.set(i.id, (coverById.get(i.id) ?? 0) + take); pool -= take; }
+  }
+  return { coverById, unplacedLocal: Math.max(0, pool) };
+}

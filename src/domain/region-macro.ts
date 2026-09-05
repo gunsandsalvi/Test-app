@@ -900,6 +900,9 @@ export interface Region {
   /** §3.15b-ii — the latest week's auction, rung by rung: offered, placed, withdrawn. Written by
    *  07c (bonds) and 07f (bills) through `government.ts:recordPrimaryOffering`. */
   lastAuction?: import('./government').AuctionRecord;
+  /** §3.16b-ii — cover nobody could write this week: what there was to insure beyond every
+   *  insurer's capacity at its own price. Written by `insurance-and-pensions.ts`. */
+  insuranceUnplacedCoverLocal?: number;
   /** PUB: matured paper that no named book ever bought — the front-of-ladder undersubscription
    *  the treasury auction leaves behind. It is not a payment; nobody was owed it. */
   lastUnsoldMaturedLocal?: number;

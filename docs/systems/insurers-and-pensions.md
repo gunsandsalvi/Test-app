@@ -92,7 +92,7 @@ checked by `scripts/check-atlas.sh`.
 | A2.b except where the contract says it IS a fund share | `src/domain/institution-profiles.ts:beneficiariesAreHouseholds` | ⚠️ |
 | A3 equity = assets − liabilities, and it can go negative | `src/engine/simulation/stages/household-balance-sheet.ts:equityCapitalLocal` | ⚠️ |
 | A4 premiums/contributions in, claims/pensions out | `src/engine/simulation/stages/insurance-and-pensions.ts:runInsuranceAndPensionsStage` | ✅ |
-| A4.a an insurer has a book and a PRICE, and the price is its own | `src/domain/institutions.ts:quoteInsuranceRate` | ⚠️ |
+| A4.a an insurer has a book and a PRICE, and the price is its own | `src/domain/institutions.ts:placeInsuranceRenewals` | ✅ |
 | **B1 the liability has a schedule** | — | ❌ |
 | **B2 its present value depends on a market discount rate** | — | ❌ |
 | B2.a falling rates raise the liability | — | ❌ |
@@ -127,16 +127,20 @@ and off the same ledger; the statement view shows it as "Accrued coupon". Before
 that paid a seller's accrued at settlement had the cash gone and nothing standing against it until
 the coupon date.
 
-### ⚠️ A4.a — THE PRICE EXISTS; THE MARKET BETWEEN THE INSURERS DOES NOT YET
+### ✅ A4.a — A POLICY GOES TO THE INSURER THAT PRICES LOWER
 
-2026-09-05 (§9.16b-i). Each insurer carries a book — the cover it stands behind, in the unit a
+2026-09-05 (§9.16b-i, ii). Each insurer carries a book — the cover it stands behind, in the unit a
 policy is written on (`institutions.ts:InsuranceBook`) — and quotes a rate for it off its OWN
 trailing loss experience and its OWN capital's hurdle (`quoteInsuranceRate`: the claims a unit of
 cover brings plus the return on the surplus held against the premium). Premiums are each
 insurer's book at its rate and claims are each insurer's own; the pool split pro rata by capital,
-with pooled claims, is gone. What is still missing is the market: the cover follows what there is
-to insure at each insurer's seed share, and a policy does not yet move to whoever quotes lower —
-§3.16b-ii.
+with pooled claims, is gone. And the market between them exists: each week a year's policies
+renew one week at a time and, with the growth of what there is to insure, go to the lowest quote
+with the capacity to write them — the cover its surplus stands behind at its own rate
+(`placeInsuranceRenewals`); an insurer with no surplus writes nothing and loses its renewals, so it
+loses book before it loses its licence; cover nobody can write is unplaced
+(`region-macro.ts:insuranceUnplacedCoverLocal`). §3.16b-iii is the VERIFY: the harness measures
+the shares moving.
 
 ### ❌ B1 / B2 / B2.a / B2.b / E3 — THE LIABILITY IS A CASH BALANCE, NOT A PRESENT VALUE
 
