@@ -418,7 +418,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
     if (!partyExists(c.a)) bump('derivative contracts');
     if (!partyExists(c.b)) bump('derivative contracts');
     // §3.13-BOOK dIIb: a reference is typed by class — only the issuer arm names a company.
-    if (c.reference.kind === 'ISSUER' && !companyById.has(c.reference.issuerId)) deadRef++;
+    if ((c.reference.kind === 'ISSUER' || c.reference.kind === 'SHARES') && !companyById.has(c.reference.issuerId)) deadRef++;
   });
   REGION_IDS.forEach((r) => {
     repoBookOf(ensureV2(state), r).forEach((c) => { // §3.13-BOOK d4c-ii: the store's rows

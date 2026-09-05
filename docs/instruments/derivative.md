@@ -96,7 +96,7 @@ checked by `scripts/check-atlas.sh`. The three FORBIDs of **WHAT A DERIVATIVE IS
 | D10.a who you face is part of what the contract is worth | — | ❌ |
 | D11 termination: it ceases to exist on both books at once | `src/domain/derivatives/profile.ts:eventTermination` | ✅ |
 | D11.a early termination on default has a stated close-out value | `src/domain/derivatives/profile.ts:closeOutUSDToB` | ⚠️ |
-| D12 an identity: counterparties + underlying + term + strike | `src/engine/simulation/stages/derivative-lifecycle.ts:strikeDerivatives` | ✅ |
+| D12 an identity: counterparties + underlying + term + strike | `src/domain/derivatives/classes/option.ts:OPTION_PROFILE` · `src/engine/simulation/stages/derivative-lifecycle.ts:strikeDerivatives` | ✅ |
 | N1 FORBID it is not a holding; it goes in the zero-sum check | `src/engine/audit/ownership.ts:o5` | ⚠️ |
 | N2 FORBID it is not a free exposure — the cash is real | `src/engine/simulation/stages/settlement.ts:pay` | ⚠️ |
 | N3 FORBID it is not a substitute for the underlying market | `src/engine2/stage08-back.ts:newCdsSpreadBps` | ⚠️ |
@@ -106,6 +106,13 @@ checked by `scripts/check-atlas.sh`. The three FORBIDs of **WHAT A DERIVATIVE IS
 ## 3. THE DIFF
 
 ### ❌ D1.a — THE PLAYER'S DERIVATIVES HAVE NO COUNTERPARTY, AND THEIR P&L IS INVENTED MONEY
+
+*2026-09-05 (§9.17b-i). The one book can carry an option now: `classes/option.ts:OPTION_PROFILE`
+— premium a periodic leg that fires once, in the strike week; the mark the option's value at the
+name's own realised volatility; expiry an event termination at intrinsic value, exercised or
+worthless; margin on the shares' own move; the reference the issuer's `SHARES`. Its market slot
+(`derivative-markets/option.ts`) strikes nothing yet. The player's six kinds moving onto it, with
+the player as a party, is 17b-ii; a market for anyone else's options is 17b-iii.*
 
 `12-portfolio-and-positions.ts` runs a second, older derivative layer beside the one book, and it
 is the node's exact opposite. Six position kinds — `IRS` (:246), `CDS` (:294), `TRS` (:350),

@@ -16,12 +16,14 @@ import { IRS_PROFILE } from './classes/irs';
 import { CDS_PROFILE } from './classes/cds';
 import { COMMODITY_FUTURE_PROFILE } from './classes/commodity-future';
 import { FX_FORWARD_PROFILE } from './classes/fx-forward';
+import { OPTION_PROFILE } from './classes/option';
 
 export const DERIVATIVE_CLASSES: Record<DerivativeClassId, DerivativeClassProfile> = {
   IRS: IRS_PROFILE,
   CDS: CDS_PROFILE,
   COMMODITY_FUTURE: COMMODITY_FUTURE_PROFILE,
   FX_FORWARD: FX_FORWARD_PROFILE,
+  OPTION: OPTION_PROFILE,
 };
 
 export const derivativeProfile = (id: DerivativeClassId): DerivativeClassProfile =>

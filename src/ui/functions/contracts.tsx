@@ -21,7 +21,7 @@ export const contracts: FunctionModule = {
   render({ world, ref, args, nav }) {
     const book = derivativesOf(world.v2);
     let mine: DerivativeContract[];
-    if (ref.type === 'company') { const c = companyOf(world, ref.id); mine = c ? [...contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker }), ...book.filter((k) => k.reference.kind === 'ISSUER' && k.reference.issuerId === c.id)] : []; }
+    if (ref.type === 'company') { const c = companyOf(world, ref.id); mine = c ? [...contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker }), ...book.filter((k) => (k.reference.kind === 'ISSUER' || k.reference.kind === 'SHARES') && k.reference.issuerId === c.id)] : []; }
     else if (ref.type === 'institution') mine = contractsOf(world, { kind: 'INSTITUTION', key: ref.id });
     else if (ref.type === 'commodity') mine = book.filter((k) => k.reference.kind === 'COMMODITY' && k.reference.commodityId === ref.id);
     else if (ref.type === 'fx') { const [base, quote] = ref.id.split('/'); mine = book.filter((k) => k.reference.kind === 'REGION' && (k.reference.regionId === base || k.reference.regionId === quote)); }

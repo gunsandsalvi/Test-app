@@ -34,7 +34,9 @@ import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../..
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../domain/derivatives/contract';
 import { DerivativeMarketView } from '../../../domain/derivatives/profile';
 import { derivativeProfile, initialMarginLocal, initialMarginAtStrike, withInitialMargin } from '../../../domain/derivatives/registry';
-import { measuredWeeklyMove, measuredWeeklyBpsMove } from '../../../domain/volatility';
+import { measuredWeeklyMove, measuredWeeklyBpsMove, realizedAnnualVol } from '../../../domain/volatility';
+import { ringFill } from '../../../engine2/world';
+import { regionIndexOf } from '../../macro/indices';
 import { SWAP_TENOR_ZERO_FIELD, SwapTenorKey } from '../../../domain/derivatives/classes/irs';
 import { StandingBook } from '../../../domain/derivatives/standing-book';
 import { WeeklyStepContext } from './context';
@@ -177,7 +179,26 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
       const c = companyById.get(issuerId);
       return measuredWeeklyBpsMove(c ? region(c.region)?.cdsSpreadHistoryByIssuer?.[issuerId] : undefined);
     },
+    // §3.17b-i — the shares an option is on: the print, the realised vol (the name's own off its
+    // price ring, its region's index before it can estimate one), the weekly move.
+    equityPrice: (issuerId) => { const px = companyById.get(issuerId)?.stockPrice; return px !== undefined && px > 0 ? px : Number.NaN; },
+    equityAnnualVol: (issuerId) => {
+      const c = companyById.get(issuerId);
+      if (!c) return undefined;
+      return realizedAnnualVol(priceSeriesOf(ctx, c.id), VOL_WINDOW_WEEKS)
+        ?? realizedAnnualVol(regionIndexOf(ctx.updatedCompositeIndices, c.region).historical, VOL_WINDOW_WEEKS);
+    },
+    equityWeeklyMove: (issuerId) => measuredWeeklyMove(priceSeriesOf(ctx, issuerId)),
   };
+}
+
+/** The window stage 12 estimates a name's realised volatility over. */
+const VOL_WINDOW_WEEKS = 26;
+const priceScratch: number[] = [];
+/** A name's price series off the ring — a READ: a name the ring does not hold has none. */
+function priceSeriesOf(ctx: WeeklyStepContext, companyId: string): number[] | undefined {
+  const row = ctx.v2.rowById.get(companyId);
+  return row === undefined ? undefined : ringFill(ctx.v2.priceRing, row, priceScratch).slice();
 }
 
 /** A member that can still pay and be paid. The default says every member stands. */

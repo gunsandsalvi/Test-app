@@ -547,11 +547,28 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17b. **An options class, and the FX swap lines.** Premium is a periodic leg paid once and
-    exercise is an event termination at intrinsic value — two profile methods on the one contract.
-    The real work is its MARKET; until it exists, stage 12's player options stay on the legacy
-    layer instead of the one book, which is the last thing outside it. FX swap lines need an FX
-    funding market first — build the market, then the lines — and that gate has not moved.
+17b. **An options class, and the FX swap lines** — split 2026-09-05, one commit each; 17b-i
+    (the option class on the one book) is in §9. What is left, in order:
+17b-ii. **THE PLAYER IS A PARTY, AND ITS DERIVATIVES ARE ON THE ONE BOOK.** `derivative.md`
+    D1.a: stage 12 runs six position kinds — IRS, CDS, TRS, COMMODITY, OPTION, XCS — priced by
+    formula, with no `b` side, their gain added to the player's cash from nobody. The player
+    becomes a `PartyRef` with an account, each kind that has a class strikes through
+    `strikeDerivatives` against a desk (the swap at the cleared par, protection at the cleared
+    spread, the future at the print, the option at the class's premium), and the legacy layer
+    is deleted with the two kinds that have no class yet (TRS, XCS) until 17b-iv gives XCS one.
+17b-iii. **THE OPTIONS MARKET.** Index puts per region: the equity holders' need for downside
+    cover sized by the hedging arithmetic every other market uses (`hedging.ts`), written by the
+    desks and the volatility sellers at a CLEARED implied volatility (the stat), struck through
+    the house like every class. Then the class prices at the implied volatility the book
+    clears, not the realised one.
+17b-iv. **THE FX FUNDING MARKET.** `fx-forwards-and-xcs.md` B2, B4, C1: a term book per pair
+    where a bank short a currency borrows it against its own for a term — the cross-currency
+    swap, a class on the one book with two notionals exchanged — cleared at the basis the
+    region's foreign-currency funding deficit sets; `fx-funding.ts`'s spot purchase stays for
+    what is due this week.
+17b-v. **THE SWAP LINES.** A central bank lends its currency to another central bank against
+    that bank's own, drawn when the basis clears past a stated width, on-lent to its banks at
+    the basis plus a penalty — the backstop that caps the basis, and a real event the news tells.
 
 17c. **Credit protection has ONE buyer and ONE reason** (user). `derivative-markets/cds.ts:60`
     builds hedge demand from the region's BANKS only, and within a bank only from
@@ -1612,6 +1629,25 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17b-i — THE OPTION CLASS ON THE ONE BOOK.** `DerivativeClassId` gains `OPTION`
+(`classes/option.ts:OPTION_PROFILE`, roles HOLDER and WRITER, the CEM equity add-on): the
+premium is a periodic leg that fires ONCE — the option's value at the strike week's print, paid
+holder to writer in the week the contract is struck, which is the first settle it sees because
+its market settles after it strikes (`derivative-markets/option.ts`, the class's slot, striking
+nothing until 17b-iii); the mark is the option's value, Black–Scholes at the name's own realised
+volatility (the one pricer the model has, `engine/blackScholes.ts`, which stage 12 already read
+— the domain imports it rather than carry a second copy; a volatility IMPLIED by a book is
+17b-iii's), so variation margin moves the value week by week; expiry is an event termination
+at intrinsic value, 'option exercised' or 'option expired', the true-up beyond what the mark
+paid. The reference is the issuer's `SHARES` (`DerivativeReference`, a fifth arm in the
+obligation store; `sharesReferenceOf`, `optionTypeOf` off `termKey` CALL|PUT, `strike` per
+share, `units` the shares, `notional` the exposure at strike); the view reads the shares'
+print, realised vol (the name's off its price ring, its region's index before it can estimate
+one — stage 12's own read, `priceSeriesOf` a READ off `rowById`, not `rowOf`, which allocates)
+and weekly move. `test/derivatives.test.ts`: the premium once and equal to the value, never
+again; in the money worth more than intrinsic; no vol, no mark; exercised beyond the mark,
+expired giving it back, a put pays the fall; every class's completeness. Gates green; no run.
 
 **17-vi — A CREDIT EVENT SETTLES AT THE ISSUER'S OWN WORKOUT.** Step 17 is closed. The view
 exposes the reference's workout (`derivative-lifecycle.ts:buildDerivativeMarketView`

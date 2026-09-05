@@ -61,6 +61,15 @@ export interface DerivativeMarketView {
   rateWeeklyMoveBps(regionId: RegionId, termKey: string): number | undefined;
   /** The weekly move of an issuer's protection spread, in bps. */
   cdsSpreadWeeklyMoveBps(issuerId: EntityId): number | undefined;
+  // §3.17b-i — THE EQUITY an option is on: its print, its realised volatility (the name's own,
+  // its region's index before the name can estimate one — the same read stage 12 made), and its
+  // weekly move for margin.
+  /** The issuer's share price; NaN when the issuer has none. */
+  equityPrice(issuerId: EntityId): number;
+  /** Annualised realised volatility of the shares; undefined with nothing to estimate from. */
+  equityAnnualVol(issuerId: EntityId): number | undefined;
+  /** The shares' weekly move as a fraction of the price. */
+  equityWeeklyMove(issuerId: EntityId): number | undefined;
 }
 
 export interface DerivativeLeg {

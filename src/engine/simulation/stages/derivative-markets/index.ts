@@ -12,10 +12,12 @@ import { IRS_MARKET } from './irs';
 import { CDS_MARKET } from './cds';
 import { COMMODITY_FUTURE_MARKET } from './commodity-future';
 import { FX_FORWARD_MARKET } from './fx-forward';
+import { OPTION_MARKET } from './option';
 
 export const DERIVATIVE_MARKETS: Record<DerivativeClassId, DerivativeMarket> = {
   IRS: IRS_MARKET,
   CDS: CDS_MARKET,
   COMMODITY_FUTURE: COMMODITY_FUTURE_MARKET,
   FX_FORWARD: FX_FORWARD_MARKET,
+  OPTION: OPTION_MARKET,
 };

@@ -35,12 +35,16 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
   fxWeeklyMove: () => 0.015,
   rateWeeklyMoveBps: () => 12,
   cdsSpreadWeeklyMoveBps: () => 20,
+  equityPrice: () => 100,
+  equityAnnualVol: () => 0.3,
+  equityWeeklyMove: () => 0.05,
   ...over,
 });
 
 /** §3.13-BOOK dIIb: each class states its own reference; a generic fixture picks the class's. */
 const referenceFor = (classId: DerivativeContract['classId']): DerivativeReference =>
   classId === 'CDS' ? { kind: 'ISSUER', issuerId: asEntityId('X') }
+    : classId === 'OPTION' ? { kind: 'SHARES', issuerId: asEntityId('X') }
     : classId === 'COMMODITY_FUTURE' ? { kind: 'COMMODITY', commodityId: 'X' }
       : classId === 'FX_FORWARD' ? { kind: 'REGION', regionId: 'EUR' } : { kind: 'RATE' };
 
@@ -180,9 +184,10 @@ test('every registered class states both roles and admissible facts — the comp
   for (const p of Object.values(DERIVATIVE_CLASSES)) {
     assert.ok(p.roleA && p.roleB);
     assert.ok(p.pfeAddOnRate > 0 && p.pfeAddOnRate < 1);
-    const move = p.closeOutMoveOf(base({ classId: p.id, reference: referenceFor(p.id) }), view());
+    const termKey = p.id === 'OPTION' ? 'CALL' : 's5';
+    const move = p.closeOutMoveOf(base({ classId: p.id, reference: referenceFor(p.id), termKey }), view());
     assert.ok(move !== undefined && move > 0 && move < 1, `${p.id}: the reference's move sizes its margin`);
-    const marks = p.markToMarketUSDToA(base({ classId: p.id, units: 1, reference: referenceFor(p.id), settledMarkLocal: 0 }), view()) !== null;
+    const marks = p.markToMarketUSDToA(base({ classId: p.id, units: 1, reference: referenceFor(p.id), termKey, settledMarkLocal: 0 }), view()) !== null;
     // §3.17-iii: every class marks; a periodic leg is the cash a rate contract exchanges beside it.
     assert.ok(marks, `${p.id}: every class carries a mark`);
     assert.ok(p.markReasonLive && p.markReasonFinal, `${p.id}: a mark class labels its legs`);
@@ -210,7 +215,7 @@ test('the standing-book index answers exactly what the per-participant walks ans
   const youKey = derivativePartyKey(you);
   for (const [party, key] of [[me, meKey], [you, youKey]] as const) {
     for (const side of ['a', 'b'] as const) {
-      for (const classId of ['IRS', 'CDS', 'COMMODITY_FUTURE', 'FX_FORWARD'] as const) {
+      for (const classId of ['IRS', 'CDS', 'COMMODITY_FUTURE', 'FX_FORWARD', 'OPTION'] as const) {
         assert.equal(index.coverLocal(classId, side, key), standingCoverLocal(book, classId, side, key, 10), `${classId} ${side} ${key}`);
         for (const term of ['s2', 's5', 's10', '3M', '']) {
           assert.equal(index.coverLocal(classId, side, key, undefined, term), standingCoverLocal(book, classId, side, key, 10, undefined, term));
@@ -253,4 +258,27 @@ test('§3.17-ii: initial margin is the reference\'s own move over a session, on 
   assert.ok(Math.abs(initialMarginAtStrike(fwd, view()) - 1_000_000 * 0.015) < 1e-6);
   assert.ok(initialMarginAtStrike(fwd, view({ fxWeeklyMove: () => 0.03 })) > initialMarginAtStrike(fwd, view()), 'D5: margin rises when the move rises');
   assert.equal(initialMarginAtStrike(fwd, view({ fxWeeklyMove: () => undefined })), 0, 'a first print has no move to measure, and posts nothing');
+});
+
+test('§3.17b-i OPTION: the premium is paid once in the strike week, the mark is the option\'s value, and expiry exercises at intrinsic', () => {
+  const call = base({ classId: 'OPTION', reference: { kind: 'SHARES', issuerId: asEntityId('X') }, termKey: 'CALL', strike: 100, units: 1000, notional: 100_000, struckWeek: 10, maturityWeek: 36 });
+  const atStrike = view({ week: 10, equityPrice: () => 100, equityAnnualVol: () => 0.3, overnightRateAnnual: () => 0.03 });
+  const prem = DERIVATIVE_CLASSES.OPTION.periodicLegUSDToB(call, atStrike)!;
+  assert.ok(prem.usdToB > 0 && prem.reason === 'option premium', 'the holder pays the writer once');
+  assert.ok(Math.abs(prem.usdToB - DERIVATIVE_CLASSES.OPTION.markToMarketUSDToA(call, atStrike)!) < 1e-9, 'and it is the option\'s value that week');
+  assert.equal(DERIVATIVE_CLASSES.OPTION.periodicLegUSDToB(call, view({ week: 11 })), null, 'never again');
+  assert.equal(DERIVATIVE_CLASSES.OPTION.eventTermination(call, atStrike), null, 'no exercise before expiry');
+  const up = DERIVATIVE_CLASSES.OPTION.markToMarketUSDToA(call, view({ week: 20, equityPrice: () => 120 }))!;
+  assert.ok(up > 20_000, 'in the money: worth its intrinsic and more');
+  assert.equal(DERIVATIVE_CLASSES.OPTION.markToMarketUSDToA(call, view({ equityAnnualVol: () => undefined })), null, 'nothing to price at: no mark');
+  const exercised = DERIVATIVE_CLASSES.OPTION.eventTermination(base({ ...call, settledMarkLocal: 15_000 }), view({ week: 36, equityPrice: () => 120 }))!;
+  assert.ok(Math.abs(exercised.usdToB - -(20_000 - 15_000)) < 1e-9, 'the writer pays intrinsic beyond what the mark already paid');
+  assert.equal(exercised.reason, 'option exercised');
+  const expired = DERIVATIVE_CLASSES.OPTION.eventTermination(base({ ...call, settledMarkLocal: 3_000 }), view({ week: 36, equityPrice: () => 90 }))!;
+  assert.ok(Math.abs(expired.usdToB - 3_000) < 1e-9, 'worthless: the holder gives back what the mark had paid it');
+  assert.equal(expired.reason, 'option expired');
+  const put = base({ ...call, termKey: 'PUT' });
+  const putExercised = DERIVATIVE_CLASSES.OPTION.eventTermination(put, view({ week: 36, equityPrice: () => 90 }))!;
+  assert.ok(Math.abs(putExercised.usdToB - -10_000) < 1e-9, 'a put pays the fall through the strike');
+  assert.equal(DERIVATIVE_CLASSES.OPTION.closeOutMoveOf(call, view()), 0.05, 'margin on the shares\' own move');
 });
