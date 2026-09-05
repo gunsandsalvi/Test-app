@@ -21,17 +21,61 @@ export interface CcpSheet {
   /** Initial margin its live contracts posted to it, in the same money — a liability to the
    *  members, returned when each contract ends. */
   marginHeldLocal: number;
+  /** §3.17-iv-c-i — the default fund: what the members have paid in against a member's default
+   *  (`CcpFundContribution`), a liability to each until it is written down by the waterfall. */
+  defaultFundLocal: number;
 }
 
-export const ccpSheetOf = (cashLocal: number, marginHeldLocal: number): CcpSheet => ({ cashLocal, marginHeldLocal });
+export const ccpSheetOf = (cashLocal: number, marginHeldLocal: number, defaultFundLocal: number): CcpSheet => ({ cashLocal, marginHeldLocal, defaultFundLocal });
 
 /**
- * What the clearing house holds BEYOND its members' margin: the margin a party that ceased to
- * exist never took back, and — from 17-iv-c — the default fund and its own capital. Negative
- * means the CCP holds less cash than it owes its members, which is a defect until the waterfall
- * gives it a meaning.
+ * THE HOUSE'S OWN CAPITAL — C3's third line: what it holds beyond its members' money. It has no
+ * shareholders and charges no fee, so its capital is what it has RETAINED: the margin a member
+ * that ceased to exist never took back, less every loss the waterfall has put on the house
+ * (17-iv-c-ii). Negative means the house holds less cash than it owes its members — past the end
+ * of its resources, which is C5's real event.
  */
-export const ccpFreeResourcesLocal = (s: CcpSheet): number => s.cashLocal - s.marginHeldLocal;
+export const ccpOwnCapitalLocal = (s: CcpSheet): number => s.cashLocal - s.marginHeldLocal - s.defaultFundLocal;
+
+/**
+ * §3.17-iv-c-i — A MEMBER'S CONTRIBUTION TO THE DEFAULT FUND: a row of the contract store
+ * (`contract-ledger.ts:ccpFundOf`), the house as one party and the member as the other, in the
+ * house's money. Trued up every week to the member's share of the fund the house requires.
+ */
+export interface CcpFundContribution {
+  regionId: RegionId;
+  member: CounterpartyRef;
+  amountLocal: number;
+}
+
+/**
+ * THE CLOSE-OUT HORIZON, in sessions. Initial margin covers ONE session's move of the reference
+ * (§3.17-ii); a defaulted member's book takes longer than that to close out, and the fund is
+ * there for the move over the rest of the horizon. Five sessions is the horizon a cleared OTC
+ * book is conventionally margined to; the move over it scales with its square root.
+ */
+export const CCP_CLOSE_OUT_SESSIONS = 5;
+
+/**
+ * COVER-ONE: the fund covers the LARGEST member's loss over the close-out horizon beyond the
+ * margin it posted — its margin, scaled from one session's move to the horizon's, less the
+ * margin itself. A house with no members needs no fund.
+ */
+export function coverOneFundLocal(marginByMember: Iterable<number>): number {
+  let largest = 0;
+  for (const m of marginByMember) if (m > largest) largest = m;
+  return largest * (Math.sqrt(CCP_CLOSE_OUT_SESSIONS) - 1);
+}
+
+/** Each member's share of the fund, pro rata to the margin it has at the house — the member the
+ *  house is most exposed to pays the most. */
+export function fundContributionsOf<K>(requiredLocal: number, marginByMember: ReadonlyMap<K, number>): Map<K, number> {
+  let total = 0;
+  marginByMember.forEach((m) => { total += Math.max(0, m); });
+  const out = new Map<K, number>();
+  marginByMember.forEach((m, k) => out.set(k, total > 0 ? requiredLocal * Math.max(0, m) / total : 0));
+  return out;
+}
 
 /**
  * THE CLEARING HOUSE A CONTRACT CLEARS AT: the one whose money the contract settles in. A

@@ -552,14 +552,17 @@ written from here):
     margin is the reference's own move) and 17-iii (variation margin is the mark, for every
     class) are in §9. What is left, in order:
 17-iv. **THE CCP** — split 2026-09-05, one commit each; 17-iv-a (the clearing house is a party
-    with a balance sheet, and holds the margin) and 17-iv-b (novation: every member faces the
-    house) are in §9. What is left:
-17-iv-c. **THE WATERFALL AND THE DEFAULT FUND.** A member's default is the house's waterfall
-    rather than a bilateral close-out: the defaulter's margin (already the house's, and kept
-    when a party is GONE), then the defaulter's fund contribution, then the house's own capital,
-    then the survivors' contributions. The default fund is an obligation the members pay into,
-    sized cover-1 (the largest member's margin shortfall over a close-out move); running past
-    the end is a real event the news tells. C3 ✅, C4, C4.a, C5 — the CCP's resources are finite.
+    with a balance sheet, and holds the margin), 17-iv-b (novation: every member faces the
+    house) and 17-iv-c-i (the default fund, cover-one, trued up weekly) are in §9. What is left:
+17-iv-c-ii. **THE WATERFALL.** A member's default is the house's waterfall rather than a
+    payment out of its estate: the house pays the survivor and recovers in order — the
+    defaulter's margin (kept: `releaseInitialMargin` returns nothing to a DEFAULTED or GONE
+    member), then the defaulter's fund contribution (written down), then the house's own
+    capital, then the survivors' contributions (written down pro rata); what is left is the
+    house's UNSECURED claim on the estate (`ClaimHolder` widens to the house, E2's rank). The
+    round is a record on the region (`lastWaterfall`: who, the loss, what each line paid), the
+    news tells it, and running past the end — the house's cash below what it owes its members —
+    is a real event the news tells too. C4, C4.a, C5 — the CCP's resources are finite.
 17-v. **CAPACITY IS A CLEARING-MEMBER LIMIT (rule 5), and the market view:** open interest,
     margin held and net position per member, by class — the "stats on the derivative markets
     overall" the user asked for.
@@ -1632,6 +1635,25 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17-iv-c-i — THE DEFAULT FUND.** The house's sheet has C3's three lines. The fund is rows of
+the contract store — `obligations.ts` kind `CCP_FUND`, one row per member per house, the house as
+A and the member as B (`clearing-house.ts:CcpFundContribution`; `contract-ledger.ts:ccpFundOf`
+memoised on the kind's epoch, `publishCcpFund` whole like the repo book, `ccpFundLocal`,
+`memberFundContributionLocal`). Sized COVER-ONE: initial margin is one session's move
+(§3.17-ii), a defaulted book takes `CCP_CLOSE_OUT_SESSIONS` (5) to close out and the move over
+the horizon scales with its square root, so the fund is the largest member's margin ×
+(√5 − 1) (`coverOneFundLocal`, off `contract-ledger.ts:membersOfHouse`), shared pro rata to each
+member's margin (`fundContributionsOf`). `derivatives.ts:trueUpDefaultFunds` runs after the
+week's last derivative market: each member pays its share in or is refunded to it, through the
+account its margin moves through (`memberMarginAccount`), and a member that has left is refunded
+whole. A bank's asset at the house is margin plus fund (`bankAtHouseLocal`, in
+`bankBookAssetsLocal`, the identity trace, the harness residual and the statement). The house's
+own capital is the residual `ccpOwnCapitalLocal` = cash − margin − fund (no shareholders, no fee:
+what it retained), and `O15` holds cash to margin plus fund. Atlas C3 ✅. `test/ccp.test.ts`:
+cover-one and the pro-rata shares, the rows read back and a member's contribution is its asset,
+the true-up pays each member's share in, moves nothing at size, refunds a member that left.
+Gates green; no run.
 
 **17-iv-b — NOVATION: EVERY MEMBER FACES THE HOUSE.** No member pays another.
 `derivative-lifecycle.ts:payThroughHouse` (was `payToB`) writes every leg — periodic, mark, event,

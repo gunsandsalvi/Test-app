@@ -28,6 +28,12 @@ import {
   DerivativeLifecycleView, buildDerivativeMarketView, settleDerivativeClass, standingBookOf,
 } from './derivative-lifecycle';
 import { DERIVATIVE_MARKETS } from './derivative-markets';
+import { REGION_IDS, currencyOf } from '../../../domain/geography';
+import { ccpParty } from '../../../domain/party';
+import { coverOneFundLocal, fundContributionsOf, memberMarginAccount, type CcpFundContribution } from '../../../domain/clearing-house';
+import { derivativePartyKey } from '../../../domain/derivatives/contract';
+import { membersOfHouse, ccpFundOf, publishCcpFund } from '../../ledger/contract-ledger';
+import { pay } from './settlement';
 
 /** Where in the week a class's market opens. */
 export type DerivativePhase = 'CLEARING' | 'POST_SETTLEMENT';
@@ -67,4 +73,42 @@ export function runDerivativesStage(state: GameState, ctx: WeeklyStepContext, ph
     market.run({ state, ctx, week: ctx.nextWeek, view, standing: standingBookOf(ctx, state), settledNetByParty });
     if (market.settles === 'AFTER_MARKET') settleDerivativeClass(ctx, state, classId, view);
   }
+  // §3.17-iv-c-i: with the week's last market struck, every house trues up its default fund.
+  if (phase === 'POST_SETTLEMENT') trueUpDefaultFunds(ctx);
 }
+
+/**
+ * §3.17-iv-c-i — THE DEFAULT FUND IS TRUED UP EVERY WEEK. Each house sizes its fund cover-one off
+ * the margin its members have at it (`clearing-house.ts:coverOneFundLocal`), shares it pro rata to
+ * that margin, and settles each member to its share: a member below it pays the difference in
+ * (from the account its margin moves through), one above it — a member whose book shrank, or
+ * that has left — is refunded. The contributions are rows of the contract store
+ * (`contract-ledger.ts:publishCcpFund`), so a member's sheet reads what it has in
+ * (`bankAtHouseLocal`) and the house's sheet reads what it holds (`ccpSheetAt`).
+ */
+export function trueUpDefaultFunds(ctx: WeeklyStepContext): void {
+  REGION_IDS.forEach((region) => {
+    const members = membersOfHouse(ctx.v2, region);
+    const marginByKey = new Map<string, number>();
+    members.forEach((m, key) => marginByKey.set(key, m.marginLocal));
+    const target = fundContributionsOf(coverOneFundLocal(marginByKey.values()), marginByKey);
+    const current = new Map<string, CcpFundContribution>();
+    ccpFundOf(ctx.v2, region).forEach((c) => current.set(derivativePartyKey(c.member), c));
+    const house = ccpParty(region);
+    const money = currencyOf(region);
+    const next: CcpFundContribution[] = [];
+    new Set([...target.keys(), ...current.keys()]).forEach((key) => {
+      const member = members.get(key)?.member ?? current.get(key)!.member;
+      const wantLocal = target.get(key) ?? 0;
+      const haveLocal = current.get(key)?.amountLocal ?? 0;
+      const deltaLocal = wantLocal - haveLocal;
+      if (deltaLocal > MIN_FUND_LEG_LOCAL) pay(ctx, { payer: memberMarginAccount(member), payee: house, amount: deltaLocal, currency: money, reason: 'default fund contribution' });
+      else if (-deltaLocal > MIN_FUND_LEG_LOCAL) pay(ctx, { payer: house, payee: memberMarginAccount(member), amount: -deltaLocal, currency: money, reason: 'default fund refunded' });
+      else if (haveLocal > 0) { next.push({ regionId: region, member, amountLocal: haveLocal }); return; }
+      if (wantLocal > MIN_FUND_LEG_LOCAL) next.push({ regionId: region, member, amountLocal: wantLocal });
+    });
+    publishCcpFund(ctx.v2, region, next);
+  });
+}
+/** A true-up under a dollar is dust, the same floor the lifecycle's legs keep. */
+const MIN_FUND_LEG_LOCAL = 1;

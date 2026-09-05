@@ -26,6 +26,8 @@ import type { LpCommitment } from '../domain/commitment';
 import type { CurrencyCode } from '../domain/geography';
 import { bankPartyOf } from '../domain/party';
 import { currencyOf } from '../domain/geography';
+import type { CcpFundContribution } from '../domain/clearing-house';
+import { ccpParty } from '../domain/party';
 import { partyFromKey, partyKey } from '../engine/ledger/party';
 import { defect } from '../domain/defect';
 import type { RegionId } from '../domain/geography';
@@ -36,7 +38,7 @@ export interface ObligationStore {
   used: number;
   freeHead: number;
   /** What kind of obligation the row is: 'DERIVATIVE' (d4c-i), 'REPO' (d4c-ii), 'STOCK_LOAN' (d4c-iii),
-   *  'PRIME_BROKERAGE' (d4c-iv), 'TRADE_INVOICE' (d4c-v), 'COMMITMENT' (d4c-vi). */
+   *  'PRIME_BROKERAGE' (d4c-iv), 'TRADE_INVOICE' (d4c-v), 'COMMITMENT' (d4c-vi), 'CCP_FUND' (§3.17-iv-c-i). */
   kindRef: RefColumn<TypeRef>;
   /** The kind's own class — a derivative's `DerivativeClassId`. */
   classRef: RefColumn<TypeRef>;
@@ -479,6 +481,49 @@ export function materializeCommitment(v2: V2World, r: number): LpCommitment {
   const lp = partyFromKey(partyKeyOf(v2, S.bRef[r]));
   if (fund?.kind !== 'INSTITUTION' || lp?.kind !== 'INSTITUTION') return defect(`commitment row ${r} (${S.id[r]}) names a party that is no institution`);
   return { fundId: fund.id, lpEntityId: lp.id, regionId: regionOf(v2, S.regionRef[r]) as RegionId, committedLocal: S.notional[r], drawnLocal: S.drawn[r] };
+}
+
+// ---- §3.17-iv-c-i — THE DEFAULT FUND: the clearing house as A, the member as B, the member's
+// contribution as the size, in the house's money. One row per member per house. ----
+
+/** The one row a house and a member have between them. */
+export const ccpFundIdOf = (regionId: string, memberKey: string): string => `CCPFUND:${regionId}:${memberKey}`;
+
+/** Write a contribution as a new row (ledger-internal). Returns the row. */
+export function writeCcpFundRow(v2: V2World, c: CcpFundContribution): number {
+  const S = mutableObligations(v2);
+  const memberKey = partyKey(c.member);
+  const id = ccpFundIdOf(c.regionId, memberKey);
+  if (S.rowById.has(id)) return defect(`default-fund contribution ${id} written twice`);
+  const r = allocRow(S);
+  const kindRef = internType(v2, 'CCP_FUND');
+  S.kindRef[r] = kindRef; S.classRef[r] = kindRef; S.regionRef[r] = internRegion(v2, c.regionId);
+  S.currencyId[r] = CURRENCY_ID[currencyOf(c.regionId)];
+  S.aRef[r] = internPartyKey(v2, partyKey(ccpParty(c.regionId))); S.bRef[r] = internPartyKey(v2, memberKey);
+  S.notional[r] = c.amountLocal; S.strike[r] = 0; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
+  S.struckWeek[r] = 0; S.maturityWeek[r] = 0;
+  S.refKind[r] = 0; S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = id;
+  S.instrRef[r] = ABSENT_REF as InstrRef; S.positionAtStrike[r] = Number.NaN; S.recalledWeek[r] = -1; S.haircut[r] = Number.NaN;
+  S.toRegionRef[r] = ABSENT_REF as RegionRef; S.drawn[r] = Number.NaN;
+  S.rowById.set(id, r);
+  appendToKind(S, kindRef, r);
+  bump(S, kindRef);
+  return r;
+}
+
+/** A true-up or a write-down moves what a member has in the fund (ledger-internal). */
+export function writeCcpFundAmount(v2: V2World, r: number, amountLocal: number): void {
+  const S = mutableObligations(v2);
+  S.notional[r] = amountLocal;
+  bump(S, S.kindRef[r]);
+}
+
+/** One contribution row materialized back to the contribution the house's readers see. */
+export function materializeCcpFund(v2: V2World, r: number): CcpFundContribution {
+  const S = v2.obligations;
+  const member = partyFromKey(partyKeyOf(v2, S.bRef[r]));
+  if (member?.kind !== 'COMPANY' && member?.kind !== 'BANK' && member?.kind !== 'INSTITUTION') return defect(`default-fund row ${r} (${S.id[r]}) names a party that is no member`);
+  return { regionId: regionOf(v2, S.regionRef[r]) as RegionId, member, amountLocal: S.notional[r] };
 }
 
 /** §3.13-BOOK d4c-vi — every live row of every kind, as the two parties and the size: what one

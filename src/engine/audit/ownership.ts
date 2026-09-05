@@ -3,7 +3,7 @@
 import { GameState, RegionId } from '../../types';
 import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf, liveObligationPartiesOf, securityLoanBookOf, ccpSheetAt } from '../ledger/contract-ledger';
 import { accountKey } from '../ledger/accounts';
-import { ccpFreeResourcesLocal } from '../../domain/clearing-house';
+import { ccpOwnCapitalLocal } from '../../domain/clearing-house';
 import type { CurrencyCode } from '../../domain/geography';
 import { deskRowsOf } from '../desk-register';
 import { issuedSharesOf, marketCapAt } from '../../engine2/instruments';
@@ -608,20 +608,21 @@ function o13(state: GameState, week: number): AuditFinding[] {
 }
 
 /**
- * O15 — §3.17-iv-a. THE CLEARING HOUSE HOLDS THE MARGIN IT WAS POSTED. Per region, the CCP's cash
- * at the banks covers the initial margin its live contracts posted to it: the posting is the one
- * inflow and the release the one outflow, so cash below margin is a payment the lifecycle did not
- * make or a contract that posted nothing it claims to have. Cash ABOVE margin is legitimate — a
- * party that ceased to exist never took its margin back — and is what the waterfall (17-iv-c)
- * draws on first.
+ * O15 — §3.17-iv-a, c-i. THE CLEARING HOUSE HOLDS WHAT ITS MEMBERS PUT WITH IT. Per region, the
+ * CCP's cash at the banks covers the initial margin its live contracts posted to it AND the
+ * default fund its members paid in: the postings and the true-ups are the inflows, the releases
+ * and the refunds the outflows, so cash below the two is a payment the lifecycle did not make, a
+ * contract that posted nothing it claims to have — or, §3.17-iv-b, a survivor the house paid for
+ * a member that ceased to exist, which is the loss 17-iv-c-ii's waterfall gives an order to.
+ * Cash ABOVE the two is the house's own capital (`ccpOwnCapitalLocal`).
  */
 function o15(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
   REGION_IDS.forEach((r) => {
     const sheet = ccpSheetAt(v2, r);
-    const shortLocal = -ccpFreeResourcesLocal(sheet);
-    if (shortLocal > AUDIT_BOOKS_TOLERANCE) out.push({ family: 'O', check: 'O15 the clearing house holds the margin it was posted', week, usd: shortLocal, message: `${r}: the clearing house holds ${B(sheet.cashLocal)} against ${B(sheet.marginHeldLocal)} of members' initial margin — ${B(shortLocal)} short` });
+    const shortLocal = -ccpOwnCapitalLocal(sheet);
+    if (shortLocal > AUDIT_BOOKS_TOLERANCE) out.push({ family: 'O', check: 'O15 the clearing house holds what its members put with it', week, usd: shortLocal, message: `${r}: the clearing house holds ${B(sheet.cashLocal)} against ${B(sheet.marginHeldLocal)} of members' initial margin and ${B(sheet.defaultFundLocal)} of default fund — ${B(shortLocal)} short` });
   });
   return out;
 }

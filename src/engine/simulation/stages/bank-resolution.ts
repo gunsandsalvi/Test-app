@@ -29,7 +29,7 @@ import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { banksOf } from '../../../domain/company';
 import { dateOfWeek } from '../../../domain/calendar';
 import { WeeklyStepContext } from './context';
-import { bankMarginAtHouseLocal, novateDerivatives, publishRepoBook, repoBookOf, primeBrokerageBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
+import { bankAtHouseLocal, novateDerivatives, publishRepoBook, repoBookOf, primeBrokerageBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
 import { pay, runSettlementStage } from './settlement';
 import { fieldsOf, residualOf } from '../bank-identity-trace';
 import { ladderRowsOf, facilityBookOf } from '../../../engine2/tranches';
@@ -149,8 +149,8 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     const traceOn = process.env.BANK_RESOLUTION_TRACE === '1';
     const traceSheet = (label: string, c: typeof bank) => {
       if (!traceOn || !c.bankBalanceSheet) return;
-      const f = fieldsOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankMarginAtHouseLocal(ctx.v2, c.id));
-      console.log(`  [res-trace] ${label} ${c.ticker} resid ${(residualOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankMarginAtHouseLocal(ctx.v2, c.id)) / 1e6).toFixed(3)}M :: `
+      const f = fieldsOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id));
+      console.log(`  [res-trace] ${label} ${c.ticker} resid ${(residualOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id)) / 1e6).toFixed(3)}M :: `
         + Object.entries(f).map(([k, v]) => `${k} ${(v / 1e9).toFixed(3)}B`).join(' | '));
     };
     traceSheet('before', bank); traceSheet('before', acquirer);
@@ -198,7 +198,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // Settlement rebuilds a bank's sheet as a new object; the handles above are last week's.
     const F = bank.bankBalanceSheet!;
     traceSheet('settled', bank); traceSheet('settled', acquirer);
-    const leftLocal = sheetLinesLocal(F, bankReservesOf(ctx.v2, bank.id), bankDepositLines(ctx, bank), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id), bankMarginAtHouseLocal(ctx.v2, bank.id));
+    const leftLocal = sheetLinesLocal(F, bankReservesOf(ctx.v2, bank.id), bankDepositLines(ctx, bank), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id), bankAtHouseLocal(ctx.v2, bank.id));
     if (leftLocal > 1e4) {
       const lines = Object.entries(F as unknown as Record<string, unknown>)
         .filter(([, v]) => typeof v === 'number' && Math.abs(v as number) > 1e4)

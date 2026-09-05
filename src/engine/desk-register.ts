@@ -20,7 +20,7 @@ import { bookHeadOf, instrumentIdAt, rowUnits } from '../engine2/holdings';
 import { deskBookId } from './ledger/holdings-ledger';
 import { bankSovereignBookLocal } from './sovereign-register';
 import type { EntityId, InstrumentId } from '../domain/ids';
-import { bankMarginAtHouseLocal } from './ledger/contract-ledger';
+import { bankAtHouseLocal } from './ledger/contract-ledger';
 import type { RegionId } from '../types';
 import type { DealerDeskPosition } from '../domain/dealer-desk';
 
@@ -79,8 +79,9 @@ export function regionalDeskViewOf(v2: V2World, bankIds: readonly string[], kind
 
 /** What a bank's books put on its balance sheet: its own sovereign book at the mark plus its
  *  desks' gross inventory — the securities the leverage ratio charges it for — and, §3.17-iv-b,
- *  the margin it has posted at the clearing house (`contract-ledger.ts:bankMarginAtHouseLocal`),
- *  an asset it holds against the house and consumes leverage with like any other. */
+ *  what it has at the clearing house — its margin and, §3.17-iv-c-i, its default-fund
+ *  contribution (`contract-ledger.ts:bankAtHouseLocal`) — an asset it holds against the house and
+ *  consumes leverage with like any other. */
 export function bankBookAssetsLocal(v2: V2World, bankId: string): number {
-  return bankSovereignBookLocal(v2, bankId) + deskGrossLocal(v2, bankId) + bankMarginAtHouseLocal(v2, bankId as EntityId);
+  return bankSovereignBookLocal(v2, bankId) + deskGrossLocal(v2, bankId) + bankAtHouseLocal(v2, bankId as EntityId);
 }

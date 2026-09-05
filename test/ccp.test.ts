@@ -10,9 +10,10 @@ import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { partyKey, partyFromKey } from '../src/engine/ledger/party';
 import { ccpParty, samePartyRef } from '../src/domain/party';
-import { ccpOfContract, ccpOfMoney, ccpSheetOf, ccpFreeResourcesLocal } from '../src/domain/clearing-house';
+import { ccpOfContract, ccpOfMoney, ccpSheetOf, ccpOwnCapitalLocal, coverOneFundLocal, fundContributionsOf, CCP_CLOSE_OUT_SESSIONS } from '../src/domain/clearing-house';
+import { trueUpDefaultFunds } from '../src/engine/simulation/stages/derivatives';
 import { openSectorRow, ccpCashOf, ccpDepositsAt, depositLinesAt } from '../src/engine/ledger/accounts';
-import { strikeDerivatives, ccpSheetAt, memberMarginPostedLocal, bankMarginAtHouseLocal } from '../src/engine/ledger/contract-ledger';
+import { keepDerivatives, strikeDerivatives, ccpSheetAt, memberMarginPostedLocal, bankMarginAtHouseLocal, bankAtHouseLocal, ccpFundOf, ccpFundLocal, publishCcpFund, membersOfHouse } from '../src/engine/ledger/contract-ledger';
 import { newPaymentJournal, reasonText } from '../src/engine/simulation/stages/settlement';
 import { newWireJournal, setActiveWireJournal } from '../src/engine/ledger/wire';
 import { partyOf } from '../src/engine/ledger/party';
@@ -37,8 +38,8 @@ test('the house a contract clears at is the house of its money', () => {
 });
 
 test('the sheet: cash against margin held, and what is free beyond it', () => {
-  assert.equal(ccpFreeResourcesLocal(ccpSheetOf(120, 100)), 20, 'a departed member\'s margin stays with the house');
-  assert.equal(ccpFreeResourcesLocal(ccpSheetOf(90, 100)), -10, 'short of what it owes its members');
+  assert.equal(ccpOwnCapitalLocal(ccpSheetOf(120, 100, 0)), 20, 'a departed member\'s margin stays with the house');
+  assert.equal(ccpOwnCapitalLocal(ccpSheetOf(130, 100, 40)), -10, 'short of what it owes its members: margin and fund');
 });
 
 test('its cash is its rows at the region\'s banks, and each bank\'s row is a deposit line', () => {
@@ -67,7 +68,8 @@ test('the sheet off the books: the house holds the margin its live contracts pos
     const sheet = ccpSheetAt(v2, 'USA');
     assert.equal(sheet.marginHeldLocal, 50_000, '§3.17-iv-b: both members posted');
     assert.equal(sheet.cashLocal, 50_000);
-    assert.equal(ccpFreeResourcesLocal(sheet), 0, 'the postings are the one inflow: cash equals margin');
+    assert.equal(sheet.defaultFundLocal, 0, 'no true-up has run');
+    assert.equal(ccpOwnCapitalLocal(sheet), 0, 'the postings are the one inflow: cash equals margin');
     assert.equal(memberMarginPostedLocal(v2, a, 'USD'), 25_000, 'the fund\'s margin at the house');
     assert.equal(bankMarginAtHouseLocal(v2, dealer), 25_000, 'the dealer\'s margin at the house is its asset');
   } finally {
@@ -108,5 +110,77 @@ test('§3.17-iv-b: every leg goes through the house — both members post to it,
     ], 'the departed member pays nothing; the house still pays the survivor');
   } finally {
     setActiveWireJournal(undefined);
+  }
+});
+
+test('§3.17-iv-c-i: the fund is cover-one — the largest member\'s move over the close-out horizon beyond its margin — shared pro rata', () => {
+  const k = Math.sqrt(CCP_CLOSE_OUT_SESSIONS) - 1;
+  assert.equal(coverOneFundLocal([100, 300, 200]), 300 * k);
+  assert.equal(coverOneFundLocal([]), 0, 'no members, no fund');
+  const shares = fundContributionsOf(120, new Map([['a', 100], ['b', 300], ['c', 0]]));
+  assert.equal(shares.get('a'), 30); assert.equal(shares.get('b'), 90); assert.equal(shares.get('c'), 0);
+});
+
+test('§3.17-iv-c-i: the fund is rows of the contract store, and a member\'s contribution is its asset', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const dealer = asEntityId('USA_BANK1');
+  const a = { kind: 'INSTITUTION' as const, id: asEntityId('INST-A') };
+  setActiveWireWorld(wireWorldOf(v2, [{ id: dealer }], [{ id: a.id }]));
+  try {
+    publishCcpFund(v2, 'USA', [{ regionId: 'USA', member: a, amountLocal: 30 }, { regionId: 'USA', member: { kind: 'BANK', id: dealer }, amountLocal: 90 }]);
+    assert.equal(ccpFundLocal(v2, 'USA'), 120);
+    assert.equal(ccpFundLocal(v2, 'EUR'), 0);
+    assert.equal(bankAtHouseLocal(v2, dealer), 90, 'no margin yet: the asset is the contribution');
+    // A true-up rewrites the rows: the fund names the members it has, at their new amounts.
+    publishCcpFund(v2, 'USA', [{ regionId: 'USA', member: { kind: 'BANK', id: dealer }, amountLocal: 50 }]);
+    assert.deepEqual(ccpFundOf(v2, 'USA').map((c) => [c.member.id, c.amountLocal]), [[dealer, 50]]);
+    assert.throws(() => publishCcpFund(v2, 'USA', [{ regionId: 'USA', member: { kind: 'INSTITUTION', id: asEntityId('INST-GHOST') }, amountLocal: 1 }]), /no entity, region or bank/);
+    assert.throws(() => publishCcpFund(v2, 'USA', [{ regionId: 'EUR', member: a, amountLocal: 1 }]), /published on USA/);
+  } finally {
+    setActiveWireWorld(undefined);
+  }
+});
+
+test('§3.17-iv-c-i: the weekly true-up settles each member to its share, and refunds a member that left', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const dealer = asEntityId('USA_BANK1');
+  const a = { kind: 'INSTITUTION' as const, id: asEntityId('INST-A') };
+  const b = { kind: 'BANK' as const, id: dealer };
+  setActiveWireWorld(wireWorldOf(v2, [{ id: dealer }], [{ id: a.id }]));
+  const journal = newPaymentJournal();
+  const ctx = { v2, paymentJournal: journal, pendingNetById: [], pendingTouchedIds: [], fx: PARITY_FX } as unknown as WeeklyStepContext;
+  setActiveWireJournal(newWireJournal(1, 0));
+  try {
+    const legs = (from: number) => Array.from({ length: journal.n - from }, (_, i) => ({ payer: partyKey(partyOf(journal.payerId[from + i])), payee: partyKey(partyOf(journal.payeeId[from + i])), amount: journal.amount[from + i], reason: reasonText(journal.reasonId[from + i]) }));
+    const c: DerivativeContract = {
+      id: 'USA-FXF-1-0', classId: 'FX_FORWARD', regionId: 'USA', currency: 'USD', a, b, notional: 1e6, strike: 1.1,
+      reference: { kind: 'REGION', regionId: 'EUR' }, termKey: '', settledMarkLocal: 0, initialMarginLocal: 1000, struckWeek: 1, maturityWeek: 14,
+    };
+    strikeDerivatives(ctx, [c]);
+    assert.deepEqual([...membersOfHouse(v2, 'USA').values()].map((m) => m.marginLocal), [1000, 1000]);
+    trueUpDefaultFunds(ctx);
+    const k = Math.sqrt(CCP_CLOSE_OUT_SESSIONS) - 1;
+    const share = 1000 * k / 2;
+    assert.deepEqual(legs(0), [
+      { payer: 'INSTITUTION:INST-A', payee: 'CCP:USA', amount: share, reason: 'default fund contribution' },
+      { payer: 'BANK_SECURITIES:USA_BANK1', payee: 'CCP:USA', amount: share, reason: 'default fund contribution' },
+    ], 'each member pays its share in; the bank from its securities account');
+    assert.equal(ccpFundLocal(v2, 'USA'), 1000 * k);
+    assert.equal(bankAtHouseLocal(v2, dealer), 1000 + share, 'margin and fund');
+    const n = journal.n;
+    trueUpDefaultFunds(ctx);
+    assert.equal(journal.n, n, 'nothing moved: the fund is at its size');
+    // The contract leaves the book: no members, no fund — each is refunded what it had in.
+    keepDerivatives(ctx, []);
+    trueUpDefaultFunds(ctx);
+    assert.deepEqual(legs(n).map((l) => [l.payer, l.payee, l.amount, l.reason]).sort(), [
+      ['CCP:USA', 'BANK_SECURITIES:USA_BANK1', share, 'default fund refunded'],
+      ['CCP:USA', 'INSTITUTION:INST-A', share, 'default fund refunded'],
+    ]);
+    assert.equal(ccpFundLocal(v2, 'USA'), 0);
+    assert.equal(ccpFundOf(v2, 'USA').length, 0);
+  } finally {
+    setActiveWireJournal(undefined);
+    setActiveWireWorld(undefined);
   }
 });

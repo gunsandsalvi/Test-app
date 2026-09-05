@@ -107,7 +107,7 @@ checked by `scripts/check-atlas.sh`.
 | C1.a netting is per counterparty pair | — | ❌ |
 | **C2 cleared: a CCP becomes buyer to the seller and seller to the buyer** | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` · `src/engine/simulation/stages/derivative-lifecycle.ts:postInitialMargin` | ✅ |
 | C2.a it concentrates the risk in a named party | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` · `src/engine/audit/ownership.ts:o15` | ✅ |
-| C3 the CCP is a real entity with a balance sheet | `src/domain/clearing-house.ts:CcpSheet` · `src/engine/ledger/contract-ledger.ts:ccpSheetAt` | ⚠️ |
+| C3 the CCP is a real entity with a balance sheet | `src/domain/clearing-house.ts:CcpSheet` · `src/engine/ledger/contract-ledger.ts:ccpFundOf` · `src/engine/simulation/stages/derivatives.ts:trueUpDefaultFunds` | ✅ |
 | **C4 a stated default waterfall, in order** | — | ❌ |
 | C4.a a member's loss can come from another member's default | — | ❌ |
 | **C5 FORBID the CCP is not a guarantor of last resort** | — | ❌ |
@@ -149,7 +149,19 @@ two stores to guess which space a string was in.
 `DerivativeParty` was a second party union re-declaring three of `PartyRef`'s arms; it is
 `CounterpartyRef`, an `Extract` view of the one union, since §9.13-BOOK c-then-3a.
 
-### ✅ C2 / ⚠️ C3 / ❌ C4, C5 — EVERY MEMBER FACES THE HOUSE; THE HOUSE HAS NO WATERFALL YET
+### ✅ C2, C3 / ❌ C4, C5 — EVERY MEMBER FACES THE HOUSE, AND FUNDS IT; NO WATERFALL YET
+
+*2026-09-05 (§9.17-iv-c-i). The sheet has its three lines. The DEFAULT FUND is rows of the
+contract store (`clearing-house.ts:CcpFundContribution`, kind `CCP_FUND`, one per member per
+house; `contract-ledger.ts:ccpFundOf` / `publishCcpFund`), sized cover-one — the largest member's
+move over a five-session close-out beyond the margin it posted (`coverOneFundLocal`,
+`CCP_CLOSE_OUT_SESSIONS`) — and shared pro rata to each member's margin (`fundContributionsOf`).
+`derivatives.ts:trueUpDefaultFunds` settles every member to its share after the week's last
+market, in and out, through the account its margin moves through, so a bank's asset at the house
+is margin plus fund (`contract-ledger.ts:bankAtHouseLocal`). The house's OWN CAPITAL is what it
+holds beyond its members' money (`ccpOwnCapitalLocal` — it has no shareholders and charges no
+fee, so its capital is what it retained), and `O15` holds cash to margin plus fund. What the
+stack still lacks is an ORDER: 17-iv-c-ii.*
 
 *2026-09-05 (§9.17-iv-b). Novated. No member pays another: `payThroughHouse` writes every leg —
 periodic, mark, event, close-out — as the paying member to the house of the contract's money and
@@ -170,12 +182,12 @@ contract's initial margin is posted TO the house of the contract's money
 (`clearing-house.ts:ccpOfContract`) and returned BY it, whoever the B side is, so the dealer's
 `clientMarginLocal` line and the lien on its securities account are gone. Its sheet
 (`clearing-house.ts:CcpSheet`, read by `contract-ledger.ts:ccpSheetAt`) is cash held against
-margin held, and `O15` holds the cash to the contracts. ⚠️ rather than ✅ because C3 names three
-lines and this is one of them: the default fund and the house's own capital are 17-iv-c's.*
+margin held, and `O15` holds the cash to the contracts. ⚠️ at the time because C3 names three
+lines and this was one of them; the default fund and the house's own capital came with 17-iv-c-i.*
 
-What is left is the waterfall: no default fund, no member contributions, no order of resources,
-no clearing-member limit. A member's default closes out through the house at the mark, and a loss
-the house cannot recover sits on its cash with no stack to run down. The only waterfall in `src`
+What is left is the waterfall: the resources exist and have no ORDER, and no clearing-member
+limit. A member's default closes out through the house at the mark, and a loss the house cannot
+recover sits on its cash with no rule for which line it consumes first. The only waterfall in `src`
 is the estate's (`estate-resolution.ts:374`, secured → unsecured → equity), which is an issuer's
 liquidation and not a clearing house's.
 

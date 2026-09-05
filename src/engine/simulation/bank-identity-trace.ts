@@ -21,7 +21,7 @@
 import { WeeklyStepContext } from './stages/context';
 import { bankSovereignBookLocal } from '../sovereign-register';
 import { deskGrossLocal, deskSignedLocal } from '../desk-register';
-import { bankMarginAtHouseLocal } from '../ledger/contract-ledger';
+import { bankAtHouseLocal } from '../ledger/contract-ledger';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../domain/banking';
 import { GameState } from '../../types';
 import { BankingSector } from '../../domain/banking';
@@ -75,7 +75,7 @@ export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLin
     // §3.13-BOOK d3d: the desks' rows, off the register (`deskGrossLocal`), handed in like the book.
     deskInventoryAbsLocal: deskGrossLocal,
     primeBrokerageLoansLocal: bs.primeBrokerageLoansLocal ?? 0,
-    // §3.17-iv-b: the margin the bank posted at the clearing house, off the contracts.
+    // §3.17-iv-b/c-i: the margin and the fund contribution the bank has at the clearing house, off the store.
     marginAtHouseLocal,
   };
 }
@@ -133,8 +133,8 @@ export class BankIdentityTrace {
       if (!sheet) return;
       const lines = bankDepositLines(ctx, c);
       const facilityBookLocal = facilityBookOf(ctx.v2, c.id);
-      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankMarginAtHouseLocal(ctx.v2, c.id)));
-      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), deskSignedLocal(ctx.v2, c.id), bankMarginAtHouseLocal(ctx.v2, c.id)));
+      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id)));
+      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), deskSignedLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id)));
     });
     return out;
   }
@@ -146,7 +146,7 @@ export class BankIdentityTrace {
     const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[this.focusTicker]?.bankBalanceSheet)
       || c?.bankBalanceSheet;
     if (!sheet || !c) return;
-    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankMarginAtHouseLocal(ctx.v2, c.id));
+    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id));
     if (this.focusFields) {
       const parts: string[] = [];
       let residualDelta = 0;

@@ -14,16 +14,16 @@
  * columnar store for the six is slice d4c's.
  */
 import type { V2World } from '../../engine2/world';
-import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
+import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeCcpFundRow, writeCcpFundAmount, materializeCcpFund, ccpFundIdOf, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import { derivativePartyKey, type DerivativeContract, type DerivativeParty } from '../../domain/derivatives/contract';
 import { type RepoContract, encumberedFaceByBond } from '../../domain/repo';
 import { setLien } from './holdings-ledger';
 import { setAccountLien, ccpCashOf, obligationCurrencyOf } from './accounts';
-import { ccpOfContract, ccpSheetOf, MEMBERS_PER_CONTRACT, type CcpSheet } from '../../domain/clearing-house';
+import { ccpOfContract, ccpSheetOf, MEMBERS_PER_CONTRACT, type CcpSheet, type CcpFundContribution } from '../../domain/clearing-house';
 import { convert } from '../../domain/currency';
-import { REGION_IDS, type CurrencyCode } from '../../domain/geography';
+import { REGION_IDS, currencyOf, type CurrencyCode } from '../../domain/geography';
 import type { SecurityLoan } from '../../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../../domain/prime-brokerage';
 import { bankPartyOf, companyPartyOf } from '../../domain/party';
@@ -68,7 +68,7 @@ export function ccpMarginHeldLocal(v2: V2World, region: RegionId): number {
   derivativesOf(v2).forEach((c) => { if (ccpOfContract(c).region === region) total += MEMBERS_PER_CONTRACT * initialMarginLocal(c); });
   return total;
 }
-export const ccpSheetAt = (v2: V2World, region: RegionId): CcpSheet => ccpSheetOf(ccpCashOf(v2, region), ccpMarginHeldLocal(v2, region));
+export const ccpSheetAt = (v2: V2World, region: RegionId): CcpSheet => ccpSheetOf(ccpCashOf(v2, region), ccpMarginHeldLocal(v2, region), ccpFundLocal(v2, region));
 
 /**
  * §3.17-iv-b — A MEMBER'S MARGIN AT THE HOUSE IS ITS ASSET: the initial margin of every live
@@ -88,6 +88,68 @@ export function memberMarginPostedLocal(v2: V2World, party: DerivativeParty, int
 /** A bank's margin at the house, in the money it keeps its books in. */
 export const bankMarginAtHouseLocal = (v2: V2World, bankId: EntityId): number =>
   memberMarginPostedLocal(v2, bankPartyOf(bankId), obligationCurrencyOf(v2, bankPartyOf(bankId)));
+
+/**
+ * §3.17-iv-c-i — THE MEMBERS OF A HOUSE, and the margin each has at it: every party on a live
+ * contract that clears in the house's money. The fund is sized and shared off this read.
+ */
+export function membersOfHouse(v2: V2World, region: RegionId): Map<string, { member: DerivativeParty; marginLocal: number }> {
+  const out = new Map<string, { member: DerivativeParty; marginLocal: number }>();
+  derivativesOf(v2).forEach((c) => {
+    if (ccpOfContract(c).region !== region) return;
+    [c.a, c.b].forEach((member) => {
+      const key = derivativePartyKey(member);
+      const row = out.get(key) ?? { member, marginLocal: 0 };
+      row.marginLocal += initialMarginLocal(c);
+      out.set(key, row);
+    });
+  });
+  return out;
+}
+
+/**
+ * §3.17-iv-c-i — THE DEFAULT FUND IS ROWS OF THE CONTRACT STORE: one per member per house, read
+ * as the contributions (memoised on the kind's epoch) and published whole — a member the store
+ * holds takes its new amount, a new member gets a row, a member the fund no longer names is
+ * freed (its money was returned by the caller).
+ */
+const ccpFundMemo = new WeakMap<V2World, { epoch: number; byRegion: Map<string, CcpFundContribution[]> }>();
+export function ccpFundOf(v2: V2World, region: RegionId): CcpFundContribution[] {
+  const epoch = kindEpochOf(v2, 'CCP_FUND');
+  let memo = ccpFundMemo.get(v2);
+  if (!memo || memo.epoch !== epoch) { memo = { epoch, byRegion: new Map() }; ccpFundMemo.set(v2, memo); }
+  let list = memo.byRegion.get(region);
+  if (!list) { list = rowsOfKindInRegion(v2, 'CCP_FUND', region).map((r) => tagRow(materializeCcpFund(v2, r), r)); memo.byRegion.set(region, list); }
+  return list;
+}
+export function publishCcpFund(v2: V2World, region: RegionId, contributions: readonly CcpFundContribution[]): void {
+  const rows = contributions.map((c) => {
+    if (c.regionId !== region) return defect(`default-fund contribution of ${c.regionId} published on ${region}'s fund`);
+    if (!(c.amountLocal >= 0) || !Number.isFinite(c.amountLocal)) return defect(`default-fund contribution of ${c.amountLocal}`);
+    resolvePartyRef(c.member, `default-fund member`);
+    const r = derivativeRowOf(v2, ccpFundIdOf(region, partyKey(c.member)));
+    if (r === undefined) return writeCcpFundRow(v2, c);
+    writeCcpFundAmount(v2, r, c.amountLocal);
+    return r;
+  });
+  relinkKindInRegion(v2, 'CCP_FUND', region, rows);
+}
+/** The fund, in the house's money. */
+export const ccpFundLocal = (v2: V2World, region: RegionId): number => ccpFundOf(v2, region).reduce((a, c) => a + c.amountLocal, 0);
+/** A member's contributions to every house, in the money asked for. */
+export function memberFundContributionLocal(v2: V2World, party: DerivativeParty, into: CurrencyCode): number {
+  const key = derivativePartyKey(party);
+  let total = 0;
+  REGION_IDS.forEach((region) => ccpFundOf(v2, region).forEach((c) => { if (derivativePartyKey(c.member) === key) total += convert(c.amountLocal, currencyOf(region), into, v2.fx); }));
+  return total;
+}
+/** §3.17-iv-c-i: what a bank has at the house altogether — its margin and its fund contribution —
+ *  in the money it keeps its books in: the asset its sheet carries against the house. */
+export const bankAtHouseLocal = (v2: V2World, bankId: EntityId): number => {
+  const party = bankPartyOf(bankId);
+  const into = obligationCurrencyOf(v2, party);
+  return memberMarginPostedLocal(v2, party, into) + memberFundContributionLocal(v2, party, into);
+};
 
 /** Every live derivative, materialized in store order — the audits', the UI's and the harness's read. */
 export function derivativesOf(v2: V2World): DerivativeContract[] {
