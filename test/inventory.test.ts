@@ -159,3 +159,16 @@ test('a week that starts nothing capitalises nothing — a cost per unit is neve
   const instant = advanceProductionPipeline(undefined, 0, 7, 21);
   assert.deepEqual({ u: instant.arrivedUnits, v: instant.arrivedValueLocal, q: instant.queue }, { u: 7, v: 21, q: [] });
 });
+
+test('a firm\'s first week on a line opens in steady state, and its opening batches carry a real cost', () => {
+  // §3.13-INV-iv-b: the seeded queue is an opening STOCK — units at the week's own rate, so what
+  // arrives is valued at what it would have cost. Seeded at zero it would be free goods, and the
+  // firm's first `lead` weeks of sales would book a windfall margin.
+  const first = advanceProductionPipeline(undefined, 4, 25, 100);
+  assert.equal(first.arrivedUnits, 25, 'in steady state from the first week, not a year of silence');
+  assert.equal(first.arrivedValueLocal, 100);
+  assert.equal(first.queue.length, 4);
+  assert.deepEqual(new Set(first.queue.map((l) => l.valueLocal)), new Set([100]), 'every opening lot is stated at the same rate');
+  // The unit cost of what arrives is the unit cost of what it is making — no windfall, no infinity.
+  assert.equal(first.arrivedValueLocal / first.arrivedUnits, 4);
+});

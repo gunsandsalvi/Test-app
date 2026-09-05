@@ -271,6 +271,16 @@ interface WipLot { units: number; valueLocal: number }
  * that has just broken ground. The alternative is a year of zero output from every construction
  * firm at week one, which is an opening condition nobody chose and not a statement about
  * production time (a stated table survives only until the mechanism has something in it).
+ *
+ * §3.13-INV-iv-b — AND THOSE SEEDED LOTS CARRY THIS WEEK'S COST, which is a decision and not an
+ * accident. The units are an OPENING STOCK, stated, the way the seed's plant is (`the-seed.md`
+ * A3); their cost is stated with them, at the rate the firm is actually running at. The other two
+ * options are worse, and both were considered: seeding the lots at ZERO cost hands the firm free
+ * goods with no basis, so its first `lead` weeks of sales book a windfall margin under the
+ * lower-of-cost-and-market rule (13-INV-vi); seeding nothing at all is the year of silence this
+ * paragraph exists to avoid. What this stands in for is a firm ENTERING a line deliberately —
+ * commissioning the plant, waiting out the build, and paying for the first batch — which is
+ * §3's `20d-iv`, and which inherits this assumption when it lands.
  */
 export function advanceProductionPipeline(
   existing: WipLot[] | undefined,

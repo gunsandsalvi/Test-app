@@ -405,16 +405,6 @@ written from here):
     earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
     all). Seven slices, in this order, because each one is load-bearing for the next:
 
-    iv-b. **A FIRM ENTERING A LINE IS GIVEN `lead` WEEKS OF WORK IN PROGRESS, AND ITS COST.**
-       `advanceProductionPipeline` seeds a virgin queue with `lead` copies of this week's batch —
-       deliberately, and for a good reason it states: the alternative is a year of zero output from
-       every construction firm at week one, an opening condition nobody chose. What was never
-       decided is the COST. The seeded lots carry `lead × the week's operating cost`, so a firm
-       that starts a new line mid-run is credited with months of manufacturing it never paid for —
-       and §9.13-INV-v is about to put that on a balance sheet with no cash leg and no counterparty.
-       Either the opening pipeline is an opening STOCK, stated and costless like the seed's plant
-       (`the-seed.md` A3), or a firm entering a line builds up from empty and the units are what
-       has to be reconsidered. Decide it, state it where the queue is seeded, and pin it.
     v. **FINISHED STOCK IS LOTS AT COST.** Not a GOOD row: the register permits exactly one GOOD
        row per (firm, sub-unit) and `openGoodsPass` addresses chains by `firmRow × NSUB + sub`, so
        a second chain is silently orphaned — and merging the two would make the recipe draw consume
@@ -678,7 +668,10 @@ step that owns its node; where it does not yet, the step below is the owner.
     clears its hurdle — the new line's plant is commissioned through the same
     `capexUnderConstruction` lag as any capex, it posts nothing until the plant is in service,
     and its revenue share is what it then sells. Entry and exit (20d-ii) together are what
-    makes a sector's line-up an outcome.
+    makes a sector's line-up an outcome. **It inherits §9.13-INV-iv-b**: until a firm can enter a
+    line deliberately, one that touches a line for the first time is handed `lead` weeks of work
+    in progress at its own running cost — an opening stock, stated, standing in for exactly the
+    commissioning-and-waiting this step builds.
 37-BANKEQUITY. **A BANK CANNOT RAISE CAPITAL, AND IT HAS ONE LAYER OF IT.** (Also here, from
     20-LLR-iv: what one bank's run says about the others — `banks-funding-and-liquidity.md` E5 —
     the contagion of a failure across the sector's funding, which a bank with only retained
@@ -1230,6 +1223,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-iv-b — THE OPENING PIPELINE IS AN OPENING STOCK, AND NOW IT SAYS SO.** A firm that has
+  never run a line is handed `lead` weeks of work in progress at this week's rate. The UNITS were
+  a decision, taken and defended at the site: the alternative is a year of zero output from every
+  construction firm at week one, an opening condition nobody chose. Their COST was not — it simply
+  came along, and 13-INV-v is about to make it the basis of real finished stock. Decided, and the
+  decision is the one already there: the seeded lots carry the week's own operating cost, because
+  the other two options are worse and both were weighed. Seeding at ZERO hands the firm free goods
+  with no basis, so its first `lead` weeks of sales book a windfall margin under the
+  lower-of-cost-and-market rule; seeding nothing is the year of silence. What it stands in for is a
+  firm ENTERING a line deliberately — commissioning the plant, waiting out the build, paying for
+  the first batch — which is §3's `20d-iv`, and that step's text now says it inherits this. Pinned
+  in `test/inventory.test.ts`: a first week arrives in steady state, every opening lot is stated at
+  the same rate, and the unit cost of what arrives is the unit cost of what the firm is making —
+  no windfall and no infinity. Gates green; no run (rule 11).
 
 **13-INV-iv — WHAT A BATCH COST, AND WHETHER THERE WAS A BATCH AT ALL.** A cost basis is only worth
   as much as the cost under it, and nothing read this number, so nothing had ever checked it.
