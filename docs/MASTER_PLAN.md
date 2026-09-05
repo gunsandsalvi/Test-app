@@ -547,22 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17e-iii-b. **The lending book lends a sovereign.** 17e-iii-a states the mirror trade's need
-    (`ctx.borrowNeeds`: the face a book wants short beyond what it holds — §9); nothing fills it.
-    `stages/securities-lending.ts` is equity-shaped end to end: `store.scan(e.id, 'EQUITY')`,
-    `stockPrice`, `equityIssuerId`, `shortsEquity` funds sized off fair value, `addShares`. The
-    tree (`securities-lending.md` B1: *"the borrower needs the security: to deliver a short…"*)
-    says any lendable security, and the registry says `GOV_BOND` is `lendable`. Generalise the
-    stage over a LENDABLE VIEW per kind — the instrument's price (`trancheClearedPricePerFace`
-    for a rung), the units a holder can deliver (face, off `sovereignRowsOf`), the delivery (a
-    units move on the store and its wire, `HoldingSpec.units`), the one-week gap (the rung's
-    own price move, `engine2/prices.ts:weeklyPriceMoveOf`) — with the equity path unchanged,
-    the borrow demand for a rung read from `ctx.borrowNeeds`, and two things the equity path
-    also lacks: a RETURN (a borrower that holds the paper and no longer needs the borrow
-    delivers it back and its collateral comes back — today a short is only ever recalled, never
-    covered) and 07c reading the lent face the way 07e reads `lentSharesByLender`, so a lender
-    is not sent out to re-buy what it lent. Then the fund sells the delivered paper in 07c next
-    week through its sell leg, and covers through its buy leg and the return.
 17e-iv. **Offsetting lines net at the house.** A book that reverses on a line — short contracts
     standing, a long struck against them — carries BOTH at the house, each margined
     (`derivative-lifecycle.ts:postInitialMargin`), where a real clearing house nets a member's
@@ -1610,7 +1594,21 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17e-iii-a — THE MIRROR TRADE, AND ITS BORROW NEED.** The pair has two directions with two
+**17e-iii-b — THE LENDING BOOK LENDS A SOVEREIGN.** `securities-lending.ts:
+  runSovereignLendingPass`, run after `holdings-store` and before 07b: the region's loan book is
+  one (`securityLoanBookOf`), partitioned by `isTrancheId` — the share pass carries bond loans
+  through untouched and prices a bond loan's net at `trancheClearedPricePerFace`. The pass
+  pays the fee and the variation margin at the rung's cleared price, RETURNS what a borrower
+  holds beyond its stated need (`ctx.borrowNeeds` is the TOTAL face wanted; a recalled loan
+  wants none) with its collateral, recalls by the share pass's rule (lender position below
+  strike → buy-in), and auctions the increment (need − borrowed) per rung: holders' face
+  (`sovereignRowsOf`) at `lendingReservationFeeBps` on `weeklyPriceMoveOf`, the print to
+  `borrowFeeBpsByCompanyId[bondId]`, loans struck pro rata, delivered as FACE
+  (`holdings.ts:setRowUnits`, the store's `addUnits`, `wireHoldingMove` with units) with cash
+  collateral at the mark. `publishLent` is rebuilt each pass and keys a bond loan by its rung;
+  07c lowers a lender's ceiling and floor by what it lent and makes a recalled borrower's
+  buy-in a purchase at any price. Atlas: securities-lending B1 cited. Gates green; no run.
+- **17e-iii-a — THE MIRROR TRADE, AND ITS BORROW NEED.** The pair has two directions with two
   carries: `bondBasisMirrorRead` turns the disagreement's sign and charges the paper's borrow
   fee (the lending book's last print for the rung, `borrowFeeBpsByCompanyId[bondId]`, 0 until
   it has one — an unpriced borrow the lending book prices the week it is asked) plus the return

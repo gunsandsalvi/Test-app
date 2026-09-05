@@ -546,6 +546,16 @@ export function setRowShares(v2: V2World, entityId: string, r: number, shares: n
   H.dirty.add(entityId);
 }
 
+/** §3.17e-iii-b — the same for a row counted in UNITS (a bond's face): what arrived is a lot at
+ *  this price, what left came off the oldest lots; the value is units × price; shares untouched. */
+export function setRowUnits(v2: V2World, entityId: string, r: number, units: number, pricePerUnit: number, week = 0): void {
+  const H = mutableHoldings(v2);
+  adjustLots(v2, r, units - rowUnits(H, r), pricePerUnit, week);
+  H.units[r] = units;
+  H.qtyLocal[r] = units * pricePerUnit;
+  H.dirty.add(entityId);
+}
+
 /** Fold row `drop` into row `keep` — value, shares and units — leaving `drop` for the relink to
  *  free. Two rows of one instrument on one book hold one position (§9.13-CREDIT row 5). */
 export function foldRowInto(v2: V2World, keep: number, drop: number): void {

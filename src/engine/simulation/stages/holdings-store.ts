@@ -29,7 +29,7 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
-import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, materializeBook, setRowShares, foldRowInto, moveLotsTo, adjustLots, rowUnits, accruedRowOf, addAccrued, pruneEmptyRows } from '../../../engine2/holdings';
+import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, materializeBook, setRowShares, foldRowInto, moveLotsTo, adjustLots, rowUnits, accruedRowOf, addAccrued, pruneEmptyRows, setRowUnits } from '../../../engine2/holdings';
 import { activeWireJournal, hasActiveWireJournal } from '../../ledger/wire';
 import { clearedPriceOf } from '../../../engine2/prices';
 import { V2World } from '../../../engine2/world';
@@ -211,6 +211,58 @@ export class HoldingsStore {
     };
     slot.rows = [...slot.rows, row];
     slot.rowIds.push(-1); // a real row is allocated for it at the write-back
+    const grown = new Uint16Array(slot.rows.length);
+    grown.set(slot.claimed);
+    slot.claimed = grown;
+    const list = slot.byType.get(type);
+    if (list) list.push(slot.rows.length - 1);
+    else slot.byType.set(type, [slot.rows.length - 1]);
+  }
+
+  /**
+   * §3.17e-iii-b — a delivery in UNITS (a bond's face), the same shape as `addShares`: an
+   * unclaimed row of the instrument is adjusted in place (a withdrawal draws from each row in
+   * turn and never takes one negative), a party with no position gets a real row, and the
+   * persistent row takes the same delivery as a lot at this price.
+   */
+  addUnits(
+    entityId: string,
+    type: ItemizedHolding['instrumentType'],
+    instrumentId: InstrumentId,
+    issuerRegion: ItemizedHolding['issuerRegion'],
+    units: number,
+    pricePerUnit: number
+  ): void {
+    const slot = this.slots.get(entityId);
+    if (!slot || !(Math.abs(units) > 0)) return;
+    const indices = slot.byType.get(type);
+    let positionUnits = 0;
+    const isDust = (x: number): boolean => Math.abs(x) <= 1e-9 * Math.max(1, Math.abs(units), positionUnits);
+    let remaining = units;
+    if (indices) {
+      for (const i of indices) {
+        if (slot.claimed[i]) continue;
+        const row = slot.rows[i];
+        if (row.instrumentId !== instrumentId) continue;
+        const held = row.units;
+        positionUnits += Math.abs(held);
+        const take = remaining < 0 ? -Math.min(held, -remaining) : remaining;
+        const next = held + take;
+        row.units = next;
+        row.quantityOrNotionalLocal = next * pricePerUnit;
+        const rid = slot.rowIds[i];
+        if (rid >= 0) setRowUnits(this.v2, entityId, rid, next, pricePerUnit, hasActiveWireJournal() ? activeWireJournal().week : 0);
+        remaining -= take;
+        if (isDust(remaining)) return;
+      }
+    }
+    if (remaining < 0 && !isDust(remaining)) {
+      defect(`${entityId} cannot deliver ${-units} of ${instrumentId}: it holds ${positionUnits} unclaimed and is ${-remaining} short — the receiving leg is already written`);
+    }
+    if (remaining < 0) return;
+    const row: ItemizedHolding = { instrumentId, instrumentType: type, issuerRegion, quantityOrNotionalLocal: remaining * pricePerUnit, units: remaining };
+    slot.rows = [...slot.rows, row];
+    slot.rowIds.push(-1);
     const grown = new Uint16Array(slot.rows.length);
     grown.set(slot.claimed);
     slot.claimed = grown;

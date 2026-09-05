@@ -62,6 +62,7 @@ import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, acc
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { positionKey } from './securities-lending';
 import { maxOverweightMultipleOf } from './asset-allocation';
 
 import { centralBankParticipant, bookCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
@@ -427,6 +428,22 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         });
       });
 
+      // §3.17e-iii-b: what it has LENT is exposure it holds through a receivable, not a deliverable
+      // rung — its ceiling comes down by it rather than sending it out to re-buy what it lent —
+      // and a recalled borrow it still owes is a purchase at any price.
+      bonds.forEach((b) => {
+        const lent = ctx.lentSharesByLender.get(positionKey(entity.id, b.id)) ?? 0;
+        const buyIn = ctx.buyInSharesByBorrower.get(positionKey(entity.id, b.id)) ?? 0;
+        const d = demandByInstrumentId.get(b.id);
+        if (!d || (lent <= 0 && buyIn <= 0)) return;
+        const current = currentByBond.get(b.id) ?? 0;
+        demandByInstrumentId.set(b.id, {
+          ...d,
+          maxHoldingLocal: Math.max(0, d.maxHoldingLocal - lent, current + buyIn),
+          minHoldingLocal: Math.max(0, (d.minHoldingLocal ?? 0) - lent, buyIn > 0 ? current + buyIn : 0),
+          maxNetPurchaseLocal: buyIn > 0 ? undefined : d.maxNetPurchaseLocal,
+        });
+      });
       return { id: entity.id, currentHoldingsByInstrumentId: currentByBond, demandByInstrumentId };
     });
 

@@ -84,7 +84,7 @@ checked by `scripts/check-atlas.sh`.
 | A5 the borrower pays a fee, and the fee is a price | `src/domain/securities-lending.ts:loanWeeklyFeeLocal` | ✅ |
 | A5.a it clears: scarce paper is dear | `src/domain/securities-lending.ts:lendingReservationFeeBps` | ✅ |
 | **A5.b a rebate when the collateral is cash** | — | ❌ |
-| B1 the borrower needs the security | `src/domain/institution-profiles.ts:shortsEquity` | ✅ |
+| B1 the borrower needs the security | `src/domain/institution-profiles.ts:shortsEquity` · `src/engine/simulation/stages/securities-lending.ts:runSovereignLendingPass` | ✅ |
 | B2 the lender has it and wants the fee | `src/engine/simulation/stages/securities-lending.ts:participants` | ✅ |
 | B2.a within a mandate, against acceptable collateral, with a limit | `src/engine/simulation/stages/securities-lending.ts:maxHoldingLocal` | ⚠️ |
 | **B3 an agent may sit in the middle** | — | ❌ |
@@ -202,3 +202,16 @@ the loss the node points at ("this is where a lending programme actually loses m
 happen: the lender can spend the collateral on securities and still owe it. That is the same
 class of defect as `repoLentLocal` being excluded from purchase capacity, and the fix is the same
 one line: posted cash collateral is not spendable capacity. **§3 step 37-SECLENDING**, small.
+
+### ✅ B1 — THE BOOK LENDS A SOVEREIGN, AND A BORROW IS RETURNED
+
+*2026-09-05 (§9.17e-iii-b).* The contract lends a rung of the sovereign ladder on the same terms
+as a share (`runSovereignLendingPass`): the borrower is a book that needs the paper to be short
+of it — the relative-value book's mirror trade, stated as `ctx.borrowNeeds` — the lenders are the
+rung's holders at the fee the auction clears, the one-week gap the rung's own price move, the
+delivery FACE on the register (`holdings.ts:setRowUnits`, the store's `addUnits`, a wire with
+units). It runs as the `sovereign-lending` stage before the sovereign auction so the paper
+delivered is sold into this week's bid,
+and the auction reads what a lender has lent and what a recalled borrower owes. And a RETURN,
+which the share pass still lacks: a borrower holding the paper and needing less of the borrow
+delivers it back and its collateral comes back — a short is covered, not only recalled.

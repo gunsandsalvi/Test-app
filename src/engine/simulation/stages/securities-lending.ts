@@ -21,8 +21,7 @@ import { GameState, RegionId, Company } from '../../../types';
 import { ensureV2, ringFill, rowOf } from '../../../engine2/world';
 import {
   SecurityLoan, loanWeeklyFeeLocal, loanOneWeekGap, lendingReservationFeeBps, shortSizeShares,
-  stockLoanNetLocal,
-} from '../../../domain/securities-lending';
+  stockLoanNetLocal, sharesOnLoan } from '../../../domain/securities-lending';
 import { WeeklyStepContext } from './context';
 import { pay, institutionSpendableLocal } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -40,11 +39,15 @@ import { cashOf } from '../../ledger/accounts';
 import type { InstrumentId } from '../../../domain/ids';
 import { sblInstrumentId, equityInstrumentId, equityIssuerId } from '../../../domain/instrument-keys';
 import { registerBook } from '../../ledger/instrument-ledger';
-import { ladderTotalLocal } from '../../../engine2/tranches';
+import { ladderTotalLocal, isTrancheId } from '../../../engine2/tranches';
+import { trancheClearedPricePerFace } from '../../credit-price';
+import { weeklyPriceMoveOf } from '../../../engine2/prices';
+import { sovereignRowsOf } from '../../sovereign-register';
 import type { EntityId } from '../../../domain/ids';
 import { asInstrumentId, isKnownEntity } from '../../../domain/ids';
 
-export const positionKey = (entityId: EntityId, companyId: EntityId) => `${entityId}|${companyId}`;
+/** A (holder, name) key — a share loan's name is its issuer, a bond loan's its rung (§3.17e-iii-b). */
+export const positionKey = (entityId: string, nameId: string) => `${entityId}|${nameId}`;
 
 
 const priceScratchSl: number[] = [];
@@ -59,7 +62,10 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
   regionIds.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
-    const priorBook: SecurityLoan[] = securityLoanBookOf(ctx.v2, regionId); // §3.13-BOOK d4c-iii: the store's rows
+    // §3.17e-iii-b: the region's book holds share loans and bond loans; this pass is the shares'.
+    const wholeBook: SecurityLoan[] = securityLoanBookOf(ctx.v2, regionId); // §3.13-BOOK d4c-iii: the store's rows
+    const bondLoans = wholeBook.filter((l) => isTrancheId(ctx.v2, l.instrumentId));
+    const priorBook: SecurityLoan[] = wholeBook.filter((l) => !isTrancheId(ctx.v2, l.instrumentId));
     const lastFee: Record<string, number> = reg.borrowFeeBpsByCompanyId ?? {};
 
     const listed = ctx.prevActiveFirms.filter(
@@ -260,9 +266,11 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       }
     });
 
-    const priceOf = (instrumentId: string) => companyById.get(equityIssuerId(asInstrumentId(instrumentId)))?.stockPrice ?? 0;
+    const priceOf = (instrumentId: string) => isTrancheId(ctx.v2, instrumentId)
+      ? (trancheClearedPricePerFace(ctx.v2, asInstrumentId(instrumentId)) ?? 0)
+      : (companyById.get(equityIssuerId(asInstrumentId(instrumentId)))?.stockPrice ?? 0);
     if (listed.length === 0) {
-      publishBook(ctx, regionId, reg, carried, lastFee, priceOf);
+      publishBook(ctx, regionId, reg, [...bondLoans, ...carried], lastFee, priceOf);
       return;
     }
 
@@ -342,7 +350,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     // like the equity book it sits beside. ----
     const borrowNames = listed.filter((c) => (borrowDemandByCompany.get(c.id)?.length ?? 0) > 0);
     if (borrowNames.length === 0) {
-      publishBook(ctx, regionId, reg, carried, lastFee, priceOf);
+      publishBook(ctx, regionId, reg, [...bondLoans, ...carried], lastFee, priceOf);
       return;
     }
 
@@ -421,7 +429,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     });
 
     if (participants.length === 0) {
-      publishBook(ctx, regionId, reg, carried, lastFee, priceOf);
+      publishBook(ctx, regionId, reg, [...bondLoans, ...carried], lastFee, priceOf);
       return;
     }
 
@@ -520,7 +528,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       });
     });
 
-    const nextBook = [...carried, ...struck];
+    const nextBook = [...bondLoans, ...carried, ...struck];
     publishBook(ctx, regionId, reg, nextBook, lastFee, priceOf);
     // Short interest, as a measurement of the book rather than a number anyone stated.
     borrowNames.forEach((c) => {
@@ -560,8 +568,197 @@ function publishBook(
  * sending it out to buy back what it has just lent.
  */
 function publishLent(ctx: WeeklyStepContext, book: SecurityLoan[]): void {
+  ctx.lentSharesByLender.clear();
   book.forEach((l) => {
-    const k = positionKey(l.lender.id, equityIssuerId(l.instrumentId));
+    // §3.17e-iii-b: a bond loan is keyed by the rung it is on; a share loan by its issuer.
+    const k = positionKey(l.lender.id, isTrancheId(ctx.v2, l.instrumentId) ? l.instrumentId : equityIssuerId(l.instrumentId));
     ctx.lentSharesByLender.set(k, (ctx.lentSharesByLender.get(k) ?? 0) + l.shares);
+  });
+}
+
+/**
+ * §3.17e-iii-b — THE BOOK LENDS A SOVEREIGN. The same contract, the same fee, collateral and
+ * recall as a share loan, on a rung of the sovereign ladder: the borrower is a book that needs
+ * the paper to be short of it (`ctx.borrowNeeds`, the relative-value book's mirror trade), the
+ * lenders are the holders of the rung, the price is the fee the auction clears, and the delivery
+ * is FACE on the register. Runs BEFORE the sovereign auction — on the opening register, so the
+ * paper delivered this week is sold into this week's bid and a lender's ceiling there already
+ * knows what it lent — where the share pass runs before the equity book for the same reason.
+ *
+ * And a RETURN, which the share pass never had: a borrower that holds the paper and no longer
+ * needs the borrow delivers it back and its collateral comes back. A short is covered by buying
+ * the paper and returning it, not only by being recalled.
+ */
+export function runSovereignLendingPass(state: GameState, ctx: WeeklyStepContext): void {
+  const v2 = ensureV2(state);
+  const store = ctx.holdingsStore!;
+  if (!store) return;
+  REGION_IDS.forEach((regionId) => {
+    const reg = ctx.updatedRegions[regionId];
+    if (!reg) return;
+    const wholeBook = securityLoanBookOf(ctx.v2, regionId);
+    const shareLoans = wholeBook.filter((l) => !isTrancheId(ctx.v2, l.instrumentId));
+    const priorBook = wholeBook.filter((l) => isTrancheId(ctx.v2, l.instrumentId));
+    const needs = ctx.borrowNeeds.filter((n) => n.regionId === regionId);
+    if (priorBook.length === 0 && needs.length === 0) return;
+    const lastFee: Record<string, number> = reg.borrowFeeBpsByCompanyId ?? {};
+    const money = currencyOf(regionId);
+    const priceOf = (instrumentId: string): number => trancheClearedPricePerFace(ctx.v2, asInstrumentId(instrumentId)) ?? 0;
+    /** What a book can deliver of a rung: its face on the opening register. */
+    const heldFace = (entityId: EntityId, bondId: string): number =>
+      sovereignRowsOf(ctx.v2, entityId).filter((r) => r.bondId === bondId).reduce((a, r) => a + r.faceLocal, 0);
+    const deliver = (fromId: EntityId, toId: EntityId, bondId: InstrumentId, face: number, price: number, reason: string) => {
+      wireHoldingMove({ kind: 'INSTITUTION', id: fromId }, { kind: 'INSTITUTION', id: toId },
+        { instrumentType: 'GOV_BOND', instrumentId: bondId, issuerRegion: regionId, valueLocal: face * price, units: face }, reason);
+      store.addUnits(fromId, 'GOV_BOND', bondId, regionId, -face, price);
+      store.addUnits(toId, 'GOV_BOND', bondId, regionId, face, price);
+    };
+    const party = (id: EntityId) => ({ kind: 'INSTITUTION' as const, id });
+    /** What each book wants borrowed of each rung this week — the need it stated; none = none. */
+    const wantByBorrower = new Map<string, number>();
+    needs.forEach((n) => wantByBorrower.set(positionKey(n.entityId, n.instrumentId), n.units));
+
+    // ---- 1. THE STANDING BOOK: fee, variation margin, return, recall. ----
+    const carried: SecurityLoan[] = [];
+    const lentByPair = new Map<string, number>();
+    priorBook.forEach((l) => { const k = positionKey(l.lender.id, l.instrumentId); lentByPair.set(k, (lentByPair.get(k) ?? 0) + l.shares); });
+    const returnedByBorrower = new Map<string, number>();
+    priorBook.forEach((loan) => {
+      const price = priceOf(loan.instrumentId);
+      if (!(price > 0)) { carried.push(loan); return; }
+      const feeLocal = loanWeeklyFeeLocal(loan, price);
+      if (feeLocal > 0) pay(ctx, { payer: party(loan.borrower.id), payee: party(loan.lender.id), amount: feeLocal, currency: loan.currency, reason: 'bond borrow fee' });
+      const markedLocal = loan.shares * price;
+      const callLocal = markedLocal - loan.collateralLocal;
+      if (Math.abs(callLocal) > 1) {
+        pay(ctx, callLocal > 0
+          ? { payer: party(loan.borrower.id), payee: party(loan.lender.id), amount: callLocal, currency: loan.currency, reason: 'bond loan variation margin' }
+          : { payer: party(loan.lender.id), payee: party(loan.borrower.id), amount: -callLocal, currency: loan.currency, reason: 'bond loan variation margin returned' });
+        loan.collateralLocal = markedLocal;
+      }
+      // THE RETURN. What the borrower no longer needs — everything, once recalled — comes back
+      // out of the paper it holds, and its collateral with it.
+      const bk = positionKey(loan.borrower.id, loan.instrumentId);
+      const wanted = loan.recalledWeek !== undefined ? 0 : (wantByBorrower.get(bk) ?? 0);
+      const borrowedNow = sharesOnLoan(priorBook, 'borrower', loan.borrower.id, loan.instrumentId) - (returnedByBorrower.get(bk) ?? 0);
+      const excess = Math.max(0, borrowedNow - wanted);
+      const canReturn = Math.max(0, heldFace(loan.borrower.id, loan.instrumentId) - (returnedByBorrower.get(bk) ?? 0));
+      const back = Math.min(loan.shares, excess, canReturn);
+      if (back > 1e-6) {
+        deliver(loan.borrower.id, loan.lender.id, loan.instrumentId, back, price, 'bond loan: paper returned');
+        const share = back / loan.shares;
+        if (loan.collateralLocal * share > 0) pay(ctx, { payer: party(loan.lender.id), payee: party(loan.borrower.id), amount: loan.collateralLocal * share, currency: loan.currency, reason: 'bond loan collateral returned' });
+        returnedByBorrower.set(bk, (returnedByBorrower.get(bk) ?? 0) + back);
+        if (loan.shares - back <= 1e-6) return;
+        loan = { ...loan, shares: loan.shares - back, collateralLocal: loan.collateralLocal * (1 - share) };
+      }
+      if (loan.recalledWeek !== undefined) {
+        // Still short of the paper: a purchase at any price in the sovereign auction.
+        ctx.buyInSharesByBorrower.set(bk, (ctx.buyInSharesByBorrower.get(bk) ?? 0) + loan.shares);
+        carried.push(loan);
+        return;
+      }
+      // RECALL: a lender whose position has fallen below what it was at strike has sold out from
+      // under the loan, and that much comes back — the share pass's rule.
+      const lk = positionKey(loan.lender.id, loan.instrumentId);
+      const positionNow = heldFace(loan.lender.id, loan.instrumentId) + (lentByPair.get(lk) ?? 0);
+      const deficit = Math.max(0, loan.lenderPositionAtStrike - positionNow);
+      if (deficit > 1e-6) {
+        const recalled = Math.min(loan.shares, deficit);
+        const share = recalled / loan.shares;
+        carried.push({ ...loan, id: `${loan.id}-R`, shares: recalled, collateralLocal: loan.collateralLocal * share, recalledWeek: ctx.nextWeek });
+        ctx.buyInSharesByBorrower.set(bk, (ctx.buyInSharesByBorrower.get(bk) ?? 0) + recalled);
+        if (loan.shares - recalled > 1e-6) carried.push({ ...loan, shares: loan.shares - recalled, collateralLocal: loan.collateralLocal * (1 - share) });
+        return;
+      }
+      carried.push(loan);
+    });
+
+    // ---- 2. THE BORROW: what each book still needs beyond what it has out, one line per rung. ----
+    const incrementByBond = new Map<InstrumentId, { fundId: EntityId; face: number }[]>();
+    needs.forEach((n) => {
+      const have = sharesOnLoan(carried, 'borrower', n.entityId, n.instrumentId);
+      const more = n.units - have;
+      if (more <= 1) return;
+      const list = incrementByBond.get(n.instrumentId) ?? [];
+      list.push({ fundId: n.entityId, face: more });
+      incrementByBond.set(n.instrumentId, list);
+    });
+    const bondIds = Array.from(incrementByBond.keys()).filter((id) => priceOf(id) > 0);
+    let struck: SecurityLoan[] = [];
+    if (bondIds.length > 0) {
+      const gapOf = (bondId: InstrumentId): number => weeklyPriceMoveOf(v2, bondId) ?? 0;
+      const instruments: ClearingInstrument[] = bondIds.map((bondId) => {
+        const demand = incrementByBond.get(bondId)!.reduce((a, d) => a + d.face, 0);
+        registerBook(v2, sblInstrumentId(regionId, bondId), 'SBL', money);
+        return { id: sblInstrumentId(regionId, bondId), outstandingLocal: demand, tradableFloatLocal: demand, currentStat: Math.max(1, lastFee[bondId] ?? 0) || 1, statKind: 'YIELD_LIKE', durationYears: 1 / 52 };
+      });
+      const lentAlready = new Map<string, number>();
+      carried.forEach((l) => { const k = positionKey(l.lender.id, l.instrumentId); lentAlready.set(k, (lentAlready.get(k) ?? 0) + l.shares); });
+      const participants: ClearingParticipant[] = [];
+      ctx.updatedInstitutionalEntities.forEach((entity) => {
+        if (entity.isDefaulted) return;
+        const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
+        const current = new Map<InstrumentId, number>();
+        const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
+        bondIds.forEach((bondId) => {
+          const held = heldFace(entity.id, bondId);
+          const lent = lentAlready.get(positionKey(entity.id, bondId)) ?? 0;
+          if (held <= 1e-6 && lent <= 1e-6) return;
+          const instrumentId = sblInstrumentId(regionId, bondId);
+          if (lent > 0) current.set(instrumentId, lent);
+          demandByInstrumentId.set(instrumentId, {
+            reservationStat: lendingReservationFeeBps({ requiredReturn, oneWeekGap: gapOf(bondId) }),
+            maxHoldingLocal: held + lent,
+            fullSizeStatRange: fullSizeSpreadRangeBpsOf(entity),
+          });
+        });
+        if (demandByInstrumentId.size > 0) participants.push({ id: entity.id, currentHoldingsByInstrumentId: current, demandByInstrumentId });
+      });
+      if (participants.length > 0) {
+        const result = clearFinancialAsset(instruments, participants, { dealerSpreadBps: 0 });
+        ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `bond loan:${id}`));
+        let seq = 0;
+        bondIds.forEach((bondId) => {
+          const instrumentId = sblInstrumentId(regionId, bondId);
+          const clearedBps = result.newStatById.get(instrumentId);
+          if (clearedBps === undefined) return;
+          lastFee[bondId] = Number(clearedBps.toFixed(1));
+          const price = priceOf(bondId);
+          const newByLender = new Map<EntityId, number>();
+          let totalNew = 0;
+          result.newParticipantHoldings.forEach((byInstrument, lenderId) => {
+            const was = lentAlready.get(positionKey(lenderId, bondId)) ?? 0;
+            const delta = Math.min((byInstrument.get(instrumentId) ?? 0) - was, heldFace(lenderId as EntityId, bondId));
+            if (delta <= 1e-6) return;
+            newByLender.set(lenderId as EntityId, delta);
+            totalNew += delta;
+          });
+          if (totalNew <= 1e-6) return;
+          const positionAtStrike = new Map<EntityId, number>();
+          newByLender.forEach((_f, lenderId) => positionAtStrike.set(lenderId, heldFace(lenderId, bondId) + (lentAlready.get(positionKey(lenderId, bondId)) ?? 0)));
+          const demands = incrementByBond.get(bondId)!;
+          const wanted = demands.reduce((a, d) => a + d.face, 0);
+          const fill = Math.min(1, totalNew / Math.max(1e-9, wanted));
+          demands.forEach((d) => {
+            const borrowed = d.face * fill;
+            newByLender.forEach((lenderFace, lenderId) => {
+              if (lenderId === d.fundId) return;
+              const face = borrowed * (lenderFace / totalNew);
+              if (face <= 1e-6) return;
+              const loan: SecurityLoan = {
+                id: `${regionId}-SBL-${bondId}-${ctx.nextWeek}-${seq++}`, regionId, instrumentId: bondId,
+                lender: party(lenderId), borrower: party(d.fundId), shares: face, feeBps: lastFee[bondId], currency: money,
+                collateralLocal: face * price, lenderPositionAtStrike: positionAtStrike.get(lenderId) ?? face, struckWeek: ctx.nextWeek,
+              };
+              deliver(lenderId, d.fundId, bondId, face, price, 'bond loan: paper delivered');
+              pay(ctx, { payer: party(d.fundId), payee: party(lenderId), amount: loan.collateralLocal, currency: money, reason: 'bond loan collateral posted' });
+              struck = [...struck, loan];
+            });
+          });
+        });
+      }
+    }
+    publishBook(ctx, regionId, reg, [...shareLoans, ...carried, ...struck], lastFee, priceOf);
   });
 }
