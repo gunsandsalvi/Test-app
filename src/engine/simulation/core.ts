@@ -91,12 +91,12 @@ import { equityIssuerId } from '../../domain/instrument-keys';
 export { computeOccupationDemand } from './stages/shared-helpers';
 
 /** Wall-clock cost of one stage, for one week. See `advanceWeeklyStep`'s `profile` option. */
-export interface StageTiming {
+interface StageTiming {
   stage: string;
   ms: number;
 }
 
-export interface WeeklyStepOptions {
+interface WeeklyStepOptions {
   /**
    * Record per-stage wall-clock time and return it alongside the state.
    *
@@ -108,7 +108,7 @@ export interface WeeklyStepOptions {
   profile?: boolean;
 }
 
-export interface WeeklyStepResult {
+interface WeeklyStepResult {
   state: GameState;
   /** Populated only when `profile` was set. */
   timings: StageTiming[];

@@ -116,15 +116,15 @@ export function membersOfHouse(v2: V2World, region: RegionId): Map<string, { mem
  * short, so a member on both sides of a class nets. One read off the store and the fund rows;
  * the region's UI shows it as a function and the harness prints it (`DRV_TRACE=1`).
  */
-export interface HouseClassView { contracts: number; notionalLocal: number }
-export interface HouseMemberClassView { contracts: number; grossLocal: number; netLocal: number }
+interface HouseClassView { contracts: number; notionalLocal: number }
+interface HouseMemberClassView { contracts: number; grossLocal: number; netLocal: number }
 export interface HouseMemberView {
   member: DerivativeParty;
   marginLocal: number;
   fundLocal: number;
   byClass: Partial<Record<DerivativeClassId, HouseMemberClassView>>;
 }
-export interface HouseView {
+interface HouseView {
   regionId: RegionId;
   sheet: CcpSheet;
   openInterest: Partial<Record<DerivativeClassId, HouseClassView>>;
@@ -186,7 +186,7 @@ export function publishCcpFund(v2: V2World, region: RegionId, contributions: rea
 /** The fund, in the house's money. */
 export const ccpFundLocal = (v2: V2World, region: RegionId): number => ccpFundOf(v2, region).reduce((a, c) => a + c.amountLocal, 0);
 /** A member's contributions to every house, in the money asked for. */
-export function memberFundContributionLocal(v2: V2World, party: DerivativeParty, into: CurrencyCode): number {
+function memberFundContributionLocal(v2: V2World, party: DerivativeParty, into: CurrencyCode): number {
   const key = derivativePartyKey(party);
   let total = 0;
   REGION_IDS.forEach((region) => ccpFundOf(v2, region).forEach((c) => { if (derivativePartyKey(c.member) === key) total += convert(c.amountLocal, currencyOf(region), into, v2.fx); }));

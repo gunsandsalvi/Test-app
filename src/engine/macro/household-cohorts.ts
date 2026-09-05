@@ -56,7 +56,7 @@ const OCCUPATIONS = OCCUPATION_TYPES;
  * from the tier-income drift formula it used to feed in evolution.ts (one matrix, one owner).
  * Transposed at build time into per-occupation tier weights.
  */
-export const TIER_OCCUPATION_MIXES: Record<WealthTier, Partial<Record<OccupationType, number>>> = {
+const TIER_OCCUPATION_MIXES: Record<WealthTier, Partial<Record<OccupationType, number>>> = {
   TOP_1: { MANAGERIAL_FINANCIAL: 0.50, SPECIALIZED_PROFESSIONAL: 0.35, TECHNICAL_ENGINEERING: 0.15 },
   TOP_9: { MANAGERIAL_FINANCIAL: 0.30, SPECIALIZED_PROFESSIONAL: 0.40, TECHNICAL_ENGINEERING: 0.20, SKILLED_TRADES: 0.10 },
   NEXT_40: { SKILLED_TRADES: 0.35, GENERAL: 0.35, TECHNICAL_ENGINEERING: 0.15, MANAGERIAL_FINANCIAL: 0.15 },
@@ -227,7 +227,7 @@ export const TIER_SPEND_MIX: Record<WealthTier, { staple: number; standard: numb
  * A stock is spent over years, not at once, so the flow propensity is divided by the horizon a
  * household spreads a windfall over — a behavioural primitive, and the only stated number left.
  */
-export const WEALTH_SPENDDOWN_YEARS = 8;
+const WEALTH_SPENDDOWN_YEARS = 8;
 
 /**
  * DIST/MAC — HOW MANY WEEKS OF ITS OWN INCOME A HOUSEHOLD WANTS ON HAND.
@@ -249,7 +249,7 @@ export function tierWealthMpc(tier: WealthTierData | undefined): number {
   return (consumePropensity * liquidShare) / WEALTH_SPENDDOWN_YEARS;
 }
 
-export interface CohortBuildInputs {
+interface CohortBuildInputs {
   /** §5-BRAINS — which region's cohorts these are: the key each cohort's brain is drawn from. */
   regionId?: string;
   occupationPools: Record<OccupationType, OccupationPool>;
@@ -310,7 +310,7 @@ export interface CohortBuildInputs {
   wealthDistribution: Record<WealthTier, WealthTierData>;
 }
 
-export interface CohortBuildResult {
+interface CohortBuildResult {
   cohorts: HouseholdCohort[];
   /** Σ consumption budgets — stage 03's household demand pool C, annual USD. */
   totalConsumptionBudgetLocal: number;

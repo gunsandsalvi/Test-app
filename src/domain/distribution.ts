@@ -41,7 +41,7 @@ import { shelfLifeWeeksOf, deliveryModeOf } from './goods-physical';
  * plus the week it is selling out of — capped by what the good will physically survive. Zero for
  * anything not delivered as a physical good, which has no stock to hold.
  */
-export function channelCoverWeeks(subUnitId: string): number {
+function channelCoverWeeks(subUnitId: string): number {
   if (deliveryModeOf(subUnitId) !== 'PHYSICAL') return 0;
   const bridge = Math.max(0, productionLeadWeeksOf(subUnitId)) + 1;
   const shelfLife = shelfLifeWeeksOf(subUnitId);

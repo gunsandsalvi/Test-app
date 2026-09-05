@@ -38,7 +38,7 @@ import type { InstrumentId } from '../../../domain/ids';
  * the two apart, and they carry back the terms that instrument was struck on so stage 08 issues
  * the paper the market actually priced.
  */
-export interface PricedOfferingOptions {
+interface PricedOfferingOptions {
   /** The instrument the auction listed this offering as. Default: the issuer's own id. */
   instrumentIdOf?: (offering: PrimaryOffering) => InstrumentId;
   /** What one UNIT of the cleared statistic buys — the price, where the book clears one. Default

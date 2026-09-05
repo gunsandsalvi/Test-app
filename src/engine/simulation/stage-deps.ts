@@ -45,13 +45,13 @@ export const DELIBERATE_PIPELINE_FIELDS: Record<string, string> = {
   lastSettlementReport: 'last week\'s report by name; readers want the prior close',
 };
 
-export interface StageAccess {
+interface StageAccess {
   stage: string;
   reads: Set<string>;
   writes: Set<string>;
 }
 
-export interface BackwardEdge {
+interface BackwardEdge {
   /** The stage that reads the field... */
   reader: string;
   /** ...which this later stage writes. */

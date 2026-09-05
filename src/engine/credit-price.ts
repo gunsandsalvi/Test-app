@@ -95,23 +95,6 @@ export function trancheClearedPricePerFace(v2: V2World, instrumentId: Instrument
   return clearedPriceOf(v2, instrumentId);
 }
 
-/**
- * THE SPREAD THIS PIECE OF PAPER TRADES AT: its own cleared price, read against the curve over
- * its own remaining life. Two tranches of one borrower give two answers, and the difference
- * between them is that borrower's credit term structure — which is a thing the market says, not
- * a number anyone stores.
- */
-export function trancheClearedSpreadBps(
-  world: CreditPriceWorld, v2: V2World, instrumentId: string, week: number
-): number | undefined {
-  const row = trancheRowOf(v2, instrumentId);
-  if (row === undefined) return undefined;
-  const comp = world.issuerById(issuerIdOf(v2, instrumentId));
-  const reg = comp ? world.regionById(comp.region) : undefined;
-  if (!reg?.zeroRates) return undefined;
-  return rowSpreadBps(v2, { zeroRates: reg.zeroRates, policyRate: reg.policyRate ?? 0 }, row, week);
-}
-
 /** The same read for a caller that already holds the row and its region's rates — the stage-08
  *  kernels, which walk ladders by row and must not build a world adapter per firm. A bond gives an
  *  OAS and a floater a discount margin; both are the same question asked of the same price. */
@@ -133,7 +116,7 @@ export function rowSpreadBps(
  * does not have A spread, it has a term structure, and every caller that used to read one number
  * is really asking this curve a question at some maturity.
  */
-export function issuerCreditPoints(
+function issuerCreditPoints(
   world: CreditPriceWorld, v2: V2World, issuerId: EntityId, week: number
 ): CreditCurvePoint[] {
   const comp = world.issuerById(issuerId);
@@ -190,15 +173,6 @@ export function issuerSpreadAt(
   world: CreditPriceWorld, v2: V2World, issuerId: EntityId, week: number, tenorYears: number
 ): CreditCurveRead | undefined {
   return spreadAtTenor(issuerCreditPoints(world, v2, issuerId, week), tenorYears);
-}
-
-/** The same question, as a bare number for a caller that has its own answer when the issuer has
- *  no paper (a debut's price talk, a bank's wholesale spread). */
-export function issuerSpreadBpsAt(
-  world: CreditPriceWorld, v2: V2World, issuerId: EntityId, week: number, tenorYears: number,
-  whenUnpriced: number
-): number {
-  return issuerSpreadAt(world, v2, issuerId, week, tenorYears)?.spreadBps ?? whenUnpriced;
 }
 
 /** The price a spread implies on one tranche — the inverse of `trancheClearedSpreadBps`, for the

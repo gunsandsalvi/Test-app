@@ -26,8 +26,8 @@ export const FX_FORWARD_TENOR_WEEKS = 13;
  * hedges the smaller half; a global macro fund hedges nothing, because the currency IS the trade.
  */
 export const HEDGE_RATIO_FIXED_INCOME = 1.0;
-export const HEDGE_RATIO_EQUITY_LIABILITY_DRIVEN = 1.0;
-export const HEDGE_RATIO_EQUITY_RETURN_SEEKING = 0.35;
+const HEDGE_RATIO_EQUITY_LIABILITY_DRIVEN = 1.0;
+const HEDGE_RATIO_EQUITY_RETURN_SEEKING = 0.35;
 
 export function equityHedgeRatioFor(entityType: InstitutionalEntityType, hedgeFundStrategy?: HedgeFundStrategy): number {
   // §7.347 — both facts are the registries': a liability-driven kind hedges fully; a strategy

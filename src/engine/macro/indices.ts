@@ -260,7 +260,7 @@ export function regionIndexOf(indices: CompositeBenchmarkIndices, regionId: Regi
 }
 
 /** How many weeks of returns a measured beta is struck on once the history exists. */
-export const BETA_MEASUREMENT_WEEKS = 52;
+const BETA_MEASUREMENT_WEEKS = 52;
 
 /**
  * IDX — BETA IS A MEASUREMENT, and this model produces both series it needs every week.

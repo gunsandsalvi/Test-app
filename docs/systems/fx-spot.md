@@ -92,7 +92,7 @@ checked by `scripts/check-atlas.sh`.
 | B6 the central bank participates with a limit | `src/domain/fx-market.ts:CENTRAL_BANK_FX_INTERVENTION_SHARE` | ✅ |
 | C1 participants post schedules in rate space | `src/engine/simulation/stages/financial-clearing-engine.ts:ParticipantDemand` | ✅ |
 | C2 it clears per pair and consistently across pairs | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
-| C2.a cross-consistency constrains the clearing | `src/domain/fx-market.ts:FX_STAT_KIND` | ✅ |
+| C2.a cross-consistency constrains the clearing | `src/engine/simulation/stages/fx-clearing.ts:statKind` | ✅ |
 | C3 the bid–offer is a consequence | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ⚠️ |
 | C4 imbalance moves the rate | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ✅ |
 | C5 one rate in force for the period | `src/engine2/world.ts:openFxWeek` | ✅ |

@@ -48,7 +48,7 @@ import type { ItemizedHolding } from './banking';
 import type { InstrumentId, Ticker } from './ids';
 import { asTicker } from './ids';
 
-export const DEALER_DESK_SHARE_OF_BALANCE_SHEET = 0.25;
+const DEALER_DESK_SHARE_OF_BALANCE_SHEET = 0.25;
 
 /**
  * The bid/ask each book's desks charge on the gross flow they facilitate — one number per book,

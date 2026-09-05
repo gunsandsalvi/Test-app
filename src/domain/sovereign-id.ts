@@ -17,7 +17,7 @@
 import { RegionId } from './geography';
 import { asInstrumentId, type InstrumentId } from './ids';
 
-export const GOV_ID_INFIX = '-GOV-';
+const GOV_ID_INFIX = '-GOV-';
 
 /** The id of one issued bill tranche. */
 export const govBillTrancheId = (region: RegionId, weeks: number, issueWeek: number): InstrumentId =>

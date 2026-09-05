@@ -8,7 +8,7 @@ import { ObjectRef, ObjectType } from './types';
 import { World } from './world';
 import { Nav } from './ui';
 
-export interface FnProps {
+interface FnProps {
   world: World;
   ref: ObjectRef;
   args: Record<string, string>;

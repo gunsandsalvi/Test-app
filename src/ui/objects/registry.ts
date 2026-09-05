@@ -20,9 +20,9 @@ export interface PeerColumn<T> {
   width?: number;
 }
 
-export interface PeerGroup { name: string; ids: string[] }
+interface PeerGroup { name: string; ids: string[] }
 
-export interface OverviewProps<T> { world: World; ref: ObjectRef; obj: T; nav: Nav }
+interface OverviewProps<T> { world: World; ref: ObjectRef; obj: T; nav: Nav }
 
 export interface ObjectModule<T = unknown> {
   type: ObjectType;

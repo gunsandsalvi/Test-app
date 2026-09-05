@@ -1,7 +1,7 @@
 import { AssetType } from '../types';
 import { assertNever } from '../domain/defect';
 
-export interface CarryEstimate {
+interface CarryEstimate {
   weeklyCarryLocal: number;
   annualizedCarryLocal: number;
   annualizedCarryPct: number;

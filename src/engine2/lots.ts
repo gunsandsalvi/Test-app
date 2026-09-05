@@ -46,7 +46,7 @@ export function goodRowOf(v2: V2World, companyId: string, subUnitId: string): nu
 }
 
 /** Every GOOD row of the firm, in book order — the first-touch order of the old record. */
-export function goodRowsOf(v2: V2World, companyId: string): number[] {
+function goodRowsOf(v2: V2World, companyId: string): number[] {
   const H = v2.holdings;
   const goodRef = typeRefOf(v2, GOOD_KIND);
   const out: number[] = [];
@@ -337,11 +337,6 @@ export function materializeInputInventory(v2: V2World, companyId: string): Recor
     out[instrumentIdAt(v2, r) as string] = lots;
   }
   return out;
-}
-
-/** Merge worker dead-row sinks back onto the free list (main thread, after a sharded pass). */
-export function freeLotRows(v2: V2World, rows: number[]): void {
-  recycleLots(v2, rows);
 }
 
 export { rowOf };

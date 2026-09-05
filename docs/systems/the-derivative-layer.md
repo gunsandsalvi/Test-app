@@ -117,7 +117,7 @@ checked by `scripts/check-atlas.sh`.
 | D2.b VERIFY Σ VM paid = Σ received, every period | `src/engine/audit/ownership.ts:o9` | ⚠️ |
 | D3 margin is held, not consumed; the poster gets it back | `src/domain/clearing-house.ts:ccpOfContract` · `src/engine/simulation/stages/derivative-lifecycle.ts:releaseInitialMargin` · `src/engine/audit/ownership.ts:o15` | ✅ |
 | D4 a margin call must be met or the position is closed out | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
-| D4.a meeting it may force a sale | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageCloseSweep` | ⚠️ |
+| D4.a meeting it may force a sale | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
 | D5 margin rises when volatility rises — procyclical, measured | `src/domain/derivatives/profile.ts:closeOutMoveOf` | ⚠️ |
 | E1 a party can fail with open positions | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` | ✅ |
 | E2 closed out at a stated value; a claim on the estate | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` · `src/domain/estate.ts:ClaimHolder` | ✅ |
@@ -283,7 +283,8 @@ a close-out horizon, scaled by the portfolio's netting"*.
 `payThroughHouse` journals the variation-margin leg unconditionally; there is no cash test and no failure
 path. A payer who cannot fund it goes negative and `overdraft-sweep.ts:runOverdraftSweep` converts
 the shortfall into credit — a revolver draw for a firm, a prime-brokerage draw for a fund
-(`prime-brokerage.ts:runPrimeBrokerageCloseSweep`), an SME facility for a pool. That is a real
+(the sweep's own fund arm; the separate close sweep in `prime-brokerage.ts` was never called and
+§3 step 19-ii deleted it), an SME facility for a pool. That is a real
 answer to the *first* half of D4 and it is a good one: the money has a lender.
 
 **The second half has no code at all.** No position is ever closed for non-payment; the only

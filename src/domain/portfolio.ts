@@ -11,7 +11,7 @@ export interface ReturnAttribution {
   volThetaLocal: number;
 }
 
-export interface HistoricalBenchmarkRecord {
+interface HistoricalBenchmarkRecord {
   week: number;
   nav: number;
   benchmark6040: number;

@@ -25,39 +25,6 @@ export interface UnitOffer {
   minPriceLocal: number;
 }
 
-export interface SupplyContract {
-  /** §3.13-BOOK slice (c2a): both ends of a supply relationship are FIRMS. */
-  supplierCompanyId: EntityId;
-  customerCompanyId: EntityId;
-  subUnitId: string;
-  priceLocal: number;
-  quantityUnitsPerWeek: number;
-  weeksRemaining: number;
-  /**
-   * IND11 — UNITS OWED AND NOT DELIVERED. The seller's backlog and the buyer's claim are the
-   * same number because they are the same obligation, and this object is bilateral: one
-   * representation, not two that can disagree (rule 4). Undelivered demand used to evaporate.
-   */
-  backlogUnits?: number;
-  /** IND11 — consecutive weeks this supplier has under-delivered: the non-performance clock. */
-  shortWeeks?: number;
-  /**
-   * IND11 — the published price this contract was struck against. An INDEXED contract (set at
-   * formation for long durations) reprices in proportion to how far the market has moved from
-   * it, so input-cost inflation passes through instead of being silently assigned to one side.
-   * Absent = a fixed-price contract, which assigns it to the seller.
-   */
-  escalationBaseLocal?: number;
-  /**
-   * IND17 — WHAT THE CUSTOMER HAS PAID AHEAD. A long-cycle order is funded as the work is done,
-   * not on handover: the buyer's money pays for the steel before the ship exists. It is the
-   * seller's LIABILITY (goods owed, not revenue) and the buyer's ASSET, one number on the
-   * bilateral object because it is one obligation — negative working capital, and a real
-   * funding source for exactly the firms whose production ties up the most cash.
-   */
-  prepaidLocal?: number;
-}
-
 export interface CategoryDemandState {
   demandLevelAnnualLocal: number;
   demandGrowthAnnual: number;

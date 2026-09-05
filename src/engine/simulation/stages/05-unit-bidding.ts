@@ -1585,7 +1585,7 @@ function buildRegionDemandPlans(
  * wedge sits on each buyer's own reservation, which is exactly how it works: a mill quotes at the
  * gate and the buyer pays the freight.
  */
-export const s05Phase = { settleRows: 0, plans: 0, settle: 0, settleCore: 0, settlePre: 0, settleEff: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
+const s05Phase = { settleRows: 0, plans: 0, settle: 0, settleCore: 0, settlePre: 0, settleEff: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
 const S05_PROF = typeof process !== 'undefined' && process.env?.S05_PROF === '1';
 // One-run diagnostic split INSIDE the buyers walk (method: name the term before
 // converting anything). ~3 clock reads per lot — relative shares only, not absolute times.

@@ -155,7 +155,7 @@ const IPO_PREMIUM_OVER_ENTRY = 1.15;
  * `cashLocal` instead measured 0.01B across every sponsor in the world and made an LBO structurally
  * impossible; HC4 built the LP commitments for exactly this and left the call to HC6.
  */
-export function dryPowderLocal(
+function dryPowderLocal(
   v2: V2World,
   sponsor: InstitutionalEntity,
   lpById: ReadonlyMap<EntityId, InstitutionalEntity>

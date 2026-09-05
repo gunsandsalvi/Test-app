@@ -22,7 +22,7 @@
  */
 
 /** How many shards a kernel should split into on this host. */
-export function shardCount(): number {
+function shardCount(): number {
   // SHARDS pins the split, so a run can prove a sharded kernel against a single-shard one. A
   // change in shard count that changes the world is a defect in the kernel's combine, not a
   // property of the hardware, and this is how that is checked.
@@ -34,7 +34,7 @@ export function shardCount(): number {
   return Math.max(1, Math.min(16, n));
 }
 
-export interface ShardRange {
+interface ShardRange {
   /** First row, inclusive. */
   lo: number;
   /** Last row, exclusive. */
@@ -45,7 +45,7 @@ export interface ShardRange {
 
 /** Split `rows` into `shards` contiguous ranges. Earlier shards take the remainder, so the split
  *  is a pure function of (rows, shards) and therefore reproducible. */
-export function shardRanges(rows: number, shards = shardCount()): ShardRange[] {
+function shardRanges(rows: number, shards = shardCount()): ShardRange[] {
   const n = Math.max(1, Math.min(shards, Math.max(1, rows)));
   const base = Math.floor(rows / n);
   const extra = rows % n;
@@ -57,26 +57,6 @@ export function shardRanges(rows: number, shards = shardCount()): ShardRange[] {
     at += size;
   }
   return out;
-}
-
-/**
- * Run `kernel` over every row of a table, sharded, and fold the per-shard results **in shard
- * order**. `combine` must be associative in INTENT — it does not have to be associative in
- * floating point, because the order it is applied in is fixed.
- */
-export function runSharded<T>(
-  rows: number,
-  kernel: (range: ShardRange) => T,
-  combine: (accumulated: T | undefined, shardResult: T, index: number) => T,
-  shards = shardCount()
-): T | undefined {
-  const ranges = shardRanges(rows, shards);
-  let acc: T | undefined;
-  // Inline today; a worker pool later. The ORDER is the invariant, not where the work happens.
-  for (let i = 0; i < ranges.length; i++) {
-    acc = combine(acc, kernel(ranges[i]), i);
-  }
-  return acc;
 }
 
 /** A kernel with nothing to reduce — the common case for a per-row column write. */

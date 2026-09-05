@@ -12,7 +12,7 @@ import { OccupationPool, OccupationType } from '../../domain/region-macro';
 type OccPool = OccupationPool;
 const poolsOf = (r: ReturnType<typeof regionOf>): Record<string, OccPool> => (r?.occupationPools ?? {}) as Partial<Record<OccupationType, OccPool>> as Record<string, OccPool>;
 export type Occupation = { region: string; occ: string; p: OccPool };
-export const occupationId = (region: string, occ: string): string => `${region}:${occ}`;
+const occupationId = (region: string, occ: string): string => `${region}:${occ}`;
 
 function occOf(world: World, id: string): Occupation | undefined {
   const [region, occ] = id.split(':');

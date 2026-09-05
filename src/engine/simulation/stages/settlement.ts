@@ -50,7 +50,7 @@ import { PaymentCategory, categoryOfReason } from '../../ledger/payment-category
 import { banksOf } from '../../../domain/company';
 import type { EntityId } from '../../../domain/ids';
 
-export interface PaymentInstruction {
+interface PaymentInstruction {
   payer: PartyRef;
   payee: PartyRef;
   /** How much, IN `currency`. Both legs move this same amount of this same money: a payment is
@@ -202,8 +202,6 @@ export const reasonText = (id: number): string => reasonById[id];
 /** W2 — table size and texts-from-index, to seed a worker's reason table id-for-id. */
 export const reasonTableSize = (): number => reasonById.length;
 export const reasonTextsFrom = (from: number): string[] => reasonById.slice(from);
-/** The category beside the free text. */
-export const reasonCategory = (id: number): PaymentCategory => reasonCategoryById[id];
 /** Every reason this run has written that no category rule matches. The harness asserts this
  *  list is EMPTY — a new payment reason must land a rule in `payment-category.ts` first. */
 export function unclassifiedReasons(): string[] {
@@ -329,7 +327,7 @@ export function seedPendingNetFromJournal(ctx: PendingNetCtx, week: number): voi
 }
 
 /** Zero the week's running net. */
-export function clearPendingNet(ctx: WeeklyStepContext): void {
+function clearPendingNet(ctx: WeeklyStepContext): void {
   const net = ctx.pendingNetById;
   for (let i = 0; i < ctx.pendingTouchedIds.length; i++) net[ctx.pendingTouchedIds[i]] = undefined as unknown as number;
   ctx.pendingTouchedIds.length = 0;
@@ -466,7 +464,7 @@ export { partyId, partyIdOf, partyOf, partyKey, partyFromKey } from '../../ledge
  * intraday cycle and an end-of-day cycle for exactly this reason. The two reports MERGE, because
  * the invariants — the clearing house flat, nothing unresolved — are properties of the WEEK.
  */
-export function mergeSettlementReports(a: SettlementReport, b: SettlementReport): SettlementReport {
+function mergeSettlementReports(a: SettlementReport, b: SettlementReport): SettlementReport {
   const mergeMap = <K>(x: Map<K, number>, y: Map<K, number>): Map<K, number> => {
     const out = new Map(x);
     y.forEach((v, k) => out.set(k, (out.get(k) ?? 0) + v));
@@ -514,7 +512,7 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
  * `runSettlementStage` sixty lines below, the same nine cases written twice. Both are now
  * `ledger/entity-index.ts:regionOfParty`, which is also where the reason it is NOT memoised lives.
  */
-export function partyIndexOf(ctx: WeeklyStepContext): EntityIndex {
+function partyIndexOf(ctx: WeeklyStepContext): EntityIndex {
   return buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
 }
 

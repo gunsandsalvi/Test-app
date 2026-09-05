@@ -25,8 +25,6 @@ const ORDER: FunctionModule[] = [
 ];
 
 export const FUNCTIONS: Record<string, FunctionModule> = Object.fromEntries(ORDER.map((f) => [f.name, f]));
-export const FUNCTION_NAMES = ORDER.map((f) => f.name);
-
 export function functionsFor(type: ObjectType): FunctionModule[] {
   return ORDER.filter((f) => f.appliesTo.includes(type));
 }

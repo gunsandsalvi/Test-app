@@ -227,7 +227,7 @@ export interface FrontCoreOut {
 const EMPTY_LINES: ProductLine[] = [];
 
 /** Everything the seam reads beyond the companies themselves. */
-export interface FrontSeamInputs {
+interface FrontSeamInputs {
   v2: V2World;
   nextWeek: number;
   companyUpdates: Record<string, CompanyWeekUpdate>;

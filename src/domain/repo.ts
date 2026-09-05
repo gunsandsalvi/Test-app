@@ -55,11 +55,6 @@ export interface RepoContract {
   collateral: RepoPledge[];
 }
 
-/** One week's interest on a contract, at the rate it was struck at. */
-export function repoWeeklyInterestLocal(c: RepoContract): number {
-  return (c.principalLocal * c.rateAnnual) / 52;
-}
-
 /** Interest owed over a contract's whole life — what settles when it matures. */
 export function repoInterestToMaturityLocal(c: RepoContract): number {
   const weeks = Math.max(1, c.maturityWeek - c.struckWeek);
@@ -93,13 +88,6 @@ export function encumberedFaceByBond(book: RepoContract[], bankId: EntityId): Ma
     c.collateral.forEach((p) => byBond.set(p.bondId, (byBond.get(p.bondId) ?? 0) + p.faceLocal));
   });
   return byBond;
-}
-
-/** Total face pledged by one bank across every bond. */
-export function encumberedFaceLocal(book: RepoContract[], bankId: EntityId): number {
-  let faceLocal = 0;
-  encumberedFaceByBond(book, bankId).forEach((v) => { faceLocal += v; });
-  return faceLocal;
 }
 
 /** The contracts that come due at or before `week` — what settles before new ones are struck. */

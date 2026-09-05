@@ -37,7 +37,7 @@ export interface FirmSeedTemplate {
 }
 
 /** HF1: the four books, in size order — macro is the largest, as it is in reality. */
-export const HEDGE_FUND_STRATEGIES: HedgeFundStrategy[] =
+const HEDGE_FUND_STRATEGIES: HedgeFundStrategy[] =
   ['GLOBAL_MACRO', 'LONG_SHORT_EQUITY', 'LONG_SHORT_CREDIT', 'DISTRESSED', 'RELATIVE_VALUE'];
 
 const NAME_PREFIXES = [
@@ -180,7 +180,7 @@ const INTEREST_RATE_ASSUMPTION = 0.045;
  * reconstruct and must therefore draw. It is a dispersion, not a level — the LEVEL is the
  * engine's own covenant rule.
  */
-export const MIN_COVENANT_TAKEUP = 0.15;
+const MIN_COVENANT_TAKEUP = 0.15;
 
 /**
  * DIST — the SME pool's leverage cross-section, struck from the SAME rule the named tier uses.

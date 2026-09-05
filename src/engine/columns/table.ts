@@ -17,9 +17,9 @@
  * produces the same layout, so a sharded reduction over row ranges is reproducible.
  */
 
-export type ColumnKind = 'f64' | 'i32' | 'u8';
+type ColumnKind = 'f64' | 'i32' | 'u8';
 
-export interface ColumnSpec {
+interface ColumnSpec {
   name: string;
   kind: ColumnKind;
 }

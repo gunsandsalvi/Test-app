@@ -495,7 +495,7 @@ export function settleDerivativeClass(
  * A contract is cut to the smaller of its two members' admitted shares; one that fits nothing
  * is refused. What was cut is the region's `ccpRefusedNotionalLocal`, reset each week.
  */
-export interface MemberCapacity { remainingByKey: Map<string, number> }
+interface MemberCapacity { remainingByKey: Map<string, number> }
 export const openMemberCapacity = (): MemberCapacity => ({ remainingByKey: new Map() });
 
 function memberLiquidCashLocal(ctx: WeeklyStepContext, p: DerivativeParty): number {

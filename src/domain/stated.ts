@@ -20,7 +20,7 @@ import { defect } from './defect';
 
 export type StatedKind = 'TECHNOLOGY' | 'PREFERENCE' | 'POLICY' | 'SHAPE' | 'RESOLUTION';
 
-export interface StatedNumber {
+interface StatedNumber {
   /** Stable id, `<area>.<name>` — what the scoreboard and the plan refer to it by. */
   readonly id: string;
   readonly value: number;

@@ -129,7 +129,7 @@ function typedLanesOf<T extends object>(o: T): Record<string, unknown> {
   return out;
 }
 
-export interface BackADispatch {
+interface BackADispatch {
   w: number;
   ranges: { lo: number; hi: number }[];
 }

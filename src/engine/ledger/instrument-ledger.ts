@@ -30,7 +30,7 @@ import type { InstitutionalEntityType } from '../../domain/institutions';
 // §3.13-BOOK (e): the vocabulary is the asset registry's (`domain/assets/index.ts:InstrumentKind`).
 export type { InstrumentKind };
 
-export interface InstrumentDeclaration {
+interface InstrumentDeclaration {
   id: InstrumentId;
   kind: InstrumentKind;
   /** Undefined for an instrument nobody owes — a traded pair, a book. */

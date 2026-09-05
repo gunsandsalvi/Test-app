@@ -23,7 +23,7 @@ import { V2World, internInstrument, instrumentRefOf } from './world';
 import { InstrumentId } from '../domain/ids';
 import type { InstrRef } from './refs';
 
-export interface PriceStore {
+interface PriceStore {
   /** Interned instrument id → what ONE UNIT of it last cleared at, in the instrument's own money.
    *  The unit is the asset registry's `countedIn`: a dollar of face for credit, a share for
    *  equity. Absent = no market has ever printed this instrument. */
@@ -45,7 +45,7 @@ export type ReadonlyPriceStore = {
 };
 
 /** The price ledger's own handle. Nothing else may hold one. */
-export const mutablePrices = (v2: V2World): PriceStore => v2.prices as PriceStore;
+const mutablePrices = (v2: V2World): PriceStore => v2.prices as PriceStore;
 
 export function newPriceStore(): PriceStore {
   return { byIdRef: new Map<InstrRef, number>(), prevByIdRef: new Map<InstrRef, number>() };

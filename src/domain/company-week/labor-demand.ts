@@ -22,8 +22,8 @@ import {
 
 /** One product line's contribution to a revenue-weighted price read. */
 export interface PriceGrowthRow { weight: number; p0: number; p1: number }
-export interface PriceLevelRow { weight: number; base: number; now: number }
-export interface FillRow { weight: number; demanded: number; supplied: number }
+interface PriceLevelRow { weight: number; base: number; now: number }
+interface FillRow { weight: number; demanded: number; supplied: number }
 
 /**
  * §7.249 — the price of what THIS employer sells, annualized over the SAME window as the nominal
@@ -142,7 +142,7 @@ export function firmQuitMultiplier(wageIndex: number, executionQuality: number):
   );
 }
 
-export interface EmployerPostingInputs {
+interface EmployerPostingInputs {
   /** The books today. */
   currentHeads: number;
   /** The growth signal, in heads this week (current × growthAnnual / 52). */

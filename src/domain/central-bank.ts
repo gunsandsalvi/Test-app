@@ -158,18 +158,6 @@ export function centralBankAssetsLocal(sovereignBookLocal: number, cb: CentralBa
     + swapLineLentLocal(cb, money, fx);
 }
 
-/**
- * THE IDENTITY: assets = reserves + treasury account + currency + the reverse repo window's
- * take, every week, to the dollar. Reserves are the banks' own cash (a derived input, one
- * representation); currency is a
- * STORED liability that moves only when the central bank issues it — never a residual that
- * closes the book, because a residual is where money appears from nowhere. The residual is
- * what the audit prints (M1) until every reserve movement has a purchase behind it.
- */
-export function centralBankIdentityResidualLocal(sovereignBookLocal: number, cb: CentralBank, bankReservesLocal: number, treasuryAccountLocal: number, waysAndMeansLocal: number): number {
-  return centralBankLiabilitiesLocal(cb, bankReservesLocal, treasuryAccountLocal) - centralBankAssetsLocal(sovereignBookLocal, cb, waysAndMeansLocal);
-}
-
 /** Reserves, the treasury's account, the currency it has issued, and what the non-banks have
  *  parked at the reverse repo window. */
 export function centralBankLiabilitiesLocal(cb: CentralBank, bankReservesLocal: number, treasuryAccountLocal: number): number {
@@ -205,11 +193,11 @@ export const EFFECTIVE_LOWER_BOUND = -0.01;
  * How much balance sheet substitutes for a rate cut the floor blocks: buying this share of the
  * sovereign stock over a year stands in for one percentage point of easing.
  */
-export const QE_STOCK_SHARE_PER_RATE_POINT_ANNUAL = 0.10;
+const QE_STOCK_SHARE_PER_RATE_POINT_ANNUAL = 0.10;
 
 
 /** Room above the floor at which the rate tool is working again, so the book can normalize. */
-export const RATE_TOOL_HEADROOM = 0.02;
+const RATE_TOOL_HEADROOM = 0.02;
 
 
 /**
@@ -283,4 +271,4 @@ export function cashPositionBillIssuanceLocal(args: {
  * operating balance in one auction — it rebuilds over several, which is also what keeps the
  * bill program's size a smooth supply the market can absorb rather than a cliff.
  */
-export const CASH_BRIDGE_CLOSE_RATE_WEEKLY = 0.34;
+const CASH_BRIDGE_CLOSE_RATE_WEEKLY = 0.34;

@@ -32,7 +32,7 @@ import { REGION_IDS } from '../../../domain/geography';
 import { entityCashOf } from '../../ledger/accounts';
 import { sovereignHeldByClass, bankSovereignPositions } from '../../sovereign-register';
 
-export interface RegionalHoldingsView {
+interface RegionalHoldingsView {
   /** Every real institutional entity's holdings in this region, flattened. */
   institutionalHoldings: ItemizedHolding[];
   /** Every named bank's real holdings in this region, flattened. */
@@ -54,7 +54,7 @@ export interface RegionalHoldingsView {
  * The single derivation of every regional holdings figure. Called once per region per week (by
  * stage 11, after every clearing stage has written its books) and by the UI selectors.
  */
-export function aggregateRegionalHoldings(state: GameState, regionId: RegionId): RegionalHoldingsView {
+function aggregateRegionalHoldings(state: GameState, regionId: RegionId): RegionalHoldingsView {
   const institutionalHoldings: ItemizedHolding[] = [];
   let corp = 0, sov = 0, loan = 0, equity = 0, cash = 0, lent = 0, liabilities = 0;
 
@@ -229,13 +229,13 @@ export function refreshRegionalHoldingsView(state: GameState, regionId: RegionId
  * business-loan book (syndicated paper it does not hold — 07d already excludes facilities from
  * the market it clears, so the two halves partition the corporate stock exactly once).
  */
-export interface MeasuredOwnership {
+interface MeasuredOwnership {
   bankLocal: number;
   institutionalLocal: number;
   centralBankLocal: number;
   outstandingLocal: number;
 }
-export type MeasuredOwnershipByClass = {
+type MeasuredOwnershipByClass = {
   equity: MeasuredOwnership; corpBond: MeasuredOwnership; sovBond: MeasuredOwnership;
 };
 

@@ -15,9 +15,9 @@
 import { RegionId } from '../../types';
 import { getRegionProductivityPerCapitaLocal } from './population';
 
-export type GeneratedCommodityCategory = 'Energy' | 'Metals' | 'Agriculture';
+type GeneratedCommodityCategory = 'Energy' | 'Metals' | 'Agriculture';
 
-export interface GeneratedCommodityDef {
+interface GeneratedCommodityDef {
   id: string;
   name: string;
   category: GeneratedCommodityCategory;

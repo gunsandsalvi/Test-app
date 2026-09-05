@@ -40,9 +40,9 @@ export type ReadonlyContractTable = {
 };
 
 /** The contract book's own handle. Nothing else may hold one. */
-export const mutableContracts = (v2: V2World): ContractTable => v2.contracts as ContractTable;
+const mutableContracts = (v2: V2World): ContractTable => v2.contracts as ContractTable;
 
-export interface ContractTable {
+interface ContractTable {
   cap: number;
   used: number;
   freeHead: number;

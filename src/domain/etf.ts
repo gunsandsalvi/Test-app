@@ -16,7 +16,6 @@
  *     case. When they cannot it persists, which is the interesting one.
  */
 
-import { RegionId } from './geography';
 import type { EntityId } from './ids';
 
 export interface EtfFund {
@@ -142,12 +141,3 @@ export const ETF_INCEPTION_NAV_PER_SHARE = 100;
 export const NAMES_COVERED_AT_ONE_BILLION_AUM = 45;
 export const RESEARCH_COVERAGE_SCALING_EXPONENT = 1 / 3;
 
-/** Every ETF this world lists, as (index, expense class). Sponsors are assigned at seeding. */
-export interface EtfSeed {
-  id: string;
-  name: string;
-  ticker: string;
-  indexId: string;
-  region?: RegionId;
-  expenseClass: 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN';
-}

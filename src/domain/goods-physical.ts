@@ -31,7 +31,7 @@
 export type DeliveryMode = 'PHYSICAL' | 'DIGITAL' | 'IN_PLACE';
 import { VIEW_SUBUNIT_PHYSICAL } from './industry-registry';
 
-export interface SubUnitPhysical {
+interface SubUnitPhysical {
   deliveryMode: DeliveryMode;
   /**
    * USD per tonne of the material, at the good's own baseline price. A technological fact about

@@ -15,7 +15,7 @@
  *   markHolding     — a change of VALUE with no change of quantity: no wire (a mark is not a move;
  *                     P retires it when value becomes price × quantity by construction)
  */
-import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
+import { V2World, internType, internInstrument, typeOf } from '../../engine2/world';
 import { companyParty, bankPartyOf, bankSecuritiesPartyOf } from '../../domain/party';
 import { addAccrued, addRealised, adjustLots,
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
@@ -516,33 +516,6 @@ export function setLien(v2: V2World, bookId: string, instrumentType: HoldingKind
   if (!(units > 0)) return;
   const r = pushBookRow(v2, bookId, { instrumentId, instrumentType, issuerRegion, quantityOrNotionalLocal: 0, units: 0 });
   H.lienUnits[r] = units;
-}
-
-/**
- * Every row of `instrumentId` on the holder's book scaled by `ratio`, the difference wired against
- * the issuer: below one a retirement (redemption, buyback, write-off), above one a placement.
- */
-export function scaleHoldings(
-  v2: V2World, holder: PartyRef, issuer: PartyRef, instrumentType: HoldingKind, instrumentId: InstrumentId,
-  ratio: number, reason: string
-): number {
-  const holderId = holderIdOf(v2, holder, { instrumentId });
-  if (!holderId || !(ratio >= 0) || Math.abs(ratio - 1) < 1e-12) return 0;
-  const H = mutableHoldings(v2);
-  const tRef = internType(v2, instrumentType), iRef = internInstrument(v2, instrumentId);
-  let valueLocal = 0, shares = 0, units = 0, anyShares = false, region: RegionId | undefined;
-  for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
-    if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
-    valueLocal += H.qtyLocal[r] * Math.abs(1 - ratio);
-    if (!Number.isNaN(H.shares[r])) { anyShares = true; shares += H.shares[r] * Math.abs(1 - ratio); }
-    // §9.13-CREDIT row 5: a corporate action scales the QUANTITY, and the value follows from it.
-    // Reading only the value left the ratio applied to the money and not to the face.
-    units += (rowUnits(H, r)) * Math.abs(1 - ratio);
-    region = regionOf(v2, H.regionRef[r]) as RegionId;
-  }
-  if (!(valueLocal > 0) || !region) return 0;
-  const spec: HoldingSpec = { instrumentType, instrumentId, issuerRegion: region, valueLocal, units, shares: anyShares ? shares : undefined };
-  return ratio < 1 ? retireHolding(v2, holder, issuer, spec, reason) : issueHolding(v2, issuer, holder, spec, reason);
 }
 
 /**

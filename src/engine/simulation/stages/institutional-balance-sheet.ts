@@ -71,7 +71,7 @@ import { materializeGovLadder } from '../../../engine2/tranches';
  * receivable as spendable would let the entity buy securities with money it had already lent.
  * It is part of the BOOK (markInstitutionalBooks), never of the budget.
  */
-export function availablePurchaseCapacityLocal(entity: InstitutionalEntity, cashLocal: number, totalAssetsLocal: number, unsettledLocal = 0): number {
+function availablePurchaseCapacityLocal(entity: InstitutionalEntity, cashLocal: number, totalAssetsLocal: number, unsettledLocal = 0): number {
   // HF1: what its prime broker will actually lend it this week, less what it has already drawn.
   // Negative when the line has been CUT below the draw — which makes the fund a net seller in
   // this week's auctions, at whatever they clear, which is what a margin call is.

@@ -36,7 +36,7 @@ import { membersOfHouse, ccpFundOf, publishCcpFund } from '../../ledger/contract
 import { pay } from './settlement';
 
 /** Where in the week a class's market opens. */
-export type DerivativePhase = 'CLEARING' | 'POST_SETTLEMENT';
+type DerivativePhase = 'CLEARING' | 'POST_SETTLEMENT';
 
 /** What the stage hands a market for its turn. */
 export interface DerivativeMarketRun {

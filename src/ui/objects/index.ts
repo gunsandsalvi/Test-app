@@ -105,7 +105,7 @@ export function kindOfWord(world: World, phrase: string): { type: ObjectType; re
   return undefined;
 }
 
-export interface SearchHit { ref: ObjectRef; label: ObjectLabel; score: number }
+interface SearchHit { ref: ObjectRef; label: ObjectLabel; score: number }
 
 /** The command bar's matches across every searchable kind: exact handle first, then handle
  *  prefix, then a word of the name or a keyword. Limited per kind so firms do not drown markets. */

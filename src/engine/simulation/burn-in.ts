@@ -40,7 +40,7 @@ import { ensureV2 } from '../../engine2/world';
 import { bookHeadOf } from '../../engine2/holdings';
 
 /** One quantity §7.4 is about: what the seed asserted, and where the engine took it. */
-export interface SteadyStateProbe {
+interface SteadyStateProbe {
   name: string;
   seeded: number;
   settled: number;
@@ -137,29 +137,29 @@ export function compareToSettled(
 // ---------------------------------------------------------------------------------------------
 
 /** Consecutive quiet weeks before the world counts as settled: two months of the UI calendar. */
-export const SETTLED_WEEKS = 8;
+const SETTLED_WEEKS = 8;
 /** The most weeks an `auto` burn-in runs before giving up and naming what still drifts. */
-export const MAX_WEEKS_DEFAULT = 156;
+const MAX_WEEKS_DEFAULT = 156;
 
 /** A week's ordinary noise in each watched quantity — the width below which it is "not moving".
  *  Unemployment: a quarter of a point. The price level: half a percent a week (that is still ~30%
  *  a year, so a converged world can be inflating — the level's DRIFT is then the finding, read
  *  off the trace, not hidden by the test). Fill: a point. Firms: half a percent of the roster. */
-export const TOLERANCES = {
+const TOLERANCES = {
   unemploymentPp: 0.0025,
   priceLevelPct: 0.005,
   fillRatio: 0.01,
   activeFirmsShare: 0.005,
 } as const;
 
-export interface BurnInWeek {
+interface BurnInWeek {
   week: number;
   probe: Record<string, number>;
   /** The quantities that moved more than their tolerance this week (empty = a quiet week). */
   moved: string[];
 }
 
-export interface BurnInResult {
+interface BurnInResult {
   state: GameState;
   weeks: number;
   converged: boolean;
@@ -168,7 +168,7 @@ export interface BurnInResult {
   drifting: string[];
 }
 
-export type BurnInMode =
+type BurnInMode =
   | { mode: 'off' }
   | { mode: 'fixed'; weeks: number }
   | { mode: 'auto'; maxWeeks: number };
@@ -192,7 +192,7 @@ export function burnInWeeks(): number {
 }
 
 /** Which watched quantities moved more than their tolerance between two probes. */
-export function movedQuantities(prev: Record<string, number>, next: Record<string, number>): string[] {
+function movedQuantities(prev: Record<string, number>, next: Record<string, number>): string[] {
   const moved: string[] = [];
   for (const rid of REGION_IDS) {
     const du = Math.abs((next[`${rid} unemployment`] ?? 0) - (prev[`${rid} unemployment`] ?? 0));

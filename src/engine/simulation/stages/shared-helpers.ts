@@ -171,7 +171,7 @@ import { equityIssuerId } from '../../../domain/instrument-keys';
 
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
-export const RECOVERY_PRIOR_WEIGHT = 8;
+const RECOVERY_PRIOR_WEIGHT = 8;
 
 /**
  * This region's recovery rate: its own realised experience, weighted against the prior by how

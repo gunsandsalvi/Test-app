@@ -44,7 +44,7 @@ export type ProducingSector = 'Tech' | 'Energy' | 'Industrials' | 'Consumer';
  * volume) need a backlog STOCK to live on, which is IND10/IND11's; they land there rather than
  * here so the stock has one owner.
  */
-export type RevenueMechanism = 'UNIT_SALE' | 'SUBSCRIPTION';
+type RevenueMechanism = 'UNIT_SALE' | 'SUBSCRIPTION';
 
 export interface SubUnitSpec {
   unitId: string;
@@ -140,7 +140,7 @@ export interface SubUnitSpec {
   recipeInputs?: Record<string, number>;
 }
 
-export interface IndustrySpec {
+interface IndustrySpec {
   /** Which sector's companies produce this industry's goods (BP1b: line assignment reads this). */
   sector: ProducingSector;
   /**
@@ -873,7 +873,7 @@ function profileBasket(profileKey: string): Record<string, number> {
   return PROFILE_INPUT_BASKET[profileKey] ?? {};
 }
 
-export const PROFILE_INPUT_BASKET: Record<string, Record<string, number>> = {
+const PROFILE_INPUT_BASKET: Record<string, Record<string, number>> = {
   BANK: { professional_services: 0.09, enterprise_software: 0.07, facilities_and_logistics: 0.04, repair_and_maintenance: 0.01, electricity: 0.01 },
   INSURER: { professional_services: 0.10, enterprise_software: 0.05, facilities_and_logistics: 0.03, repair_and_maintenance: 0.01, electricity: 0.01 },
   ASSET_MANAGER: { professional_services: 0.08, enterprise_software: 0.06, facilities_and_logistics: 0.02, electricity: 0.01 },
@@ -943,23 +943,6 @@ export function recipeIntensityOf(unitId: string): number {
   const out = Object.values(byId.get(unitId)?.recipeInputs ?? {}).reduce((a, b) => a + b, 0);
   recipeIntensityById.set(unitId, out);
   return out;
-}
-
-/**
- * Gross output per dollar of VALUE ADDED for this product, which is `1 / (1 - a)` and nothing
- * else: value added is what is left of a dollar of output after the inputs it consumed, so
- * `VA = X(1 - a)` and `X / VA = 1/(1 - a)`.
- *
- * This is the number `companyGenerator.ts` used to state as a seven-entry per-sector
- * `revPerEmployeeMultiple` table whose own comment said the multiples "follow the recipes, not
- * the other way round" while nothing derived them. Deriving it is what makes headcount equal
- * `value added / productivity` — so total employment is pinned to what the economy actually
- * produces, instead of to gross output through a multiple picked separately.
- */
-export function grossOutputMultiplierOf(unitId: string): number {
-  const a = recipeIntensityOf(unitId);
-  if (!(a < 1)) defect(`recipe for ${unitId} consumes ${a.toFixed(3)} per dollar of output — a product cannot consume its own output entirely`);
-  return 1 / (1 - a);
 }
 
 /**
@@ -1129,7 +1112,7 @@ export function subUnitsByProducingSector(): Record<ProducingSector, { industry:
  * primitive here — a real-world cost, not a real-world outcome (rule 2) — and everything below
  * derives from it plus the physics each registry entry already carries.
  */
-export const WAREHOUSE_USD_PER_TONNE_YEAR = 40;
+const WAREHOUSE_USD_PER_TONNE_YEAR = 40;
 
 /**
  * Can this good be held at all? Only a separable physical object can sit in a warehouse. Software
@@ -1137,21 +1120,6 @@ export const WAREHOUSE_USD_PER_TONNE_YEAR = 40;
  * carry, and both were carrying one — measured: enterprise software held 159 units worth 5.9M,
  * spoiling like steel.
  */
-/**
- * The share of a firm's revenue that is CONTRACTED rather than sold by the unit,
- * weighted by its own product lines. A firm with no subscription line gets 0 and behaves exactly
- * as it always has.
- */
-export function recurringRevenueShare(lines: { subUnitId: string; revenueShare: number }[]): number {
-  let recurring = 0, total = 0;
-  lines.forEach((l) => {
-    const share = Math.max(0, l.revenueShare);
-    total += share;
-    if (byId.get(l.subUnitId)?.revenueMechanism === 'SUBSCRIPTION') recurring += share;
-  });
-  return total > 0 ? recurring / total : 0;
-}
-
 /**
  * What share of a contracted base is lost per week. The one primitive the mechanism
  * needs: a subscription is defined by the fact that it ENDS unless renewed, and how fast it does
@@ -1227,7 +1195,7 @@ export function annualCarryingCostRateOf(unitId: string): number {
  *   OPERATING     — everything else a business buys and uses. Expensed; its cost already lives
  *                   in the operating margin and its cash in settled purchases.
  */
-export type PurchaseKind = 'RECIPE_INPUT' | 'CAPITAL_GOOD' | 'OPERATING';
+type PurchaseKind = 'RECIPE_INPUT' | 'CAPITAL_GOOD' | 'OPERATING';
 
 const recipeInputIds = new Set<string>(
   allSubUnits.flatMap(su => Object.keys(su.recipeInputs ?? {}))

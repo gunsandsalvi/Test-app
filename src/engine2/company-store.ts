@@ -25,8 +25,8 @@ import { ladderTotalLocal } from './tranches';
  * cap (price × shares), total debt (the ladder's live face) and cash (the account row). Named
  * here because the constraint below has to admit them and refuse everything else.
  */
-export const DERIVED_F64_FIELDS = ['marketCap', 'totalDebt', 'cash', 'sharesOutstanding'] as const;
-export type DerivedF64Field = typeof DERIVED_F64_FIELDS[number];
+const DERIVED_F64_FIELDS = ['marketCap', 'totalDebt', 'cash', 'sharesOutstanding'] as const;
+type DerivedF64Field = typeof DERIVED_F64_FIELDS[number];
 
 /**
  * §3.13c — THE LANE NAMES ARE `keyof Company` OR A NAMED DERIVATION, CHECKED.
@@ -76,9 +76,9 @@ const STR_FIELDS = [
   'pendingRecapSponsorId', 'pendingIpoSponsorId',
 ] as const satisfies readonly (keyof Company)[];
 
-export type CompanyF64Field = (typeof F64_FIELDS)[number];
-export type CompanyBoolField = (typeof BOOL_FIELDS)[number];
-export type CompanyStrField = (typeof STR_FIELDS)[number];
+type CompanyF64Field = (typeof F64_FIELDS)[number];
+type CompanyBoolField = (typeof BOOL_FIELDS)[number];
+type CompanyStrField = (typeof STR_FIELDS)[number];
 
 export interface CompanyStore {
   n: number;
@@ -127,16 +127,13 @@ function alloc(cap: number): CompanyStore {
 // Keyed by the persistent V2World — the GameState OBJECT is rebuilt every week (stage 13's
 // `{...state}`), so keying on it re-allocated the whole SAB store weekly (measured ~11.5 ms/wk
 // of pure allocation before this line learned that fact).
-let storeByState = new WeakMap<V2World, CompanyStore>();
-
-/** Test seam: forget cached stores (batteries clone whole states). */
-export function resetCompanyStores(): void { storeByState = new WeakMap(); }
+const storeByState = new WeakMap<V2World, CompanyStore>();
 
 /**
  * Fill every lane from the object graph. One pass, no allocation once at capacity; growth
  * copies (§7.309). Call at a consuming stage's top — validity is then by construction.
  */
-export function refreshCompanyStore(state: GameState): CompanyStore {
+function refreshCompanyStore(state: GameState): CompanyStore {
   const companies = state.companies;
   const key = ensureV2(state);
   const n = companies.length;
@@ -263,11 +260,6 @@ export function trustCompanyStore(state: GameState): CompanyStore {
   S.n = companies.length;
   S.epoch++;
   return S;
-}
-
-/** The store for this world, if it exists yet (the II.4 sync sites need it without forcing). */
-export function companyStoreOf(state: GameState): CompanyStore | undefined {
-  return storeByState.get(ensureV2(state));
 }
 
 // --- §4.C II.4 writer hunt -------------------------------------------------------------------

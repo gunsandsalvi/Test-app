@@ -21,7 +21,7 @@ const same = (p: DerivativeParty, q: DerivativeParty): boolean => derivativePart
 
 /** One slice of a standing contract a new one offsets: the seat given up ('a' or 'b' of the
  *  standing contract), the notional netted, and the member taking the seat. */
-export interface Offset { standingId: string; seat: 'a' | 'b'; notional: number; incoming: DerivativeParty }
+interface Offset { standingId: string; seat: 'a' | 'b'; notional: number; incoming: DerivativeParty }
 
 /**
  * The offsets one new contract makes against the standing book, and what of it still stands.

@@ -121,7 +121,7 @@ function allocScratch(n: number): FrontPass {
   return scratch;
 }
 
-export interface FrontPassInputs {
+interface FrontPassInputs {
   v2: V2World;
   nextWeek: number;
   companyUpdates: Record<string, CompanyWeekUpdate>;

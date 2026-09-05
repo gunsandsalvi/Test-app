@@ -185,7 +185,7 @@ export interface WeatherAnomaly {
   minDurationWeeks?: number;
 }
 
-export type CreditTier = 'SUPER_PRIME' | 'PRIME' | 'NEAR_PRIME' | 'SUBPRIME';
+type CreditTier = 'SUPER_PRIME' | 'PRIME' | 'NEAR_PRIME' | 'SUBPRIME';
 
 export interface CreditTierBook {
   tier: CreditTier;
@@ -371,7 +371,7 @@ export type GovDebtTrancheView = GovDebtTranche & { tenorAtIssuanceYears: number
  * The pool's own aggregates stay, and are DERIVED from these (rule 4) — nothing reads a node and
  * a parallel scalar for the same quantity.
  */
-export interface SmePoolStratum {
+interface SmePoolStratum {
   /** Share of the pool's firms this stratum stands for. Weights sum to 1. */
   weight: number;
   /** Debt to annual earnings for the firms in it — the dimension that gates default. */
@@ -527,7 +527,7 @@ export const LABOR_PRODUCTIVITY_GROWTH_ANNUAL = 0.012;
  * resting vacancy stock of 12.8k against a realistic 520k, and every opening filled inside a
  * single week. A labor market with no search friction is not a labor market.
  */
-export const SEPARATION_RATE_MONTHLY = 0.034;
+const SEPARATION_RATE_MONTHLY = 0.034;
 export const BASELINE_QUIT_RATE_WEEKLY = SEPARATION_RATE_MONTHLY / (52 / 12);
 /**
  * The share of an unfilled vacancy stock that is WITHDRAWN each week. Firms give up on
@@ -605,7 +605,7 @@ export const RENT_SHARE_TO_LABOUR = 0.12;
 /** Execution quality also retains people — a well-run firm loses fewer of them. */
 export const QUIT_ELASTICITY_TO_EXECUTION = 0.35;
 /** Open positions as a share of employment at a neutral market (the JOLTS openings rate). */
-export const NEUTRAL_VACANCY_SHARE_OF_EMPLOYMENT = 0.045;
+const NEUTRAL_VACANCY_SHARE_OF_EMPLOYMENT = 0.045;
 /** Vacancies per seeker at that same neutral market — the tightness wages are indexed to. */
 export const NEUTRAL_LABOR_TIGHTNESS = 0.95;
 export const MATCHING_ELASTICITY = 0.5;

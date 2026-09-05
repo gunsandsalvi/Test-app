@@ -30,7 +30,7 @@ import { institutionTotalAssetsLocal, stagePurchaseBudgetLocal } from './institu
 import { institutionUnsettledLessCollateralLocal } from './settlement';
 
 /** What this build needs of a piece of paper — a bond and a loan both already are one. */
-export interface CreditDemandInstrument {
+interface CreditDemandInstrument {
   id: InstrumentId;
   /** Index into `issuerTerms` — which borrower's paper this is. */
   ci: number;
@@ -42,7 +42,7 @@ export interface CreditDemandInstrument {
 }
 
 /** What it needs of the borrower behind it. */
-export interface CreditDemandIssuerTerms {
+interface CreditDemandIssuerTerms {
   expectedLossBps: number;
   /** Below investment grade: the holder's mandate sleeve applies. */
   subIG: boolean;

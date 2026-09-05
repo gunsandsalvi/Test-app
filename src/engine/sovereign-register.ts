@@ -32,9 +32,9 @@ import type { InstrumentId } from '../domain/ids';
 
 /** The kind of book a sovereign position sits in — what `holdings-view` reports as its shares,
  *  and the only thing a caller has to know about WHERE a holding is kept. */
-export type SovereignHolderClass = 'REGISTER' | 'BANK' | 'CENTRAL_BANK' | 'DESK' | 'TREASURY';
+type SovereignHolderClass = 'REGISTER' | 'BANK' | 'CENTRAL_BANK' | 'DESK' | 'TREASURY';
 
-export interface SovereignPosition {
+interface SovereignPosition {
   /** The bond's own tranche id — one id space across all four stores (§3.13-SOV row 3). */
   bondId: string;
   /** The book it sits in: an institution's or household's id, a bank's ticker, `CB`. */
@@ -108,7 +108,7 @@ export function sovereignHeldByClass(v2: V2World, state: GameState, regionId: Re
 
 /** One sovereign row of a register book: the bond, its FACE and its VALUE (the mark). */
 /** §3.13-BOOK d5a: `lienFaceLocal` is the face of the row pledged in repo — bound, not free. */
-export interface SovereignRow { row: number; bondId: InstrumentId; issuerRegion: RegionId; faceLocal: number; valueLocal: number; lienFaceLocal: number }
+interface SovereignRow { row: number; bondId: InstrumentId; issuerRegion: RegionId; faceLocal: number; valueLocal: number; lienFaceLocal: number }
 
 /**
  * §3.13-BOOK d3a/d3b — A BOOK'S SOVEREIGN ROWS, read off the register. Every reader of the deleted

@@ -54,14 +54,3 @@ export interface DiagnosticsLog {
   data?: Record<string, unknown>;
 }
 
-export interface ChartModalData {
-  isOpen: boolean;
-  title: string;
-  subtitle?: string;
-  ticker?: Ticker;
-  unit: string;
-  currentVal: number;
-  change1W: number;
-  historicalSeries: number[];
-  tradeableInstrument?: TradeableInstrument;
-}

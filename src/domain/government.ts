@@ -53,7 +53,7 @@ export function weeklyInterestExpenseLocal(tranches: readonly GovDebtTrancheView
  * `SOV_BILL_MAX_TENOR_YEARS` in the clearing helpers; kept here so the domain can answer "does
  * this pay a coupon" without importing an engine module.
  */
-export const DISCOUNT_BILL_MAX_TENOR_YEARS = 1.5;
+const DISCOUNT_BILL_MAX_TENOR_YEARS = 1.5;
 
 export function isDiscountBill(tenorAtIssuanceYears: number): boolean {
   return tenorAtIssuanceYears < DISCOUNT_BILL_MAX_TENOR_YEARS;
@@ -99,7 +99,7 @@ export function discountBillProceedsLocal(faceLocal: number, annualYield: number
  * left. Parsing an id for meaning is what let one holding be a group to one reader and a bond to
  * another; the ladder is the single place that knows.
  */
-export interface SovereignLadderIndex {
+interface SovereignLadderIndex {
   /** Is this id a live bond or bill of this region? */
   has(instrumentId: string): boolean;
   /** Is it a BILL — short at issue, returning its discount (`bond.md` N5.c)? */
@@ -226,7 +226,7 @@ export function governmentPayrollWeeklyLocal(args: {
 }
 
 /** How far a full stimulus (stance 1.0) lifts the procurement line above its structural share. */
-export const FISCAL_STANCE_PROCUREMENT_SENSITIVITY = 0.25;
+const FISCAL_STANCE_PROCUREMENT_SENSITIVITY = 0.25;
 
 /**
  * What actually left the treasury's account this week. PUB1e: procurement is the amount the
@@ -297,7 +297,7 @@ export function governmentObligationsWeeklyLocal(args: {
  * replacement-rate band of 40–60%. That agreement is the check that the bases are sane, the same
  * test the national-accounts header applies to the household tax rate.
  */
-export const SOCIAL_BENEFIT_REPLACEMENT_RATE = 0.52;
+const SOCIAL_BENEFIT_REPLACEMENT_RATE = 0.52;
 
 /**
  * Goods and services the government's operations consume, per dollar of its own payroll. An
@@ -309,7 +309,7 @@ export const SOCIAL_BENEFIT_REPLACEMENT_RATE = 0.52;
  * keeps the model's own composition rather than importing that, so the change is a re-basing and
  * not a re-sizing. Moving toward 1.4 is a deliberate composition change, not a fix.
  */
-export const PROCUREMENT_PER_PAYROLL_DOLLAR = 1.07;
+const PROCUREMENT_PER_PAYROLL_DOLLAR = 1.07;
 
 /** How hard a full stimulus (stance 1.0) leans on government hiring, per week. */
 export const GOV_HIRING_RESPONSE_TO_STANCE = 0.0004;
@@ -345,7 +345,7 @@ export function sovereignCouponDueShare(tranche: { originationWeek: number }, we
  * primary-market event with a real consequence for the treasury's account — happened in silence.
  * One row per piece of paper offered; the region keeps the latest week's rows.
  */
-export interface PrimaryOfferingRecord {
+interface PrimaryOfferingRecord {
   bondId: string;
   kind: 'BOND' | 'BILL';
   offeredLocal: number;
@@ -362,7 +362,7 @@ export function recordPrimaryOffering(reg: { lastAuction?: AuctionRecord }, week
   reg.lastAuction.offerings.push(rec);
 }
 
-export interface AuctionSummary {
+interface AuctionSummary {
   offeredLocal: number;
   placedLocal: number;
   withdrawnLocal: number;

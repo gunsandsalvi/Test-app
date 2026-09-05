@@ -56,7 +56,7 @@ export const ON_RRP_SPREAD_BPS = 20;
  * contribution. `householdState.liquidSavingShare` is that same split, measured every week, and
  * every weekly reader takes it — this value is what the first pass opens on and nothing else.
  */
-export const HOUSEHOLD_SAVINGS_TO_DEPOSITS_SEED_SHARE = 0.3;
+const HOUSEHOLD_SAVINGS_TO_DEPOSITS_SEED_SHARE = 0.3;
 
 /** The share of saving that reaches the banks: measured where it is decided, seeded before. */
 export function savingsToDepositsShare(hs?: { liquidSavingShare?: number }): number {
@@ -123,13 +123,13 @@ export function leverageHeadroomLocal(sheet: BankingSector, cashLocal: number, f
  * Runoff rates and a coverage ratio of 1 are posted regulatory primitives (rule 2 permits a
  * primitive; it is the 22% equilibrium that it forbids).
  */
-export const RETAIL_DEPOSIT_RUNOFF_RATE = 0.10;
+const RETAIL_DEPOSIT_RUNOFF_RATE = 0.10;
 /** Corporate, institutional and wholesale money leaves far faster than insured retail money. */
-export const WHOLESALE_FUNDING_RUNOFF_RATE = 0.40;
-export const LIQUIDITY_COVERAGE_RATIO = 1.0;
+const WHOLESALE_FUNDING_RUNOFF_RATE = 0.40;
+const LIQUIDITY_COVERAGE_RATIO = 1.0;
 
 /** Funding that runs in a stress month, weighted by how fast each kind of it runs. */
-export function stressedOutflowLocal(sheet: BankingSector, lines: DepositLines): number {
+function stressedOutflowLocal(sheet: BankingSector, lines: DepositLines): number {
   const wholesaleLocal = lines.corporateLocal + lines.institutionalLocal + lines.smeLocal + lines.ccpLocal;
   return Math.max(0, lines.householdLocal) * RETAIL_DEPOSIT_RUNOFF_RATE
     + Math.max(0, wholesaleLocal) * WHOLESALE_FUNDING_RUNOFF_RATE;

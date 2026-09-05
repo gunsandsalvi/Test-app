@@ -29,7 +29,7 @@ import { internReason } from '../simulation/stages/settlement';
 import { defect } from '../../domain/defect';
 import type { Ticker } from '../../domain/ids';
 
-export interface GoodsFlow { producedUnits: number; consumedUnits: number; scrappedUnits: number }
+interface GoodsFlow { producedUnits: number; consumedUnits: number; scrappedUnits: number }
 
 function flowOf(region: RegionId, subUnitId: string): GoodsFlow {
   const j = activeWireJournal();
@@ -40,7 +40,7 @@ function flowOf(region: RegionId, subUnitId: string): GoodsFlow {
 }
 
 /** A move that stays inside one party (a firm taking its own output into its own lots): no wire. */
-export const INTERNAL_MOVE = 0;
+const INTERNAL_MOVE = 0;
 
 /** Goods move from one party to another. Returns the wire number (`INTERNAL_MOVE` when the two
  *  parties are one — a firm supplying itself moves nothing between parties). */
@@ -187,7 +187,7 @@ export function scrapOutputUnitsTo(comp: StockHolder, subUnitId: string, unitsAf
  * consumed and let decay as the goods flows the W4 identity reads, and reads the stock back off
  * the row, revalued at this week's price.
  */
-export const segmentBookId = (region: RegionId, industry: string): string => partyKey({ kind: 'SEGMENT', region, industry });
+const segmentBookId = (region: RegionId, industry: string): string => partyKey({ kind: 'SEGMENT', region, industry });
 const segmentBookOfGood = (region: RegionId, subUnitId: string): string => segmentBookId(region, industryOfSubUnit(subUnitId) ?? subUnitId);
 
 /** The segment's row of one good, -1 when it holds none. */

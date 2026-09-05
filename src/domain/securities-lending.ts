@@ -40,7 +40,7 @@ import { CurrencyCode } from './geography';
 import type { EntityId } from './ids';
 import type { InstrumentId } from './ids';
 
-export type LendingParty = { kind: 'INSTITUTION'; id: EntityId };
+type LendingParty = { kind: 'INSTITUTION'; id: EntityId };
 
 export interface SecurityLoan {
   id: string;

@@ -31,7 +31,7 @@ import { bookHeadOf, rowUnits } from '../../engine2/holdings';
 const INSTR_ID_MEMO = new WeakMap<V2World, number[]>();
 
 /** The instrument types, in the order the by-type grouping uses. */
-export const HOLDING_TYPES: ItemizedHolding['instrumentType'][] = [
+const HOLDING_TYPES: ItemizedHolding['instrumentType'][] = [
   'EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'GOV_BOND', 'COMMERCIAL_PAPER',
   'PE_FUND_INTEREST', 'ETF_SHARE',
 ];

@@ -39,7 +39,7 @@ function yearFraction(week: number): number {
  * The season index: +1 at midsummer, −1 at midwinter. A weather type is likelier the closer the
  * year is to its own half of the cycle, which is the whole of what seasonality means here.
  */
-export function seasonIndex(week: number): number {
+function seasonIndex(week: number): number {
   return Math.sin(2 * Math.PI * (yearFraction(week) - 0.25));
 }
 
@@ -52,7 +52,7 @@ const TYPE_SEASON: Record<Exclude<WeatherAnomaly['type'], 'Normal'>, number> = {
 };
 
 /** What a region grows, pumps or ships — the exposure its own firm population gives it. */
-export interface RegionExposure {
+interface RegionExposure {
   cropShare: number;
   energyShare: number;
   metalShare: number;
@@ -64,7 +64,7 @@ const CROP_IDS = new Set(['WHEAT', 'CORN', 'SOYBEANS']);
 const ENERGY_IDS = new Set(['CRUDE_OIL', 'HEAVY_CRUDE_OIL', 'NATURAL_GAS']);
 
 /** Read a region's exposure off the firms that are actually in it. */
-export function regionExposure(regionId: RegionId, companies: Company[]): RegionExposure {
+function regionExposure(regionId: RegionId, companies: Company[]): RegionExposure {
   let cropLocal = 0, energyLocal = 0, metalLocal = 0;
   const commodityIds: string[] = [];
   companies.forEach((c) => {

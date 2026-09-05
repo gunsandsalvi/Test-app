@@ -23,10 +23,10 @@ import { sovereignReferenceOf } from '../contract';
 import type { RegionId } from '../../geography';
 
 /** Deliveries are quarterly, on the market convention's clock: the next multiple of 13 weeks. */
-export const BOND_FUTURE_DELIVERY_WEEKS = 13;
+const BOND_FUTURE_DELIVERY_WEEKS = 13;
 export const nextDeliveryWeek = (week: number): number => (Math.floor(week / BOND_FUTURE_DELIVERY_WEEKS) + 1) * BOND_FUTURE_DELIVERY_WEEKS;
 /** The benchmark: the rung nearest this many years from delivery is the deliverable. */
-export const BOND_FUTURE_BENCHMARK_YEARS = 10;
+const BOND_FUTURE_BENCHMARK_YEARS = 10;
 export const BOND_FUTURE_TERM_KEY = 'F';
 
 /** The bond whose maturity from delivery is nearest the benchmark; undefined with no ladder. */

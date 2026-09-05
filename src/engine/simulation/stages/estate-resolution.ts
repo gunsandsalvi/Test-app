@@ -49,7 +49,7 @@ import type { EntityId } from '../../../domain/ids';
 import type { Ticker } from '../../../domain/ids';
 
 /** How many resolutions the realised recovery rate averages over before it displaces the prior. */
-export const RECOVERY_HISTORY_LENGTH = 24;
+const RECOVERY_HISTORY_LENGTH = 24;
 
 const holderRef = (c: EstateClaim): PartyRef =>
   c.holder.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: c.holder.id }

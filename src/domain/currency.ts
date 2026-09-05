@@ -75,13 +75,6 @@ export const PARITY_FX: FxTable = Object.freeze(
   CURRENCY_CODES.reduce((t, c) => { t[c] = 1; return t; }, {} as Record<CurrencyCode, number>)
 );
 
-/** The table an `FxToUsd` reader implies, snapshotted once so a whole pass converts at one rate. */
-export function fxTableFrom(regionIds: readonly RegionId[], fxToUsd: FxToUsd): FxTable {
-  const table = { ...PARITY_FX } as Record<CurrencyCode, number>;
-  regionIds.forEach((r) => { table[CURRENCY_BY_REGION[r]] = requireRate(fxToUsd(r), CURRENCY_BY_REGION[r]); });
-  return table;
-}
-
 // ---- The region-keyed reads. A region is a place and its money is `CURRENCY_BY_REGION`; these
 // exist because the decision stages hold a region and not a currency, and each is one hop. ----
 

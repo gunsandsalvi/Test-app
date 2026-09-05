@@ -106,7 +106,7 @@ export const basketReferenceOf = (c: { classId: DerivativeClassId; reference: De
 export const sovereignReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): { regionId: RegionId; bondId: InstrumentId } =>
   c.reference.kind === 'SOVEREIGN' ? c.reference : defect(`${c.classId} contract read as if it named a sovereign bond`);
 /** §3.17b-i — the option's kind, as its `termKey` carries it. */
-export type OptionType = 'CALL' | 'PUT';
+type OptionType = 'CALL' | 'PUT';
 export const optionTypeOf = (c: { classId: DerivativeClassId; termKey: string }): OptionType =>
   c.termKey === 'CALL' || c.termKey === 'PUT' ? c.termKey : defect(`${c.classId} contract '${c.termKey}' is neither a call nor a put`);
 

@@ -8,7 +8,7 @@ import { ObjectHeader, FunctionTiles, RegionLink } from './common';
 import { ensureV2 } from '../../engine2/world';
 import { tradeInvoicesOf } from '../../engine/ledger/contract-ledger';
 
-export interface Lane { from: string; to: string; ratePerTonne: number; inTransitUnits: number; shipments: number; invoicesLocal: number }
+interface Lane { from: string; to: string; ratePerTonne: number; inTransitUnits: number; shipments: number; invoicesLocal: number }
 
 function lanesOf(world: World): Map<string, Lane> {
   const out = new Map<string, Lane>();

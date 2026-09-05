@@ -2,8 +2,8 @@
 
 import { ReactNode } from 'react';
 import { Card, Hint, Link, Muted, Tile, serif, T, Nav } from '../ui';
-import { ObjectRef, Series } from '../types';
-import { World, tapeSeries, displayWeek } from '../world';
+import { Series } from '../types';
+import { World, tapeSeries } from '../world';
 import { changePct, pct } from '../format';
 import { WEEKS_PER_MONTH, WEEKS_PER_YEAR, formatSpan } from '../calendar';
 
@@ -54,10 +54,6 @@ export function RegionLink({ id, nav }: { id: string; nav: Nav }) {
   return <Link to={{ type: 'region', id }} nav={nav}>{id}</Link>;
 }
 
-export function ObjLink({ to, nav, children }: { to: ObjectRef; nav: Nav; children: ReactNode }) {
-  return <Link to={to} nav={nav}>{children}</Link>;
-}
-
 /** A tape series as a chart series, with the calendar weeks it was recorded on. */
 export function taped(world: World, key: string, name: string, unit: string, fmt: (v: number) => string, level = false): Series {
   const t = tapeSeries(world, key);
@@ -69,8 +65,6 @@ export function ringed(world: World, values: number[], name: string, unit: strin
   const wk = world.state.currentWeek;
   return { name, weeks: values.map((_, i) => wk - (values.length - 1 - i)), values, unit, fmt, level };
 }
-
-export const dateOf = (world: World, week: number): number => displayWeek(world.state, week);
 
 /** An identifier read aloud: `apparel_retail` → "apparel retail", `ConsumerDiscretionaryRetail` → "consumer discretionary retail". */
 export const words = (s: string): string => s.replace(/_/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2').toLowerCase();

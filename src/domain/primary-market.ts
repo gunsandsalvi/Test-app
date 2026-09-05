@@ -21,7 +21,7 @@ import { asInstrumentId, type InstrumentId, asEntityId } from './ids';
 import type { EntityId } from './ids';
 import type { Ticker } from './ids';
 
-export type PrimaryOfferingInstrumentType = PrimaryOfferingType;
+type PrimaryOfferingInstrumentType = PrimaryOfferingType;
 
 /**
  * The tenor a new corporate term deal is brought at. It lived in `engine2/stage08-back.ts`, where
@@ -37,7 +37,7 @@ export const STANDARD_CORP_TENOR_YEARS = 5;
 export const primaryTrancheId = (issuerId: string, purpose: string, week: number): InstrumentId =>
   asInstrumentId(`${issuerId}-${purpose}-${week}`);
 
-export type PrimaryOfferingPurpose =
+type PrimaryOfferingPurpose =
   /** CFO issuing into cheap spreads (the RV supply lever, now with a real market step). */
   | 'OPPORTUNISTIC'
   /** Rolling a maturing tranche — need-driven; the walk-away is the revolver's all-in cost. */

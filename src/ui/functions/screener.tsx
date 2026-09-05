@@ -14,7 +14,7 @@ import { PeerColumn } from '../objects/registry';
 type AnyColumn = PeerColumn<any>;
 
 /** The kind's screener columns for an anchor object (or the kind's plain set when there is none). */
-export function columnsFor(world: World, type: ObjectType, anchorId?: string): AnyColumn[] {
+function columnsFor(world: World, type: ObjectType, anchorId?: string): AnyColumn[] {
   const m = moduleOf(type);
   if (!m.peers) return [];
   if (typeof m.peers.columns === 'function') {

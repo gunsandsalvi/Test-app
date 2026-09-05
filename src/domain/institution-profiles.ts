@@ -12,7 +12,7 @@
 
 import type { InstitutionalEntityType, InstitutionalEntity, AssetAllocationTarget, HedgeFundStrategy } from './institutions';
 
-export interface InstitutionProfile {
+interface InstitutionProfile {
   /** Picks names itself, so an index overlay that averages them away adds nothing it wants. */
   readonly picksOwnNames: boolean;
   /** May hold ETF shares as a portfolio position (a fund does not buy funds of itself). */
@@ -80,7 +80,7 @@ function pensionHurdle(entity: InstitutionalEntity, _stated: number, totalAssets
   return (benefitOutflowAnnual / totalAssetsLocal) / fundedRatio;
 }
 
-export const INSTITUTION_PROFILES: Record<InstitutionalEntityType, InstitutionProfile> = {
+const INSTITUTION_PROFILES: Record<InstitutionalEntityType, InstitutionProfile> = {
   INSURER:           { picksOwnNames: false, investsInEtfs: true,  leverage: 'NONE',            liabilityDriven: true,  beneficiariesAreHouseholds: true,  sovereignDurationMandate: true,  sovereignCoreShare: 0.70, preferredCreditDurationYears: 6.0, subInvestmentGradeSizeFactor: 0.08, quotesCdsProtection: false, targets: { govBondPct: 0.50, corpBondPct: 0.32, loanPct: 0.03, equityPct: 0.10, cashPct: 0.05 }, liabilityHurdle: insurerHurdle },
   ASSET_MANAGER:     { picksOwnNames: false, investsInEtfs: true,  leverage: 'NONE',            liabilityDriven: false, beneficiariesAreHouseholds: true,  sovereignDurationMandate: true,  sovereignCoreShare: 0.40, preferredCreditDurationYears: 4.0, subInvestmentGradeSizeFactor: 2.0,  quotesCdsProtection: true , targets: { govBondPct: 0.10, corpBondPct: 0.12, loanPct: 0.08, equityPct: 0.65, cashPct: 0.05 } },
   PENSION_FUND:      { picksOwnNames: false, investsInEtfs: true,  leverage: 'NONE',            liabilityDriven: true,  beneficiariesAreHouseholds: true,  sovereignDurationMandate: true,  sovereignCoreShare: 0.75, preferredCreditDurationYears: 6.0, subInvestmentGradeSizeFactor: 0.10, quotesCdsProtection: false, targets: { govBondPct: 0.25, corpBondPct: 0.25, loanPct: 0.05, equityPct: 0.40, cashPct: 0.05 }, liabilityHurdle: pensionHurdle },
@@ -99,7 +99,7 @@ export const institutionProfile = (t: InstitutionalEntityType): InstitutionProfi
  * four weights are stated primitives (rule 2's PREFERENCE kind, like every other kind's
  * mandate); the flags say which markets the book shows up in.
  */
-export interface HedgeFundStrategyProfile {
+interface HedgeFundStrategyProfile {
   readonly targets: AssetAllocationTarget;
   /** How much more of one name than its size implies the book will take when paper is cheap
    *  enough to clear its hurdle — concentration IS the distressed strategy. Undefined = the
@@ -120,7 +120,7 @@ export interface HedgeFundStrategyProfile {
   readonly sellsVolatility: boolean;
 }
 
-export const HEDGE_FUND_STRATEGY_PROFILES: Record<HedgeFundStrategy, HedgeFundStrategyProfile> = {
+const HEDGE_FUND_STRATEGY_PROFILES: Record<HedgeFundStrategy, HedgeFundStrategyProfile> = {
   // Rates and FX: a large liquid book against which to run directional risk, and the biggest
   // cash sleeve of the four, because its positions are margin and its dry powder is the point.
   GLOBAL_MACRO:      { targets: { govBondPct: 0.45, corpBondPct: 0.05, loanPct: 0,    equityPct: 0.20, cashPct: 0.30 }, pricesOffRecovery: false, shortsEquity: false, tradesCommodityFutures: true,  runsFxDirectional: true,  hedgesForeignEquity: false, sellsVolatility: true },

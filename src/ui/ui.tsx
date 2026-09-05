@@ -119,7 +119,7 @@ export function Empty({ children }: { children: ReactNode }) {
  * silence) and ten rendered whole — a register of holders stalled the phone at its full length,
  * and a silent slice was a truncation the reader could neither see nor undo.
  */
-export const TABLE_CAP = 50;
+const TABLE_CAP = 50;
 
 export function Table<R>({ columns, rows, sortKey, onSort, keyOf }: {
   columns: { key: string; label: string; render: (r: R) => ReactNode; sortable?: boolean; width?: number }[];

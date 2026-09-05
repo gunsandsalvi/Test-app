@@ -69,7 +69,7 @@ export function balanceSheetChargeBps(args: { capitalChargeRate: number; require
  * against the clearing-member limit with, so the house's cut at the strike is the exception.
  * Zero where the strike would post nothing.
  */
-export type StrikeShape = Pick<DerivativeContract, 'classId' | 'regionId' | 'reference' | 'termKey' | 'maturityWeek'>;
+type StrikeShape = Pick<DerivativeContract, 'classId' | 'regionId' | 'reference' | 'termKey' | 'maturityWeek'>;
 export function initialMarginRateOf(shape: StrikeShape, m: DerivativeMarketView): number {
   const move = derivativeProfile(shape.classId).closeOutMoveOf({ ...shape, notional: 1 } as DerivativeContract, m);
   return move !== undefined && move > 0 ? move : 0;

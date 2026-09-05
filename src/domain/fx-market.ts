@@ -51,7 +51,7 @@
 
 /** The smallest weekly sigma a pair is assumed to have: with too little history to estimate one,
  *  the engine's own minimum repricing allowance stands in, exactly as the repo haircuts do. */
-export const MIN_FX_WEEKLY_SIGMA = 0.0025;
+const MIN_FX_WEEKLY_SIGMA = 0.0025;
 
 /** The move a speculator needs before there is anything to trade: the pair's own weekly noise. */
 export function speculatorReservationMoveFrac(sigma: number): number { return sigma; }
@@ -94,7 +94,4 @@ export function centralBankFullSizeRangeFrac(sigma: number): number {
 /** Share of the reserve book one week's operation may commit — desk capacity, drawn as spent. */
 export const CENTRAL_BANK_FX_INTERVENTION_SHARE = 0.10;
 
-
-/** The rate is a PRICE_LIKE statistic: demand falls as the currency gets dearer. */
-export const FX_STAT_KIND = 'PRICE_LIKE' as const;
 

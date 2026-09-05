@@ -21,7 +21,7 @@ import { DerivativeClassId, DerivativeContract } from './contract';
 import type { EntityId, InstrumentId } from '../ids';
 import type { CreditIndexSeries } from './classes/cds-index';
 
-export type IssuerWorkout = { state: 'OPEN' } | { state: 'CLOSED'; recovery: number };
+type IssuerWorkout = { state: 'OPEN' } | { state: 'CLOSED'; recovery: number };
 
 /** Flat market inputs the lifecycle hands a profile — everything a leg may price off.
  *  Party LIVENESS is deliberately absent: a dead counterparty is the lifecycle's own close-out,

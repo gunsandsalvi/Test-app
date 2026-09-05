@@ -21,7 +21,6 @@ import { DerivativeClassProfile } from '../profile';
 import { commodityReferenceOf } from '../contract';
 
 export const FUTURES_TENOR_MONTHS = [1, 3, 6] as const;
-export type FuturesTenorMonths = (typeof FUTURES_TENOR_MONTHS)[number];
 export const futuresTermKey = (tenorMonths: number): string => `${tenorMonths}M`;
 
 /**

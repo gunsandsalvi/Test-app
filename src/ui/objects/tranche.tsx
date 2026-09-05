@@ -19,7 +19,7 @@ import { ObjectHeader, FunctionTiles, AllRow, RegionLink, words } from './common
 import type { DebtTranche } from '../../domain/company';
 import type { GovDebtTrancheView } from '../../domain/region-macro';
 
-export interface TrancheView {
+interface TrancheView {
   ownerRef: { type: 'company' | 'region'; id: string };
   ownerName: string;
   id: string;
@@ -43,7 +43,7 @@ export interface TrancheView {
   callProtection?: unknown;
 }
 export const trancheId = (ownerId: string, id: string): string => `${ownerId}|${id}`;
-export type TrancheKind = 'bond' | 'subordinated bond' | 'loan' | 'facility' | 'commercial paper' | 'sovereign bond' | 'bill';
+type TrancheKind = 'bond' | 'subordinated bond' | 'loan' | 'facility' | 'commercial paper' | 'sovereign bond' | 'bill';
 /** The class words a market files a tranche under, plural as the kind word and singular as a keyword. */
 const CLASS_GROUP: Record<TrancheKind, string> = { bond: 'bonds', 'subordinated bond': 'bonds', loan: 'loans', facility: 'facilities', 'commercial paper': 'commercial paper', 'sovereign bond': 'sovereigns', bill: 'bills' };
 const CLASS_GROUPS = ['bonds', 'loans', 'commercial paper', 'facilities', 'sovereigns', 'bills'];

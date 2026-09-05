@@ -23,7 +23,7 @@ import type { CurrencyCode } from '../domain/geography';
 import { equityInstrumentId, etfShareId } from '../domain/instrument-keys';
 import { marketCapOf } from '../domain/company';
 
-export interface InstrumentIndex {
+interface InstrumentIndex {
   /** Rows are indexed by `InstrRef`; `cap` is how many refs the columns cover. */
   cap: number;
   /** The instrument's KIND — the register's type tag. ABSENT_REF = this ref names no issued instrument. */
@@ -48,7 +48,7 @@ export type ReadonlyInstrumentIndex = {
 };
 
 /** The ledger's own handle. Nothing else may hold one. */
-export const mutableInstrumentIndex = (v2: V2World): InstrumentIndex => v2.instruments as unknown as InstrumentIndex;
+const mutableInstrumentIndex = (v2: V2World): InstrumentIndex => v2.instruments as unknown as InstrumentIndex;
 
 export function newInstrumentIndex(): InstrumentIndex {
   const cap = 1 << 14;
@@ -120,7 +120,7 @@ export function instrumentCurrencyOf(v2: V2World, id: InstrumentId): CurrencyCod
 
 /** The issued amount the index states, in the instrument's own unit — undefined where the class
  *  store owns it or nobody has stated it. */
-export function instrumentIssuedUnitsOf(v2: V2World, id: InstrumentId): number | undefined {
+function instrumentIssuedUnitsOf(v2: V2World, id: InstrumentId): number | undefined {
   const ref = instrumentRefOf(v2, id);
   if (!instrumentRefRegistered(v2, ref)) return undefined;
   const u = v2.instruments.issuedUnits[ref];

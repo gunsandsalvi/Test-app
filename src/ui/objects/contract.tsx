@@ -15,7 +15,6 @@ export function partyRef(world: World, p: DerivativeParty): ObjectRef | undefine
   if (p.kind === 'INSTITUTION') return { type: 'institution', id: p.id };
   return { type: 'company', id: p.id };
 }
-export const partyTicker = (p: DerivativeParty): string => p.id;
 /** The party's handle as the world shows it: a fund's ticker, a firm's ticker. */
 export function partyName(world: World, p: DerivativeParty): string {
   if (p.kind === 'INSTITUTION') return world.state.institutionalEntities.find((e) => e.id === p.id)?.ticker ?? p.id;

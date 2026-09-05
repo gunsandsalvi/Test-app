@@ -6,8 +6,6 @@
  * IDX renames both halves together.
  */
 
-export type TabKey = 'macro' | 'indices' | 'equities' | 'commodities' | 'bonds_cds' | 'derivatives' | 'risk';
-
 export interface IndexMetric {
   name: string;
   symbol: string;

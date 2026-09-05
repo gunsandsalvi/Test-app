@@ -32,7 +32,7 @@ const DEFAULT_PPE_INTENSITY = 0.5;
 // the accumulated-depreciation fraction of gross PP&E used at that seed point.
 const INITIAL_ACCUM_DEPRECIATION_FRACTION = 0.45;
 
-export function getCategoryDemandSeedLocal(
+function getCategoryDemandSeedLocal(
   category: string,
   region: RegionId,
   // hoist: callers inside generation pass the world they already built; rebuilding four
@@ -79,31 +79,6 @@ export function getCategoryDemandSeedLocal(
  * under-claim it (rule 2 — a share is an outcome of the one structural primitive, not a fourth
  * stated number).
  */
-/**
- * WHAT A SECTOR'S NAMED FIRMS MUST BE BIG ENOUGH TO SUPPLY.
- *
- * The demand for every sub-unit this sector produces, net of the share the registry says its SME
- * tier carries — read from the SAME demand vector the product lines are dealt against, so supply
- * and demand are one statement about the economy rather than two.
- */
-export function producingSectorNamedTierDemandLocal(
-  sector: string,
-  region: RegionId,
-  initialRegions: Record<RegionId, import('../types').Region>
-): number {
-  const list = (subUnitsByProducingSector() as Record<string, { su: { unitId: string } }[]>)[sector];
-  if (!list || list.length === 0) return 0;
-  let total = 0;
-  for (const { su } of list) {
-    const demandLocal = Number(initialRegions[region]?.categoryDemand[su.unitId]?.demandLevelAnnualLocal) || 0;
-    if (!(demandLocal > 0)) continue;
-    const industry = industryOfSubUnit(su.unitId);
-    const smeShare = industry ? (INDUSTRY_REGISTRY[industry]?.smeShareOfActivity ?? 0) : 0;
-    total += demandLocal * Math.max(0, 1 - smeShare);
-  }
-  return total;
-}
-
 export function deriveInitialRevenueLocal(
   category: ProductCategory,
   regionCategoryDemandSeedLocal: number,

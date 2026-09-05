@@ -40,14 +40,14 @@ import { defect } from './defect';
  * 07b's clearing (what a holder pays to trade) and the make-whole above (what a called holder
  * must be paid to replace its bond). They are the same real cost and must not drift apart.
  */
-export const BOND_DEALER_SPREAD_BPS = 15;
+const BOND_DEALER_SPREAD_BPS = 15;
 
 /** Weeks of soft-call protection on a new leveraged loan — the market's six months. */
-export const LOAN_SOFT_CALL_WEEKS = 26;
+const LOAN_SOFT_CALL_WEEKS = 26;
 /** What a loan repaid inside its soft-call period costs, per dollar: the market's 101. */
-export const LOAN_SOFT_CALL_PRICE = 1.01;
+const LOAN_SOFT_CALL_PRICE = 1.01;
 /** High yield's non-call period from issue — the market's NC1. */
-export const HY_NON_CALL_WEEKS = 52;
+const HY_NON_CALL_WEEKS = 52;
 
 export type CallProtectionKind = 'SOFT_CALL' | 'HARD_NC' | 'MAKE_WHOLE';
 
@@ -68,7 +68,7 @@ export function callProtectionForIssue(args: {
 }
 
 /** The first date a HARD_NC issue may be called on its schedule. */
-export function firstCallWeek(tranche: DebtTranche): number {
+function firstCallWeek(tranche: DebtTranche): number {
   return tranche.originationWeek + HY_NON_CALL_WEEKS;
 }
 

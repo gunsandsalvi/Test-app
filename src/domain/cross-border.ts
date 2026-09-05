@@ -36,7 +36,7 @@ import { institutionProfile } from './institution-profiles';
  * (rule 2's PREFERENCE category), and deriving them would mean deriving what a pension fund's
  * trustees will tolerate, which is not a market outcome.
  */
-export const HOME_BIAS_BY_ENTITY_TYPE: Record<InstitutionalEntityType, number> = {
+const HOME_BIAS_BY_ENTITY_TYPE: Record<InstitutionalEntityType, number> = {
   PENSION_FUND: 0.75,
   INSURER: 0.85,
   ASSET_MANAGER: 0.65,

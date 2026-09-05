@@ -76,7 +76,7 @@ export function consumerAnnualLossRate(
 /** An instalment loan loses half of what a revolving balance does on the same borrower: it
  *  amortises, so the exposure at default is smaller and the borrower who stops paying is
  *  further into the schedule. One owner for the ratio the seed quote and the weekly book share. */
-export const CONSUMER_TERM_LOSS_SHARE_OF_CARD = 0.5;
+const CONSUMER_TERM_LOSS_SHARE_OF_CARD = 0.5;
 export function consumerTermAnnualLossRate(cardAnnualLossRate: number): number {
   return cardAnnualLossRate * CONSUMER_TERM_LOSS_SHARE_OF_CARD;
 }

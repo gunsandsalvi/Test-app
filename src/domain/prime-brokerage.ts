@@ -65,7 +65,3 @@ export function lentByBroker(book: PrimeBrokerageLine[], brokerId: EntityId): nu
   return book.reduce((a, l) => a + (l.brokerId === brokerId ? l.drawnLocal : 0), 0);
 }
 
-/** One week's financing on a line, at the rate it was struck at. */
-export function weeklyFinancingLocal(line: PrimeBrokerageLine): number {
-  return (line.drawnLocal * line.rateAnnual) / 52;
-}

@@ -17,14 +17,7 @@ import type { InstrumentId } from './ids';
  * engine and the harness ask it. A rule with one implementation cannot disagree with itself.
  */
 
-/** A pledge of one bond's paper against a secured borrowing. */
-export interface Pledge {
-  /** §3.13-BOOK slice (a): the paper pledged, in the INSTRUMENT id space. */
-  bondId: InstrumentId;
-  faceLocal: number;
-}
-
-export interface CollateralPosition {
+interface CollateralPosition {
   /** What this holder has pledged, by bond. */
   pledgedByBond: Map<InstrumentId, number>;
   /** What it actually holds, by bond. */

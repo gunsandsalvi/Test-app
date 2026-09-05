@@ -17,7 +17,7 @@ import { ensureV2 } from '../../engine2/world';
 
 const RATING_CODES = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC', 'D'];
 
-export function companyKind(c: Company): string {
+function companyKind(c: Company): string {
   return c.isBankEntity ? 'bank' : c.institutionalRole ? 'fund manager' : c.listingStatus === 'PRIVATE' ? 'private company' : 'company';
 }
 

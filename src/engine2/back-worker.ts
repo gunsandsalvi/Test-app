@@ -26,7 +26,7 @@ import { WeeklyStepContext } from '../engine/simulation/stages/context.ts';
 
 void parentPort;
 
-export interface BackAJob {
+interface BackAJob {
   lanes: BackLanes;
   f: Partial<FrontPass>;
   regions: Record<string, { effectiveTaxRate: number; bankingSector: { bankCapitalRatio: number } }>;

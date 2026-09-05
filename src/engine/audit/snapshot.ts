@@ -23,7 +23,7 @@ import { ASSET_KINDS } from '../ledger/wire';
 /** A holding type that is an asset kind in its own right, so its row and its wire meet. */
 const isOwnAssetKind = (t: string): boolean => (ASSET_KINDS as readonly string[]).includes(t);
 
-export interface RegionSnapshot {
+interface RegionSnapshot {
   treasuryAccountLocal: number;
   waysAndMeansLocal: number;
   centralBankAssetsLocal: number;

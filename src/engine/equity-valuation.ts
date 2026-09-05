@@ -33,11 +33,11 @@ export const EQUITY_RISK_PREMIUM = 0.035;
  */
 export const REPRESENTATIVE_HOLDER_REQUIRED_RETURN = 0.10;
 /** Ceiling on the growth a holder will capitalise, so no fair value runs to infinity. */
-export const MAX_CAPITALISED_GROWTH = 0.06;
+const MAX_CAPITALISED_GROWTH = 0.06;
 /** The haircut a buyer really applies to the net assets of a business that is losing money. */
 const LOSS_MAKER_NET_ASSET_HAIRCUT = 0.55;
 
-export interface EquityValuationInputs {
+interface EquityValuationInputs {
   /** Annual net income, in dollars. Real, off the income statement. */
   annualEarningsLocal: number;
   sharesOutstanding: number;

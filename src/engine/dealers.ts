@@ -87,43 +87,6 @@ export function dealersFromBanks(
     });
 }
 
-/** What this desk holds of one instrument right now. */
-export function deskInventoryLocal(v2: V2World, bank: Company | undefined, book: string, instrumentId: string): number {
-  const kind = DESK_BOOK_KIND[book];
-  if (!bank || kind === undefined) return 0;
-  return deskRowsOf(v2, bank.id, kind).filter((r) => r.instrumentId === instrumentId).reduce((a, r) => a + r.inventoryLocal, 0);
-}
-
-/**
- * The desk's quote for one player order, in bps away from the market.
- *
- * Two terms, both the desk's own. The SPREAD is what its book charges every participant, half of
- * it on each side. The IMPACT is the desk's own schedule: it goes from its current inventory to
- * full capacity across one spread, so an order that consumes a share of its capacity moves the
- * level by that share of the spread. An order the desk can fill from stock has no impact — that
- * is what an axe IS, and it falls out rather than being granted as a discount.
- */
-export function quoteDeskFillBps(args: {
-  bookSpreadBps: number;
-  /** What the desk is long in this instrument (negative = short). */
-  deskInventoryLocal: number;
-  /** What it could still take on, across all its books. */
-  deskCapacityLocal: number;
-  orderLocal: number;
-  isBuy: boolean;
-}): { spreadBps: number; impactBps: number; totalBps: number } {
-  const spreadBps = args.bookSpreadBps / 2;
-  // Buying, the desk sells from stock first and sources the rest; selling, everything it takes
-  // is new inventory.
-  const sourcedLocal = args.isBuy
-    ? Math.max(0, args.orderLocal - Math.max(0, args.deskInventoryLocal))
-    : args.orderLocal;
-  const impactBps = args.deskCapacityLocal > 0
-    ? args.bookSpreadBps * (sourcedLocal / args.deskCapacityLocal)
-    : args.bookSpreadBps * 10; // a full desk quotes a level nobody wants to trade at
-  return { spreadBps, impactBps, totalBps: spreadBps + impactBps };
-}
-
 /**
  * Standard Unified Margin Requirements across Prime Brokers:
  * Eliminates arbitrary dealer leverage and enforces unified regulatory PB margin rules.

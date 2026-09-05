@@ -64,7 +64,7 @@ export function writerReservationVol(args: {
 }
 
 /** What exercise pays the holder: the shares' distance through the strike, on the shares. */
-export function intrinsicToHolder(c: DerivativeContract, spot: number): number {
+function intrinsicToHolder(c: DerivativeContract, spot: number): number {
   const perShare = optionTypeOf(c) === 'CALL' ? Math.max(0, spot - c.strike) : Math.max(0, c.strike - spot);
   return perShare * (c.units ?? 0);
 }

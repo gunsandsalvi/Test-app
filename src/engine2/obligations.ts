@@ -33,7 +33,7 @@ import { defect } from '../domain/defect';
 import type { RegionId } from '../domain/geography';
 import { asEntityId, asInstrumentId } from '../domain/ids';
 
-export interface ObligationStore {
+interface ObligationStore {
   cap: number;
   used: number;
   freeHead: number;
@@ -108,7 +108,7 @@ export type ReadonlyObligationStore = {
 };
 
 /** The contract ledger's own handle. Nothing else may hold one. */
-export const mutableObligations = (v2: V2World): ObligationStore => v2.obligations as unknown as ObligationStore;
+const mutableObligations = (v2: V2World): ObligationStore => v2.obligations as unknown as ObligationStore;
 
 export function newObligationStore(): ObligationStore {
   const cap = 1 << 12;

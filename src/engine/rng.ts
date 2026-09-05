@@ -26,12 +26,6 @@ export const DEFAULT_SIMULATION_SEED = 0x9e3779b9;
 let state = DEFAULT_SIMULATION_SEED >>> 0;
 let currentSeed = DEFAULT_SIMULATION_SEED >>> 0;
 
-/** The seed the stream was last started from — lets init-time caches key on the world's
- *  identity rather than guessing (see getInitialRegions' memo). */
-export function getSimulationSeed(): number {
-  return currentSeed;
-}
-
 /** Start (or restart) the stream. The same seed always replays the same run. */
 export function setSimulationSeed(seed: number): void {
   // Zero is a fixed point for some mixers; fold it away rather than special-casing later.
@@ -56,16 +50,6 @@ export function random(): number {
   t = Math.imul(t ^ (t >>> 15), t | 1);
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-}
-
-/** Uniform in [min, max). */
-export function randomBetween(min: number, max: number): number {
-  return min + random() * (max - min);
-}
-
-/** Uniform integer in [0, n). */
-export function randomInt(n: number): number {
-  return Math.floor(random() * n);
 }
 
 /**

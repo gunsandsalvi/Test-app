@@ -15,7 +15,7 @@
  * duplicated every lot in the world every week (~55,000 and growing), all of it garbage.
  */
 
-export interface OutputStock { unitsHeld: number; valueLocal: number }
+interface OutputStock { unitsHeld: number; valueLocal: number }
 
 /** A real purchase: units bought at a price, in a week. The three facts FIFO needs. */
 export interface CostedLot { unitsHeld: number; unitPriceLocal: number; acquiredWeek: number }

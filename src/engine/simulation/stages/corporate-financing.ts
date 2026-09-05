@@ -94,7 +94,7 @@ const DEPLOYMENT_MULTIPLE = 3;
 /** Spread of return over cost, in decimal, wide enough to be worth acting on either way. */
 const ACTION_THRESHOLD = 0.005;
 
-export interface FinancingDecision {
+interface FinancingDecision {
   /** Positive: raise this much new debt. Negative: pay down this much. Zero: do nothing. */
   netDebtChangeLocal: number;
   reason: 'ISSUE_CHEAP_DEBT' | 'DELEVER_EXPENSIVE_DEBT' | 'NONE';

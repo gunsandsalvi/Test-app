@@ -5,7 +5,6 @@
  * table knows what is broken without opening the file.
  */
 
-import { GameState } from '../../types';
 
 export interface AuditFinding {
   family: 'M' | 'O' | 'P' | 'X' | 'F' | 'N' | 'W';
@@ -15,8 +14,6 @@ export interface AuditFinding {
   /** The size of the breach in USD where one exists (a count otherwise). */
   usd?: number;
 }
-
-export type AuditCheck = (prev: GameState | undefined, state: GameState, week: number) => AuditFinding[];
 
 export const B = (usd: number): string => `${(usd / 1e9).toFixed(2)}B`;
 export const M = (usd: number): string => `${(usd / 1e6).toFixed(1)}M`;

@@ -58,7 +58,7 @@ export const UNIVERSE_SCALE: number = (() => {
   return Number.isFinite(raw) && raw > 0 && raw <= 1 ? raw : 1;
 })();
 
-export const PRIVATE_FIRMS_PER_REGION = Math.max(4, Math.round(300 * UNIVERSE_SCALE));
+const PRIVATE_FIRMS_PER_REGION = Math.max(4, Math.round(300 * UNIVERSE_SCALE));
 /**
  * Share of each pool's REVENUE attributed to the named tier (the upper tail). The tier's DEBT is
  * whatever real leverage on that revenue's EBITDA supports — deliberately NOT a share of the
@@ -69,7 +69,7 @@ export const PRIVATE_FIRMS_PER_REGION = Math.max(4, Math.round(300 * UNIVERSE_SC
  * the share and the distribution can disagree — the cut point should fall out of the
  * distribution, not sit beside it. Owner: DYN, which owns firm-size structure.
  */
-export const NAMED_TIER_REVENUE_SHARE = 0.6;
+const NAMED_TIER_REVENUE_SHARE = 0.6;
 /** Pareto tail index for firm sizes (~80/20 mass concentration). */
 const PARETO_ALPHA = 1.16;
 /** Share of named private firms that are sponsor-owned in style (real LBO-level leverage). */

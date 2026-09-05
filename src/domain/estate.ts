@@ -51,7 +51,7 @@ export interface EstateClaim {
   recoveredLocal: number;
 }
 
-export interface EstateAssets {
+interface EstateAssets {
   cashLocal: number;
   receivablesLocal: number;
   inventoryLocal: number;
@@ -76,7 +76,7 @@ export interface Estate {
 }
 
 /** One week of a workout: what the waterfall paid each class, what was sold and to whom. */
-export interface EstateWeek {
+interface EstateWeek {
   week: number;
   /** Paid by class, indexed by `CLAIM_SENIORITY − 1`: secured, unsecured, equity. */
   paidByClassLocal: [number, number, number];

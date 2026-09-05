@@ -18,9 +18,9 @@ import { isActiveCompany } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 
 /** The structural quarter every review runs on. */
-export const MANAGEMENT_REVIEW_WEEKS = 13;
+const MANAGEMENT_REVIEW_WEEKS = 13;
 /** Four failed reviews — the §7.138 measured year — and the board replaces the management. */
-export const MANAGEMENT_FAILED_QUARTERS_TO_REPLACE = 4;
+const MANAGEMENT_FAILED_QUARTERS_TO_REPLACE = 4;
 
 /** Every deciding entity without a management gets one, from its own stream, salted by the
  *  week it entered. Runs at the seed and at the top of every week (the catch-up convention

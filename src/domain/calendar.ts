@@ -6,8 +6,8 @@
  * hold a start date.
  */
 
-export const EPOCH_UTC = Date.UTC(2027, 0, 1);
-export const WEEK_MS = 7 * 24 * 3600 * 1000;
+const EPOCH_UTC = Date.UTC(2027, 0, 1);
+const WEEK_MS = 7 * 24 * 3600 * 1000;
 
 /** The date a week begins, UTC. A negative week is clamped to the epoch. */
 export function dateOfWeek(week: number): Date {

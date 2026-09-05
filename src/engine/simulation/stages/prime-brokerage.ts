@@ -1,7 +1,6 @@
 import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
 import { primeBrokerageBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
 import { bankBookAssetsLocal } from '../../desk-register';
-import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { bankPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf } from '../../../domain/party';
 /**
@@ -26,7 +25,7 @@ import { computeSovereignRepoHaircuts } from './repo-clearing';
 import { PrimeBrokerageLine, maxDrawnLocal, drawnByFund, lentByBroker } from '../../../domain/prime-brokerage';
 import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { WeeklyStepContext, updateBankSheet } from './context';
-import { pay, institutionUnsettledLessCollateralLocal } from './settlement';
+import { pay } from './settlement';
 import { leverageHeadroomLocal } from '../../macro/banking';
 import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
@@ -254,81 +253,3 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
   });
 }
 
-/**
- * §4.0 Tier 1 item 6 — THE CLOSE-CYCLE SWEEP. A margin account finances its debit the day it
- * appears, not a week later. The morning pass above deliberately sweeps LAST week's spend; a
- * fund that levered into this week's auctions then sat with a naked negative balance until the
- * next morning — the harness's whole 'fund spending money it does not have' family for the
- * leveraged funds (measured: ABBG bought 7.5B of loans on 5.1B cash the week its line
- * re-struck, closed at −4.6B, and the drawdown arrived the following week). This pass runs
- * before the settlement close: a fund whose cash-plus-pending is negative draws the shortfall
- * against its remaining line, on the standing terms the morning pass struck (the next morning
- * re-prices the whole balance), and the broker's asset line moves on the live sheet.
- */
-export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
-  // §3.13-BOOK (c-then-3b): `homeBankId` names the broker in the ENTITY space, so it is a lookup.
-  const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
-  (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
-    const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
-    // §3.13-BOOK d4c-iv: the lines are the store's; the sweep moves a COPY and publishes it back.
-    const book: PrimeBrokerageLine[] = primeBrokerageBookOf(ctx.v2, regionId).map((l) => ({ ...l }));
-    const drawnByBroker = new Map<EntityId, number>();
-    ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
-      if (fund.region !== regionId || fund.entityType !== 'HEDGE_FUND' || fund.isDefaulted) return fund;
-      const broker = fund.homeBankId ? companyById.get(fund.homeBankId) : undefined;
-      if (!broker) return fund;
-      const brokerBankId = broker.id;
-      // §1.19: the SIGNED figure, because this is an overdraft test and the clamped
-      // `institutionSpendableLocal` would report every fund as solvent. The collateral it is only
-      // holding is netted here for the first time: a fund sitting on stock-loan collateral looked
-      // funded by exactly that much, so its draw was short by the same amount.
-      const cashPlusPendingLocal = entityCashOf(ctx.v2, fund)
-        + institutionUnsettledLessCollateralLocal(ctx, fund.id);
-      if (cashPlusPendingLocal >= -1) return fund;
-      const drawLocal = Math.min(fund.primeBrokerageAvailableLocal ?? 0, -cashPlusPendingLocal);
-      if (drawLocal <= 1) return fund;
-      pay(ctx, {
-        payer: bankSecuritiesParty(broker),
-        payee: { kind: 'INSTITUTION', id: fund.id },
-        amount: drawLocal,
-        currency: currencyOf(fund.region),
-        reason: 'prime brokerage drawdown',
-      });
-      const line = book.find((l) => l.fundId === fund.id);
-      if (line) {
-        line.drawnLocal = Math.round(line.drawnLocal + drawLocal);
-      } else {
-        book.push({
-          id: `${regionId}-PB-${fund.id}`,
-          regionId,
-          brokerId: broker.id,
-          fundId: fund.id,
-          drawnLocal: Math.round(drawLocal),
-          // An emergency draw on a line the morning struck at zero balance carries the standing
-          // terms for one week; the next morning's re-strike prices the whole balance properly.
-          haircutRate: measuredHaircutsFor(ctx, regionId, reg).DEFAULT,
-          rateAnnual: Number((reg.policyRate + WHOLESALE_FUNDING_SPREAD_BPS / 10000).toFixed(6)),
-          struckWeek: ctx.nextWeek,
-        });
-      }
-      drawnByBroker.set(brokerBankId, (drawnByBroker.get(brokerBankId) ?? 0) + drawLocal);
-      return { ...fund, primeBrokerageAvailableLocal: Math.max(0, (fund.primeBrokerageAvailableLocal ?? 0) - drawLocal) };
-    });
-    publishPrimeBrokerageBook(ctx.v2, regionId, book);
-    if (drawnByBroker.size > 0) {
-      // Post-08: the live sheet is the only bank-sheet write that survives (§7.250).
-      ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
-        const drawnLocal = drawnByBroker.get(c.id);
-        if (!drawnLocal || !c.bankBalanceSheet) return c;
-        return {
-          ...c,
-          bankBalanceSheet: {
-            ...c.bankBalanceSheet,
-            primeBrokerageLoansLocal: Math.round((c.bankBalanceSheet.primeBrokerageLoansLocal ?? 0) + drawnLocal),
-          },
-        };
-      });
-    }
-  });
-}

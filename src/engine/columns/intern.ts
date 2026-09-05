@@ -33,9 +33,4 @@ export class InternTable {
   get size(): number { return this.textById.length; }
 }
 
-/** The world's shared name tables. One per kind, so an id is only ever compared within its kind. */
-export const COMPANY_IDS = new InternTable();
-export const TICKERS = new InternTable();
-export const ENTITY_IDS = new InternTable();
 export const INSTRUMENT_IDS = new InternTable();
-export const SUBUNIT_IDS = new InternTable();

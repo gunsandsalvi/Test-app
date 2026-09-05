@@ -57,8 +57,8 @@ export function getRegionProductivityPerCapitaLocal(regionId: RegionId): number 
  * Mortality is the other side: it follows the share of the population that is old, which
  * `lifeCycleDistribution` already carries, so an ageing region's death rate rises on its own.
  */
-export const FERTILITY_AT_REFERENCE_PRODUCTIVITY = 0.0125;
-export const FERTILITY_INCOME_ELASTICITY = -0.35;
+const FERTILITY_AT_REFERENCE_PRODUCTIVITY = 0.0125;
+const FERTILITY_INCOME_ELASTICITY = -0.35;
 export const MORTALITY_PER_RETIRED_SHARE = 0.030;
 
 /** Region productivity relative to the set's mean — the income term the transition reads. */
@@ -92,8 +92,8 @@ export function getRegionDeathRateAnnual(retiredShareOfPopulation: number): numb
  * 133-year working life** (§7.169), which is why the savings life-cycle could not be derived from
  * them: `r/d` is not a lifespan when `d` is a fitted proxy.
  */
-export const GOMPERTZ_HAZARD_AT_BIRTH_ANNUAL = 0.00012;
-export const GOMPERTZ_DOUBLING_YEARS = 8.5;
+const GOMPERTZ_HAZARD_AT_BIRTH_ANNUAL = 0.00012;
+const GOMPERTZ_DOUBLING_YEARS = 8.5;
 
 /** DEM — the annual probability of dying at a given age. */
 export function mortalityHazardAnnual(ageYears: number): number {

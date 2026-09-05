@@ -27,7 +27,7 @@ import { RegionId } from './geography';
  * for roughly an order of magnitude more fuel and, decisively, for thousands of times more crew.
  * That gap is why ocean trade is cheap and inland haulage is not.
  */
-export type FreightMode = 'SEA' | 'ROAD';
+type FreightMode = 'SEA' | 'ROAD';
 
 /**
  * One physical freight asset — a ship or a truck fleet unit. Everything here is a measured
@@ -103,7 +103,7 @@ export function freightModeForLane(from: RegionId, to: RegionId): FreightMode {
 }
 
 /** One-way transit, in weeks. Distance over speed — this is also the lead time a buyer waits. */
-export function transitWeeks(distanceNm: number, speedKnots: number): number {
+function transitWeeks(distanceNm: number, speedKnots: number): number {
   if (!(speedKnots > 0)) return 0;
   return distanceNm / (speedKnots * 24 * 7);
 }
@@ -178,10 +178,6 @@ export interface CarrierFleet {
    *  real demand for refined product — measured here, and the number a bunker bid should
    *  eventually be sized from rather than from a share of revenue. */
   lastWeekFuelBurnedTonnes?: number;
-}
-
-export function emptyCarrierFleet(): CarrierFleet {
-  return { assets: [], fuelInventoryTonnes: 0, lastWeekTonneNm: 0, lastWeekFreightRevenueLocal: 0 };
 }
 
 /** A directed lane key, e.g. "USA>EUR". Directed because a head-haul and a back-haul are not the

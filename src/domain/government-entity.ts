@@ -38,7 +38,7 @@ export interface GovernmentFields {
 }
 
 /** What a week of this government's finances looks like, in one shape rather than four call sites. */
-export interface FiscalWeek {
+interface FiscalWeek {
   /** Contractual, paid in full: the coupon bill and the staff. */
   interestLocal: number;
   payrollLocal: number;

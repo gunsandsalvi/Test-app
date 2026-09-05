@@ -73,7 +73,7 @@ export interface AssetAllocationTarget {
  *  divergent if-chains that used to pick it (etf-flows and institutional-balance-sheet each
  *  had their own, and a new class would silently fall through to `loanPct` in one of them).
  *  A new investable class fails to compile here until its mandate line is named. */
-export type InvestableClass = 'EQUITY' | 'CORP_BOND' | 'GOV_BOND' | 'LEVERAGED_LOAN';
+type InvestableClass = 'EQUITY' | 'CORP_BOND' | 'GOV_BOND' | 'LEVERAGED_LOAN';
 const MANDATE_FIELD: Record<InvestableClass, keyof AssetAllocationTarget> = {
   EQUITY: 'equityPct',
   CORP_BOND: 'corpBondPct',
@@ -262,7 +262,7 @@ export interface InsuranceBook {
 
 /** A policy runs a year: the window an insurer's own experience is read over, and (16b-ii) the
  *  share of its book that re-shops each week. */
-export const INSURANCE_POLICY_TERM_WEEKS = 52;
+const INSURANCE_POLICY_TERM_WEEKS = 52;
 
 /** What a firm has to lose, and therefore insures: its plant and the revenue that runs through it. */
 export const corporateInsurableBaseLocal = (c: { grossPPELocal?: number; annualRevenue: number }): number =>

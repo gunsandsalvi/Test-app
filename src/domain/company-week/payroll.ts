@@ -15,7 +15,7 @@
  * one owner, one representation, and the deviation rule written down where it can be tested.
  */
 
-export interface PayrollWeek {
+interface PayrollWeek {
   /** What the firm actually owes its staff this week, at its own offered wage. */
   weeklyLocal: number;
   /** What a firm of this shape owed at the baseline wage — the figure a stated margin contains. */

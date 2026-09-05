@@ -57,7 +57,7 @@ export interface CapitalProgrammeInputs {
   riskAversion?: number;
 }
 
-export interface CapitalProgramme {
+interface CapitalProgramme {
   /** What upkeep costs if the plant is to stay whole: gross plant over its useful life. */
   targetMaintenanceCapexLocal: number;
   /** What was actually funded, and what was therefore deferred. */
@@ -90,7 +90,7 @@ export function maintenanceTargetLocal(grossPPELocal: number, usefulLifeYears: n
 
 /** What a firm can put behind upkeep this week: operating cash, a small draw, and — only if it is
  *  investment grade — a bridge. A distressed company cannot borrow its way out of deferred upkeep. */
-export function maintenanceFundingCapacityLocal(i: CapitalProgrammeInputs): number {
+function maintenanceFundingCapacityLocal(i: CapitalProgrammeInputs): number {
   const weeklyOperatingCashFlow = i.weeklyEbitdaLocal - i.weeklyInterestLocal;
   const activePpeLocal = i.grossPPELocal * (1 - Math.max(0, Math.min(1, i.mothballedPpeShare ?? 0)));
   const weeklyDesired = maintenanceTargetLocal(activePpeLocal, i.usefulLifeYears) / 52;
@@ -101,7 +101,7 @@ export function maintenanceFundingCapacityLocal(i: CapitalProgrammeInputs): numb
 /** The weekly bridge a firm can draw against its upkeep: half the desired spend, investment grade
  *  only, and only from a house bank it actually has (measured §7.372: a BANK, banking nowhere,
  *  drew a maintenance facility from nobody — paper with no holder, interest paid to no one). */
-export function bridgeCapacityLocal(i: CapitalProgrammeInputs, weeklyDesiredMaintenanceLocal: number): number {
+function bridgeCapacityLocal(i: CapitalProgrammeInputs, weeklyDesiredMaintenanceLocal: number): number {
   return i.isInvestmentGrade && i.hasHouseBank !== false ? weeklyDesiredMaintenanceLocal * 0.5 : 0;
 }
 
@@ -205,7 +205,7 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
  * mothballed share MOVES at the same 10%/week stock-adjustment weight the growth-capex EMA uses
  * (§7.288) — a plant is taken down and brought back over months, not on a Tuesday.
  */
-export interface CapacityRetirementInputs {
+interface CapacityRetirementInputs {
   /** Revenue share of this firm's lines that FAILED the §7.139 cost-covering test this week —
    *  measured by stage 05, the only place the test runs. */
   idleRevenueShareThisWeek: number;
@@ -224,7 +224,7 @@ export interface CapacityRetirementInputs {
   mothballAfterWeeks?: number;
   scrapAfterWeeks?: number;
 }
-export interface CapacityRetirement {
+interface CapacityRetirement {
   idleStreakWeeks: number;
   /** Share of the plant offline: no maintenance target, no staffed capacity, restartable. */
   mothballedShare: number;

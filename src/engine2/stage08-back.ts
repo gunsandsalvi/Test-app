@@ -1916,7 +1916,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
   return { bondCallPremiumLocal, buybacksThisWeek, debtIssuanceThisWeek, debtRepaymentThisWeek, financing, isDefaulted, loanCallPremiumLocal, newCdsSpreadBps, newLastOpportunisticOfferingWeek, newRating, preActionFixedLocal, preActionFloatingLocal, preFaceByRow, rowList, settlement, newRevenue, newEbitda, newEbit, newTotalDebt };
 }
 
-export type BackCoreOut = ReturnType<typeof runBackCoreA> & ReturnType<typeof runBackCoreB>;
+type BackCoreOut = ReturnType<typeof runBackCoreA> & ReturnType<typeof runBackCoreB>;
 
 function runBackCore(comp: Company, row: number, d: BackKernelDeps) {
   const a = runBackCoreA(comp, row, d);

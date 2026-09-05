@@ -41,12 +41,12 @@ export function seedCumulativeUnits(annualOutputUnits: number): number {
   return (LEARNING_ELASTICITY * annualOutputUnits) / LEGACY_PRODUCTIVITY_DRIFT_ANNUAL;
 }
 
-export interface LearningInputs {
+interface LearningInputs {
   priorCumulativeUnits: number;
   producedUnitsThisWeek: number;
   priorMultiplier: number;
 }
-export interface LearningUpdate {
+interface LearningUpdate {
   cumulativeUnits: number;
   /** Unit-labour productivity relative to the firm's baseline: heads-per-unit ÷ multiplier. */
   multiplier: number;

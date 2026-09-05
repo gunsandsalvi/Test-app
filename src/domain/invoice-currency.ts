@@ -31,7 +31,7 @@
 import { RegionId, CURRENCY_BY_REGION } from './geography';
 
 /** Key a pair the way the FX books key it, whichever way round that book is quoted. */
-export function pairDepthKey(a: RegionId, b: RegionId, quotedPairs: { base: RegionId; quote: RegionId }[]): string {
+function pairDepthKey(a: RegionId, b: RegionId, quotedPairs: { base: RegionId; quote: RegionId }[]): string {
   const forward = quotedPairs.find(p => p.base === a && p.quote === b);
   if (forward) return `${a}/${b}`;
   return `${b}/${a}`;
@@ -42,7 +42,7 @@ export function pairDepthKey(a: RegionId, b: RegionId, quotedPairs: { base: Regi
  * pair's own flow its market could not absorb this week. Zero when a currency is exposed to
  * itself — there is no risk to carry.
  */
-export function exposureCost(
+function exposureCost(
   a: RegionId,
   b: RegionId,
   illiquidity: Record<string, number>,

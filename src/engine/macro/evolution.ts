@@ -75,11 +75,11 @@ export function openingSovereignRating(debtToGdp: number, deficitPctGdp: number)
   return 'AA';
 }
 
-export function sovereignDebtToGdpRatio(region: Region): number {
+function sovereignDebtToGdpRatio(region: Region): number {
   return region.debtToGdpPctBottomUp || 0;
 }
 
-export function sovereignDeficitPctGdp(region: Region): number {
+function sovereignDeficitPctGdp(region: Region): number {
   const gdpLocal = region.derivedNominalGdpLocal || region.estimatedNominalGdpLocal || 0;
   if (!(gdpLocal > 0)) return 0;
   // A region whose fiscal stage has not run this week has no outlay figure yet; its deficit is
@@ -87,7 +87,7 @@ export function sovereignDeficitPctGdp(region: Region): number {
   return (((region.governmentOutlaysLocal ?? 0) - region.governmentRevenueLocal) * 52) / gdpLocal;
 }
 
-export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
+function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
   if (!pools) return 0.03;
   return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
 }
@@ -1289,7 +1289,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
  * Evolve Commodities with Weather & Supply/Demand shocks
  */
 
-export function computePrivateSegmentCommoditySupplyLocal(commodityId: string, regions: Record<RegionId, Region>, fxToUsd: FxToUsd): number {
+function computePrivateSegmentCommoditySupplyLocal(commodityId: string, regions: Record<RegionId, Region>, fxToUsd: FxToUsd): number {
   // SEG-A: which pools supply a commodity comes from the REGISTRY's own sub-unit linkages —
   // the industries whose output is actually linked to it — rather than from a hardcoded list
   // bolted onto one bucket (MANUFACTURING_LINKED_COMMODITIES, deleted). A pool's contribution

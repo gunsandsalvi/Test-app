@@ -59,7 +59,7 @@ import { facilityBookOf } from '../../../engine2/tranches';
 
 /** Covenant-style ceiling on SME pool leverage — the same real lending constraint the bond
  * market's covenant ladder expresses (§5-RV's "lenders do not fund unlimited leverage"). */
-export const SME_SERVICEABLE_LEVERAGE = 3.0;
+const SME_SERVICEABLE_LEVERAGE = 3.0;
 // The pricing rules and their capital constants live in domain/bank-pricing.ts (§5-STRUCT
 // step 2), where their tests are; re-exported here so no call site moved.
 export {
@@ -188,7 +188,7 @@ export function migrateSmeDebtAtSeed(
   });
 }
 
-export interface WeeklyLendingResult {
+interface WeeklyLendingResult {
   sheet: BankingSector;
   /** Real interest the bank earned on its itemized book this week (cash + equity legs are the
    * caller's to post — evolve's income line carries it so NIM stays one statistic). */
@@ -508,7 +508,7 @@ export function migrateHouseholdDebtAtSeed(
   ));
 }
 
-export interface HouseholdLendingResult {
+interface HouseholdLendingResult {
   sheet: BankingSector;
   /** Interest accrued at the pools' own terms — REPORT ONLY (the caller passes the prior-book
    * accrual to evolveBankingSector, which posts it; posting here too would double-count). */
@@ -891,7 +891,7 @@ export function repayCentralBankLoanLocal(sheet: BankingSector, cashLocal: numbe
  * repay threshold sat far above the raise threshold, so the loan ratcheted up and was never
  * repaid. The repo session and the bill book size their own cash need the same way.
  */
-export function operatingCashBufferLocal(householdDepositsLocal: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
+function operatingCashBufferLocal(householdDepositsLocal: number, bufferRatio: number = MIN_CASH_BUFFER_RATIO): number {
   return Math.max(0, householdDepositsLocal) * bufferRatio;
 }
 

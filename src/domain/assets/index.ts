@@ -39,9 +39,9 @@ export type InstrumentKind =
   | 'GOOD';
 
 /** Where an instrument sits when a book is summed by class. */
-export type AssetClass = 'EQUITY' | 'CREDIT' | 'SOVEREIGN' | 'DERIVATIVE' | 'COMMODITY' | 'CASH_LIKE' | 'GOODS';
+type AssetClass = 'EQUITY' | 'CREDIT' | 'SOVEREIGN' | 'DERIVATIVE' | 'COMMODITY' | 'CASH_LIKE' | 'GOODS';
 
-export interface AssetModule {
+interface AssetModule {
   /** For the balance-sheet and NAV views that sum a book by class. */
   readonly assetClass: AssetClass;
   /** Does it pay a periodic coupon (so CAL accrues it between payment dates)? */
@@ -85,7 +85,7 @@ export interface AssetModule {
  * index (`engine2/instruments.ts:instrumentCurrencyOf`), read beside the unit, never folded into
  * it — a euro bond's face is a par unit like any other's.
  */
-export type UnitOfMeasure =
+type UnitOfMeasure =
   /** One unit of face: what a bond or a loan is a claim on, in the instrument's own money. Its PRICE is per unit of face. */
   | 'PAR'
   /** A share of a company or a fund. */
@@ -132,14 +132,8 @@ export const ASSET_REGISTRY: Record<InstrumentKind, AssetModule> = {
   GOOD:             { assetClass: 'GOODS',      carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'GOODS_UNITS', ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
 };
 
-/** The one lookup. A caller that cannot find its question here should add a field, not a switch. */
-export function assetModule(type: InstrumentKind): AssetModule {
-  return ASSET_REGISTRY[type];
-}
-
 export const assetClassOf = (type: InstrumentKind): AssetClass => ASSET_REGISTRY[type].assetClass;
 export const carriesCoupon = (type: InstrumentKind): boolean => ASSET_REGISTRY[type].carriesCoupon;
-export const isLendable = (type: InstrumentKind): boolean => ASSET_REGISTRY[type].lendable;
 /** What a quantity of this kind is counted in — the other half of every price. */
 export const countedIn = (type: InstrumentKind): UnitOfMeasure => ASSET_REGISTRY[type].countedIn;
 export const hasCreditRisk = (type: InstrumentKind): boolean => ASSET_REGISTRY[type].hasCreditRisk;
@@ -180,12 +174,6 @@ export const isIntraSectorClaim = (type: string): boolean => type === 'PE_FUND_I
 export const hedgedAsFixedIncome = (type: string): boolean => moduleOf(type)?.hedgedAsFixedIncome ?? false;
 export const carriesRateDuration = (type: string): boolean => moduleOf(type)?.carriesRateDuration ?? false;
 export const isVehicleClaim = (type: string): boolean => moduleOf(type)?.vehicleClaim ?? false;
-
-/** The register's issuer-equity rows — the identity question three corporate-action sites ask
- *  (a holder's stake in one named issuer). Lives here so the fact is the registry's, not a
- *  literal comparison repeated per site (§7.283). */
-export const isIssuerEquityRow = (h: { instrumentType?: string }): boolean =>
-  h.instrumentType === 'EQUITY';
 
 /** §5-WIRES W2 — the UNIT a holding of this kind moves in: a share count at a price (the register's
  *  `quantityShares`; the wire's quantity is shares, its price the cleared level), or FACE at par

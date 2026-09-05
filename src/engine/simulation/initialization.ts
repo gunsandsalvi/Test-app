@@ -179,7 +179,7 @@ function seedUnitMassTonnes(regions: Record<RegionId, Region>): Record<string, n
  *
  * `solveSeedInvestmentFixedPoint` below iterates the two against each other until they agree.
  */
-export function seedRegionCategoryDemand(
+function seedRegionCategoryDemand(
   reg: Region,
   regionId: RegionId,
   companies: Company[]
@@ -300,7 +300,7 @@ export function seedRegionCategoryDemand(
 const SEED_INVESTMENT_TOLERANCE = 0.01;
 const SEED_INVESTMENT_MAX_PASSES = 6;
 
-export function solveSeedInvestmentFixedPoint(
+function solveSeedInvestmentFixedPoint(
   regions: Record<RegionId, Region>,
   generate: () => Company[],
   rewindRng: () => void

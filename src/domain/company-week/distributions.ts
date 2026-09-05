@@ -16,7 +16,7 @@
  * makes for coupons. A weekly dividend is a smoothing artefact, not a payment.
  */
 
-export interface DividendDecision {
+interface DividendDecision {
   /** What the board declares each week, as an accrual. */
   accrualWeeklyLocal: number;
   /** What actually leaves this week — everything, or nothing. */

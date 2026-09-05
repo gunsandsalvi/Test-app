@@ -10,30 +10,27 @@
  * ledger key; the category is the aggregate view beside it.
  */
 
-export const PAYMENT_CATEGORIES = [
+export type PaymentCategory =
   /** Real goods and services changing hands: auctions, contracts, freight, opex. */
-  'GOODS_AND_SERVICES',
+  | 'GOODS_AND_SERVICES'
   /** Compensation of employees, public and private. */
-  'LABOR',
+  | 'LABOR'
   /** Taxes and government transfers — flows that redistribute, not exchange. */
-  'TAX_AND_TRANSFER',
+  | 'TAX_AND_TRANSFER'
   /** Insurance and pension flows: premiums in, claims and benefits out. */
-  'INSURANCE_AND_PENSION',
+  | 'INSURANCE_AND_PENSION'
   /** Interest, coupons, principal repayment and redemption — servicing existing debt. */
-  'DEBT_SERVICE',
+  | 'DEBT_SERVICE'
   /** New credit being drawn: originations, revolver/overdraft/repo/PB draws, trade credit. */
-  'CREDIT_CREATION',
+  | 'CREDIT_CREATION'
   /** Securities changing hands: clearing legs, primary issuance, fund flows, derivatives legs. */
-  'SECURITIES',
+  | 'SECURITIES'
   /** Equity distributions and corporate events: dividends, buybacks, mergers, estates, births. */
-  'CORPORATE_ACTION',
+  | 'CORPORATE_ACTION'
   /** Intermediation charged for itself: dealer/underwriting/management/borrow fees. */
-  'FINANCIAL_FEES',
+  | 'FINANCIAL_FEES'
   /** No rule matched. The harness asserts this set is EMPTY every run. */
-  'UNCLASSIFIED',
-] as const;
-
-export type PaymentCategory = (typeof PAYMENT_CATEGORIES)[number];
+  | 'UNCLASSIFIED';
 
 /** Ordered: first match wins, so put the specific (fees) before the general (securities). */
 const RULES: ReadonlyArray<readonly [RegExp, PaymentCategory]> = [

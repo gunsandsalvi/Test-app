@@ -42,13 +42,13 @@ export interface AuctionFill {
 }
 
 /** Who supplied what to whom, at the cleared price. */
-export interface AuctionLot {
+interface AuctionLot {
   buyerKey: string;
   sellerKey: string;
   quantity: number;
 }
 
-export interface AuctionResult {
+interface AuctionResult {
   clearedPrice: number;
   clearedQuantity: number;
   /** Every filled seller and buyer, keyed. Callers settle from these. */
@@ -71,7 +71,7 @@ function sortInPlaceByKey<T>(arr: T[], keys: number[]): void {
   for (let i = 0; i < arr.length; i++) arr[i] = copy[idx[i]];
 }
 
-export function emptyAuctionResult(anchorPrice: number): AuctionResult {
+function emptyAuctionResult(anchorPrice: number): AuctionResult {
   return {
     clearedPrice: anchorPrice,
     clearedQuantity: 0,

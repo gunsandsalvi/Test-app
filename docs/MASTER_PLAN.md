@@ -549,14 +549,6 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-19-ii. **THE DEAD EXPORTS** (19-i deleted the dead damper machinery and the FX cap — §9).
-    Measured by a sweep of every `export` in `src` against every other file in `src`, `scripts`
-    and `test`: **389 exported names in 164 files appear in no other file** — over-exported
-    internals for the most part, dead constants and functions for the rest (`accounts.ts` 19,
-    `engine2/world.ts` 11, `engine2/state.ts` 10, `units.ts` 9, `company.ts` 9). A mechanical
-    pass: drop the `export` where the name is used in its own file, delete the name where it is
-    used nowhere, and let `tsc`/`eslint` say. An atlas cite is not a use: a symbol only a tree
-    cites is dead code the tree is describing, and the row re-cites what replaced it.
 20. **Where a bound covered a missing mechanism, BUILD THE MECHANISM** (rule 6's pairing). Named:
     the estate's asset sale clears against real bidders instead of `sold × (1 − min(0.9, …))`
     (`estate-resolution.ts:213`) and peers are allocated by a bid, not pro rata to cash; the LOLR and
@@ -1531,6 +1523,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**19-ii — THE DEAD EXPORTS ARE GONE.** The sweep measured 389 exported names in 164 files that
+  no other file read. The pass had two arms and `tsc`/`eslint` were the judge of each: the
+  `export` came off all 389; the 86 names then used nowhere — `eslint`'s "never used" on the
+  unexported declaration — were deleted with their comment blocks (`engine2/state.ts` 9 including
+  the whole unused `WorldState` column interface, `units.ts` 6, `world.ts` 4, `intern.ts` 4,
+  `company.ts` 4). Among the dead: `calculateForwardRate` (the IRS tree's C2 already said it had no
+  callers), `weeklyFinancingLocal` (a restatement of the stage's own `interestLocal`), and
+  `runPrimeBrokerageCloseSweep` — a whole close-cycle sweep that `core.ts` never scheduled, whose
+  work `overdraft-sweep.ts` does; the-derivative-layer D4.a re-cites the sweep that runs.
+  `PAYMENT_CATEGORIES` survived only as a type and is now the union it named. Net −765 lines in
+  `src`; exports 2197 → 1808, dead 0. Four atlas rows re-cited (fx-spot C2.a, prime-brokerage A4,
+  interest-rate-swaps C2, the-derivative-layer D4.a). Gates green; no run.
 
 **19-i — THE DEAD DAMPER MACHINERY AND THE FX CAP ARE GONE.** The damper never bound: the JS
   kernel never wrote its flag, the C port only ever compared a solve to itself with no cap. Every

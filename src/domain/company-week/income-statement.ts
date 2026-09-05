@@ -15,7 +15,7 @@
  * TAXR's charter, not a flag here.
  */
 
-export interface IncomeStatement {
+interface IncomeStatement {
   ebitdaLocal: number;
   ebitLocal: number;
   netIncomeLocal: number;
@@ -44,7 +44,7 @@ export interface IncomeStatement {
  *     EBIT and negative pre-tax got `preTax × (1 − rate)` — a REBATE (the §7.255 asymmetry
  *     surviving in one corner). One rule now: positive taxable income pays, negative accrues.
  */
-export interface TaxInputs {
+interface TaxInputs {
   /** Book depreciation already inside EBIT — added back so the TAX schedule can replace it. */
   bookDepreciationAnnualLocal: number;
   taxBasisPpeLocal: number;
@@ -54,7 +54,7 @@ export interface TaxInputs {
   carryforwardLocal: number;
   bookNetPpeLocal: number;
 }
-export interface TaxComputation {
+interface TaxComputation {
   taxPaidAnnualLocal: number;
   carryforwardLocal: number;
   taxBasisPpeLocal: number;

@@ -17,7 +17,7 @@ import { Nav } from '../ui';
 const IDENT = /\b([A-Z][A-Z0-9]{1,5})\b/g;
 
 /** Plain text with every token that resolves to an object turned into a link. */
-export function Linked({ text, world, nav }: { text: string; world: World; nav: Nav }) {
+function Linked({ text, world, nav }: { text: string; world: World; nav: Nav }) {
   const parts: ReactNode[] = [];
   let last = 0;
   let m: RegExpExecArray | null;

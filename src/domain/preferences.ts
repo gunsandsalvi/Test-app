@@ -68,13 +68,6 @@ export function drawPreferences(entityKey: string, appointedWeek: number): Prefe
   };
 }
 
-/** The median management — what an entity with no draw yet decides like (yesterday's rule). */
-export const MEDIAN_PREFERENCES: Readonly<Preferences> = Object.freeze({
-  patienceWeeks: PATIENCE_MEDIAN_WEEKS,
-  riskAversion: 1,
-  appointedWeek: 0,
-});
-
 export function patienceWeeksOf(p: Preferences | undefined): number {
   const v = p?.patienceWeeks;
   return Number.isFinite(v) && (v as number) > 0 ? (v as number) : PATIENCE_MEDIAN_WEEKS;

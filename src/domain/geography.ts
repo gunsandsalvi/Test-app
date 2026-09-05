@@ -63,7 +63,7 @@ export const asRegionId = (id: string): RegionId => id as RegionId;
  * orders that are bit-load-bearing (seed RNG draw order, float-sum order) and therefore must
  * NOT be rewritten onto REGION_IDS.
  */
-export type AllRegionsNamed<T extends readonly RegionId[]> =
+type AllRegionsNamed<T extends readonly RegionId[]> =
   Exclude<RegionId, T[number]> extends never ? T : never;
 
 /**
@@ -82,7 +82,7 @@ void _seedOrderComplete;
  * The diagonal is a region's own average domestic haul and is deliberately NOT zero: zero would
  * hand every domestic seller a free advantage, an assumption dressed as geography.
  */
-export const LANE_DISTANCE_NM: Record<RegionId, Record<RegionId, number>> = {
+const LANE_DISTANCE_NM: Record<RegionId, Record<RegionId, number>> = {
   USA: { USA: 800, EUR: 3_300, UK: 3_000, JPN: 4_800 },
   EUR: { USA: 3_300, EUR: 500, UK: 250, JPN: 11_200 },
   UK: { USA: 3_000, EUR: 250, UK: 150, JPN: 11_300 },

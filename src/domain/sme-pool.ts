@@ -20,7 +20,7 @@
  */
 
 /** One sub-unit's demand and what this pool has measurably sold into it. */
-export interface PoolSubUnitObservation {
+interface PoolSubUnitObservation {
   subUnitId: string;
   demandLevelAnnualLocal: number;
   measuredRevenueLocal: number;

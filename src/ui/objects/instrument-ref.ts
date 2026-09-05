@@ -9,7 +9,6 @@ import { instrumentNameOf } from '../../engine/instrument-name';
 import { yearOfWeek } from '../calendar';
 import { displayWeek } from '../world';
 
-export const regionOfInstrument = (id: string): string => { const m = id.match(/^([A-Z]+)[_:-]/); return m ? m[1] : 'ALL'; };
 export const bookId = (name: string, region: string): string => `${name}:${region}`;
 
 export function instrumentRef(world: World, id: string): ObjectRef | undefined {

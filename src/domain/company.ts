@@ -3,7 +3,6 @@
  *  financial. Product lines, debt tranches, the three statements, credit, and the real input and
  *  output inventories it holds. No parallel firm type anywhere (§7.33). */
 
-import { riskAversionOf } from './preferences';
 import { InstrumentId, type EntityId, type Ticker } from './ids';
 import { RegionId } from './geography';
 import { defect } from './defect';
@@ -131,7 +130,7 @@ export interface DebtTranche {
   _refinanceInitiated?: boolean;
 }
 
-export interface CogsBreakdown {
+interface CogsBreakdown {
   baseCostLocal: number;
   wagePressureLocal: number;
   inputPriceCostLocal: number;
@@ -176,7 +175,7 @@ export interface QuarterlyBalanceSheet {
   shareholdersEquity: number;
 }
 
-export interface QuarterlyCashFlowStatement {
+interface QuarterlyCashFlowStatement {
   netIncome: number;
   daAddback: number;
   changeInWorkingCapital: number;
@@ -213,12 +212,12 @@ export interface FundamentalSnapshot {
   creditRating?: CreditRating;
 }
 
-export interface DealerEstimate {
+interface DealerEstimate {
   eps: number;
   revenue: number;
 }
 
-export interface ConsensusForecast {
+interface ConsensusForecast {
   alpha: DealerEstimate;
   beta: DealerEstimate;
   gamma: DealerEstimate;
@@ -718,13 +717,7 @@ export function fullStaffingCapHeads(c: Company): number {
  * one owner: 07f sizes the bid with it, and nothing mints paper any more.
  */
 export const TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE = 0.05;
-export const TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH = 0.6;
-
-/** §5-BRAINS — the buffer THIS treasurer keeps: the operating share, weighted by how much its
- *  management fears running short. The median management keeps the stated share. */
-export function operatingBufferShareOf(c: { management?: import('./preferences').Preferences }): number {
-  return TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversionOf(c.management);
-}
+const TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH = 0.6;
 
 /** What this firm wants to be holding in short government paper, given the cash it has now. */
 export function corporateTreasuryTargetLocal(cashLocal: number, annualRevenueLocal: number, riskAversion = 1): number {
@@ -747,28 +740,6 @@ export function getOutputInventoryUnits(comp: Company, subUnitId?: string): numb
 }
 
 /** IND10 — units of this company's output that are started but not yet finished. */
-/** IND13 — capital delivered and not yet in service: the construction-in-progress asset. */
-export function assetsUnderConstructionLocal(comp: Company): number {
-  return (comp.assetsUnderConstruction ?? []).reduce((s, l) => s + l.valueLocal, 0);
-}
-
-export function getWipUnits(comp: Company, subUnitId?: string): number {
-  const wip = comp.wipBySubUnit;
-  if (!wip) return 0;
-  const q = (lots: { units: number }[]) => lots.reduce((s, l) => s + l.units, 0);
-  if (subUnitId) return q(wip[subUnitId] ?? []);
-  return Object.values(wip).reduce((s, lots) => s + q(lots), 0);
-}
-
-/** IND10 — the cost sunk into that unfinished production: the WIP asset. */
-export function getWipLocal(comp: Company, subUnitId?: string): number {
-  const wip = comp.wipBySubUnit;
-  if (!wip) return 0;
-  const q = (lots: { valueLocal: number }[]) => lots.reduce((s, l) => s + l.valueLocal, 0);
-  if (subUnitId) return q(wip[subUnitId] ?? []);
-  return Object.values(wip).reduce((s, lots) => s + q(lots), 0);
-}
-
 // ENGINE V2 (§7.304) — input lots live on the persistent columnar table (engine2/lots.ts);
 // the balance-sheet reads are totalInputValueLocal / inputUnitsHeld / materializeInputInventory.
 

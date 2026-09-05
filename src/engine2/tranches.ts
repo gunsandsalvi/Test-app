@@ -32,9 +32,9 @@ export const TR_FLOATING = 1;
 export const TR_CP = 2;
 export const TR_FACILITY = 4;
 export const TR_SUBORDINATED = 8;
-export const TR_REFI_INITIATED = 16;
+const TR_REFI_INITIATED = 16;
 
-export interface TrancheStore {
+interface TrancheStore {
   cap: number;
   principalLocal: Float64Array;
   couponRate: Float64Array;        // NaN = absent
@@ -304,14 +304,11 @@ export function materializeLadder(v2: V2World, companyId: string): DebtTranche[]
   return ladderRowsOf(v2, companyId).map((r) => materializeTranche(v2, r));
 }
 
-/** The wire that created a ladder row (-1: seeded or born without one). */
-export const trancheWireOf = (v2: V2World, r: number): number => v2.tranches.wireRef[r];
-
 /** §5-FINALIZATION step 10 — A LENDER'S FACILITY BOOK IS A READ OF THE BORROWERS' LADDERS. The
  *  bank used to carry one loan row per facility tranche, synced weekly and drifting between
  *  syncs (O4 lived on that drift). The facility row on the ladder IS the loan, seen from the
  *  lender: one scan of the store, in row order. */
-export interface FacilityRow {
+interface FacilityRow {
   row: number; borrowerId: EntityId; bankId: EntityId; trancheId: string; principalLocal: number;
   /** The tranche's floating margin — struck when the line opened; §3.16-i: a facility with none
    *  stated is a defect, not a 350bp fallback. */

@@ -17,7 +17,7 @@ import { annuityFactor } from '../pricing';
  */
 
 /** What one call would be worth, and what it would cost, per dollar of principal. */
-export interface CallEconomics {
+interface CallEconomics {
   /** Present value of the coupon saving over the remaining life, per dollar. */
   savingPvPerDollar: number;
   /** What the call option costs to exercise, per dollar, over par. */

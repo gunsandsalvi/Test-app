@@ -20,11 +20,6 @@ export function formatSimulationDate(week: number): string {
   return `${month} ${day}, ${d.getUTCFullYear()}`;
 }
 
-export function formatSimulationDateShort(week: number): string {
-  const d = dateOfWeek(week);
-  return `${MONTH_NAMES[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, '0')}`;
-}
-
 /**
  * Returns formatted quarter filing label (e.g. "Q1 '27 (Mar 31)", "Q2 '27 (Jun 30)"), counting
  * quarters from the epoch's year.
@@ -44,33 +39,6 @@ export function formatQuarterFilingDate(quarterIndex: number, startYear: number 
   };
 
   return `Q${qNum} '${shortYear} (${quarterDates[qNum]})`;
-}
-
-/**
- * Strips raw LaTeX tokens and replaces them with clean UTF-8 text
- */
-export function cleanLatexTokens(text: string | undefined | null): string {
-  if (!text) return '';
-  return text
-    .replace(/\\longleftrightarrow/g, ' ⟷ ')
-    .replace(/\\leftrightarrow/g, ' ⟷ ')
-    .replace(/\\rightarrow|\\to/g, ' → ')
-    .replace(/\\leftarrow/g, ' ← ')
-    .replace(/\\Delta/g, 'Δ')
-    .replace(/\\delta/g, 'δ')
-    .replace(/\\beta/g, 'β')
-    .replace(/\\pi\^?\*?/g, 'π*')
-    .replace(/\\pi/g, 'π')
-    .replace(/\\rho/g, 'ρ')
-    .replace(/\\sigma/g, 'σ')
-    .replace(/\\lambda/g, 'λ')
-    .replace(/\\approx/g, '≈')
-    .replace(/\\pm/g, '±')
-    .replace(/\\le|\\leq/g, '≤')
-    .replace(/\\ge|\\geq/g, '≥')
-    .replace(/\\times/g, '×')
-    .replace(/\\cdot/g, '·')
-    .replace(/\$/g, '');
 }
 
 export function formatCurrency(

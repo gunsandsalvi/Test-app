@@ -29,7 +29,7 @@ import { partyKey } from '../../ledger/party';
 import { rollOverdraftStreaks } from '../../../domain/banking';
 
 /** What a broker charges over its standing line for a balance it did not agree to fund. */
-export const OVERDRAFT_PENALTY_BPS = 200;
+const OVERDRAFT_PENALTY_BPS = 200;
 
 export function runOverdraftSweep(ctx: WeeklyStepContext): void {
   const v2 = ctx.v2;

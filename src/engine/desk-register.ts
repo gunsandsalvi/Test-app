@@ -53,12 +53,6 @@ export function deskGrossLocal(v2: V2World, bankId: string): number {
   deskRowsOf(v2, bankId).forEach((p) => { gross += Math.abs(p.inventoryLocal); });
   return gross;
 }
-/** The same gross in one register kind. */
-export function deskGrossOfKindLocal(v2: V2World, bankId: string, kind: string): number {
-  let gross = 0;
-  deskRowsOf(v2, bankId, kind).forEach((p) => { gross += Math.abs(p.inventoryLocal); });
-  return gross;
-}
 /** The desks' net position at the mark — the signed asset line (a short is negative). */
 export function deskSignedLocal(v2: V2World, bankId: string): number {
   let net = 0;

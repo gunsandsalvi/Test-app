@@ -24,7 +24,7 @@ import { balanceSheetChargeBps } from '../registry';
 export const XCS_TENOR_WEEKS = 52;
 
 /** The home notional a contract exchanged at strike. */
-export const homeNotionalOf = (c: DerivativeContract): number => c.units ?? 0;
+const homeNotionalOf = (c: DerivativeContract): number => c.units ?? 0;
 
 /** Foreign money per unit of home money at today's prints — undefined without both. */
 function homePerForeignRate(c: DerivativeContract, m: DerivativeMarketView): number | undefined {

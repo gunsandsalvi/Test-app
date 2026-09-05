@@ -42,7 +42,7 @@ export const SOURCING_REGION_IDS = REGION_IDS;
  * ten percent of cargo value. That killed cross-border trade outright, took the carriers'
  * revenue with it, and defaulted the entire fleet by week twelve.
  */
-export function pipelineCarryCostRatePerWeek(annualPolicyRate: number): number {
+function pipelineCarryCostRatePerWeek(annualPolicyRate: number): number {
   return Math.max(0, annualPolicyRate) / 52;
 }
 
@@ -69,14 +69,14 @@ export interface SourcingSplit {
   expectedLandedCostByOrigin: Record<string, number>;
 }
 
-export interface SourcingIntent {
+interface SourcingIntent {
   bookings: LaneBooking[];
   /** key: `${buyerRegion}|${subUnitId}` */
   splitByRegionSubUnit: Map<string, SourcingSplit>;
 }
 
 /** What a good costs to move one unit on a lane, in the lane's own money, at a given rate. */
-export function freightPerUnitLocal(
+function freightPerUnitLocal(
   subUnitId: string,
   from: RegionId,
   to: RegionId,
@@ -236,11 +236,6 @@ export function computeSourcingIntent(args: {
   });
 
   return { bookings, splitByRegionSubUnit };
-}
-
-/** Great-circle-ish lane length, re-exported so callers do not each import geography. */
-export function laneDistance(from: RegionId, to: RegionId): number {
-  return laneDistanceNm(from, to);
 }
 
 /**

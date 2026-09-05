@@ -18,9 +18,9 @@
 import { RegionId, REGION_IDS } from './geography';
 import type { InstrumentId } from './ids';
 
-export type IndexAssetClass = 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN';
+type IndexAssetClass = 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN';
 
-export type IndexTier =
+type IndexTier =
   /** Every eligible listed name in the scope. */
   | 'ALL_CAP'
   /** The names making up the top share of aggregate market cap. */

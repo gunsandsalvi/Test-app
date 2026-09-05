@@ -56,7 +56,7 @@ const SHIP_FINANCE_LOAN_TO_VALUE = 0.55;
 
 /** What one tonne costs to move on a lane using the standard equipment for it, before any
  *  carrier exists. The floor the intent is formed against on a lane that has never cleared. */
-export function specMarginalRatePerTonneLaneMoney(
+function specMarginalRatePerTonneLaneMoney(
   from: RegionId,
   to: RegionId,
   regions: Record<RegionId, Region>,

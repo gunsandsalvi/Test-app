@@ -106,17 +106,6 @@ export function calculateDiscountFactor(t: number, params: NelsonSiegelParams): 
 }
 
 /**
- * Forward rate F(t1, t2) between two future tenors
- */
-export function calculateForwardRate(t1: number, t2: number, params: NelsonSiegelParams): number {
-  if (t2 <= t1) return calculateNelsonSiegelZeroRate(t1, params);
-  const p1 = calculateDiscountFactor(t1, params);
-  const p2 = calculateDiscountFactor(t2, params);
-  const dt = t2 - t1;
-  return (p1 / p2 - 1) / dt;
-}
-
-/**
  * Closed-form price of a fixed-rate coupon bond using Nelson-Siegel curve
  * Annual coupon payments, face value = 100
  */

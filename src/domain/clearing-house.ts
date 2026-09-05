@@ -85,9 +85,6 @@ export function fundContributionsOf<K>(requiredLocal: number, marginByMember: Re
  */
 export const ccpOfMoney = (currency: CurrencyCode): PartyOfKind<'CCP'> => ccpParty(REGION_BY_CURRENCY[currency]);
 export const ccpOfContract = (c: { currency: CurrencyCode }): PartyOfKind<'CCP'> => ccpOfMoney(c.currency);
-/** The region a clearing house keeps its books in — its own. */
-export const ccpRegionOf = (p: PartyOfKind<'CCP'>): RegionId => p.region;
-
 /**
  * §3.17-iv-b — THE ACCOUNT A MEMBER'S MARGIN MOVES THROUGH. Margin is an asset swap, not income:
  * a bank member posts it from its securities account (reserves move, equity does not,
@@ -126,7 +123,7 @@ export interface WaterfallRound {
   /** The house's unsecured claim on the defaulter's estate. */
   claimLocal: number;
 }
-export interface WaterfallResources {
+interface WaterfallResources {
   /** The defaulter's initial margin the house holds. */
   marginLocal: number;
   /** The defaulter's default-fund contribution. */

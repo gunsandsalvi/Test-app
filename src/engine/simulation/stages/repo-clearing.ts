@@ -138,7 +138,7 @@ function nearestCurvePoint(years: number): 'tenor3M' | 'tenor2Y' | 'tenor5Y' | '
  * thirty-year bonds no longer withholds the two-year book from the auction that prices it, and
  * the cash a pledge raises is that bond's own haircut rather than a blended average.
  */
-export function unencumberedByBond(
+function unencumberedByBond(
   heldByBond: ReadonlyMap<InstrumentId, number>,
   encumberedFace: Map<InstrumentId, number>
 ): Map<InstrumentId, number> {
@@ -184,7 +184,7 @@ export function unencumberedBorrowingCapacityLocal(
  * the bill auction has to sell paper the repo book says cannot move: measured immediately, banks
  * pledging 6.1B of 13-week bills against 1.0B they still held by the end of the week.
  */
-export function selectCollateral(
+function selectCollateral(
   free: Map<InstrumentId, number>,
   haircutOf: (bondId: InstrumentId) => number | undefined,
   targetCashLocal: number
@@ -214,7 +214,7 @@ export function selectCollateral(
 /** The overnight half of an institution's cash sleeve — the split WS5's bill program already
  * uses (07f's CASH_SLEEVE_BILL_SHARE takes the term half). G6 derives this from real
  * liability liquidity needs and retires the shared constant. */
-export const CASH_SLEEVE_OVERNIGHT_SHARE = 0.5;
+const CASH_SLEEVE_OVERNIGHT_SHARE = 0.5;
 
 /** Who a contract's lender is, as a settlement party: a bank lends from its securities account;
  *  an institution and the central bank's window are the parties they are. */
@@ -224,7 +224,7 @@ const repoLenderParty = (lender: RepoParty): PartyRef =>
 const CB_SRF_SEAT_ID = 'CB-SRF';
 /** The term book's maturity — one quarter, the tenor the curve's own front point prices,
  *  so a lender's outside option over it is something the model already publishes. */
-export const REPO_TERM_WEEKS = 13;
+const REPO_TERM_WEEKS = 13;
 /** A perfectly elastic window stands at full size AT its posted rate; the numerical step that
  *  represents that vertical schedule sits just below it. See the seat's comment in runBook. */
 const SRF_SEAT_STEP_BPS = 1;

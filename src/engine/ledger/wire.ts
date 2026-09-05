@@ -10,7 +10,7 @@
  */
 import { PartyRef, partyId, partyOf } from './party';
 import type { EntityId } from '../../domain/ids';
-import { CurrencyCode, CURRENCY_CODES, NUMERAIRE } from '../../domain/geography';
+import { CurrencyCode, CURRENCY_CODES } from '../../domain/geography';
 import { FxTable, PARITY_FX, toNumeraire } from '../../domain/currency';
 import { isVehicleClaim, type HoldingType } from '../../domain/assets';
 import { defect } from '../../domain/defect';
@@ -24,9 +24,7 @@ export const ASSET_KINDS: readonly AssetKind[] = [
   'ETF_SHARE', 'MMF_SHARE', 'BANK_FACILITY', 'GOOD', 'HOUSE', 'CONTRACT', 'PE_FUND_INTEREST',
 ];
 const kindIdOf = new Map<AssetKind, number>(ASSET_KINDS.map((k, i) => [k, i]));
-export const assetKindOfId = (id: number): AssetKind => ASSET_KINDS[id];
-
-export interface WireInstruction {
+interface WireInstruction {
   from: PartyRef;
   to: PartyRef;
   kind: AssetKind;
@@ -77,22 +75,19 @@ export function newWireJournal(base: number, week: number, cap = 1 << 14): WireJ
 
 const assetIdByText = new Map<string, number>();
 const assetTextById: string[] = [];
-export function internAsset(asset: string): number {
+function internAsset(asset: string): number {
   const existing = assetIdByText.get(asset);
   if (existing !== undefined) return existing;
   const id = assetTextById.length;
   assetIdByText.set(asset, id); assetTextById.push(asset);
   return id;
 }
-export const assetText = (id: number): string => assetTextById[id];
+const assetText = (id: number): string => assetTextById[id];
 /** §3.13c — MONEY IS FOUR ASSETS, not one called 'USD'. A wire moving euros moves the EUR asset
  *  at a price of 1 EUR, which is what "a euro is a euro" means; before this every money wire in
  *  the model was labelled USD whatever it actually moved. */
 export const MONEY_ASSET_ID_BY_CURRENCY: Readonly<Record<CurrencyCode, number>> =
   CURRENCY_CODES.reduce((m, c) => { m[c] = internAsset(c); return m; }, {} as Record<CurrencyCode, number>);
-/** The numéraire's money asset — the one a caller that has not yet been given a currency uses. */
-export const MONEY_ASSET_ID = MONEY_ASSET_ID_BY_CURRENCY[NUMERAIRE];
-
 function grow(j: WireJournal): void {
   const cap = j.fromId.length * 2;
   const gi = (o: Int32Array) => { const a = new Int32Array(cap); a.set(o); return a; };
@@ -131,7 +126,6 @@ let world: WireWorld | undefined;
 /** Per party id: 1 once the active world has resolved it. Reset with the world. */
 let resolved = new Uint8Array(1 << 12);
 export function setActiveWireWorld(w: WireWorld | undefined): void { world = w; resolved.fill(0); }
-export const hasActiveWireWorld = (): boolean => world !== undefined;
 /** A birth: the newborn is admitted to the active world, so its first wire resolves. */
 export function admitParty(ref: PartyRef): void {
   if (!world) return defect(`${partyDesc(ref)} was born with no world active to join`);
@@ -214,7 +208,7 @@ export function wire(instruction: WireInstruction, internReasonId: (reason: stri
 }
 
 /** The week's wires, summarised for the state and the audit. */
-export interface WireSummary {
+interface WireSummary {
   count: number;
   byKind: Record<string, number>;
   valueUSDByKind: Record<string, number>;

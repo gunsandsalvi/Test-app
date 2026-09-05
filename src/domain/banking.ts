@@ -441,7 +441,7 @@ export function housingTurnoverAnnual(args: {
 }
 export const MORTGAGE_LTV_AT_ORIGINATION = 0.80;
 /** Foreclosure recovers the house less the real cost of taking and selling it. */
-export const FORECLOSURE_COST_SHARE = 0.25;
+const FORECLOSURE_COST_SHARE = 0.25;
 /** Mortgage default frequency relative to unsecured credit at the same unemployment print —
  * owners with equity sell rather than default, which is also why severity reads home equity. */
 export const MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER = 0.25;

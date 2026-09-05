@@ -223,7 +223,7 @@ export function setDemand(D: DemandStaging, row: number, i: number, reservationS
   D.minH[at] = minHoldingLocal;
 }
 
-export interface ClearingParams {
+interface ClearingParams {
   /** Bid/ask the dealer desk earns on the gross flow it facilitates. */
   dealerSpreadBps: number;
   /**
@@ -533,14 +533,14 @@ export interface KernelShardResult {
 }
 
 /** Bytes a packed clearing occupies, so a caller can allocate it on shared memory. */
-export function packedClearingBytes(n: number, pCount: number): number {
+function packedClearingBytes(n: number, pCount: number): number {
   const f64 = 8 * (4 * n + 6 * n * pCount);
   const u8 = 3 * n + n * pCount;
   return f64 + u8 + 64; // alignment slack
 }
 
 
-export function packClearing(
+function packClearing(
   instruments: ClearingInstrument[],
   participants: ClearingParticipant[],
   params: ClearingParams,
@@ -960,7 +960,7 @@ function anyCeilingAboveHolding(
  * inside workers cannot follow extensionless relative imports — the dependency points the other
  * way instead.
  */
-export interface ShardedKernelApi {
+interface ShardedKernelApi {
   workerCount: () => number;
   sharedBuffer: (bytes: number) => SharedArrayBuffer | null;
   run: (packed: PackedClearing, sab: SharedArrayBuffer) => KernelShardResult[] | null;

@@ -139,14 +139,14 @@ const CREDIT_CONDITIONS_REQUIRED_SPREAD_BPS = 40;
  * real demand curve is not a step function: some holders come in early, others need to be paid
  * considerably more, and the range is what gives the curve its slope.
  */
-export const FULL_SIZE_SPREAD_RANGE_BPS = 250;
+const FULL_SIZE_SPREAD_RANGE_BPS = 250;
 
 /**
  * The most a holder will take of one name relative to its structural share of it, when the
  * spread is generous. Real money does run overweights; it does not run unlimited ones, because
  * concentration in a single issuer is its own risk regardless of how well it pays.
  */
-export const MAX_OVERWEIGHT_MULTIPLE = 2.2;
+const MAX_OVERWEIGHT_MULTIPLE = 2.2;
 
 /** §5-BRAINS — the two sizes above through THIS holder's own risk weight: a more risk-averse
  *  holder runs a smaller overweight and needs to be paid more before it takes full size. The
@@ -247,7 +247,7 @@ export function subInvestmentGradeSizeFactor(entityType: InstitutionalEntityType
  *     price falls until the IRR clears. That standing bid at some price is what actually
  *     arrests a widening, and it is why the engine needs no economic ceiling at all.
  */
-export const EXPECTED_WORKOUT_YEARS = 2;
+const EXPECTED_WORKOUT_YEARS = 2;
 
 export function computeDistressedReservationSpreadBps(params: {
   annualDefaultProbability: number;

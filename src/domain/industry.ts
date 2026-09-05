@@ -3,8 +3,6 @@
 
 import { VIEW_CATEGORY_PRICE_TIER, VIEW_INDUSTRY_SUBUNITS } from './industry-registry';
 
-export type NecessityTier = 'Staple' | 'Standard' | 'Luxury';
-
 export type Industry =
   | 'Energy' | 'MaterialsChemicals' | 'IndustrialsMachinery' | 'AerospaceDefense'
   | 'AutomotiveTransport' | 'TechHardwareSemis' | 'SoftwareDigitalServices' | 'Telecommunications'
@@ -84,7 +82,7 @@ export function householdBudgetReachMultiple(
  * the same curve more finely and the answer must not depend on it. It does not — the rungs are cut
  * on the QUANTITY axis, so what a given clearing price fills is the curve's own value there.
  */
-export const HOUSEHOLD_DEMAND_LADDER_RUNGS = 6;
+const HOUSEHOLD_DEMAND_LADDER_RUNGS = 6;
 /** §7.343 — the same ladder for a firm's or a treasury's purchases: a budget-anchored demand curve
  *  is what stops a shortage from compounding the print week after week. */
 export const DEMAND_LADDER_RUNGS = 3;
@@ -161,7 +159,7 @@ export function budgetDemandLadder(args: {
   return out;
 }
 
-export interface IndustrySubUnit {
+interface IndustrySubUnit {
   unitId: string;
   label: string;
   buyerMix: Record<BuyerType, number>;

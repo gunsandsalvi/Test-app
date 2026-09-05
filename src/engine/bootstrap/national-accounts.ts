@@ -70,7 +70,7 @@ export const LABOR_SHARE_OF_OUTPUT = derivedLabourShareOfValueAdded({
  * Share of output households receive as capital income (dividends, interest, rent). The rest of
  * capital income is retained by firms and funds investment, so this is well below (1 - labor share).
  */
-export const HOUSEHOLD_CAPITAL_INCOME_SHARE_OF_OUTPUT = 0.13;
+const HOUSEHOLD_CAPITAL_INCOME_SHARE_OF_OUTPUT = 0.13;
 
 /**
  * Household capital income per dollar of wages. Derived from the two shares above rather than

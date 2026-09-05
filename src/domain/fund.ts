@@ -11,7 +11,7 @@
  */
 
 /** What a fund can pay out right now, and why it is not more. */
-export interface Distributable {
+interface Distributable {
   /** What it may actually wire. */
   payableLocal: number;
   /** What was asked for. */

@@ -24,7 +24,7 @@ import type { EntityId, InstrumentId } from './ids';
 import { bondFuturesCarryPrice } from './derivatives/classes/bond-future';
 
 /** The markets a leg can clear in. A comparable joins by naming the two its legs need. */
-export type ComparableMarket = 'SOVEREIGN_CASH' | 'BOND_FUTURE' | 'CORP_BOND_CASH' | 'CDS_PROTECTION' | 'CDS_INDEX_PROTECTION' | 'IRS_FIXED';
+type ComparableMarket = 'SOVEREIGN_CASH' | 'BOND_FUTURE' | 'CORP_BOND_CASH' | 'CDS_PROTECTION' | 'CDS_INDEX_PROTECTION' | 'IRS_FIXED';
 
 /** One leg of a pair, as the market that clears it reads it: a size (+ long / − short, in face),
  *  the price it is worth doing at (a long buys below it, a short sells above it), how far past
@@ -61,7 +61,7 @@ export const stoppedOut = (pnlLocal: number, marginPostedLocal: number): boolean
 
 /** What a comparable reads this week: the disagreement, annualised in bps of the pair's face, and
  *  what carrying the pair costs per year in the same unit. */
-export interface ComparableRead { deviationBps: number; carryBps: number }
+interface ComparableRead { deviationBps: number; carryBps: number }
 
 /** The edge: what is left of the disagreement after carrying it. */
 export const edgeBps = (r: ComparableRead): number => r.deviationBps - r.carryBps;

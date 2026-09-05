@@ -85,7 +85,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 a named bank and a named client, with a contract | `src/domain/prime-brokerage.ts:PrimeBrokerageLine` · `src/engine2/obligations.ts:writePrimeBrokerageRow` · `src/engine/ledger/contract-ledger.ts:primeBrokerageBookOf` | ✅ |
 | A2 the broker holds the client's assets and knows the position | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageStage` | ⚠️ |
 | **A3 the client can have more than one broker** | — | ❌ |
-| A4 financing spread, stock-borrow fees and commissions | `src/domain/prime-brokerage.ts:weeklyFinancingLocal` | ⚠️ |
+| A4 financing spread, stock-borrow fees and commissions | `src/engine/simulation/stages/prime-brokerage.ts:interestLocal` | ⚠️ |
 | B1 the broker lends the difference against the assets | `src/engine/simulation/stages/prime-brokerage.ts:targetDrawnLocal` | ✅ |
 | B1.a leverage is a loan from a named lender | `src/domain/prime-brokerage.ts:brokerId` | ✅ |
 | B2 the loan has a rate above the broker's cost of funds | `src/engine/simulation/stages/prime-brokerage.ts:rateAnnual` | ✅ |
@@ -210,7 +210,7 @@ found from the other side, and the two should be fixed in one commit: a pledged-
 the broker is what makes both rehypothecation and close-out expressible.
 
 **A4**: of the three incomes the node names, only the financing spread exists
-(`weeklyFinancingLocal`, paid at `prime-brokerage.ts:75`). The stock-borrow fee goes to the LENDING
+(`interestLocal` in `runPrimeBrokerageStage`: last week's balance at the struck rate, paid to the broker; the domain helper that restated it had no caller and went with §3 step 19-ii). The stock-borrow fee goes to the LENDING
 holder, never through a broker; there are no commissions — the fund pays `DEALER_SPREAD_BPS` to
 the region's dealer DESKS in each clearing book instead, which is a different party and a
 different business. Not a defect so much as a smaller broker than the node describes.

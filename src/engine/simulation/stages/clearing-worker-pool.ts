@@ -25,7 +25,7 @@ let poolUnavailable = false;
 let receiveMessageOnPortFn: ((port: unknown) => { message: unknown } | undefined) | null = null;
 let sharedBuffer: SharedArrayBuffer | null = null;
 
-export function clearingWorkerCount(): number {
+function clearingWorkerCount(): number {
   if (typeof process === 'undefined' || !process.versions?.node) return 0;
   const n = Number(process.env?.CLEARING_WORKERS ?? 0);
   return Number.isFinite(n) && n >= 2 ? Math.min(16, Math.floor(n)) : 0;
@@ -73,7 +73,7 @@ function ensurePool(): PoolWorker[] | null {
   }
 }
 
-export function sharedPackBuffer(bytes: number): SharedArrayBuffer | null {
+function sharedPackBuffer(bytes: number): SharedArrayBuffer | null {
   if (!ensurePool()) return null;
   if (!sharedBuffer || sharedBuffer.byteLength < bytes) {
     sharedBuffer = new SharedArrayBuffer(Math.ceil(bytes / 65536) * 65536);
@@ -81,18 +81,9 @@ export function sharedPackBuffer(bytes: number): SharedArrayBuffer | null {
   return sharedBuffer;
 }
 
-export interface ShardResultLike {
-  from: number; to: number;
-  clearedStat: Float64Array; dealerInventory: Float64Array;
-  primaryWithdrawn: Uint8Array; primaryMarketTake: Float64Array; hasPrimary: Uint8Array;
-  fillInst: Int32Array; fillPart: Int32Array;
-  fillFilled: Float64Array; fillTraded: Float64Array; fillFee: Float64Array;
-  fillCount: number;
-}
-
 /** Run the kernel over [0, n) split across the pool. Returns shards in instrument order, or
  *  null when the pool is unavailable (caller falls back to the serial kernel). */
-export function runShardedKernel(packed: PackedClearing, sab: SharedArrayBuffer): KernelShardResult[] | null {
+function runShardedKernel(packed: PackedClearing, sab: SharedArrayBuffer): KernelShardResult[] | null {
   const workers = ensurePool();
   if (!workers || !receiveMessageOnPortFn) return null;
   const n = packed.n;

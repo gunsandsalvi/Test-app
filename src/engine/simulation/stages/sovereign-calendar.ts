@@ -254,7 +254,7 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
  * What the treasury has ACCRUED but not yet paid on its bond stack — its own side of the same
  * receivable, so the reported interest line stays smooth while the cash is lumpy.
  */
-export function sovereignAccruedPayableLocal(v2: WeeklyStepContext['v2'], regionId: RegionId): number {
+function sovereignAccruedPayableLocal(v2: WeeklyStepContext['v2'], regionId: RegionId): number {
   // §3.13-BOOK f4b: every GOV_BOND row of this region's paper, whoever holds it.
   const H = v2.holdings;
   const govBondRef = typeRefOf(v2, 'GOV_BOND');

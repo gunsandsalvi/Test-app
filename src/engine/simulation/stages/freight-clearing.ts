@@ -33,7 +33,7 @@ import type { EntityId } from '../../../domain/ids';
 import { asTicker } from '../../../domain/ids';
 
 /** The good a ship burns. Its cleared price per tonne IS the bunker price. */
-export const FUEL_SUBUNIT_ID = 'refined_products';
+const FUEL_SUBUNIT_ID = 'refined_products';
 
 export interface FreightClearing {
   /** What a tonne cost to move on each lane this week, in the LANE'S OWN money (its origin's). */
@@ -60,7 +60,7 @@ export interface FreightClearing {
   laneBookedTonnes: Record<string, number>;
 }
 
-export function emptyFreightClearing(): FreightClearing {
+function emptyFreightClearing(): FreightClearing {
   return {
     ratePerTonneLaneMoneyByLane: {},
     marginalRatePerTonneLaneMoneyByLane: {},

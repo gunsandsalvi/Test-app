@@ -139,7 +139,7 @@ export function createLifeCycleDistribution(birthRateAnnual = 0.0125): Record<Li
   };
 }
 
-export function createInitialCategoryDemand(
+function createInitialCategoryDemand(
   gdpGrowth: number,
   estimatedHouseholdIncome: number,
   estimatedNominalGdp: number,
@@ -256,7 +256,7 @@ const DEBT_TO_GDP_PCT = 1.0;
 const FISCAL_DEFICIT_PCT_GDP = 0.05;
 const GOV_EMPLOYMENT_SHARE_OF_POPULATION = 0.055;
 
-export const BANK_BALANCE_SHEET_RATIOS = {
+const BANK_BALANCE_SHEET_RATIOS = {
   // R: the two loan-book ratios are declared in the registry (domain/stated.ts).
   businessLoanBookToGdp: SEED_BUSINESS_LOAN_BOOK_TO_GDP,
   consumerLoanBookToGdp: SEED_CONSUMER_LOAN_BOOK_TO_GDP,

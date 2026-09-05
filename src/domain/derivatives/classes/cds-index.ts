@@ -30,10 +30,10 @@ export const CDS_INDEX_TENOR_WEEKS = 5 * 52;
 export const CDX_ROLL_WEEKS = 26;
 
 /** A basket has to be a basket: fewer names than this is a single-name book wearing a series. */
-export const CDX_MIN_NAMES = 2;
+const CDX_MIN_NAMES = 2;
 
 /** One constituent's credit event, settled for the series: at what its workout paid. */
-export interface CreditIndexEvent { issuerId: EntityId; week: number; recovery: number }
+interface CreditIndexEvent { issuerId: EntityId; week: number; recovery: number }
 
 export interface CreditIndexSeries {
   seriesId: string;

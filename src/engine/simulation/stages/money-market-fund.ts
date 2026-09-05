@@ -46,10 +46,10 @@ import type { EntityId } from '../../../domain/ids';
 
 /** The fund's annual expense ratio — a structural primitive like the deposit beta; G6/BP make
  * fees competitive between funds. */
-export const MMF_FEE_ANNUAL = 0.003;
+const MMF_FEE_ANNUAL = 0.003;
 /** Yield gap at which the household savings flow has fully switched between deposits and the
  * fund. A stated primitive standing in for real household choice — MS owns replacing it. */
-export const DEPOSIT_MMF_FULL_SWITCH_GAP = 0.01;
+const DEPOSIT_MMF_FULL_SWITCH_GAP = 0.01;
 
 export function findRegionMmf(entities: InstitutionalEntity[], regionId: RegionId): InstitutionalEntity | undefined {
   return entities.find((e) => e.region === regionId && e.entityType === 'MONEY_MARKET_FUND' && !e.isDefaulted);
@@ -60,7 +60,7 @@ export function findRegionMmf(entities: InstitutionalEntity[], regionId: RegionI
  * fund quotes the floor its first dollar would earn (the RRP), net of fee — the honest opening
  * quote, and the reason the market can bootstrap itself when that beats the deposit rate.
  */
-export function quoteMmfNetYieldAnnual(v2: V2World, entity: InstitutionalEntity, cashLocal: number, reg: Region, week: number, govLadder: GovDebtTrancheView[]): number {
+function quoteMmfNetYieldAnnual(v2: V2World, entity: InstitutionalEntity, cashLocal: number, reg: Region, week: number, govLadder: GovDebtTrancheView[]): number {
   const rrpRateAnnual = Math.max(0, reg.policyRate - ON_RRP_SPREAD_BPS / 10000);
   const repoRateAnnual = reg.repoRateAnnual ?? rrpRateAnnual;
 
@@ -157,7 +157,7 @@ export function refreshMmfQuotes(regionId: RegionId, reg: Region, ctx: WeeklySte
   });
 }
 
-export interface CorporateSweepBook {
+interface CorporateSweepBook {
   /** Cash the fund can pay out to redeeming treasuries this week — its real available cash. */
   redeemableLocal: number;
   netInflowLocal: number;

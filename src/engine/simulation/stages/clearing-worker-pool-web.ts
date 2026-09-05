@@ -31,7 +31,7 @@ export function webWorkersAvailable(): boolean {
 }
 
 /** How many workers the pool is set to use (0 = serial path). */
-export function clearingWorkersWeb(): number {
+function clearingWorkersWeb(): number {
   return poolDead ? 0 : requested;
 }
 

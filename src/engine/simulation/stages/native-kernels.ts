@@ -72,9 +72,6 @@ if (addon) {
   });
 }
 
-/** Whether the native addon is active this process (a diagnostic, read by nothing hot). */
-export const nativeKernelsActive = addon !== null;
-
 // ---- the stage-08 front core (engine2/front-core.ts runFrontCore, ported) ----
 
 import type { FrontSeam, FrontCoreOut } from '../../../engine2/front-core';
@@ -88,7 +85,7 @@ interface FrontAddon extends NativeAddon {
   ): number;
 }
 
-export interface FrontCoreTables {
+interface FrontCoreTables {
   RECIPE_START: Int32Array; RECIPE_INPUT: Int32Array; RECIPE_INTENSITY: Float64Array;
   HAS_INDUSTRY: Uint8Array; IS_SUBSCRIPTION: Uint8Array; CARRY_RATE_WEEKLY: Float64Array;
   INDUSTRIAL_SET: Uint8Array;

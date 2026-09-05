@@ -1,12 +1,3 @@
-export const SECTOR_WAGE_SENSITIVITY: Record<string, number> = {
-  Tech: 0.6,
-  Financials: 0.5,
-  Industrials: 1.3,
-  Energy: 0.9,
-  Consumer: 1.4,
-  Banks: 0.5,
-};
-
 // Straight-line useful life assumption for the PP&E roll-forward — years until a fully-loaded
 // asset base (fabs/servers vs. heavy plant/refineries) is fully depreciated.
 export const SECTOR_PPE_USEFUL_LIFE_YEARS: Record<string, number> = {

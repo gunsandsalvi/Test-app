@@ -169,7 +169,7 @@ export function companyRevenueHistory(world: World, id: string): number[] {
 
 // ---- the register ----
 
-export interface RegisterRow { holderId: string; instrumentId: string; instrumentType: string; region: string; usd: number; shares: number }
+interface RegisterRow { holderId: string; instrumentId: string; instrumentType: string; region: string; usd: number; shares: number }
 
 /** Every register row an institution holds. */
 export function bookOf(world: World, entityId: string): RegisterRow[] {

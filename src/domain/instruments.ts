@@ -79,14 +79,6 @@ export interface Dealer {
   color: string;
 }
 
-export type CommodityQuantityUnit = 'BARREL' | 'MMBTU' | 'TROY_OZ' | 'TONNE';
-
-export const COMMODITY_QUANTITY_UNIT: Record<string, CommodityQuantityUnit> = {
-  CRUDE_OIL: 'BARREL', HEAVY_CRUDE_OIL: 'BARREL', NATURAL_GAS: 'MMBTU',
-  GOLD: 'TROY_OZ', SILVER: 'TROY_OZ',
-  COPPER: 'TONNE', WHEAT: 'TONNE', CORN: 'TONNE', SOYBEANS: 'TONNE',
-};
-
 // 1$ is 1$: subUnitId here is the REAL industry input category a company's own productLines/
 // CATEGORY_INPUT_REQUIREMENTS recipe draws down (see 04-input-output.ts) — not just a demand-
 // side price-discovery proxy. Every producedCommodityId-tagged company (see companyGenerator.ts)
@@ -171,7 +163,7 @@ export interface TradeableInstrument {
  * cannot each spell it. `yearOfWeek` is the caller's read of the one calendar (`calendar.ts`):
  * the UI passes it on the DISPLAY week (the burn-in shifted off), a trace on the raw week.
  */
-export interface NamedPaper {
+interface NamedPaper {
   rateType: 'FIXED' | 'FLOATING';
   couponRate?: number;
   floatingMarginBps?: number;

@@ -55,7 +55,7 @@ function partyIndexOfState(state: GameState): EntityIndex {
 }
 
 /** One region's debt books, by class, in FACE. */
-export type OwnershipBook = { corp: number; loan: number; sov: number; cp: number };
+type OwnershipBook = { corp: number; loan: number; sov: number; cp: number };
 
 /**
  * §3.13-READ A9/A10/A11 — WHAT IS HELD AND WHAT IS OUTSTANDING, of every debt class, by the

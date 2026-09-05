@@ -99,7 +99,7 @@ checked by `scripts/check-atlas.sh`.
 | B5 a dealer running a book, hedging its net position | — | ❌ |
 | C1 swaps at many tenors; the set of cleared fixed rates IS a curve | `src/domain/derivatives/classes/irs.ts:SWAP_TENORS` | ✅ |
 | **C1.a the curve is a READ of cleared prices, never a fitted object that prices the swaps** | `src/engine/nelsonSiegel.ts:fitNelsonSiegelParams` | ⚠️ |
-| C2 a forward rate is derived from the curve | `src/engine/nelsonSiegel.ts:calculateForwardRate` | ❌ |
+| C2 a forward rate is derived from the curve | — | ❌ |
 | C3 the swap curve and the sovereign curve are different curves | `src/domain/derivatives/classes/irs.ts:SWAP_TENOR_ZERO_FIELD` | ✅ |
 | C3.a the swap spread is a consequence, measured and never set | `src/engine/simulation/stages/derivative-markets/irs.ts:runSwapMarket` | ✅ |
 | C4 VERIFY policy moves the short end through the reference, the long end through expectations | — | ❌ |
@@ -230,7 +230,7 @@ became meaningful once the floating leg stopped referencing an administered rate
 
 ### ❌ C2 / C4 — A FORWARD RATE NOBODY DERIVES, AND A CHANNEL NOBODY MEASURES
 
-`nelsonSiegel.ts:calculateForwardRate` exists and **has no callers anywhere in `src`.** So C2's
+`nelsonSiegel.ts` carried a `calculateForwardRate` that **had no callers anywhere in `src`** — dead code, deleted by §3 step 19-ii (2026-09-05). So C2's
 forward — *"what the market thinks, not what will happen"* — is not produced, not published and
 not read; and when it is revived it must be derived from `securedCurve` (the swap curve) rather
 than from the fitted sovereign params it currently takes, or it inherits step 25's split.

@@ -53,7 +53,7 @@ import type { EntityId, Ticker } from '../../../domain/ids';
 import { asTicker } from '../../../domain/ids';
 
 /** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
-export interface FeeDesk { id: EntityId; ticker: Ticker; share: number }
+interface FeeDesk { id: EntityId; ticker: Ticker; share: number }
 
 /**
  * Settle one region's session of one book.
@@ -91,7 +91,7 @@ export interface PrimaryTake {
  * hands back the borrower whose paper it is, and a deal struck this week carries no accrued at all
  * so its issuer is owed nothing.
  */
-export interface AccruedLeg {
+interface AccruedLeg {
   byParticipantId: Map<string, number>;
   netByInstrumentId: Map<InstrumentId, number>;
   issuerOf: (instrumentId: InstrumentId) => PartyRef | undefined;
