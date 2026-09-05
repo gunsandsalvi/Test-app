@@ -124,8 +124,9 @@ section D follows from that one line:
 
 - **D1/D2** — there is no mark, so there is no gain and no loss to move with the curve. A payer of
   fixed struck at 3% when the curve is now 6% carries no asset;
-- **D3** — `initialMarginRate: 0` and no mark means **no margin flows at all** on the largest
-  class in the book. The node's point — *"a rate move is a liquidity event long before it is a P&L
+- **D3** — no mark means **no variation margin flows** on the largest class in the book (§9.17-ii:
+  initial margin now posts at strike off the tenor's own rate move, `irs.ts:closeOutMoveOf`; the
+  mark and its weekly flow are §3.17-iii's). The node's point — *"a rate move is a liquidity event long before it is a P&L
   event"* — has no channel;
 - **D3.a** — the hedger's funding mismatch (winning hedge paying cash against an unrealised loss
   on the hedged item) cannot occur, so the one thing swaps do to a balance sheet in a stress week

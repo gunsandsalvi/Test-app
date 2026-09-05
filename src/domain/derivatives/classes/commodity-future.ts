@@ -68,7 +68,8 @@ export const COMMODITY_FUTURE_PROFILE: DerivativeClassProfile = {
   roleB: 'SHORT',
   // Basel CEM commodity add-on, sub-year bucket — every tenor this book quotes.
   pfeAddOnRate: 0.10,
-  initialMarginRate: 0,
+  /** §3.17-ii: the commodity's own weekly move, on the notional — a future marks one for one. */
+  closeOutMoveOf: (c, m) => m.commodityWeeklyMove(commodityReferenceOf(c)),
   periodicLegUSDToB: () => null,
   /** The contract's value to the long at current prints: the print's move off the strike, on
    *  the size. In the delivery week the mark IS spot — that is what cash settlement means. */

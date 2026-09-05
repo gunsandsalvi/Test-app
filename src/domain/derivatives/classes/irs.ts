@@ -33,7 +33,13 @@ export const IRS_PROFILE: DerivativeClassProfile = {
   // Basel CEM interest-rate add-on, 1-5y bucket. Small per dollar — which is why rates books
   // run large — and real once the desk's whole derivative book shares one leverage budget.
   pfeAddOnRate: 0.005,
-  initialMarginRate: 0,
+  /** §3.17-ii: the rate's own weekly move at this tenor, on the swap's remaining life — the
+   *  repricing of the fixed leg one session can bring. */
+  closeOutMoveOf: (c, m) => {
+    const bps = m.rateWeeklyMoveBps(c.regionId, c.termKey);
+    if (bps === undefined) return undefined;
+    return (bps / 10000) * Math.max(0, c.maturityWeek - m.week) / 52;
+  },
   // The floating leg pays the rate the week PRINTED; the fixed leg pays the strike. A payer of
   // fixed gains exactly when rates rose against it, which is the hedge it entered for.
   periodicLegUSDToB: (c, m) => {

@@ -36,7 +36,7 @@ import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
 import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { postInitialMargin, initialMarginAtStrike } from '../derivative-lifecycle';
+import { postInitialMargin, withInitialMargin } from '../derivative-lifecycle';
 import { institutionTotalAssetsLocal, institutionBookLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
@@ -63,7 +63,7 @@ function twoSigmaYieldMoveBps(reg: { historicalZeroCurves?: { tenor10Y: number }
   return Math.max(YIELD_LIKE_MIN_WEEKLY_MOVE_BPS, 2 * Math.sqrt(variance));
 }
 
-function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
+function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun): void {
   const v2g = ensureV2(state);
 
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
@@ -243,7 +243,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
         takenByEntity.forEach((takenLocal, entityId) => {
           const notional = hedgedLocal * (takenLocal / totalTakenLocal);
           if (notional <= 1) return;
-          struck.push({
+          struck.push(withInitialMargin({
             id: `${regionId}-IRS-${k}-${week}-${seq++}`,
             classId: 'IRS',
             regionId,
@@ -255,11 +255,9 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
             termKey: k,
             // §3.13c: the market it clears in.
             currency: currencyOf(regionId),
-            // §3.17-i: what this strike posts, carried on the contract.
-            initialMarginLocal: initialMarginAtStrike({ classId: 'IRS', notional: Math.round(notional) }),
             struckWeek: week,
             maturityWeek: week + Math.round(SWAP_TENOR_YEARS[k] * 52),
-          });
+          }, view));
         });
       });
     });

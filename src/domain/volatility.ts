@@ -24,10 +24,13 @@
  * one, nothing (undefined) — a caller takes the book's median over the names that have one. There
  * is no posted cap to read it off any more.
  */
+/** The window a realised move is measured over, and the length of the print rings that feed it. */
+export const MEASURE_WINDOW_WEEKS = 26;
+
 export function measuredWeeklyMove(series: number[] | undefined): number | undefined {
   if (!series) return undefined;
   const s = series.filter((v) => Number.isFinite(v) && v > 0);
-  if (s.length >= 8) { const v = realizedAnnualVol(s, Math.min(26, s.length)); if (v !== undefined) return v / Math.sqrt(52); }
+  if (s.length >= 8) { const v = realizedAnnualVol(s, Math.min(MEASURE_WINDOW_WEEKS, s.length)); if (v !== undefined) return v / Math.sqrt(52); }
   if (s.length >= 2) return Math.abs(s[s.length - 1] - s[s.length - 2]) / s[s.length - 2];
   return undefined;
 }

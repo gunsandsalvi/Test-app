@@ -49,7 +49,13 @@ export const CDS_PROFILE: DerivativeClassProfile = {
   // name); the contract-level rule charges the book it actually carries.
   pfeAddOnRate: 0.10,
   pfeAddOnRateFor: (_c, isInvestmentGrade) => (isInvestmentGrade ? 0.05 : 0.10),
-  initialMarginRate: 0,
+  /** §3.17-ii: the name's own weekly spread move on the protection's remaining life — the
+   *  replacement value one session can move by (the same arithmetic as `closeOutUSDToB`). */
+  closeOutMoveOf: (c, m) => {
+    const bps = m.cdsSpreadWeeklyMoveBps(issuerReferenceOf(c));
+    if (bps === undefined) return undefined;
+    return (bps / 10000) * Math.max(0, c.maturityWeek - m.week) / 52;
+  },
   /** The buyer pays the struck spread on the notional, weekly, for the life of the trade. */
   periodicLegUSDToB: (c) => ({
     usdToB: (c.notional * (c.strike / 10000)) / 52,

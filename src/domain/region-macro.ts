@@ -724,6 +724,10 @@ export interface Region {
   borrowFeeBpsByCompanyId?: Record<string, number>;
   /** DER1 — the cleared par swap rate per tenor (annualised decimal). */
   swapParRateByTenor?: Record<string, number>;
+  /** §3.17-ii — each reference issuer's cleared protection spread, the last
+   *  `MEASURE_WINDOW_WEEKS` prints: the history a CDS's initial margin is sized from. Written by
+   *  the CDS book when it clears a name. */
+  cdsSpreadHistoryByIssuer?: Record<string, number[]>;
   /**
    * CAL/DER — the SECURED OVERNIGHT INDEX: the cleared GC repo rate compounded week by week, the
    * way a published overnight benchmark actually is. It is a level, not a rate: the ratio of two

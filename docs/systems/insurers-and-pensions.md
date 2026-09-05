@@ -109,7 +109,7 @@ checked by `scripts/check-atlas.sh`.
 | D2 the mismatch moves equity when rates move | — | ❌ |
 | D3 a funding shortfall has consequences | `src/domain/institution-profiles.ts:pensionHurdle` | ⚠️ |
 | D4 it can hedge, and hedging costs money | `src/engine/simulation/stages/derivative-markets/irs.ts:runSwapMarket` | ⚠️ |
-| **D4.a a leveraged hedge turns solvency into liquidity** | `src/domain/derivatives/classes/irs.ts:initialMarginRate` | ❌ |
+| **D4.a a leveraged hedge turns solvency into liquidity** | `src/domain/derivatives/classes/irs.ts:closeOutMoveOf` | ❌ |
 | D5 VERIFY the asymmetry on a large rate move | — | ❌ |
 | E1 FORBID no liability without beneficiaries | `src/engine/simulation/stages/household-balance-sheet.ts:institutionalClaimsLocal` | ✅ |
 | E2 FORBID no asset that is not somebody's liability or a real thing | `src/domain/institutions.ts:institutionTotalAssetsLocal` | ✅ |
@@ -199,16 +199,15 @@ as the receive-fixed side of the swap book, prices their reservation at the gove
 same tenor (`reservationStat: zeroBps`, `:169`), and sizes each one off its own book. That is C2/D4
 done properly.
 
-But `domain/derivatives/classes/irs.ts:36` is `initialMarginRate: 0`, and there is no variation
-margin on an IRS anywhere — `grep variationMargin` over `src/` returns nothing; the only margin
+But an IRS carried no initial margin (until §9.17-ii sized it from the tenor's own rate move —
+`irs.ts:closeOutMoveOf` — a swap posted none), and there is no variation margin on an IRS anywhere — `grep variationMargin` over `src/` returns nothing; the only margin
 calls in the model are `securities-lending.ts:159` on a stock loan. So the swap costs nothing to
 carry and demands nothing when it moves. **The one thing D4.a describes — rates fall, the hedge
 gains, the liability gains more, and the fund has to find cash for a position that is winning —
 cannot happen**, and neither can its mirror, which is the sector's actual failure mode.
 
-**Already §3 step 17**, which names this exact line: *"`initialMarginRate` is a flat stated number
-per class — 0 for CDS, IRS and commodity futures … three of the four classes are
-uncollateralised"*, and requires variation margin through a CCP. This tree is the demand-side
+**Already §3 step 17** (17-i and 17-ii done: the margin is a fact of the contract, sized from the
+reference's own move at strike; 17-iii gives the swap a mark and variation margin, 17-iv a CCP). This tree is the demand-side
 reason that step matters.
 
 ### ⚠️ D1 — THE "DURATION GAP" IS MEASURED AGAINST ASSETS, BECAUSE THERE IS NO LIABILITY TO MEASURE AGAINST

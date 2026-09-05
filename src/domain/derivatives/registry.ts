@@ -11,7 +11,7 @@
 import { DerivativeClassId, DerivativeContract, derivativePartyKey } from './contract';
 import { issuerReferenceOf } from './contract';
 import type { EntityId } from '../ids';
-import { DerivativeClassProfile } from './profile';
+import { DerivativeClassProfile, DerivativeMarketView } from './profile';
 import { IRS_PROFILE } from './classes/irs';
 import { CDS_PROFILE } from './classes/cds';
 import { COMMODITY_FUTURE_PROFILE } from './classes/commodity-future';
@@ -34,11 +34,20 @@ export function initialMarginLocal(c: Pick<DerivativeContract, 'initialMarginLoc
   return c.initialMarginLocal;
 }
 
-/** §3.17-i — what a strike posts: the class's stated rate on the notional, until 17-ii sizes it
- *  from the reference's own move over a close-out horizon. Called once, at strike, by the market
- *  that writes the contract; from then on the contract carries the number. */
-export function initialMarginAtStrike(c: Pick<DerivativeContract, 'classId' | 'notional'>): number {
-  return c.notional * derivativeProfile(c.classId).initialMarginRate;
+/**
+ * §3.17-ii — WHAT A STRIKE POSTS: the reference's own move over one session, on the notional
+ * (`profile.closeOutMoveOf`) — the move the position can make before it can be closed. Called
+ * once, at strike, by the market that writes the contract; from then on the contract carries the
+ * number. A reference with no move to measure yet posts nothing, and that is the stated reason.
+ */
+export function initialMarginAtStrike(c: Omit<DerivativeContract, 'initialMarginLocal'>, m: DerivativeMarketView): number {
+  const move = derivativeProfile(c.classId).closeOutMoveOf(c as DerivativeContract, m);
+  return move !== undefined && move > 0 ? c.notional * move : 0;
+}
+
+/** The contract as the market wrote it, with the margin its strike posts. */
+export function withInitialMargin(c: Omit<DerivativeContract, 'initialMarginLocal'>, m: DerivativeMarketView): DerivativeContract {
+  return { ...c, initialMarginLocal: initialMarginAtStrike(c, m) };
 }
 
 /** The registry's order is the order the one derivative stage runs the classes within a phase of

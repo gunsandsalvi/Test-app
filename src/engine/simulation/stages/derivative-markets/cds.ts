@@ -36,7 +36,8 @@ import { bankRequiredReturnAnnual } from '../bank-lending';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { postInitialMargin, initialMarginAtStrike } from '../derivative-lifecycle';
+import { postInitialMargin, withInitialMargin } from '../derivative-lifecycle';
+import { MEASURE_WINDOW_WEEKS } from '../../../../domain/volatility';
 import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf, facilityRowsOf } from '../../../../engine2/tranches';
@@ -49,7 +50,7 @@ import type { InstrumentId, EntityId } from '../../../../domain/ids';
 import { asEntityId } from '../../../../domain/ids';
 import { asTicker } from '../../../../domain/ids';
 import type { Ticker } from '../../../../domain/ids';
-function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
+function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun): void {
   const v2cds = ensureV2(state);
   // §3.13-BOOK (c-then-2/3b): the ONE index — the two-array union it replaces was a strict subset
   // of `updatedCompanies` — and the seat→party crossing built off it once per session.
@@ -221,6 +222,10 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       // THE PRICE. `comp.cdsSpreadBps` was `oas + a random draw`, clamped to [10, 5000]; it is
       // what this book cleared at, with no bound on either end (rule 6).
       issuer.cdsSpreadBps = Number(clearedBps.toFixed(1));
+      // §3.17-ii: the name's print joins its history — what a protection contract's initial
+      // margin is sized from (the spread's own measured move).
+      const hist = reg.cdsSpreadHistoryByIssuer ?? (reg.cdsSpreadHistoryByIssuer = {});
+      hist[issuer.id] = [...(hist[issuer.id] ?? []).slice(-(MEASURE_WINDOW_WEEKS - 1)), issuer.cdsSpreadBps];
       // §5-CLOSE P2: the week this print was struck — a name with no protection book this week
       // carries last print, which is a quote, not a price, and the basis test reads only prices.
       issuer.cdsClearedWeek = ctx.nextWeek;
@@ -256,7 +261,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
           const seller: DerivativeParty = deskBankId !== undefined
             ? bankPartyOf(deskBankId)
             : { kind: 'INSTITUTION', id: asEntityId(participantId) };
-          struck.push({
+          struck.push(withInitialMargin({
             id: `${regionId}-CDS-${issuer.id}-${week}-${seq++}`,
             classId: 'CDS',
             regionId,
@@ -268,11 +273,9 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
             termKey: '',
             // §3.13c: the market it clears in.
             currency: currencyOf(regionId),
-            // §3.17-i: what this strike posts, carried on the contract.
-            initialMarginLocal: initialMarginAtStrike({ classId: 'CDS', notional: Math.round(notional) }),
             struckWeek: week,
             maturityWeek: week + CDS_TENOR_WEEKS,
-          });
+          }, view));
         });
       });
     });

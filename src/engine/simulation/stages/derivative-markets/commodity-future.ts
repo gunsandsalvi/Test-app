@@ -39,7 +39,7 @@ import { exposureToHedgeLocal } from '../corporate-financing';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { postInitialMargin, initialMarginAtStrike } from '../derivative-lifecycle';
+import { postInitialMargin, withInitialMargin } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
@@ -57,7 +57,7 @@ function annualInterestOf(c: Company): number {
   return Math.max(0, c.ebit) / coverage;
 }
 
-function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMarketRun): void {
+function runCommodityFuturesMarket({ state, ctx, week, standing, view }: DerivativeMarketRun): void {
   const firms = ctx.prevActiveFirms.filter(isActiveCompany);
   // §3.13-BOOK (c-then-3b): a `CONS-` seat embeds the consumer's TICKER; a party is its entity id.
   const consumerIdOfTicker = (t: Ticker) => buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities).companyByTicker.get(t)?.id;
@@ -263,7 +263,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
           const size = units * ((s.units * fillShare) / Math.max(1e-9, totalBoughtUnits));
           if (size <= 0.0001) return;
           const sizeUnits = Number(size.toFixed(4));
-          struck.push({
+          struck.push(withInitialMargin({
             id: `${id}-${week}-${seq++}`,
             classId: 'COMMODITY_FUTURE',
             regionId: 'USA',
@@ -277,11 +277,9 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
             settledMarkLocal: 0,
             // §3.13c: commodities are quoted in the numeraire, which is what `regionId: 'USA'` was standing in for.
             currency: NUMERAIRE,
-            // §3.17-i: what this strike posts, carried on the contract.
-            initialMarginLocal: initialMarginAtStrike({ classId: 'COMMODITY_FUTURE', notional: sizeUnits * strike }),
             struckWeek: week,
             maturityWeek: week + Math.round(tenorMonths * (52 / 12)),
-          });
+          }, view));
         });
       });
     });

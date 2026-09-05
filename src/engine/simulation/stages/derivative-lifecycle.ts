@@ -25,7 +25,9 @@ import { bankSecuritiesParty } from '../../../domain/party';
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../domain/derivatives/contract';
 import { DerivativeMarketView } from '../../../domain/derivatives/profile';
-import { derivativeProfile, initialMarginLocal, initialMarginAtStrike } from '../../../domain/derivatives/registry';
+import { derivativeProfile, initialMarginLocal, initialMarginAtStrike, withInitialMargin } from '../../../domain/derivatives/registry';
+import { measuredWeeklyMove, measuredWeeklyBpsMove } from '../../../domain/volatility';
+import { SWAP_TENOR_ZERO_FIELD, SwapTenorKey } from '../../../domain/derivatives/classes/irs';
 import { StandingBook } from '../../../domain/derivatives/standing-book';
 import { WeeklyStepContext } from './context';
 import { buildEntityIndex, companyOfParty } from '../../ledger/entity-index';
@@ -134,6 +136,28 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
       return comm && comm.spotPrice > 0 ? comm.spotPrice : Number.NaN;
     },
     fxToUsd: (r) => ctx.getFxToUsd(r),
+    // §3.17-ii — the reference's own move, off the world's own prints.
+    commodityWeeklyMove: (commodityId) => {
+      const comm = commodityById.get(commodityId);
+      if (!comm) return undefined;
+      // The realised move of its prints; before it has printed enough, the sigma its own path runs on.
+      return measuredWeeklyMove(comm.historicalPrices) ?? (comm.volatility > 0 ? comm.volatility / Math.sqrt(52) : undefined);
+    },
+    fxWeeklyMove: (r) => {
+      if (r === 'USA') return undefined;
+      const pair = ctx.updatedFxPairs.find((p) => (p.base === r && p.quote === 'USA') || (p.base === 'USA' && p.quote === r));
+      return measuredWeeklyMove(pair?.historicalRates);
+    },
+    rateWeeklyMoveBps: (r, termKey) => {
+      const field = SWAP_TENOR_ZERO_FIELD[termKey as SwapTenorKey];
+      const curves = region(r)?.historicalZeroCurves;
+      if (!field || !curves) return undefined;
+      return measuredWeeklyBpsMove(curves.map((z) => z[field] * 10000));
+    },
+    cdsSpreadWeeklyMoveBps: (issuerId) => {
+      const c = companyById.get(issuerId);
+      return measuredWeeklyBpsMove(c ? region(c.region)?.cdsSpreadHistoryByIssuer?.[issuerId] : undefined);
+    },
   };
 }
 
@@ -278,6 +302,6 @@ export function settleDerivativeClass(
   return net;
 }
 
-// §3.13-BOOK d5c / §3.17-i: the margin a contract carries (`registry.ts:initialMarginLocal`), and
-// what a strike posts (`initialMarginAtStrike`).
-export { initialMarginLocal, initialMarginAtStrike };
+// §3.13-BOOK d5c / §3.17-i, ii: the margin a contract carries (`registry.ts:initialMarginLocal`),
+// and what a strike posts (`initialMarginAtStrike`, `withInitialMargin`).
+export { initialMarginLocal, initialMarginAtStrike, withInitialMargin };

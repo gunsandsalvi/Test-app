@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { DerivativeContract, DerivativeReference, standingCoverLocal, standingCoverUnits, derivativePartyKey }
   from '../src/domain/derivatives/contract';
 import { DerivativeMarketView } from '../src/domain/derivatives/profile';
-import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, standingPfeChargeLocal, DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM }
+import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, standingPfeChargeLocal, DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM, initialMarginAtStrike }
   from '../src/domain/derivatives/registry';
 import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivatives/hedging';
 import { StandingBook } from '../src/domain/derivatives/standing-book';
@@ -29,6 +29,10 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
   commodityPrint: () => 110,
   commoditySpot: () => 105,
   fxToUsd: () => 1.1,
+  commodityWeeklyMove: () => 0.04,
+  fxWeeklyMove: () => 0.015,
+  rateWeeklyMoveBps: () => 12,
+  cdsSpreadWeeklyMoveBps: () => 20,
   ...over,
 });
 
@@ -139,7 +143,8 @@ test('every registered class states both roles and admissible facts — the comp
   for (const p of Object.values(DERIVATIVE_CLASSES)) {
     assert.ok(p.roleA && p.roleB);
     assert.ok(p.pfeAddOnRate > 0 && p.pfeAddOnRate < 1);
-    assert.ok(p.initialMarginRate >= 0 && p.initialMarginRate < 1);
+    const move = p.closeOutMoveOf(base({ classId: p.id, reference: referenceFor(p.id) }), view());
+    assert.ok(move !== undefined && move > 0 && move < 1, `${p.id}: the reference's move sizes its margin`);
     const marks = p.markToMarketUSDToA(base({ classId: p.id, units: 1, reference: referenceFor(p.id), settledMarkLocal: 0 }), view()) !== null;
     const periodic = p.periodicLegUSDToB(base({ classId: p.id }), view()) !== null;
     assert.ok(marks !== periodic, `${p.id}: exactly one leg family`);
@@ -197,4 +202,18 @@ test('§3.13-BOOK d4a: a contract party is keyed the way the ledger keys every p
   assert.equal(derivativePartyKey(bank), partyKey(bank));
   assert.equal(derivativePartyKey(inst), partyKey(inst));
   assert.equal(derivativePartyKey(comp), partyKey(comp));
+});
+
+test('§3.17-ii: initial margin is the reference\'s own move over a session, on the notional — and rises with it', () => {
+  const swap = base({ classId: 'IRS', struckWeek: 10, maturityWeek: 10 + 5 * 52 });
+  // 12bp a week on five years of remaining life, on 1M.
+  assert.ok(Math.abs(initialMarginAtStrike(swap, view()) - 1_000_000 * (12 / 10000) * 5) < 1e-6);
+  const cds = base({ classId: 'CDS', reference: referenceFor('CDS'), struckWeek: 10, maturityWeek: 10 + 5 * 52 });
+  assert.ok(Math.abs(initialMarginAtStrike(cds, view()) - 1_000_000 * (20 / 10000) * 5) < 1e-6);
+  const fut = base({ classId: 'COMMODITY_FUTURE', reference: referenceFor('COMMODITY_FUTURE'), units: 1 });
+  assert.ok(Math.abs(initialMarginAtStrike(fut, view()) - 1_000_000 * 0.04) < 1e-6);
+  const fwd = base({ classId: 'FX_FORWARD', reference: referenceFor('FX_FORWARD') });
+  assert.ok(Math.abs(initialMarginAtStrike(fwd, view()) - 1_000_000 * 0.015) < 1e-6);
+  assert.ok(initialMarginAtStrike(fwd, view({ fxWeeklyMove: () => 0.03 })) > initialMarginAtStrike(fwd, view()), 'D5: margin rises when the move rises');
+  assert.equal(initialMarginAtStrike(fwd, view({ fxWeeklyMove: () => undefined })), 0, 'a first print has no move to measure, and posts nothing');
 });

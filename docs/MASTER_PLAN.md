@@ -548,18 +548,8 @@ written from here):
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
 17. **Derivatives are centrally cleared, and margin is risk-based** (user) — split 2026-09-05,
-    one commit each; 17-i (the margin a contract carries is the amount posted, a fact of the
-    contract, posted through one path) is in §9. What is left, in order:
-17-ii. **INITIAL MARGIN IS THE REFERENCE'S OWN MOVE.** `initialMarginRate` is a flat stated
-    number per class — 0 for CDS, IRS and commodity futures, 0.02 for FX forwards — so three
-    classes are uncollateralised and the fourth charges every ticket the same 2%. **Margin must
-    not be a stated shape** (user, rule 2): initial margin covers the move a position can make
-    before it can be closed — the reference's own realised volatility over a close-out horizon
-    of one session (the model's clock), on the notional. Each class profile states where its
-    reference's history is: a commodity's own `volatility` and prints, a pair's `historicalRates`,
-    a tenor's par-rate prints and an issuer's spread prints (two rings the swap and CDS books
-    must start keeping). `initialMarginRate` is deleted. D5 follows: margin rises when volatility
-    rises.
+    one commit each; 17-i (the margin a contract carries is the amount posted) and 17-ii
+    (initial margin is the reference's own move) are in §9. What is left, in order:
 17-iii. **VARIATION MARGIN IS THE MARK, FOR EVERY CLASS.** IRS and CDS carry no mark, so half the
     book pays no variation margin and A4/D2.b cannot be measured: give the two rate-leg classes
     a mark (the swap's fixed-versus-par value over its remaining life; the CDS's spread change on
@@ -1642,6 +1632,23 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17-ii — INITIAL MARGIN IS THE REFERENCE'S OWN MOVE.** `initialMarginRate` — 0 for IRS, CDS and
+commodity futures, 0.02 for every FX forward — is deleted. A class profile states
+`closeOutMoveOf(c, view)`: the move the position can make over one session (the model's clock is
+the close-out horizon), as a fraction of notional, off the world's own prints
+(`domain/volatility.ts`): a commodity's realised weekly move on its prints (its own path's sigma
+before it has printed enough), a pair's realised weekly move on its `historicalRates`, a swap
+tenor's rate move in bps off the region's `historicalZeroCurves` on the swap's remaining life, a
+name's protection-spread move in bps on the protection's remaining life — off a print ring the
+CDS book now keeps per name (`Region.cdsSpreadHistoryByIssuer`, `MEASURE_WINDOW_WEEKS` deep).
+`registry.ts:initialMarginAtStrike(c, view)` is notional × that move, `withInitialMargin` wraps
+what the four markets write, and the market view carries the four measures. A reference on its
+first print has no move to measure and posts nothing — F2's stated reason, not a rate. D5 rises
+for a new contract as volatility rises; a live contract is margined once, at strike, until the
+CCP (17-iv) calls it daily. Atlas D1 ✅, D5 and F2 ⚠️, `derivative.md` D9 re-cited.
+`test/derivatives.test.ts`: each class's margin is its move on the notional, it rises with the
+move, and no move posts nothing. Gates green; no run.
 
 **17-i — THE MARGIN A CONTRACT CARRIES IS WHAT WAS POSTED.** `initialMarginLocal(c)` re-derived
 every contract's margin from its class's stated rate on every read — the lien on the dealer's

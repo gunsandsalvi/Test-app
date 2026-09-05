@@ -42,7 +42,7 @@ import { leverageHeadroomLocal } from '../../../macro/banking';
 import { fxWeeklySigma } from '../../../../domain/fx-market';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
-import { initialMarginLocal, initialMarginAtStrike, postInitialMargin } from '../derivative-lifecycle';
+import { initialMarginLocal, withInitialMargin, postInitialMargin } from '../derivative-lifecycle';
 import { derivativesBookOf, strikeDerivatives, tradeInvoicesOf } from '../../../ledger/contract-ledger';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { cashOf, bankReservesOf, partyLienLocal } from '../../../ledger/accounts';
@@ -125,7 +125,7 @@ interface DeskState {
 
 const deskCapacityLocal = (d: DeskState) => deskNotionalCapacityLocal(d.headroomLocal, d.chargedPfeLocal, 'FX_FORWARD');
 
-function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: DerivativeMarketRun): void {
+function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty, view }: DerivativeMarketRun): void {
   const book = derivativesBookOf(ctx);
 
   // Every dealer's desk, opened at what its LIVE book leaves it — contracts that matured released
@@ -348,7 +348,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       const writableLocal = Math.min(gapLocal, filledLocal, deskCapacityLocal(desk));
       if (writableLocal <= 1e6) return;
       const basisBps = clearedBasisBps.get(bookKey(holderRegion, issuer)) ?? 0;
-      const contract: DerivativeContract = {
+      const contract: DerivativeContract = withInitialMargin({
         id: `${holderKey}-FX-${issuer}-${week}`,
         classId: 'FX_FORWARD',
         regionId: holderRegion,
@@ -365,11 +365,9 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         settledMarkLocal: 0,
         // §3.13c: the holder settles in its own money.
         currency: currencyOf(holderRegion),
-        // §3.17-i: what this strike posts, carried on the contract.
-        initialMarginLocal: initialMarginAtStrike({ classId: 'FX_FORWARD', notional: writableLocal }),
         struckWeek: week,
         maturityWeek: week + FX_FORWARD_TENOR_WEEKS,
-      };
+      }, view);
       const marginLocal = initialMarginLocal(contract);
       if (marginLocal > budgetLocal) return;
       budgetLocal -= marginLocal;

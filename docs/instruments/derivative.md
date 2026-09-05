@@ -90,7 +90,7 @@ checked by `scripts/check-atlas.sh`. The three FORBIDs of **WHAT A DERIVATIVE IS
 | **D7.b struck at par: the price IS the rate, out of a mechanism** | `src/engine/simulation/stages/derivative-markets/irs.ts:runSwapMarket` | ✅ |
 | D8 a mark after inception, which moves and is not zero | `src/domain/derivatives/profile.ts:markToMarketUSDToA` | ⚠️ |
 | D8.a the mark is a real gain to one and a real loss to the other | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ✅ |
-| D9 collateral and margin | `src/domain/derivatives/profile.ts:initialMarginRate` | ⚠️ |
+| D9 collateral and margin | `src/domain/derivatives/registry.ts:initialMarginAtStrike` | ⚠️ |
 | D9.a posted collateral leaves the poster's free balance | `src/engine/simulation/stages/derivative-lifecycle.ts:initialMarginLocal` | ✅ |
 | D10 counterparty credit: the other side can fail first | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` | ✅ |
 | D10.a who you face is part of what the contract is worth | — | ❌ |
@@ -144,8 +144,9 @@ checked* are different claims, and the second is what D1.b asks for.
 inception and termination: it pays its periodic leg and is otherwise worth zero to both sides
 until somebody dies. So D8 is `⚠️` and D1.b has nothing to sum over for two of the four classes.
 
-The missing marks and margin are **Already §3 step 17** (which names `initialMarginRate` 0 for
-CDS, IRS and futures and requires variation margin to be the mark). The missing measurement is
+The missing marks are **Already §3 step 17** (17-iii: variation margin is the mark for every
+class; §9.17-ii already sizes initial margin from the reference's own move, so no class posts a
+stated rate). The missing measurement is
 **A measurement, for §3 step 38** — it is the one number that tells a derivative from a security
 and no read produces it.
 

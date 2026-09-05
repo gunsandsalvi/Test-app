@@ -53,8 +53,10 @@ export const FX_FORWARD_PROFILE: DerivativeClassProfile = {
   roleB: 'DEALER',
   // Basel CEM FX add-on, sub-year — the number the FX desk's capacity always charged.
   pfeAddOnRate: 0.02,
-  /** Initial margin is real cash: the client's money sitting with the desk (XB2b). */
-  initialMarginRate: 0.02,
+  /** §3.17-ii: the pair's own weekly move, on the notional — a forward marks one for one. The
+   *  flat 2% every ticket used to post (XB2b) is gone; the client's money with the desk is now
+   *  what the currency can move in a session. */
+  closeOutMoveOf: (c, m) => m.fxWeeklyMove(regionReferenceOf(c)),
   periodicLegUSDToB: () => null,
   /** A holder short the foreign currency gains when it FALLS — the assets it is hedging lost
    *  the same amount. The desk carries the mirror, so the pair nets to zero by construction. */

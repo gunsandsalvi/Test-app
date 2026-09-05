@@ -111,20 +111,20 @@ checked by `scripts/check-atlas.sh`.
 | **C4 a stated default waterfall, in order** | — | ❌ |
 | C4.a a member's loss can come from another member's default | — | ❌ |
 | **C5 FORBID the CCP is not a guarantor of last resort** | — | ❌ |
-| D1 initial margin, sized from the risk of the position | `src/domain/derivatives/registry.ts:initialMarginAtStrike` | ⚠️ |
+| D1 initial margin, sized from the risk of the position | `src/domain/derivatives/registry.ts:initialMarginAtStrike` | ✅ |
 | **D2 variation margin: the change in the mark, in cash, every period** | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ⚠️ |
 | D2.a real money leaving one account and arriving in another | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
 | **D2.b VERIFY Σ VM paid = Σ received, every period** | — | ❌ |
 | D3 margin is held, not consumed; the poster gets it back | `src/engine/ledger/accounts.ts:setAccountLien` · `src/engine/simulation/stages/derivative-lifecycle.ts:releaseInitialMargin` | ✅ |
 | D4 a margin call must be met or the position is closed out | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
 | D4.a meeting it may force a sale | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageCloseSweep` | ⚠️ |
-| D5 margin rises when volatility rises — procyclical, measured | — | ❌ |
+| D5 margin rises when volatility rises — procyclical, measured | `src/domain/derivatives/profile.ts:closeOutMoveOf` | ⚠️ |
 | E1 a party can fail with open positions | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` | ✅ |
 | E2 closed out at a stated value; a claim on the estate | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ⚠️ |
 | E3 the loss is the mark less collateral, on named survivors | `src/domain/derivatives/profile.ts:closeOutUSDToB` | ⚠️ |
 | E4 VERIFY the loss chain is traceable party by party | — | ❌ |
 | F1 FORBID no position without a counterparty | `src/engine/audit/ownership.ts:o5` | ⚠️ |
-| F2 FORBID no exposure without margin or a stated reason | `src/domain/derivatives/profile.ts:initialMarginRate` | ⚠️ |
+| F2 FORBID no exposure without margin or a stated reason | `src/domain/derivatives/profile.ts:closeOutMoveOf` | ⚠️ |
 | **F3 FORBID no netting across counterparties** | `src/domain/derivatives/registry.ts:standingPfeChargeLocal` | ✅ |
 | F4 FORBID nothing settles against a price this world does not clear | `src/engine/macro/evolution.ts:evolveCommodity` | ⚠️ |
 
@@ -204,14 +204,20 @@ The missing marks are **Already §3 step 17**. The missing measurement is
 **a measurement, for §3 step 38**: A4 and D2.b are the layer's own audit family and nothing
 produces either number.
 
-### ⚠️ D1 / F2 / ❌ D5 — MARGIN IS A STATED RATE, SO IT CANNOT RISE WHEN IT MATTERS
+### ✅ D1 / ⚠️ F2 / ⚠️ D5 — MARGIN IS THE REFERENCE'S OWN MOVE, AT STRIKE
 
-*2026-09-05 (§9.17-i): the margin a contract carries is now the amount POSTED at strike, a fact
-of the contract (`contract.ts:initialMarginLocal`, a column of the obligation store), posted
-through one path for every class (`derivative-lifecycle.ts:postInitialMargin`) and read — never
-re-derived — by the lien, the audit and the release. What a strike posts is still the class's
-stated rate (`registry.ts:initialMarginAtStrike`); §3.17-ii sizes it from the reference's own
-move, which is what this section is about.*
+*2026-09-05 (§9.17-i, ii). The margin a contract carries is the amount POSTED at strike, a fact of
+the contract (`contract.ts:initialMarginLocal`, a column of the obligation store), posted through
+one path for every class (`derivative-lifecycle.ts:postInitialMargin`) and read — never
+re-derived — by the lien, the audit and the release. What a strike posts is the reference's own
+measured move over one session on the contract's sensitivity to it
+(`profile.ts:closeOutMoveOf`: a commodity's or a pair's realised weekly move on the notional, a
+tenor's rate move in bps on a swap's remaining life, a name's spread move on the protection's
+remaining life — the CDS book now keeps each name's print history for it), so `initialMarginRate`
+is gone and no class posts a stated rate. What remains: a contract is margined once, at strike —
+D5 rises for NEW contracts as volatility rises, but a live contract is never re-margined (17-iv,
+the CCP, is where a daily call belongs); and a reference on its first print posts nothing, which
+is F2's stated reason rather than a rate.*
 
 `profile.ts:initialMarginRate` is a flat per-class constant: `0` for IRS, CDS and commodity
 futures, `0.02` for FX forwards (`classes/*.ts`). Nothing reads volatility, a close-out horizon or

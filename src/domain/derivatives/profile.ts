@@ -39,6 +39,17 @@ export interface DerivativeMarketView {
   /** Spot for a commodity; NaN when the commodity no longer exists. */
   commoditySpot(commodityId: string): number;
   fxToUsd(regionId: RegionId): number;
+  // §3.17-ii — THE REFERENCE'S OWN MOVE over one session, measured off the world's own prints
+  // (`domain/volatility.ts`); undefined while there is nothing to measure. Initial margin is
+  // sized from these and nothing else.
+  /** A commodity's weekly move as a fraction of its level. */
+  commodityWeeklyMove(commodityId: string): number | undefined;
+  /** A pair's weekly move as a fraction of the rate, for the region's currency against the numéraire. */
+  fxWeeklyMove(regionId: RegionId): number | undefined;
+  /** The weekly move of the region's rate at a swap tenor, in bps. */
+  rateWeeklyMoveBps(regionId: RegionId, termKey: string): number | undefined;
+  /** The weekly move of an issuer's protection spread, in bps. */
+  cdsSpreadWeeklyMoveBps(issuerId: EntityId): number | undefined;
 }
 
 export interface DerivativeLeg {
@@ -61,9 +72,14 @@ export interface DerivativeClassProfile {
    *  credit-derivative row) states it here; the flat rate above is the class's default and its
    *  capacity denominator. */
   pfeAddOnRateFor?(c: DerivativeContract, isInvestmentGrade: boolean): number;
-  /** Initial margin the A side posts to the B side at inception. 0 = uncollateralized today;
-   *  turning margin on for a class is this one number, because the strike path is shared. */
-  initialMarginRate: number;
+  /**
+   * §3.17-ii — THE MOVE A POSITION CAN MAKE BEFORE IT CAN BE CLOSED, as a fraction of notional:
+   * the reference's own measured move over one session (the model's clock is the close-out
+   * horizon), on the contract's own sensitivity to it. Initial margin is notional × this
+   * (`registry.ts:initialMarginAtStrike`). Undefined while the reference has no move to measure
+   * — a first print — and then nothing is posted, which is a stated reason (F2), not a rate.
+   */
+  closeOutMoveOf(c: DerivativeContract, m: DerivativeMarketView): number | undefined;
   /** The week's periodic exchange on a live contract, signed to B. Null for mark-leg classes. */
   periodicLegUSDToB(c: DerivativeContract, m: DerivativeMarketView): DerivativeLeg | null;
   /**
