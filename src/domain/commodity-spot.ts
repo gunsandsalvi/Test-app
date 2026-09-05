@@ -50,7 +50,16 @@ export interface WorldPrint {
  * is not yet part of its identity), so the price is every origin's gate price in the numéraire,
  * weighted by the units that origin supplied; the quantities are the auction's own.
  */
-export function worldPrintOf(subUnitId: string, regions: Record<RegionId, Region>, fxToUsd: FxToUsd): WorldPrint {
+export function worldPrintOf(
+  subUnitId: string, regions: Record<RegionId, Region>, fxToUsd: FxToUsd,
+  /**
+   * §3.13-INV-iii — WHAT THAT REGION'S AUCTION LAST CLEARED THIS GOOD AT, ex-works. Handed in
+   * rather than read: the print lives in the world's price store and no file under `domain/`
+   * imports `engine2/` (none does, and this is not the one to start). The weekly caller reads the
+   * store; the seed, where no auction has run, reads its own opening price and says so.
+   */
+  exWorksPriceOf: (region: RegionId, subUnitId: string) => number | undefined,
+): WorldPrint {
   let valueUsd = 0;
   let suppliedUnits = 0;
   let demandedUnits = 0;
@@ -60,7 +69,7 @@ export function worldPrintOf(subUnitId: string, regions: Record<RegionId, Region
     demandedUnits += cd.totalUnitsDemandedThisWeek ?? 0;
     const units = cd.totalUnitsSuppliedThisWeek ?? 0;
     if (!(units > 0)) return;
-    const priceLocal = cd.exWorksUnitPriceLocal;
+    const priceLocal = exWorksPriceOf(r, subUnitId);
     if (!(priceLocal !== undefined && priceLocal > 0)) {
       return defect(`${r} ${subUnitId} supplied ${units.toFixed(1)} units with no ex-works price`);
     }
@@ -76,8 +85,11 @@ export function worldPrintOf(subUnitId: string, regions: Record<RegionId, Region
  * together: the marginal producer's cost per unit (`getCommodityBaseSpotPrice`, the seed level,
  * NAT1) against the sub-unit's seed print. Bushels per tonne, stated once and never rewritten.
  */
-export function goodsUnitsPerCommodityUnitOf(seedSpotUsd: number, subUnitId: string, regions: Record<RegionId, Region>, fxToUsd: FxToUsd): number {
-  const print = worldPrintOf(subUnitId, regions, fxToUsd);
+export function goodsUnitsPerCommodityUnitOf(
+  seedSpotUsd: number, subUnitId: string, regions: Record<RegionId, Region>, fxToUsd: FxToUsd,
+  exWorksPriceOf: (region: RegionId, subUnitId: string) => number | undefined,
+): number {
+  const print = worldPrintOf(subUnitId, regions, fxToUsd, exWorksPriceOf);
   if (print.priceUsdPerUnit === undefined || !(seedSpotUsd > 0)) {
     return defect(`${subUnitId} has no seed print to state a commodity unit against`);
   }
@@ -90,11 +102,14 @@ export function goodsUnitsPerCommodityUnitOf(seedSpotUsd: number, subUnitId: str
  * about this week is a read; nothing here moves a price. When no origin supplied a unit the
  * last print carries, unchanged (§3.21: a bracket — or a blank — is never a print).
  */
-export function markCommodityToAuction(comm: Commodity, regions: Record<RegionId, Region>, fxToUsd: FxToUsd): Commodity {
+export function markCommodityToAuction(
+  comm: Commodity, regions: Record<RegionId, Region>, fxToUsd: FxToUsd,
+  exWorksPriceOf: (region: RegionId, subUnitId: string) => number | undefined,
+): Commodity {
   const linkage = commodityLinkageOf(comm.id, comm.symbol);
   const g = comm.goodsUnitsPerUnit;
   if (!(g > 0)) return defect(`commodity ${comm.id} states no unit against ${linkage.subUnitId}`);
-  const print = worldPrintOf(linkage.subUnitId, regions, fxToUsd);
+  const print = worldPrintOf(linkage.subUnitId, regions, fxToUsd, exWorksPriceOf);
   const spotPrice = print.priceUsdPerUnit === undefined ? comm.spotPrice : Number((print.priceUsdPerUnit * g).toFixed(2));
   const weeklySupplyUnits = (print.suppliedUnits * linkage.intensityShare) / g;
   const weeklyDemandUnits = (print.demandedUnits * linkage.intensityShare) / g;

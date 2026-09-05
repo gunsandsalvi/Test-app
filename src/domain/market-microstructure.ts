@@ -79,7 +79,6 @@ export interface CategoryDemandState {
    *  price levels (ex-works → landed `unitPriceLocal` → `shelfUnitPriceLocal`). Written by stage 05.
    *  §3.22: read by `domain/commodity-spot.ts` — a commodity's spot is this price, weighted by the
    *  units each origin supplied, in the numéraire. */
-  exWorksUnitPriceLocal?: number;
   /** §3.27-iii-c-ii — the cheapest landed ALTERNATIVE the sourcing intent saw for this buyer once
    *  its need was met: the next origin still holding stock, at its ex-works in the buyer's money
    *  plus the lane's freight per unit plus the pipeline's carry over the transit
@@ -116,7 +115,6 @@ export function createSeedCategoryDemandState(
     smoothedUnitPriceLocal: unitPriceLocal,
     // §3.22: the gate price opens where the books do, so the commodity's seed print is a read of
     // the same field every later week reads.
-    exWorksUnitPriceLocal: unitPriceLocal,
     // XB3a-3: the week's real quantities, which the sourcing intent reads to decide where to buy
     // and how much freight to book. Seeded at the bootstrap demand a week represents, so the
     // opening week forms an intent against the same observables every later week does (§7.4).

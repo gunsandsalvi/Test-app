@@ -1,5 +1,6 @@
 
 import { profileKeyOf } from './stages/profiles';
+import { setClearedPrice } from '../../engine2/prices';
 import { writePlantRows, seedPlantOf } from '../ledger/plant-ledger';
 import { plantNetLocal } from '../../domain/plant';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
@@ -122,7 +123,7 @@ import { decomposeGovernmentSpending, governmentObligationsWeeklyLocal } from '.
 import { marketCapOf, totalDebtOf } from '../../domain/company';
 import { computeExpenditureGdpLocal, GOV_PROCUREMENT_SHARE_OF_SPENDING, computeHouseholdDisposableIncomeLocal, UNEMPLOYMENT_REPLACEMENT_RATE } from '../bootstrap/national-accounts';
 import { seedInstitutionTotalAssetsLocal } from '../../domain/institutions';
-import { equityInstrumentId, peFundInterestId, equityIssuerId } from '../../domain/instrument-keys';
+import { equityInstrumentId, peFundInterestId, equityIssuerId, goodsInstrumentId } from '../../domain/instrument-keys';
 import type { InstrumentId } from '../../domain/ids';
 import { governmentIssuer, indexFundEntityId, moneyFundEntityId, peFundEntityId } from '../../domain/entity-keys';
 import type { Ticker } from '../../domain/ids';
@@ -515,6 +516,16 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   // are worth rather than from one spread per borrower.
   seedOpeningAccruals(state.regions, state.companies, state.institutionalEntities, seedV2, 1);
   seedOpeningCreditPrices(state.regions, state.companies, seedV2, 1);
+  // §3.13-INV-iii — AND THE OPENING GOODS PRINTS. Every category a region carries opens at the
+  // price the seed stated it at, in the one store a price lives in, so week 1 reads a print
+  // rather than an absence: the ex-works field this replaces was seeded by the category's own
+  // constructor and was therefore never missing.
+  REGION_IDS.forEach((regionId) => {
+    Object.entries(state.regions[regionId].categoryDemand).forEach(([subUnitId, d]) => {
+      const priceLocal = d?.unitPriceLocal;
+      if (priceLocal !== undefined && priceLocal > 0) setClearedPrice(seedV2, goodsInstrumentId(regionId, subUnitId), priceLocal);
+    });
+  });
   projectSeededSectorViews(state);
   // §5-STRUCT step 6 — OFF unless asked for. Burn-in hands back a world the ENGINE produced rather
   // than one this function asserted, which is the end state for every §7.4 defect. It changes every

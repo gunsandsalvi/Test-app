@@ -119,7 +119,7 @@ checked by `scripts/check-atlas.sh`.
 
 *2026-09-05 (§9.22). The walk is deleted. `domain/commodity-spot.ts:markCommodityToAuction` sets
 `spotPrice` to the linked sub-unit's world print — every origin's ex-works cleared price
-(`exWorksUnitPriceLocal`, given its first reader) in the numéraire, weighted by the units that
+(the price store's own print since §9.13-INV-iii) in the numéraire, weighted by the units that
 origin supplied — times the commodity's own unit against the sub-unit's (`goodsUnitsPerUnit`, rule
 8, fixed at the seed where the marginal producer's cost per unit meets the sub-unit's seed print).
 `weeklySupplyUnits` and `weeklyDemandUnits` are the auction's own supplied and demanded units in

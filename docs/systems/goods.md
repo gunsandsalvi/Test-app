@@ -249,7 +249,7 @@ recipe). So:
   shock does to a firm.
 
 The inputs for a real PPI are all present and already measured per sub-unit:
-`demandState.exWorksUnitPriceLocal` (05-unit-bidding:2306) is the factory gate, and
+the region's ex-works print in the price store (§9.13-INV-iii) is the factory gate, and
 `totalUnitsSuppliedThisWeek` is the production weight. **§3 step 37-BENCHMARK** — small.
 
 ### ⚠️ B4 / ❌ B1.d / ⚠️ E4 — THREE THINGS THAT (MOSTLY) NEVER HAPPEN TO A UNIT

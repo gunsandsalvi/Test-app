@@ -196,7 +196,8 @@ gap).
 ### ❌ D5 — ONE VERIFY NODE NOBODY READS
 
 Nothing compares a good's price gap between two regions against that lane's cleared freight rate.
-Both numbers exist per week — `categoryDemand[sub].exWorksUnitPriceLocal` per region and
+Both numbers exist per week — the region's ex-works print in the price store (§9.13-INV-iii,
+`instrument-keys.ts:goodsInstrumentId`) and
 `freightRatePerTonneLaneMoneyByLane[lane]` — so this is a division and a print.
 **A measurement, for §3 step 38**, and it is the read that would show whether E2's missing
 rationing is biting once it exists.

@@ -8,6 +8,9 @@ import { REGION_IDS, type RegionId } from '../../domain/geography';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../domain/market-microstructure';
 import { INDUSTRY_REGISTRY, industryOfSubUnit } from '../../domain/industry-registry';
 import { categoryPriceTier } from '../../domain/industry';
+import { goodsInstrumentId } from '../../domain/instrument-keys';
+import { clearedPriceOf } from '../../engine2/prices';
+import { ensureV2 } from '../../engine2/world';
 import { isActiveCompany } from '../../domain/company';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, taped, words } from './common';
 
@@ -112,7 +115,7 @@ export const market = defineObject<Market>({
           <KV k="who buys" hint="hh · firms · gov" v={mix ? `${pctLevel(mix.HOUSEHOLD, 0)} · ${pctLevel(mix.CORPORATE, 0)} · ${pctLevel(mix.GOVERNMENT, 0)}` : '—'} />
           <KV k="household spend" hint="annualised" v={money(d.householdDemandLocal)} />
           <KV k="corporate spend" hint="annualised" v={money(d.corporateDemandLocal)} />
-          <KV k="ex-works price" hint="before freight" v={num(d.exWorksUnitPriceLocal)} />
+          <KV k="ex-works price" hint="before freight" v={num(clearedPriceOf(ensureV2(world.state), goodsInstrumentId(m.region as RegionId, m.subUnitId)))} />
           <KV k="input prices" hint="vs seed, recipe-weighted" v={inputPriceIndex !== undefined ? num(inputPriceIndex, 2) : '—'} />
           <KV k="named sellers" v={count(sellers.length)} onTap={() => nav.go('sellers')} />
         </Card>

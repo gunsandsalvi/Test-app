@@ -175,3 +175,13 @@ export const birthFacilityTrancheId = (companyId: string, week: number): Instrum
 /** §3.20b — the interbank unsecured book on one borrowing bank's NAME: one instrument per borrower. */
 export const interbankInstrumentId = (regionId: RegionId, borrowerId: string): InstrumentId =>
   asInstrumentId(`INTERBANK:${regionId}:${borrowerId}`);
+
+/**
+ * §3.13-INV-iii — A REGION'S MARKET IN ONE GOOD. Step 13's item 3: the goods auction computes the
+ * price it needs and throws it away, so nothing can re-mark a warehouse the week after. This is
+ * where that print lives — one instrument per `region|subUnit`, because a good clears in each
+ * region's own market at its own price, and the EX-WORKS price is the one the auction strikes
+ * (a landed price is that plus a lane's freight, and a shelf price is that plus the channel).
+ */
+export const goodsInstrumentId = (region: RegionId, subUnitId: string): InstrumentId =>
+  asInstrumentId(`GOODS:${region}:${subUnitId}`);

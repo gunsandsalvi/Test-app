@@ -405,11 +405,6 @@ written from here):
     earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
     all). Seven slices, in this order, because each one is load-bearing for the next:
 
-    iii. **THE GOODS PRICE IS STORED** — step 13's item 3, *the cheapest half of the whole step*.
-       The auction's cleared price per `region|subUnit` goes in `v2.prices` (whose own header
-       already names `setOutputStock` as the same defect one asset class over); the region's
-       `exWorksUnitPriceLocal` and stage 05's anchor become reads of it. Nothing can re-mark a
-       warehouse next week until the price outlives the week that made it.
     iv. **WHAT A UNIT COST TO MAKE IS AN HONEST NUMBER.** The pipeline books the whole line's
        weekly operating cost against that week's batch, so a throttled week inflates the unit cost
        and a zero-unit week makes it INFINITE; the weather's yield loss shrinks `arrivedUnits` and
@@ -1231,6 +1226,28 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-iii — THE GOODS PRICE IS STORED, AND STEP 13'S ITEM 3 IS CLOSED.** *"The goods auction
+  already computes the price it needs and discards it. It has to be stored per `region|subUnit|week`
+  — the cheapest half of the whole step."* It was a FIELD on the region's demand state
+  (`exWorksUnitPriceLocal`), which is the same defect the price store's own header names one asset
+  class over: a number that valued a warehouse did not outlive the week that made it, so nothing
+  could re-mark the stock the week after. A region's market in one good is an INSTRUMENT now —
+  `instrument-keys.ts:goodsInstrumentId`, one per `region|subUnit`, because a good clears in each
+  region's own market at its own price — and stage 05 deposits its ex-works print through
+  `setClearedPrice` like every other auction in the model. The seed deposits the opening print
+  where the books open, so week 1 reads a price rather than an absence (the field it replaces was
+  written by the category's own constructor and was therefore never missing — the kind of thing
+  that only shows up when the field goes). The field is deleted and its readers take the store: the
+  commodity world print, the market panel, and the category trace.
+  **The layering held.** `worldPrintOf` and `markCommodityToAuction` live under `domain/`, and NO
+  file under `domain/` imports `engine2/` — nought out of ninety — so the print crosses as a lookup
+  the caller supplies rather than as an import: the weekly caller reads the store, and the seed,
+  where no auction has run, reads its own stated opening price and says so at the call site. Pinned
+  in `test/commodity-spot.test.ts` (two regions clear the same good at their own prices, an absent
+  print is an absence and not a zero, and last week's stays where a weekly move can be read off
+  it). Atlas: the freight, goods and commodities-spot trees cite the store instead of the field.
+  Gates green; no run (rule 11).
 
 **13-INV-ii-c — THE DEAD LANE GOES, AND THE TWO CORES ARE HELD IN STEP BY A CHECK.** The real
   finding was not the lane. `native/kernels.c` is a hand-written mirror of the JS front core and

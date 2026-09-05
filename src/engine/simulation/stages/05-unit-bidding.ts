@@ -20,6 +20,8 @@
  */
 
 import { moveDwellings } from '../../ledger/dwelling-ledger';
+import { goodsInstrumentId } from '../../../domain/instrument-keys';
+import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
 import { arrivePlant, plantVintagesOf } from '../../ledger/plant-ledger';
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
 import { bookTradeInvoices } from '../../ledger/contract-ledger';
@@ -2412,7 +2414,10 @@ function runSubUnitMarkets(
   MARKET_REGION_IDS.forEach(regionId => {
     const demandState = ctx.updatedRegions[regionId].categoryDemand[subUnitId];
     if (!demandState) return;
-    demandState.exWorksUnitPriceLocal = roundN(results[regionId].clearedPriceLocal, 1e2);
+    // §3.13-INV-iii — THE AUCTION'S PRINT, in the one store a price lives in. It used to be a
+    // field on the demand state, so the number that valued a warehouse did not outlive the week
+    // that made it (step 13's item 3).
+    setClearedPrice(ctx.v2, goodsInstrumentId(regionId, subUnitId), roundN(results[regionId].clearedPriceLocal, 1e2));
     demandState.unitPriceLocal = roundN(publishedPrice[regionId], 1e2);
     // The category's own price, one entry per week, so a firm's real output growth can
     // be deflated by the price of what IT sells over the SAME window (rule 8 twice over: the
@@ -2438,7 +2443,7 @@ function runSubUnitMarkets(
     // CAT_TRACE=<subUnitId> — one category's weekly price and fill, per region (probe).
     if (process.env.CAT_TRACE === subUnitId) {
       console.log(`  [cat] ${subUnitId} ${regionId} price ${demandState.unitPriceLocal}`
-        + ` (exw ${demandState.exWorksUnitPriceLocal}) supplied ${Math.round(demandState.totalUnitsSuppliedThisWeek)}`
+        + ` (exw ${clearedPriceOf(ctx.v2, goodsInstrumentId(regionId, subUnitId))}) supplied ${Math.round(demandState.totalUnitsSuppliedThisWeek)}`
         + ` / demanded ${Math.round(demandState.totalUnitsDemandedThisWeek)}`);
     }
     const landedPrice = demandState.unitPriceLocal ?? 0;

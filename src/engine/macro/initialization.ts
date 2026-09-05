@@ -804,8 +804,11 @@ export function getInitialCommodities(regions: Record<RegionId, Region>, fxToUsd
       supplyDemandBalance: 'Balanced' as const,
       inventoryLevelPct: 48,
       allTimeBaselinePrice: spotPrice,
-      goodsUnitsPerUnit: goodsUnitsPerCommodityUnitOf(spotPrice, linkage.subUnitId, regions, fxToUsd),
+      goodsUnitsPerUnit: goodsUnitsPerCommodityUnitOf(spotPrice, linkage.subUnitId, regions, fxToUsd,
+        (r, su) => regions[r].categoryDemand[su]?.unitPriceLocal),
     };
-    return markCommodityToAuction(seed, regions, fxToUsd);
+    // §3.13-INV-iii: no auction has run at the seed, so the ex-works price is the opening one
+    // the category was stated at (`openSeededBooks` deposits it, and week 1 reads the store).
+    return markCommodityToAuction(seed, regions, fxToUsd, (r, su) => regions[r].categoryDemand[su]?.unitPriceLocal);
   });
 }
