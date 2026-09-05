@@ -23,7 +23,8 @@ import { V2World, internEntity, entityOf, entityRefOf } from '../../engine2/worl
 import { registerInstrument } from './instrument-ledger';
 import { currencyOf } from '../../domain/geography';
 import { bankPartyOf, companyParty } from '../../domain/party';
-import { mutableTranches, pushLadderRow, relinkLadder, clearLadder, ladderRowsOf, TR_FACILITY, trancheIdOf, trancheKindOfRow } from '../../engine2/tranches';
+import { mutableTranches, pushLadderRow, relinkLadder, clearLadder, ladderRowsOf, TR_FACILITY, trancheIdOf, trancheKindOfRow, trancheRowOf } from '../../engine2/tranches';
+import { revolverTrancheId } from '../../domain/instrument-keys';
 import { DebtTranche } from '../../domain/company';
 import { RegionId } from '../../domain/geography';
 import { trancheKindOf } from '../../domain/assets';
@@ -85,6 +86,48 @@ export function issueTranche(v2: V2World, issuer: TrancheIssuer, t: DebtTranche,
   // issuer, its money (the issuer's, until an issuer issues in another).
   registerInstrument(v2, { id: t.id, kind, issuer: issuer.id, currency: currencyOf(issuer.region) });
   return r;
+}
+
+/**
+ * §3.16 — A TAP. An issuer that wants more of the same debt REOPENS the tranche it has: face is
+ * added to the EXISTING row, the holder of record takes the added face at the tap price by wire
+ * (a bank draw at par; a bond at the week's cleared price, which is what the proceeds are), and
+ * the row's terms — its coupon or margin, its maturity, its lender — are untouched. Nothing else
+ * about the ladder moves: every other holder's row is exactly as it was.
+ */
+export function tapTranche(v2: V2World, issuer: TrancheIssuer, r: number, addedFaceLocal: number, priceLocal: number, reason: string): number {
+  const S = mutableTranches(v2);
+  if (!(addedFaceLocal > 0)) return defect(`tranche ${trancheIdOf(v2, r)} tapped for ${addedFaceLocal}`);
+  if (!(priceLocal > 0)) return defect(`tranche ${trancheIdOf(v2, r)} tapped at price ${priceLocal}`);
+  const kind = issuer.kind === 'GOVERNMENT' ? 'GOV_BOND' : trancheKindOfRow(v2, r);
+  const n = wire({ from: issuerParty(issuer), to: holderOfRow(v2, r, issuer.region), kind, asset: trancheIdOf(v2, r), quantity: addedFaceLocal, priceLocal, reason }, internReason);
+  S.principalLocal[r] += addedFaceLocal;
+  return n;
+}
+
+/**
+ * §3.16-i — A REVOLVER DRAW. The borrower has ONE committed line at each lending bank
+ * (`instrument-keys.ts:revolverTrancheId`); a draw taps it at par, and opens it — at the margin
+ * the bank quotes now, for `termWeeks` — only when there is none live. A line's margin is struck
+ * when it opens and a later draw rides it: that is what a committed line is, and why a borrower
+ * whose credit has moved is repriced when the line is renewed rather than at every draw.
+ */
+export function drawRevolver(
+  v2: V2World, issuer: TrancheIssuer, bankId: EntityId, drawLocal: number,
+  terms: { marginBps: number; week: number; termWeeks?: number }, reason: string,
+): { row: number; opened: boolean; trancheId: string } {
+  const id = revolverTrancheId(issuer.id, bankId);
+  const live = trancheRowOf(v2, id);
+  if (live !== undefined && v2.tranches.principalLocal[live] > 0.01) {
+    tapTranche(v2, issuer, live, drawLocal, 1, reason);
+    return { row: live, opened: false, trancheId: id };
+  }
+  const row = issueTranche(v2, issuer, {
+    id, principalLocal: drawLocal, rateType: 'FLOATING', floatingMarginBps: terms.marginBps,
+    originationWeek: terms.week, maturityWeek: terms.week + (terms.termWeeks ?? 52), seniority: 'SENIOR',
+    isBankFacility: true, facilityBankId: bankId,
+  }, reason);
+  return { row, opened: true, trancheId: id };
 }
 
 /** Face comes off a row: the holder's paper returns to the issuer. Returns the wire number. */

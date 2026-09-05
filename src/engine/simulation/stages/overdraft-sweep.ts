@@ -17,13 +17,12 @@ import { bankCreditParty, bankSecuritiesParty, companyParty } from '../../../dom
 import { currencyOf } from '../../../domain/geography';
 import { RegionId } from '../../../types';
 import { pay, PartyRef, pendingSettlementLocal } from './settlement';
-import { issueTranche } from '../../ledger/tranche-ledger';
+import { drawRevolver } from '../../ledger/tranche-ledger';
 import { smePoolId, facilityMarginBpsFor } from './bank-lending';
 import { PrimeBrokerageLine } from '../../../domain/prime-brokerage';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { cashOf, poolCashOf } from '../../ledger/accounts';
 import { entityCashOf } from '../../ledger/accounts';
-import { overdraftFacilityTrancheId } from '../../../domain/instrument-keys';
 import { banksOf } from '../../../domain/company';
 import type { Ticker } from '../../../domain/ids';
 import { partyKey } from '../../ledger/party';
@@ -53,22 +52,13 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     const balanceLocal = cashOf(ctx.v2, c) + pendingLocal(companyParty(c));
     if (!(balanceLocal < -1)) return;
     const drawLocal = -balanceLocal;
-    const reg = ctx.updatedRegions[c.region];
+    const reg = ctx.updatedRegions[c.region] ?? defect(`firm ${c.id} is in ${c.region}, which is not a region`);
     const homeBank = companyById.get(c.homeBankId);
     if (!homeBank) return defect(`firm ${c.id} banks at ${c.homeBankId}, which is not an entity`);
-    const marginBps = reg ? facilityMarginBpsFor(v2, c, reg, homeBank) : 350;
-    const tranche = {
-      id: overdraftFacilityTrancheId(c.id, ctx.nextWeek, '-C'),
-      principalLocal: drawLocal,
-      rateType: 'FLOATING' as const,
-      floatingMarginBps: marginBps,
-      originationWeek: ctx.nextWeek,
-      maturityWeek: ctx.nextWeek + 52,
-      seniority: 'SENIOR' as const,
-      isBankFacility: true,
-      facilityBankId: homeBank.id,
-    };
-    issueTranche(v2, { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
+    const marginBps = facilityMarginBpsFor(v2, c, reg, homeBank);
+    // §3.16-i: a TAP of the firm's one revolver at its house bank — the sweep used to write a
+    // fresh facility per firm per week, each at its own struck margin.
+    drawRevolver(v2, { id: c.id, ticker: c.ticker, region: c.region }, homeBank.id, drawLocal, { marginBps, week: ctx.nextWeek }, 'overdraft converted to a facility draw');
     swept.set(partyKey(companyParty(c)), drawLocal);
     pay(ctx, {
       payer: bankCreditParty(homeBank),

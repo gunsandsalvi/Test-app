@@ -29,7 +29,7 @@ import { bankCreditParty, bankParty, bankSecuritiesParty, companyParty } from '.
 
 import { ensureV2 } from '../../../engine2/world';
 import { facilityBookOf, facilityRowsOf } from '../../../engine2/tranches';
-import { issueTranche } from '../../ledger/tranche-ledger';
+import { drawRevolver } from '../../ledger/tranche-ledger';
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
@@ -51,7 +51,6 @@ import { SRF_SPREAD_BPS, bankCashBufferRatioOf } from '../../macro/banking';
 import { cashOf, entityCashOf, adjustSectorRow, adjustBankReserves, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { materializeGovLadder } from '../../../engine2/tranches';
 import { sovereignTenorResolver } from '../../../domain/government';
-import { overdraftFacilityTrancheId } from '../../../domain/instrument-keys';
 import { banksOf } from '../../../domain/company';
 import type { Ticker } from '../../../domain/ids';
 
@@ -151,22 +150,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const drawLocal = -cashLocal;
       // P1: priced off the borrower's own PD at its bank's hurdle, like every facility.
       // §3.13-BOOK (c-then-3b): a lookup on the entity index, not a full scan per overdrawn firm.
-      const homeBank = companyById.get(c.homeBankId);
+      const homeBank = companyById.get(c.homeBankId) ?? defect(`firm ${c.id} banks at ${c.homeBankId}, which is not an entity`);
       const marginBps = facilityMarginBpsFor(ensureV2(state), c, reg, homeBank);
-      const tranche = {
-        id: overdraftFacilityTrancheId(c.id, ctx.nextWeek),
-        principalLocal: drawLocal,
-        rateType: 'FLOATING' as const,
-        floatingMarginBps: marginBps,
-        originationWeek: ctx.nextWeek,
-        maturityWeek: ctx.nextWeek + 52,
-        seniority: 'SENIOR' as const,
-        isBankFacility: true,
-        facilityBankId: homeBank?.id,
-      };
-      issueTranche(ensureV2(state), { id: c.id, ticker: c.ticker, region: c.region }, tranche, 'overdraft converted to a facility draw');
+      // §3.16-i: a TAP of the firm's one revolver at its house bank, opened only when none is live.
+      drawRevolver(ensureV2(state), { id: c.id, ticker: c.ticker, region: c.region }, homeBank.id, drawLocal, { marginBps, week: ctx.nextWeek }, 'overdraft converted to a facility draw');
       pay(ctx, {
-        payer: homeBank ? bankCreditParty(homeBank) : defect(`firm ${c.id} banks at ${c.homeBankId}, which is not an entity`),
+        payer: bankCreditParty(homeBank),
         payee: companyParty(c),
         amount: drawLocal,
         currency: currencyOf(c.region),

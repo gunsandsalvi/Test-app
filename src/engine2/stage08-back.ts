@@ -52,13 +52,13 @@ import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from 
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
 import { ladderRowsOf, materializeTranche, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY, trancheIdOf } from './tranches';
-import { issueTranche, retireTranche, commitLadder } from '../engine/ledger/tranche-ledger';
+import { issueTranche, retireTranche, commitLadder, drawRevolver } from '../engine/ledger/tranche-ledger';
 import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World, entityOf } from './world';
 import { totalInputValueLocal } from './lots';
 import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../domain/primary-market';
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/stated';
 import { trancheWeekAccrual } from './front-core';
-import { maintenanceBridgeTrancheId, liquidityRevolverTrancheId, maturityRevolverTrancheId, calledRefinanceTrancheId } from '../domain/instrument-keys';
+import { maintenanceBridgeTrancheId, calledRefinanceTrancheId } from '../domain/instrument-keys';
 import type { InstrumentId, Ticker, EntityId } from '../domain/ids';
 import { asEntityId } from '../domain/ids';
 
@@ -1170,19 +1170,11 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         cashShortfallLocal: -cash.usd, headroomLocal, alreadyDrawnLocal: 0,
       });
       if (drawLocal > 1) {
-        const revolver: DebtTranche = {
-          id: liquidityRevolverTrancheId(L8.companyId[row], nextWeek),
-          principalLocal: drawLocal,
-          rateType: 'FLOATING',
-          floatingMarginBps: L8.facilityMarginBps[row],
-          originationWeek: nextWeek,
-          maturityWeek: nextWeek + 52,
-          seniority: 'SENIOR',
-          // G2: a committed line is BANK debt on the house bank's own itemized book.
-          isBankFacility: true,
-          facilityBankId: L8.homeBankId[row],
-        };
-        drawnRevolverRow = issueTranche(v2, issuer, revolver, 'revolver drawn: liquidity shortfall');
+        // §3.16-i: a TAP of the firm's one revolver at its house bank; the row joins the ladder
+        // walk below only when the draw OPENED the line (a tapped row is already in it). G2: a
+        // committed line is BANK debt on the house bank's own itemized book.
+        const drawn = drawRevolver(v2, issuer, L8.homeBankId[row], drawLocal, { marginBps: L8.facilityMarginBps[row], week: nextWeek }, 'revolver drawn: liquidity shortfall');
+        if (drawn.opened) drawnRevolverRow = drawn.row;
         newTotalDebt += drawLocal;
         post('revolver drawn: liquidity shortfall', drawLocal,
           L8.homeBankId[row] ? bankCreditPartyOf(L8.homeBankId[row]) : undefined);
@@ -1628,21 +1620,12 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
       // The market said no and the paper still matures: the revolver catches it — real market
       // access closing when spreads gap, with a real penalty cost. Step 11: a firm with no house
       // bank (a bank) has no revolver; its maturity is repaid from its own book below.
-      const revolverTranche: DebtTranche = {
-        id: maturityRevolverTrancheId(L8.companyId[row], nextWeek),
-        principalLocal: maturingPrincipalLocal,
-        rateType: 'FLOATING',
-        floatingMarginBps: L8.facilityMarginBps[row],
-        originationWeek: nextWeek,
-        maturityWeek: nextWeek + 52,
-        seniority: 'SENIOR',
-        // G2: the revolver is a committed BANK line — the house bank funds it and books it.
-        isBankFacility: true,
-        facilityBankId: L8.homeBankId[row],
-      };
-      rowList.push(issueTranche(v2, issuer, revolverTranche, 'revolver draw: withdrawn refinancing'));
-      debtIssuanceThisWeek += revolverTranche.principalLocal;
-      post('revolver draw: withdrawn refinancing', revolverTranche.principalLocal, bankCredit);
+      // §3.16-i: a TAP of the firm's one revolver at its house bank (G2: a committed BANK line —
+      // the house bank funds it and books it); a line opened here joins the ladder walk.
+      const drawn = drawRevolver(v2, issuer, L8.homeBankId[row], maturingPrincipalLocal, { marginBps: L8.facilityMarginBps[row], week: nextWeek }, 'revolver draw: withdrawn refinancing');
+      if (drawn.opened) rowList.push(drawn.row);
+      debtIssuanceThisWeek += maturingPrincipalLocal;
+      post('revolver draw: withdrawn refinancing', maturingPrincipalLocal, bankCredit);
       pushNews({
         id: `refi-fail-${L8.ticker[row]}-${nextWeek}`,
         week: nextWeek,

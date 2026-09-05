@@ -94,7 +94,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.a not a security, no market price | `src/engine/audit/ownership.ts:isBankFacility` | ✅ |
 | A1.b carried differently | `src/domain/banking.ts:annuityWeeklyPrincipalLocal` | ✅ |
 | A2 terms fixed at origination | `src/domain/banking.ts:BankLoan` | ✅ |
-| A3 a drawdown structure: term loan or facility | `src/engine/simulation/stages/corporate-financing.ts:committedLineHeadroomLocal` | ⚠️ |
+| A3 a drawdown structure: term loan or facility | `src/engine/ledger/tranche-ledger.ts:drawRevolver` | ✅ |
 | **A3.a an undrawn commitment consumes something** | — | ❌ |
 | A3.b VERIFY undrawn commitments are visible | — | ❌ |
 | A4 security: named collateral, or unsecured | `src/domain/banking.ts:MortgageVintage` | ⚠️ |
@@ -258,7 +258,7 @@ exactly what a capital-only gate produces.
 
 ### Also marked, briefly
 
-- **A3 ⚠️** — a facility exists and its headroom gates one of three draw paths — the A3.a/A3.b entry.
+- **A3 ✅** (2026-09-05, §9.16-i) — a borrower has ONE revolver per lending bank (`instrument-keys.ts:revolverTrancheId`), and every draw path — liquidity, a withdrawn refinancing, a refused paper roll, the overdraft conversions at 02b and the close — TAPS it (`tranche-ledger.ts:drawRevolver`, at par, at the margin the line was struck at), opening it only when none is live; the five ids that minted a facility per draw and per week are gone, and so is the 350bp fallback a facility with no margin rode. Headroom still gates one path only — the A3.a/A3.b entry.
 - **B2.c ⚠️** — `bankRequiredReturnAnnual` is a per-bank number, not an appetite that moves with the bank's state.
 - **C1.d ⚠️** — the mortgage quote carries `MORTGAGE_OPERATING_COST_BPS`; the business quote carries no operating cost at all.
 - **D3 ⚠️** — interest accrues and is received; non-payment is unobservable because there is no event — E1.

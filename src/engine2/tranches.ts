@@ -313,7 +313,8 @@ export const trancheWireOf = (v2: V2World, r: number): number => v2.tranches.wir
  *  lender: one scan of the store, in row order. */
 export interface FacilityRow {
   row: number; borrowerId: EntityId; bankId: EntityId; trancheId: string; principalLocal: number;
-  /** The tranche's floating margin; a facility with none stated rides the 350bp the mirror used. */
+  /** The tranche's floating margin — struck when the line opened; §3.16-i: a facility with none
+   *  stated is a defect, not a 350bp fallback. */
   marginBps: number; originationWeek: number; maturityWeek: number;
 }
 function facilityRowOf(v2: V2World, r: number): FacilityRow {
@@ -321,7 +322,7 @@ function facilityRowOf(v2: V2World, r: number): FacilityRow {
   return {
     row: r, borrowerId: entityOf(v2, S.issuerRef[r]), bankId: entityOf(v2, S.bankRef[r]),
     trancheId: instrumentOf(v2, S.idRef[r]), principalLocal: S.principalLocal[r],
-    marginBps: Number.isNaN(S.floatingMarginBps[r]) ? 350 : S.floatingMarginBps[r],
+    marginBps: Number.isNaN(S.floatingMarginBps[r]) ? defect(`facility ${instrumentOf(v2, S.idRef[r])} states no margin`) : S.floatingMarginBps[r],
     originationWeek: S.originationWeek[r], maturityWeek: S.maturityWeek[r],
   };
 }

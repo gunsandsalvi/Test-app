@@ -34,6 +34,7 @@
 import { riskAversionOf } from '../../../domain/preferences';
 import { deskRowsOf, deskGrossLocal } from '../../desk-register';
 import { asEntityId } from '../../../domain/ids';
+import { defect } from '../../../domain/defect';
 import { bankCreditPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf, bankPartyOf, companyParty } from '../../../domain/party';
 import { asInstrumentId, InstrumentId } from '../../../domain/ids';
 
@@ -59,7 +60,7 @@ import { centralBankParticipant, bookCentralBankFills, CENTRAL_BANK_PARTICIPANT_
 import { pay, pendingSettlementLocal, institutionSpendableLocal, PartyRef } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, PrimaryTake, participantPartyOf, bankIdOfTickerFor, parHoldingRow, writeBackClearedFills } from './book-settlement';
 import { transferHolding } from '../../ledger/holdings-ledger';
-import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
+import { issueTranche, retireTranche, commitLadder, drawRevolver } from '../../ledger/tranche-ledger';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
 import { discountBillProceedsLocal, billYieldFromPrice, isDiscountBill, recordPrimaryOffering } from '../../../domain/government';
@@ -1161,23 +1162,13 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const rollNeedLocal = Math.min(iss.maturedLocal, iss.wantedLocal);
         const revolverLocal = Math.max(0, rollNeedLocal - placedLocal);
         if (revolverLocal > 1) {
-          issueTranche(v2Mirror, { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId }, {
-            id: `${iss.comp.ticker}-REVOLVER-${ctx.nextWeek}`,
-            principalLocal: revolverLocal,
-            rateType: 'FLOATING',
-            floatingMarginBps: REVOLVER_MARGIN_BPS,
-            originationWeek: ctx.nextWeek,
-            maturityWeek: ctx.nextWeek + 52,
-            seniority: 'SENIOR',
-            // G2: a committed bank line is BANK debt, exactly like the revolver stage 08 draws
-            // for a withdrawn refinancing. Unmarked, the identical instrument sat in the
-            // syndicated loan market's float on one path and on the house bank's itemized book
-            // on the other — one real thing represented two ways (rule 4).
-            isBankFacility: true,
-            facilityBankId: iss.comp.homeBankId,
-          } as DebtTranche, 'revolver draw: commercial paper roll failed');
+          // §3.16-i: a TAP of the issuer's one revolver at its house bank (opened at the
+          // committed line's margin when none is live). G2: a committed bank line is BANK debt,
+          // exactly like the revolver stage 08 draws for a withdrawn refinancing.
+          const homeBankId = iss.comp.homeBankId ?? defect(`${iss.comp.ticker} rolls paper with no house bank to catch the roll`);
+          drawRevolver(v2Mirror, { id: iss.comp.id, ticker: iss.comp.ticker, region: regionId }, homeBankId, revolverLocal, { marginBps: REVOLVER_MARGIN_BPS, week: ctx.nextWeek }, 'revolver draw: commercial paper roll failed');
           pay(ctx, {
-            payer: bankCreditPartyOf(iss.comp.homeBankId ?? asEntityId('')),
+            payer: bankCreditPartyOf(homeBankId),
             payee: companyParty(iss.comp),
             amount: revolverLocal,
             currency: currencyOf(iss.comp.region),

@@ -105,13 +105,15 @@ export const corporateTrancheId = (ticker: Ticker, rung: number): InstrumentId =
 export const maintenanceBridgeTrancheId = (ticker: Ticker, week: number): InstrumentId =>
   asInstrumentId(`${ticker}-MAINT-${week}`);
 
-/** A revolver draw taken because the borrower ran out of cash this week. */
-export const liquidityRevolverTrancheId = (companyId: string, week: number): InstrumentId =>
-  asInstrumentId(`${companyId}-REVOLVER-LIQ-${week}`);
-
-/** A revolver draw taken because a maturity came due and the market would not refinance it. */
-export const maturityRevolverTrancheId = (companyId: string, week: number): InstrumentId =>
-  asInstrumentId(`${companyId}-REVOLVER-${week}`);
+/**
+ * §3.16-i — THE REVOLVER: one committed line per borrower and lending bank, drawn and repaid.
+ * Every draw — a liquidity shortfall, a maturity the market would not refinance, a paper roll the
+ * market refused, an overdraft the close converts — TAPS this line (`tranche-ledger.ts:drawRevolver`);
+ * it is opened the first time and reopened when a matured one is gone. The five ids that used
+ * to name a fresh facility per draw and per week are gone with the proliferation they named.
+ */
+export const revolverTrancheId = (companyId: string, bankId: string): InstrumentId =>
+  asInstrumentId(`${companyId}-REVOLVER@${bankId}`);
 
 /**
  * The replacement a called tranche becomes. It carries the CALLED tranche's id inside its own, so
@@ -157,9 +159,6 @@ export const peFundInterestId = (regionId: RegionId, fundIndex: number): Instrum
  * can strike one in the same week — the corporate sweep and the diversification pass — because
  * two rungs struck on one week under one key would silently be one rung.
  */
-export const overdraftFacilityTrancheId = (companyId: string, week: number, suffix = ''): InstrumentId =>
-  asInstrumentId(`${companyId}-REVOLVER-OD-${week}${suffix}`);
-
 /** The facility a company is born owing — the debt half of a sponsor's capital structure. */
 export const birthFacilityTrancheId = (companyId: string, week: number): InstrumentId =>
   asInstrumentId(`${companyId}-FACILITY-BIRTH-${week}`);

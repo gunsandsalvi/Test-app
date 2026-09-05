@@ -547,11 +547,17 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-16. **A tap, not a new facility** (user). An issuer that wants more of the same debt REOPENS an
-    existing tranche: face is added at the week's clearing price, the proceeds are the price × the
-    added face, and holders of record are unaffected. This replaces the proliferation the audit kept
-    finding (`overdraft-sweep.ts:158` writes a fresh hardcoded 350bp facility per sweep;
-    `tranches.ts:355` has a bare 350 fallback). Requires step 13 (a tap prices off a real price).
+16. **A tap, not a new facility** (user) — split 2026-09-05; 16-i (the ledger taps; a revolver
+    is one line per borrower and bank, tapped) is in §9. What is left:
+16-ii. **A BOND TAP.** An issuer that wants more of the same debt REOPENS an existing tranche:
+    stage 08's new issue (`stage08-back.ts` primary placed, `setClearedPrice(newTranche)`) mints a
+    fresh tranche per offering with a coupon struck at the cleared spread. When the issuer has a
+    live bond of the same kind and seniority whose remaining life is within a year of the tenor
+    it wants, the offering is a TAP of that bond: the primary offers added face of the existing
+    tranche, it clears in the same solve as the outstanding stock at that bond's price (as 07c
+    already does for a sovereign's unheld face), the proceeds are the price × the added face
+    (`tranche-ledger.ts:tapTranche`), and every other holder's row is untouched. A debut, or an
+    issuer with no bond near the tenor, still opens a new one. Requires step 13 (done).
 16b. **Insurance is a market, not three price-takers.** A policy moves to the insurer that
     prices lower, and an insurer's price answers its own losses and its own capital. The three
     insurers exist; the market between them does not. Verify: premium shares move week to week,
@@ -1637,6 +1643,23 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**16-i — A TAP, NOT A NEW FACILITY: THE LEDGER TAPS, AND A REVOLVER IS ONE LINE.**
+`tranche-ledger.ts:tapTranche(v2, issuer, row, addedFace, price, reason)`: face is added to the
+EXISTING row, the holder of record takes it by wire at the tap price (the proceeds are price ×
+face), and the row's coupon or margin, maturity and lender are untouched — no other holder's row
+moves. `drawRevolver(v2, issuer, bankId, draw, {marginBps, week}, reason)`: a borrower has ONE
+committed line per lending bank (`instrument-keys.ts:revolverTrancheId`, `KRLN-REVOLVER@BANK`);
+a draw taps it at par at the margin it was struck at, and opens it — at the margin the bank
+quotes now, for a year — only when none is live. Every draw path goes through it: stage 08's
+liquidity shortfall and withdrawn refinancing (a tapped row is already in the ladder walk, an
+opened one joins it), 07f's refused paper roll, 02b's overdraft conversion and the close's
+sweep — which wrote a fresh facility per firm per week, each at its own struck margin, and fell
+to a bare 350bp when it had no region. The five per-draw-per-week ids are deleted, and
+`engine2/tranches.ts`'s 350bp fallback for a facility with no margin is a defect (every writer
+states one). `test/tap.test.ts`: a second draw adds face and opens nothing; a bond tap is one
+wire at the price given and touches no term. 16-ii (the bond tap in the primary) is inserted
+after it. Gates green; no run.
 
 **15b-iii — A PARTY LIVING ON ITS BANK IS A RUN.** The original list said "contract-break
 streaks" and no object here is called a contract break; the non-performance this model records
