@@ -23,8 +23,10 @@
 import { Company } from '../types';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from './simulation/constants';
 
-/** Compensation for equity's residual risk, over the holder's own cost of capital. */
-export const EQUITY_RISK_PREMIUM = 0.035;
+/** §3.26-d: the premium is stated once, with the firm's cost of capital (`domain/company-week/
+ *  cost-of-capital.ts`); re-exported here for the valuation's own readers. */
+import { EQUITY_RISK_PREMIUM } from '../domain/company-week/cost-of-capital';
+export { EQUITY_RISK_PREMIUM };
 /**
  * The hurdle of a representative holder. 07e asks each entity for its OWN required return —
  * that disagreement is the market. This constant is for the two places where a valuation is

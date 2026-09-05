@@ -551,12 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-d. **One cost of capital per firm.** `05-unit-bidding.ts:1209` prices the seller's floor off
-    `0.05 + pd × 0.60` — a stated hurdle and a stated LGD beside the cost of capital the labour
-    stage already computes for the same firm (its own beta against its region's own rate, at its
-    own risk aversion) and the recovery rate its credit carries. One owner for the hurdle
-    (`domain/company-week`), read here. *(The "second PD model" the step named is already gone:
-    both sites read `computeAnnualDefaultProbability`.)*
 26-e. **The desk's spread is a consequence.** `DESK_SPREAD_BPS_BY_BOOK` (dealer-desk.ts) is nine
     stated real-market widths doing two jobs: a fee on the mid in five books
     (`financial-clearing-engine` charges `|traded| × bps` beside the one cleared price — dealer-desks
@@ -1377,6 +1371,24 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-d — ONE COST OF CAPITAL PER FIRM.** What a firm's capital requires was stated in seven places,
+  four ways: the labour stage's `10Y + β × premium × risk aversion`, the freight and commodity
+  books' and the seed's `10Y + β × premium`, the estate's `10Y + premium` (one hurdle for every
+  bidder, floored at 1%), a bank's own with a 1% floor, and the goods auction's seller floor at
+  `(0.05 + pd × 0.60) × 1.5` — a stated hurdle, a stated loss-given-default and a stated shape.
+  `domain/company-week/cost-of-capital.ts` is the one owner now: `costOfCapitalOf` (the region's
+  own long rate — `riskFreeRateOf`, the policy rate before a curve exists — plus the premium on
+  the firm's own beta at its own management's risk aversion; `EQUITY_RISK_PREMIUM` moved there,
+  re-exported by `equity-valuation.ts`) and `weeklyCapitalChargeLocal` (its net plant at that
+  rate). Every site reads it: the labour affordability test, the carrier's hull charge, the
+  commodity hedger's concession, the bank's own, the seed's capital charge, each plant BIDDER
+  against its own hurdle at the estate, and the seller's ask — which now carries the return its
+  plant requires per unit (this line's share of the weekly charge over the week's units) where the
+  stated markup stood; the fallback ask for a line with no production marks up by the same rate.
+  The two 1% floors go (rule 6). goods B5 and the-capital-programme B1 diffs updated (B1 stays ❌:
+  the hurdle exists, the comparison does not). `test/cost-of-capital.test.ts`. Gates green; no run
+  (rule 11).
 
 **26-c — A NAME WITH NO PROTECTION BOOK HAS NO CDS SPREAD.** `stage08-back.ts` carried a name's
   five-year cash spread as its CDS spread whenever the protection book had not printed it — the

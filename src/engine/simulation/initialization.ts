@@ -70,7 +70,7 @@ import { centralBankAssetsLocal, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../doma
 import { reconcileEmploymentView } from './stages/labor-market';
 import { weeklyWageBillLocal } from '../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
-import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
+import { costOfCapitalOf, riskFreeRateOf } from '../../domain/company-week/cost-of-capital';
 import { mandateAllocator, assignHouseBanks } from '../../domain/primary-market';
 import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, ItemizedHolding, INDUSTRY_SUBUNITS, DebtTranche } from '../../types';
 import { dealersFromBanks } from '../dealers';
@@ -1249,7 +1249,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           baseAnnualWageLocal, unitPools, 1.0
         ) * 52;
         const netPpeLocal = Math.max(0, (c.grossPPELocal ?? 0) - (c.accumulatedDepreciationLocal ?? 0));
-        capitalChargeLocal += netPpeLocal * Math.max(0, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (c.beta ?? 1) * EQUITY_RISK_PREMIUM);
+        capitalChargeLocal += netPpeLocal * costOfCapitalOf(c, riskFreeRateOf(reg)); // §3.26-d: one owner
       });
       if (basePayrollLocal > 0) {
         const affordableIndex = (ebitdaLocal + basePayrollLocal - capitalChargeLocal) / basePayrollLocal;

@@ -1,0 +1,21 @@
+/** §3.26-d — one owner of what a firm's capital requires. */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { costOfCapitalOf, riskFreeRateOf, weeklyCapitalChargeLocal, EQUITY_RISK_PREMIUM } from '../src/domain/company-week/cost-of-capital';
+
+test('the hurdle is the long rate plus the premium on the firm\'s own beta at its own risk aversion', () => {
+  assert.equal(costOfCapitalOf({ beta: 1 }, 0.04), 0.04 + EQUITY_RISK_PREMIUM);
+  assert.equal(costOfCapitalOf({ beta: 2, management: { patienceWeeks: 13, riskAversion: 1.5, appointedWeek: 0 } }, 0.04), 0.04 + 2 * EQUITY_RISK_PREMIUM * 1.5);
+  assert.equal(costOfCapitalOf({ beta: 1 }, -0.1), 0, 'never negative');
+});
+
+test('the region\'s rate is its own ten-year point, the policy rate before a curve exists', () => {
+  assert.equal(riskFreeRateOf({ zeroRates: { tenor10Y: 0.045 }, policyRate: 0.03 }), 0.045);
+  assert.equal(riskFreeRateOf({ policyRate: 0.03 }), 0.03);
+});
+
+test('the weekly charge is the net plant at that rate over the year', () => {
+  const firm = { beta: 1, grossPPELocal: 5200, accumulatedDepreciationLocal: 0 };
+  assert.ok(Math.abs(weeklyCapitalChargeLocal(firm, 0.04) - (5200 * (0.04 + EQUITY_RISK_PREMIUM)) / 52) < 1e-9);
+  assert.equal(weeklyCapitalChargeLocal({ beta: 1, grossPPELocal: 100, accumulatedDepreciationLocal: 200 }, 0.04), 0);
+});

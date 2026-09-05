@@ -274,10 +274,13 @@ are **a measurement, for §3 step 38**.
 ### ⚠️ B5 / F5 — THE COST OF A UNIT AND THE COST OF THE UNITS THAT LEFT
 
 B5's three terms are two. `05-unit-bidding.ts:945` builds `firmWeeklyCostLocal` as current payroll +
-real input lots consumed + the trailing residual; the capital charge is not in it. Capital appears
-only as `marginPremium = costOfCapital * 1.5` on the *ask* (`:1188`), so a firm's break-even test
-is taken against a cost that excludes the return on its plant, and the `1.5` is a stated shape
-§3 step 30 will find. F5 follows from E2: COGS is the FIFO cost of inputs consumed, which is
+real input lots consumed + the trailing residual; the capital charge is not in it. *2026-09-05
+(§9.26-d): capital appears on the ASK as the return the plant requires per unit —
+`weeklyCapitalChargeLocal` (`domain/company-week/cost-of-capital.ts`, the one owner of the firm's
+hurdle) on this line's share, over the week's units — where it was `marginPremium =
+(0.05 + pd × 0.60) × 1.5`, a stated hurdle, a stated loss-given-default and a stated shape.* The
+break-even test (`coversUnitCost`) is still taken against a cost that excludes that return, which
+is B5's remaining ⚠️ and §3 step 30's. F5 follows from E2: COGS is the FIFO cost of inputs consumed, which is
 right for the input leg, but the finished units that left have no cost to relieve — their carrying
 value was the market price.
 

@@ -52,7 +52,7 @@ import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
 import { INDUSTRY_REGISTRY, smePoolSubUnits } from '../../../domain/industry-registry';
 import { weeklyWageBillLocal, getBaseAnnualWageLocal } from '../../bootstrap/labor-and-wages';
-import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
+import { costOfCapitalOf, riskFreeRateOf } from '../../../domain/company-week/cost-of-capital';
 import { patienceWeeksOf, riskAversionOf, adaptiveExpectation } from '../../../domain/preferences';
 import { RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../../bootstrap/population';
 import {
@@ -253,7 +253,8 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const netPpeLocal = Math.max(0, (comp.grossPPELocal ?? 0) - (comp.accumulatedDepreciationLocal ?? 0));
       // §5-BRAINS — the return THIS management requires of its plant: the premium weighted by its own
       // risk aversion. A risk-averse board wants more for the same beta and sheds sooner.
-      const costOfCapital = Math.max(0, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (comp.beta ?? 1) * EQUITY_RISK_PREMIUM * riskAversion);
+      // §3.26-d: one owner of that number (`domain/company-week/cost-of-capital.ts`).
+      const costOfCapital = costOfCapitalOf(comp, riskFreeRateOf(reg));
       const capitalChargeLocal = netPpeLocal * costOfCapital;
       const earningsShortfallLocal = capitalChargeLocal - expectedEbitdaLocal;
       const annualWagePerWorkerLocal = current > 0

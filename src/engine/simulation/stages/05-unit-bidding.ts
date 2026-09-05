@@ -51,6 +51,7 @@ import { laneDistanceNm, REGION_IDS, currencyOf } from '../../../domain/geograph
 import { SourcingSplit } from './sourcing-intent';
 import { chooseInvoiceRegion, invoiceCurrencyOf } from '../../../domain/invoice-currency';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
+import { costOfCapitalOf, riskFreeRateOf, weeklyCapitalChargeLocal } from '../../../domain/company-week/cost-of-capital';
 import { paymentTermWeeks } from '../../../domain/trade-invoice';
 import { computeAnnualDefaultProbability } from './shared-helpers';
 import { getFxToUsd } from './06-fx-and-trade';
@@ -1202,11 +1203,12 @@ function buildRegionSupplyPlans(
     // The [0.40, 0.98] band on the cost rate goes with it: it existed because the margin it read
     // was a stated number that could be anything, and since IND3 it is the residual of real
     // costs (rule 6).
-    // ONE PD model: the structural distance the
-    // credit books price with, not a rating-keyed table beside it.
-    const pd = computeAnnualDefaultProbability(v2, comp);
-    const expectedLoss = pd * 0.60;
-    const costOfCapital = 0.05 + expectedLoss;
+    // §3.26-d: THE PREMIUM A UNIT MUST EARN IS THE RETURN THE PLANT REQUIRES, per unit — the
+    // firm's own cost of capital (one owner, `domain/company-week/cost-of-capital.ts`) on its net
+    // plant, this line's share of it, over the week's units. It was `(0.05 + pd × 0.60) × 1.5`: a
+    // stated hurdle, a stated loss-given-default and a stated shape, beside the cost of capital the
+    // labour stage already charged the same firm with.
+    const lineCapitalChargeWeeklyLocal = weeklyCapitalChargeLocal(comp, riskFreeRateOf(reg)) * Math.max(0, line.revenueShare ?? 1);
 
     // SHARE VERSUS MARGIN, expressed only through the real offer price.
     //
@@ -1221,7 +1223,6 @@ function buildRegionSupplyPlans(
     // zero and the ask is unit cost, never below — a firm gives up profit to win share,
     // not money.
     const inventoryPricePressure = Math.min(1, Math.max(0, inventoryToCapacityRatio));
-    const marginPremium = costOfCapital * 1.5;
 
     plans.push({
       key: comp.ticker,
@@ -1234,15 +1235,16 @@ function buildRegionSupplyPlans(
       wipQueue: pipeline.queue,
       openOfferUnits,
       // Cost per unit of what this plant actually makes, in dollars. Falls back to the
-      // reference-anchored form only when the line has no production to divide by.
-      // The ask runs from FULL cost plus margin (nothing in stock: hold out for it) down to
-      // avoidable cost (warehouse full: move the stock, lose the margin but not the inputs) —
-      // IND6's posture with the floor where the short-run economics puts it.
+      // reference-anchored form only when the line has no production to divide by — marked up
+      // by the firm's own cost of capital, the same rate the charge above is struck at.
+      // The ask runs from FULL cost plus the plant's return (nothing in stock: hold out for it)
+      // down to avoidable cost (warehouse full: move the stock, lose the return but not the
+      // inputs) — IND6's posture with the floor where the short-run economics puts it.
       minPriceLocal: targetProductionUnits > 0.0001
         ? (weeklyAvoidableCostLocal / targetProductionUnits)
-          + ((weeklyOperatingCostLocal / targetProductionUnits) * (1 + marginPremium) - (weeklyAvoidableCostLocal / targetProductionUnits))
+          + ((weeklyOperatingCostLocal + lineCapitalChargeWeeklyLocal) / targetProductionUnits - (weeklyAvoidableCostLocal / targetProductionUnits))
             * (1 - inventoryPricePressure)
-        : referencePriceLocal * costRate * (1 + marginPremium),
+        : referencePriceLocal * costRate * (1 + costOfCapitalOf(comp, riskFreeRateOf(reg))),
     });
   });
 

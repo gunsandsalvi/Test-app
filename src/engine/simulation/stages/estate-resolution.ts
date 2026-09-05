@@ -39,7 +39,7 @@ import { BankingSector } from '../../../domain/banking';
 import { bookPnL } from '../../ledger/bank-book';
 import { WeeklyStepContext } from './context';
 import { pay, pendingSettlementLocal, PartyRef } from './settlement';
-import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
+import { costOfCapitalOf, riskFreeRateOf } from '../../../domain/company-week/cost-of-capital';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { cashOf } from '../../ledger/accounts';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
@@ -239,8 +239,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // scrap is not a sale to nobody.
     const ppeWeeks = Math.max(1, regionalPpeAbsorptionWeeks(ctx, index, estate.regionId));
     const ppeOfferedLocal = estate.assets.ppeLocal / weeksLeft(ppeWeeks);
-    const hurdle = Math.max(0.01, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + EQUITY_RISK_PREMIUM);
-    const plant = sellPlantToBidders(ctx, estate, comp, ppeOfferedLocal, hurdle);
+    const plant = sellPlantToBidders(ctx, estate, comp, ppeOfferedLocal);
     estate.assets.ppeLocal -= weeksLeft(ppeWeeks) <= 1 ? ppeOfferedLocal : plant.soldLocal;
     thisWeek.ppeSoldLocal += plant.soldLocal;
     thisWeek.plantPriceOfBook = plant.priceOfBook;
@@ -347,7 +346,7 @@ function peersOf(ctx: WeeklyStepContext, estate: Estate, comp: Company | undefin
  * kept on the estate so the next solve starts from it.
  */
 function sellPlantToBidders(
-  ctx: WeeklyStepContext, estate: Estate, comp: Company | undefined, offeredLocal: number, hurdle: number
+  ctx: WeeklyStepContext, estate: Estate, comp: Company | undefined, offeredLocal: number
 ): { soldLocal: number; priceOfBook: number | undefined } {
   if (!(offeredLocal > 1)) return { soldLocal: 0, priceOfBook: undefined };
   const instrumentId = asInstrumentId(`ESTATE-PLANT:${estate.companyId}`);
@@ -356,7 +355,9 @@ function sellPlantToBidders(
     const netPpeLocal = (peer.grossPPELocal ?? 0) - (peer.accumulatedDepreciationLocal ?? 0);
     if (!(netPpeLocal > 0)) return; // no plant of its own: no return on capital to read a bid from
     const roc = (peer.ebit ?? 0) / netPpeLocal;
-    const reservation = Math.min(1, roc / hurdle);
+    // §3.26-d: against ITS OWN cost of capital (one owner) — the region's long rate at its own
+    // beta and its own board's risk aversion, not one hurdle for every bidder.
+    const reservation = Math.min(1, roc / costOfCapitalOf(peer, riskFreeRateOf(ctx.updatedRegions[estate.regionId])));
     if (!(reservation > 0.01)) return;
     const wantLocal = Math.max(0, (peer.growthCapex ?? 0) + (peer.maintenanceCapex ?? 0));
     if (!(wantLocal > 1)) return;

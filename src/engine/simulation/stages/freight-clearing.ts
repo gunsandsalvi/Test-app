@@ -23,7 +23,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { laneDistanceNm } from '../../../domain/geography';
 import { FreightAsset, laneKey, marginalCostPerTonneNmLocal, weeklyCapacityTonnes } from '../../../domain/carrier';
 import { getBaseAnnualWageLocal } from '../../bootstrap/labor-and-wages';
-import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
+import { costOfCapitalOf, riskFreeRateOf } from '../../../domain/company-week/cost-of-capital';
 import { convertLocal, FxToUsd } from '../../../domain/currency';
 import { LaneBooking, SOURCING_REGION_IDS } from './sourcing-intent';
 import { WeeklyStepContext } from './context';
@@ -121,9 +121,9 @@ function buildCarrierOffers(
     // CAP — the carrier's own weekly capital charge, spread across its fleet by capacity. The
     // return its hulls require is a real cost of offering the capacity, and a floor without it
     // prices freight where the fleet cannot be replaced.
+    // §3.26-d: the return its hulls require has one owner (`domain/company-week/cost-of-capital.ts`).
     const netPpeLocal = Math.max(0, (carrier.grossPPELocal ?? 0) - (carrier.accumulatedDepreciationLocal ?? 0));
-    const costOfCapital = Math.max(0,
-      (regions[home]?.zeroRates?.tenor10Y ?? regions[home]?.policyRate ?? 0) + (carrier.beta ?? 1) * EQUITY_RISK_PREMIUM);
+    const costOfCapital = costOfCapitalOf(carrier, riskFreeRateOf(regions[home]));
     const fleetCapacityTonnes = (carrier.carrierFleet?.assets ?? []).reduce((a, x: FreightAsset) => {
       const d = laneDistanceNm(x.laneFrom, x.laneTo);
       return a + (d > 0 ? weeklyCapacityTonnes(x, d) : 0);

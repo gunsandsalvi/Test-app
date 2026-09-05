@@ -82,7 +82,7 @@ checked by `scripts/check-atlas.sh`.
 | **A3 it depreciates — a cost and a reduction** | `src/domain/company-week/capital-programme.ts:weeklyDepreciationLocal` | ⚠️ |
 | A4 capital is specific | `src/engine/simulation/stages/estate-resolution.ts:peersOf` | ⚠️ |
 | A5 its value is what it can produce; it can be written down | `src/domain/company-week/capital-programme.ts:capacityRetirement` | ⚠️ |
-| **B1 invests when the return beats the cost of capital** | `src/domain/company-week/capital-programme.ts:desiredGrowthCapex` | ❌ |
+| **B1 invests when the return beats the cost of capital** | `src/domain/company-week/capital-programme.ts:desiredGrowthCapex` · `src/domain/company-week/cost-of-capital.ts:costOfCapitalOf` | ❌ |
 | B1.a the return comes from expected demand and price | `src/engine2/stage08-lanes.ts:categoryShortfall` | ⚠️ |
 | **B1.b the cost of capital comes from the markets** | `src/engine2/front-core.ts:effectiveDebtRate` | ⚠️ |
 | **B1.c a market price change moves real investment** | `src/domain/company-week/capital-programme.ts:rateDrag` | ⚠️ |
@@ -126,7 +126,10 @@ it is a MULTIPLIER on that rate, not a reason the firm invests — so the level 
 world is set by a seeded ratio and only its deviations are economic.
 
 And B1 itself is absent: **nothing anywhere compares an expected return to a cost of capital.**
-There is no project, no expected cash flow, no hurdle, no NPV. `tobinsQ` is the closest thing and it
+There is no project, no expected cash flow, no NPV. *(§9.26-d: the hurdle itself has one owner
+now — `cost-of-capital.ts:costOfCapitalOf`, the firm's own beta on its region's long rate at its
+management's risk aversion, which the labour stage, the freight and commodity books and the goods
+ask all read — so what B1 lacks is the comparison, not the number.)* `tobinsQ` is the closest thing and it
 is a market-cap ratio bolted on as `(q − 1) × 0.2`, not a comparison. The model *has* the pieces —
 `corporate-financing.ts:decideCorporateFinancing` computes `returnOnInvestedCapital` and
 `afterTaxCostOfDebt` and compares them properly — but that comparison drives the **debt** decision

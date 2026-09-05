@@ -37,7 +37,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { exposureToHedgeLocal } from '../corporate-financing';
 import { leverageHeadroomLocal } from '../../../macro/banking';
-import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
+import { costOfCapitalOf, riskFreeRateOf } from '../../../../domain/company-week/cost-of-capital';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
 import { postInitialMargin, withInitialMargin, admitToHouse, openMemberCapacity, memberNotionalCapacityLocal, reserveMemberCapacity } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
@@ -66,7 +66,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
   const firmById = new Map(firms.map((c) => [c.id, c]));
   // The USA short rate finances a carry position; it is the one this model quotes globally.
   const financingRateAnnual = ctx.updatedRegions.USA?.zeroRates?.tenor3M ?? 0.03;
-  const riskFreeRate = ctx.updatedRegions.USA?.zeroRates?.tenor10Y ?? 0.04;
+  const riskFreeRate = riskFreeRateOf(ctx.updatedRegions.USA);
 
   // ---- 1. WHO HAS TO HEDGE, on each side, measured off real books, net of what each already
   // carries on the one book (§7.241). ----
@@ -178,8 +178,8 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
           riskAversion: riskAversionOf(c.management),
         });
         if (!(hedgeLocal > 0)) return;
-        // Its own cost of capital, the same one the equity book values it at.
-        const costOfCapital = riskFreeRate + (c.beta ?? 1) * EQUITY_RISK_PREMIUM;
+        // Its own cost of capital — one owner (§3.26-d, `domain/company-week/cost-of-capital.ts`).
+        const costOfCapital = costOfCapitalOf(c, riskFreeRate);
         const reservation = spot + hedgeConcessionPerUnit({
           spotPrice: spot, annualVol: comm.volatility, costOfCapital, tenorYears,
         });

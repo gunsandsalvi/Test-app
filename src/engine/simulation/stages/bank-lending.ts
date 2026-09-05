@@ -36,9 +36,9 @@ import { openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf, seedBankBoo
  * real reserve-settlement flow for the money that moved between banks.
  */
 
-import { Preferences, riskAversionOf } from '../../../domain/preferences';
+import { Preferences } from '../../../domain/preferences';
 import { Company, Region, RegionId } from '../../../types';
-import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
+import { costOfCapitalOf, riskFreeRateOf } from '../../../domain/company-week/cost-of-capital';
 import { BankingSector, BankLoan, HouseholdLoanPool, HouseholdLoanKind,
   MORTGAGE_RISK_WEIGHT, CONSUMER_CREDIT_RISK_WEIGHT, householdBookRwaLocal, annuityWeeklyPrincipalLocal,
   MORTGAGE_TERM_WEEKS, MORTGAGE_SEED_WAM_WEEKS, CONSUMER_TERM_WEEKS, CONSUMER_TERM_SEED_WAM_WEEKS,
@@ -89,7 +89,9 @@ import {
 export function bankRequiredReturnAnnual(bank: { beta?: number; management?: Preferences }, reg: Region): number {
   // §5-BRAINS — the premium weighted by this bank's own risk aversion: a cautious bank prices
   // every loan off a higher hurdle. The median bank prices off the stated premium.
-  return Math.max(0.01, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (bank.beta ?? 1) * EQUITY_RISK_PREMIUM * riskAversionOf(bank.management));
+  // §3.26-d: one owner of the number (`domain/company-week/cost-of-capital.ts`); the 1% floor it
+  // carried was a bound where the rate itself is the answer (rule 6).
+  return costOfCapitalOf(bank, riskFreeRateOf(reg));
 }
 /** Share of the gap to the serviceable ceiling the SME pools seek to borrow each week when
  * credit is free — the pace of a real investment pipeline (MS/BP make segment investment
