@@ -20,11 +20,12 @@ export const lines: FunctionModule = {
     const ls = c.productLines ?? [];
     if (ls.length === 0) return <Card style={{ padding: 14, color: T.muted }}>{c.ticker} sells nothing by the unit — {c.isBankEntity ? 'a bank earns a margin, not a price' : 'no product line is on record'}.</Card>;
     const reg = regionOf(world, c.region);
-    const sales = c.lastWeekSalesUnitsBySubUnit ?? {};
-    const expected = c.expectedSalesUnitsBySubUnit ?? {};
-    const inv = c.outputInventoryBySubUnit ?? {};
+    // Per sub-unit the firm sells or holds — SPARSE, so a line with no entry prints a dash.
+    const sales: Partial<Record<string, number>> = c.lastWeekSalesUnitsBySubUnit ?? {};
+    const expected: Partial<Record<string, number>> = c.expectedSalesUnitsBySubUnit ?? {};
+    const inv = c.outputInventoryBySubUnit;
     const rows = [...ls].sort((a, b) => b.revenueShare - a.revenueShare);
-    const stockLocal = Object.values(inv).reduce((a, v) => a + v.valueLocal, 0);
+    const stockLocal = Object.values(inv).reduce((a, v) => a + (v?.valueLocal ?? 0), 0);
     return (<>
       <Card style={{ padding: '2px 0' }}>
         <KV k="lines" hint={rows.map((l) => words(l.industry)).filter((v, i, a) => a.indexOf(v) === i).join(' · ')} v={count(rows.length)} />
@@ -44,9 +45,9 @@ export const lines: FunctionModule = {
       <Table rows={rows} keyOf={(l) => l.subUnitId} columns={[
         { key: 'line', label: 'line', width: 1.5, render: (l) => <Link to={{ type: 'market', id: marketId(c.region, l.subUnitId) }} nav={nav}>{subUnitLabel(l.subUnitId)}</Link> },
         { key: 'cap', label: 'makes', render: (l) => (l.weeklyCapacityUnits !== undefined ? count(Math.round(l.weeklyCapacityUnits)) : '—') },
-        { key: 'sold', label: 'sold', render: (l) => (sales[l.subUnitId] !== undefined ? count(Math.round(sales[l.subUnitId])) : '—') },
-        { key: 'exp', label: 'expects', render: (l) => (expected[l.subUnitId] !== undefined ? count(Math.round(expected[l.subUnitId])) : '—') },
-        { key: 'stock', label: 'stock', render: (l) => (inv[l.subUnitId] ? count(Math.round(inv[l.subUnitId].unitsHeld)) : '—') },
+        { key: 'sold', label: 'sold', render: (l) => { const s = sales[l.subUnitId]; return s !== undefined ? count(Math.round(s)) : '—'; } },
+        { key: 'exp', label: 'expects', render: (l) => { const x = expected[l.subUnitId]; return x !== undefined ? count(Math.round(x)) : '—'; } },
+        { key: 'stock', label: 'stock', render: (l) => { const i = inv[l.subUnitId]; return i ? count(Math.round(i.unitsHeld)) : '—'; } },
       ]} />
       <SectionLabel>the markets</SectionLabel>
       <Table rows={rows} keyOf={(l) => l.subUnitId} columns={[

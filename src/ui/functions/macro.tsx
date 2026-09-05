@@ -78,7 +78,7 @@ export const macro: FunctionModule = {
         <KV k="net worth" hint={sub('household net worth')} v={money(hs?.netWorthLocal)} />
         <KV k="debt to income" v={ratio(hs?.householdDebtToIncomeRatio, 2)} />
         <KV k="savings rate" v={pctLevel(hs?.savingsRate)} />
-        <KV k="home ownership" hint={sub('a read of the dwelling register')} v={pctLevel(hm ? ownershipRateOf(hm, r.totalPopulation) : undefined, 0)} />
+        <KV k="home ownership" hint={sub('a read of the dwelling register')} v={pctLevel(ownershipRateOf(hm, r.totalPopulation), 0)} />
       </Card>
       <SectionLabel>banks</SectionLabel>
       <Card style={{ padding: '2px 0' }}>

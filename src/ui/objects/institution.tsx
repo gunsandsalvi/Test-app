@@ -84,11 +84,11 @@ export const institution = defineObject<InstitutionalEntity>({
           {e.etf ? <KV k="tracks" v={<Link to={{ type: 'index', id: e.etf.indexId }} nav={nav}>{e.etf.indexId}</Link>} /> : null}
           {e.peFund ? <KV k="portfolio companies" v={count(e.peFund.portfolioCompanyIds?.length ?? 0)} onTap={() => nav.go('links')} /> : null}
         </Card>
-        {t ? (
+        {(
           <Card style={{ padding: '2px 0' }}>
             <KV k="mandate" hint={strategy ? 'the strategy\'s book' : 'policy allocation'} v={`gov ${pctLevel(t.govBondPct, 0)} · credit ${pctLevel(t.corpBondPct + t.loanPct, 0)} · equity ${pctLevel(t.equityPct, 0)} · cash ${pctLevel(t.cashPct, 0)}`} />
           </Card>
-        ) : null}
+        )}
         <FunctionTiles nav={nav} tiles={[
           { fn: 'holdings', sub: `${book.length} positions` },
           { fn: 'news', sub: 'what happened, and why' },

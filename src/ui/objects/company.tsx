@@ -163,7 +163,7 @@ export const company = defineObject<Company>({
             <KV k="net debt / ebitda" hint={`leverage ${ratio(c.leverage)}`} v={c.ebitda > 0 ? ratio(netDebt / c.ebitda) : '—'} />
             <KV k="interest coverage" v={ratio(c.interestCoverage)} />
             <KV k="cash" v={money(cashLocal)} />
-            <KV k="people" hint={c.previousEmployeeCount !== undefined && c.previousEmployeeCount !== c.employeeCount ? `${c.employeeCount > c.previousEmployeeCount ? '+' : ''}${count(c.employeeCount - c.previousEmployeeCount)} this week` : undefined} v={count(c.employeeCount)} />
+            <KV k="people" hint={c.previousEmployeeCount !== c.employeeCount ? `${c.employeeCount > c.previousEmployeeCount ? '+' : ''}${count(c.employeeCount - c.previousEmployeeCount)} this week` : undefined} v={count(c.employeeCount)} />
             {c.mothballedPpeShare ? <KV k="plant mothballed" v={pctLevel(c.mothballedPpeShare, 0)} /> : null}
           </Card>
         )}

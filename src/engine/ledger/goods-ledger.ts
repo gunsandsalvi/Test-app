@@ -81,7 +81,7 @@ export function scrapGoods(region: RegionId, subUnitId: string, units: number): 
  * A good that cannot be held is never held — its unsold capacity was unused, not produced.
  */
 export function settleOutputInventory(
-  update: { outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }> },
+  update: { outputInventoryBySubUnit?: Partial<Record<string, { unitsHeld: number; valueLocal: number }>> },
   region: RegionId, subUnitId: string,
   initialUnits: number, arrivedUnits: number, contractUnits: number, marketUnits: number, unitPriceLocal: number
 ): void {
@@ -118,7 +118,7 @@ export function settleOutputInventory(
 /** A running stock write with no production behind it — the contract deliveries' balance
  *  within the week; every unit that left did so by a wire at the delivery. */
 export function setOutputStock(
-  update: { outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }> },
+  update: { outputInventoryBySubUnit?: Partial<Record<string, { unitsHeld: number; valueLocal: number }>> },
   subUnitId: string, unitsHeld: number, unitPriceLocal: number
 ): void {
   const held = isStorable(subUnitId) ? unitsHeld : 0;
@@ -126,7 +126,7 @@ export function setOutputStock(
   update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: held, valueLocal: held * unitPriceLocal };
 }
 
-type StockHolder = { id: EntityId; ticker: Ticker; region: RegionId; outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }> };
+type StockHolder = { id: EntityId; ticker: Ticker; region: RegionId; outputInventoryBySubUnit?: Partial<Record<string, { unitsHeld: number; valueLocal: number }>> };
 
 /** Finished stock moves from one firm to another (an estate's sale to a peer): a wire, the rows follow. */
 export function moveOutputUnits(from: StockHolder, to: StockHolder, subUnitId: string, units: number, valueLocal: number, reason: string): number {

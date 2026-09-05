@@ -35,20 +35,20 @@ export const OBJECT_TYPES = Object.keys(OBJECTS) as ObjectType[];
 export const moduleOf = (type: ObjectType): ObjectModule<any> => OBJECTS[type];
 
 export function objectOf(world: World, ref: ObjectRef): unknown {
-  return OBJECTS[ref.type]?.find(world, ref.id);
+  return OBJECTS[ref.type].find(world, ref.id);
 }
 
 export function labelOf(world: World, ref: ObjectRef): ObjectLabel {
   const m = OBJECTS[ref.type];
-  const o = m?.find(world, ref.id);
-  if (!m || o === undefined) return { ticker: ref.id, name: 'gone', kind: ref.type };
+  const o = m.find(world, ref.id);
+  if (o === undefined) return { ticker: ref.id, name: 'gone', kind: ref.type };
   return m.label(world, ref.id, o);
 }
 
 export function headlineOf(world: World, ref: ObjectRef): { value: string; sub?: string; neg?: boolean } | undefined {
   const m = OBJECTS[ref.type];
-  const o = m?.find(world, ref.id);
-  return m && o !== undefined ? m.headline?.(world, ref.id, o) : undefined;
+  const o = m.find(world, ref.id);
+  return o !== undefined ? m.headline?.(world, ref.id, o) : undefined;
 }
 
 /**
@@ -74,7 +74,7 @@ export function refOfIdentifier(world: World, s: string | undefined | null): Obj
     if (id !== undefined) return { type, id };
   }
   const upper = q.toUpperCase();
-  if (world.state.regions[upper as 'USA']) return { type: 'region', id: upper };
+  if (Object.hasOwn(world.state.regions, upper)) return { type: 'region', id: upper };
   const c = world.state.companies.find((x) => x.id === q) ?? world.state.companies.find((x) => x.ticker === upper);
   if (c) return { type: 'company', id: c.id };
   const e = world.state.institutionalEntities.find((x) => x.id === q) ?? world.state.institutionalEntities.find((x) => x.ticker === upper);
@@ -93,11 +93,11 @@ export function kindOfWord(world: World, phrase: string): { type: ObjectType; re
     // §3.15-i: a class word ("bonds", "bills") is the kind's screener opened on that class.
     const classTab = m.kindWords?.[p];
     if (classTab !== undefined) {
-      const first = m.list(world)[0];
+      const first = m.list(world).at(0);
       return first ? { type, ref: { type, id: first.id }, tab: classTab } : { type };
     }
     if (m.words[0] !== p && m.words[1] !== p && !(type === 'company' && (p === 'firms' || p === 'firm')) && !(type === 'institution' && (p === 'institutions' || p === 'institution')) && !(type === 'index' && p === 'indexes') && !(type === 'fx' && (p === 'fx' || p === 'currencies'))) continue;
-    const first = m.list(world)[0];
+    const first = m.list(world).at(0);
     if (!first) return { type };
     const groups = m.peers?.groups(world, first.id, first.obj) ?? [];
     return { type, ref: { type, id: first.id }, tab: groups.length ? groups[groups.length - 1].name : undefined };

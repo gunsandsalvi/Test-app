@@ -18,7 +18,7 @@ function columnsFor(world: World, type: ObjectType, anchorId?: string): AnyColum
   const m = moduleOf(type);
   if (!m.peers) return [];
   if (typeof m.peers.columns === 'function') {
-    const id = anchorId ?? m.list(world)[0]?.id;
+    const id = anchorId ?? m.list(world).at(0)?.id;
     const obj = id !== undefined ? m.find(world, id) : undefined;
     return obj !== undefined ? m.peers.columns(world, id!, obj) : [];
   }
@@ -33,7 +33,7 @@ export function Screener({ world, nav, type, ids, columns, sort: initialSort, su
   const [sort, setSort] = useState(initialSort ?? m.peers?.defaultSort ?? cols[1]?.key ?? 'name');
   const [asc, setAsc] = useState(false);
   const rows = ids.map((id) => ({ id, obj: m.find(world, id) })).filter((r) => r.obj !== undefined) as { id: string; obj: unknown }[];
-  const col = cols.find((c) => c.key === sort) ?? cols[1] ?? cols[0];
+  const col = cols.find((c) => c.key === sort) ?? cols.at(1) ?? cols.at(0);
   if (!col) return <Card style={{ padding: 14, color: T.muted }}>this kind has no screener.</Card>;
   const sorted = [...rows].sort((a, b) => {
     const va = col.value(a, world), vb = col.value(b, world);

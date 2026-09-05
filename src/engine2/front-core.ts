@@ -464,6 +464,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
       atPl++;
     }
     for (const [su, inv] of Object.entries(comp.outputInventoryBySubUnit)) {
+      if (!inv) continue;
       S.outSub[atOut] = SUBUNIT_INDEX.get(su) ?? -1;
       S.outUnits[atOut] = inv.unitsHeld;
       S.outValue[atOut] = inv.valueLocal;

@@ -527,7 +527,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     novateDerivatives(ctx, rekey); // §3.13-BOOK d4b: through the contract ledger's door
   }
   reassignConsignments(state, target, acquirer);
-  Object.entries(target.outputInventoryBySubUnit ?? {}).forEach(([subUnitId, row]) => {
+  Object.entries(target.outputInventoryBySubUnit).forEach(([subUnitId, row]) => {
+    if (!row) return;
     moveOutputUnits(target, acquirer, subUnitId, row.unitsHeld, row.valueLocal, 'merger: finished stock assumed');
   });
   Object.keys(materializeInputInventory(ctx.v2, target.id)).forEach((subUnitId) => {

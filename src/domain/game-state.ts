@@ -60,7 +60,7 @@ export interface GameState {
   /** XB6 — the share of each pair's own weekly flow its market could NOT absorb, keyed
    *  "BASE/QUOTE". The model's one real measure of how deep a currency pair is, and what the
    *  invoice-currency choice is priced against. */
-  fxPairIlliquidity: Record<string, number>;
+  fxPairIlliquidity: Partial<Record<string, number>>; // per pair the FX book has measured
   // §3.13-BOOK d4c-v: the trade invoices — sales delivered and not yet paid for — are rows of
   // the world's contract store, read through `contract-ledger.ts:tradeInvoicesOf`; not a field.
   /** G5 — open and just-closed workouts, carried across weeks. §7.274: REQUIRED — the optional

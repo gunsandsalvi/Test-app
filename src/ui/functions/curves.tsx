@@ -53,7 +53,7 @@ export const curves: FunctionModule = {
     if (month.some((p) => Number.isFinite(p.v))) shapes.push({ name: 'a month ago', points: month, dim: true } as never);
     if (year.some((p) => Number.isFinite(p.v))) shapes.push({ name: 'a year ago', points: year, dim: true } as never);
     const slope = (r.zeroRates?.tenor10Y ?? 0) - (r.zeroRates?.tenor2Y ?? 0);
-    const swaps = r.swapSpreadBpsByTenor ?? {};
+    const swaps: Partial<Record<string, number>> = r.swapSpreadBpsByTenor ?? {}; // per tenor the swap book has printed
     return (<>
       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
         <Hint>solid: today · dashed: a month, a year ago</Hint>

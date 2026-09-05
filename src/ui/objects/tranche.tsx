@@ -89,7 +89,6 @@ function allTranches(world: World): { id: string; obj: TrancheView }[] {
     for (const t of materializeLadder(v2, c.id)) out.push({ id: trancheId(c.id, t.id), obj: companyView(world, c, policy, t) });
   }
   for (const r of REGION_IDS) {
-    if (!world.state.regions[r]) continue;
     for (const t of materializeGovLadder(v2, r)) out.push({ id: trancheId(r, t.id), obj: sovereignView(world, r, t) });
   }
   listMemo.set(world, out);

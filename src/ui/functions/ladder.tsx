@@ -71,7 +71,7 @@ export const ladder: FunctionModule = {
       })).sort((a, b) => a.maturityWeek - b.maturityWeek);
       const total = rows.reduce((a, r) => a + r.principalLocal, 0);
       const interest = rows.reduce((a, r) => a + r.principalLocal * r.rate, 0);
-      const next = rows[0];
+      const next = rows.at(0);
       if (rows.length === 0) return <Card style={{ padding: 14, color: T.muted }}>{c.ticker} carries no debt — no bond, loan, paper or facility on the ladder.</Card>;
       return (<>
         <Card style={{ padding: '2px 0' }}>

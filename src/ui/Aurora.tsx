@@ -148,7 +148,7 @@ export default function Aurora() {
 
   // ---- navigation ----
   const panel = panels[panelIdx];
-  const frame = panel.stack[panel.stack.length - 1];
+  const frame = panel.stack.at(-1);
   const remember = useCallback((f: Frame) => {
     const arg = Object.values(f.args)[0];
     const text = `${labelOf(world, f.ref).ticker.toLowerCase()}${f.fn !== DEFAULT_FUNCTION ? ' ' + f.fn : ''}${arg ? ' ' + arg : ''}`;
@@ -157,7 +157,7 @@ export default function Aurora() {
   const push = useCallback((f: Frame) => {
     setPanels((ps) => ps.map((p, i) => {
       if (i !== panelIdx) return p;
-      const top = p.stack[p.stack.length - 1];
+      const top = p.stack.at(-1);
       // The same page again is not a new page.
       if (top && sameRef(top.ref, f.ref) && top.fn === f.fn && JSON.stringify(top.args) === JSON.stringify(f.args)) return p;
       return { ...p, stack: [...p.stack, f] };
@@ -175,7 +175,7 @@ export default function Aurora() {
       setPanelIdx((i) => i + 1); remember(f); setBarOpen(false); setCommand('');
     },
     go: (fn, args = {}) => {
-      const cur = panels[panelIdx]?.stack[panels[panelIdx].stack.length - 1];
+      const cur = panels.at(panelIdx)?.stack.at(-1);
       if (!cur) return;
       const f = { ref: cur.ref, fn, args: { ...(fn === cur.fn ? cur.args : {}), ...args } };
       push(f); if (fn !== cur.fn) remember(f);
@@ -213,7 +213,7 @@ export default function Aurora() {
   const gone = frame ? objectOf(world, frame.ref) === undefined : false;
   const argText = frame ? Object.values(frame.args)[0] : undefined;
   const trail = panel.stack.slice(0, -1).map((f, i, arr) => {
-    const prev = arr[i - 1];
+    const prev = i > 0 ? arr[i - 1] : undefined;
     const t = labelOf(world, f.ref).ticker.toLowerCase();
     if (prev && sameRef(prev.ref, f.ref)) return prev.fn === f.fn ? '' : f.fn;
     return `${t}${f.fn !== DEFAULT_FUNCTION ? ' ' + f.fn : ''}`;
@@ -392,7 +392,7 @@ function Home({ world, nav, recents, onRecent, stepMs }: { world: World; nav: Na
   const kinds: { type: ObjectType; text: string }[] = OBJECT_TYPES
     .filter((t) => OBJECTS[t].searchable && !['company', 'institution', 'region'].includes(t))
     .map((t) => ({ type: t, text: OBJECTS[t].words[1] }));
-  const firstOf = (type: ObjectType): ObjectRef | undefined => { const x = moduleOf(type).list(world)[0]; return x ? { type, id: x.id } : undefined; };
+  const firstOf = (type: ObjectType): ObjectRef | undefined => { const x = moduleOf(type).list(world).at(0); return x ? { type, id: x.id } : undefined; };
   const Chip = ({ text, onTap, sub }: { text: string; onTap: () => void; sub?: string }) => (
     <span onClick={onTap} style={{ display: 'inline-flex', flexDirection: 'column', justifyContent: 'center', minHeight: 40, padding: '4px 12px', borderRadius: 8, background: T.card, border: `1px solid ${T.border}`, cursor: 'pointer' }}>
       <span style={{ ...mono, fontSize: 13, fontWeight: 600, color: '#c7cdd6' }}>{text}</span>

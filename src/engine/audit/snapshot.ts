@@ -131,7 +131,7 @@ export function goodsUnitsByKey(state: GameState, parts?: Record<string, [number
   };
   const v2 = state.v2 as V2World | undefined;
   for (const c of state.companies) {
-    for (const [sub, inv] of Object.entries(c.outputInventoryBySubUnit ?? {})) add(c.region, sub, inv.unitsHeld);
+    for (const [sub, inv] of Object.entries(c.outputInventoryBySubUnit)) if (inv) add(c.region, sub, inv.unitsHeld);
     // §3.13-BOOK f3: a firm's input lots are its GOOD rows on the register.
     if (v2) for (const g of goodsHeldBy(v2, c.id)) add(c.region, g.subUnitId, g.units, 1);
   }

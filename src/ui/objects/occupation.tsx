@@ -8,9 +8,9 @@ import { REGION_IDS } from '../../domain/geography';
 import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, taped, words } from './common';
 import { cohortId } from './cohort';
 
-import { OccupationPool, OccupationType } from '../../domain/region-macro';
+import { OccupationPool } from '../../domain/region-macro';
 type OccPool = OccupationPool;
-const poolsOf = (r: ReturnType<typeof regionOf>): Record<string, OccPool> => (r?.occupationPools ?? {}) as Partial<Record<OccupationType, OccPool>> as Record<string, OccPool>;
+const poolsOf = (r: ReturnType<typeof regionOf>): Partial<Record<string, OccPool>> => (r?.occupationPools ?? {}) as Partial<Record<string, OccPool>>; // sparse by occupation
 export type Occupation = { region: string; occ: string; p: OccPool };
 const occupationId = (region: string, occ: string): string => `${region}:${occ}`;
 
@@ -25,7 +25,7 @@ export const occupation = defineObject<Occupation>({
   words: ['occupation', 'occupations'],
   searchable: true,
   find: occOf,
-  list: (world) => REGION_IDS.flatMap((r) => Object.entries(poolsOf(world.state.regions[r])).map(([occ, p]) => ({ id: occupationId(r, occ), obj: { region: r, occ, p } }))),
+  list: (world) => REGION_IDS.flatMap((r) => Object.entries(poolsOf(world.state.regions[r])).flatMap(([occ, p]) => (p ? [{ id: occupationId(r, occ), obj: { region: r, occ, p } }] : []))),
   parse: (world, phrase) => { const p = phrase.trim().toLowerCase().replace(/\s+/g, ' '); for (const r of REGION_IDS) { const rl = r.toLowerCase(); if (!p.startsWith(rl + ' ')) continue; const rest = p.slice(rl.length + 1); const occ = Object.keys(poolsOf(world.state.regions[r])).find((o) => words(o) === rest || o.toLowerCase() === rest); if (occ) return occupationId(r, occ); } return undefined; },
   label: (_w, _id, o) => ({ ticker: `${o.region} ${words(o.occ)}`, name: `${words(o.occ)} labour market, ${o.region}`, kind: 'occupation', region: o.region }),
   keywords: (_w, _id, o) => [o.region.toLowerCase(), words(o.occ), 'labour', 'labor', 'wages', 'jobs'],

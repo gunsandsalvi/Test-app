@@ -45,7 +45,7 @@ function pairDepthKey(a: RegionId, b: RegionId, quotedPairs: { base: RegionId; q
 function exposureCost(
   a: RegionId,
   b: RegionId,
-  illiquidity: Record<string, number>,
+  illiquidity: Partial<Record<string, number>>,
   quotedPairs: { base: RegionId; quote: RegionId }[]
 ): number {
   if (a === b) return 0;
@@ -64,7 +64,7 @@ export function chooseInvoiceRegion(args: {
   sellerRegion: RegionId;
   buyerRegion: RegionId;
   candidates: readonly RegionId[];
-  illiquidity: Record<string, number>;
+  illiquidity: Partial<Record<string, number>>;
   quotedPairs: { base: RegionId; quote: RegionId }[];
   sellerIsShort: boolean;
 }): RegionId {

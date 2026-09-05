@@ -18,10 +18,10 @@ export const centralbank = defineObject<Region>({
   words: ['central bank', 'central banks'],
   searchable: true,
   find: regionOf,
-  list: (world) => REGION_IDS.map((r) => ({ id: r, obj: world.state.regions[r] })).filter((x) => !!x.obj),
+  list: (world) => REGION_IDS.map((r) => ({ id: r, obj: world.state.regions[r] })),
   label: (_w, id, r) => ({ ticker: `${id} cb`, name: r.centralBank, kind: 'central bank', region: id }),
   keywords: (_w, id, r) => [id.toLowerCase(), r.centralBank.toLowerCase(), 'central bank', 'cb', 'monetary'],
-  parse: (world, phrase) => { const p = phrase.trim().toLowerCase(); const m = p.match(/^([a-z]+) (cb|central bank)$/); return m && world.state.regions[m[1].toUpperCase() as 'USA'] ? m[1].toUpperCase() : undefined; },
+  parse: (world, phrase) => { const p = phrase.trim().toLowerCase(); const m = p.match(/^([a-z]+) (cb|central bank)$/); return m && Object.hasOwn(world.state.regions, m[1].toUpperCase()) ? m[1].toUpperCase() : undefined; },
   headline: (_w, _id, r) => ({ value: pctLevel(r.policyRate, 2), sub: 'policy rate' }),
   series: (world, id) => [
     taped(world, `region:${id}:policy`, 'policy rate', 'rate', (v) => pctLevel(v, 2)),

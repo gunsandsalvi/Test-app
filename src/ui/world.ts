@@ -67,7 +67,6 @@ export function recordTape(tape: Tape, state: GameState): void {
   put('world:defaults', defaults);
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    if (!reg) return;
     put(`region:${r}:unemployment`, reg.unemploymentRate);
     put(`region:${r}:policy`, reg.policyRate);
     put(`region:${r}:10y`, reg.zeroRates?.tenor10Y);
@@ -84,7 +83,7 @@ export function recordTape(tape: Tape, state: GameState): void {
     put(`region:${r}:government outlays`, reg.governmentOutlaysLocal ?? reg.governmentSpendingWeeklyLocal);
     put(`region:${r}:tightness`, reg.laborMarketTightness);
     const z = reg.zeroRates;
-    if (z) { put(`curve:${r}:3M`, z.tenor3M); put(`curve:${r}:2Y`, z.tenor2Y); put(`curve:${r}:5Y`, z.tenor5Y); put(`curve:${r}:10Y`, z.tenor10Y); put(`curve:${r}:30Y`, z.tenor30Y); }
+    { put(`curve:${r}:3M`, z.tenor3M); put(`curve:${r}:2Y`, z.tenor2Y); put(`curve:${r}:5Y`, z.tenor5Y); put(`curve:${r}:10Y`, z.tenor10Y); put(`curve:${r}:30Y`, z.tenor30Y); }
     const cb = reg.centralBankSheet;
     if (cb) {
       put(`centralbank:${r}:treasury account`, treasuryAccountOf(ensureV2(state), r));

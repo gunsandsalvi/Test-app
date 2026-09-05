@@ -39,7 +39,7 @@ export const fx = defineObject<FxPair>({
     ],
   },
   overview({ world, obj: p, nav }) {
-    const ill = world.state.fxPairIlliquidity?.[p.pair];
+    const ill = world.state.fxPairIlliquidity[p.pair];
     return (
       <>
         <ObjectHeader name={p.pair} sub={<>currency pair · <RegionLink id={p.base} nav={nav} /> against <RegionLink id={p.quote} nav={nav} /></>} />

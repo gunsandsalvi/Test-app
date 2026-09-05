@@ -568,7 +568,8 @@ export interface Company {
    *  sales this management EXPECTS by line (owner: stage 05, where production is decided). */
   lastWeekSalesUnitsBySubUnit?: Record<string, number>;
   expectedSalesUnitsBySubUnit?: Record<string, number>;
-  outputInventoryBySubUnit: Record<string, { unitsHeld: number; valueLocal: number }>;
+  /** Per sub-unit the firm has ever produced — SPARSE (§3.29-iii: the type says so). */
+  outputInventoryBySubUnit: Partial<Record<string, { unitsHeld: number; valueLocal: number }>>;
   // 1$ is 1$ Phase 2/6: real input inventory, keyed by the input sub-unit category (e.g.
   // upstream_extraction, specialty_metals) a company has actually bought and holds. Each entry is
   // a LIST of real purchase lots — not one blended average — because "you get out N output that
@@ -747,13 +748,13 @@ export function corporateTreasuryTargetLocal(cashLocal: number, annualRevenueLoc
 export function getOutputInventoryLocal(comp: Company, subUnitId?: string): number {
   const inv = comp.outputInventoryBySubUnit;
   if (subUnitId) return inv[subUnitId]?.valueLocal ?? 0;
-  return Object.values(inv).reduce((s, entry) => s + entry.valueLocal, 0);
+  return Object.values(inv).reduce((s, entry) => s + (entry?.valueLocal ?? 0), 0);
 }
 
 export function getOutputInventoryUnits(comp: Company, subUnitId?: string): number {
   const inv = comp.outputInventoryBySubUnit;
   if (subUnitId) return inv[subUnitId]?.unitsHeld ?? 0;
-  return Object.values(inv).reduce((s, entry) => s + entry.unitsHeld, 0);
+  return Object.values(inv).reduce((s, entry) => s + (entry?.unitsHeld ?? 0), 0);
 }
 
 /** IND10 — units of this company's output that are started but not yet finished. */

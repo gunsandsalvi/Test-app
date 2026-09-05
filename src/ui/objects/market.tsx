@@ -41,7 +41,7 @@ export const market = defineObject<Market>({
   words: ['market', 'markets'],
   searchable: true,
   find: (world, id) => { const { region, subUnitId } = splitMarketId(id); const d = stateOf(world, region, subUnitId); return d ? { region, subUnitId, d } : undefined; },
-  list: (world) => REGION_IDS.flatMap((r) => { const reg = world.state.regions[r]; return reg ? Object.keys(reg.categoryDemand).map((su) => ({ id: marketId(r, su), obj: { region: r, subUnitId: su, d: reg.categoryDemand[su as keyof typeof reg.categoryDemand]! } })) : []; }),
+  list: (world) => REGION_IDS.flatMap((r) => { const reg = world.state.regions[r]; return Object.keys(reg.categoryDemand).map((su) => ({ id: marketId(r, su), obj: { region: r, subUnitId: su, d: reg.categoryDemand[su]! } })); }),
   label: (_w, _id, m) => ({ ticker: `${m.region} ${words(m.subUnitId)}`, name: `${subUnitLabel(m.subUnitId)} in ${m.region}`, kind: 'goods market', region: m.region }),
   keywords: (_w, _id, m) => [m.region.toLowerCase(), words(m.subUnitId), subUnitLabel(m.subUnitId).toLowerCase(), (industryOfSubUnit(m.subUnitId) ?? '').toLowerCase()],
   parse: (world, phrase) => {
@@ -51,7 +51,7 @@ export const market = defineObject<Market>({
       if (!p.startsWith(rl + ' ')) continue;
       const rest = p.slice(rl.length + 1).replace(/ /g, '_');
       const reg = world.state.regions[r];
-      if (reg && reg.categoryDemand[rest as keyof typeof reg.categoryDemand]) return marketId(r, rest);
+      if (reg.categoryDemand[rest]) return marketId(r, rest);
     }
     return undefined;
   },

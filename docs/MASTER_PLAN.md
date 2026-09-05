@@ -553,20 +553,12 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-29-iii. **The dead conditions.** The 331 guards the types say cannot fire (always-truthy,
-    always-falsy, no overlap) are each one of two things: a check that never fires — §7.234's class,
-    a guard against a state the type already excludes, and rule 12 says delete it, not the rule —
-    or a type that LIES, where the guard is the only thing catching a runtime `undefined` the
-    declaration denies, and the fix is the declaration (an optional field, a `Partial<Record>` for
-    a sparse store), never the guard. One directory at a time (rule 10), the budget falling with
-    each: **a** domain, engine2 and test (26), **b** `src/engine` outside the simulation (69),
-    **c-i** the simulation's guards on total stores (113) and **c-ii** its reads of sparse stores
-    (38, the stores' types fixed) are DONE; **d** `src/ui` and `scripts/harness.ts` (96) remain.
-29-iv. **The defensive reads.** The 1,223 `??` and `?.` on values the types say are never nullish
-    are the same choice per site: a fallback that cannot run (delete it — a `?? 0` that never
-    fires is a stated number with no owner, rule 2) or a type that lies (fix it). `scripts/harness.ts`
-    (178), `macro/evolution.ts` (83), `05-unit-bidding.ts` (68) and `labor-market.ts` (47) hold a
-    quarter of them.
+29-iv. **The defensive reads.** The 997 `??` (649) and `?.` (348) on values the types say are never
+    nullish are the same choice per site: a fallback that cannot run (delete it — a `?? 0` that
+    never fires is a stated number with no owner, rule 2) or a type that lies (fix it, as 29-iii
+    fixed sixteen sparse stores). By directory: the simulation 376, the engine outside it 235, the
+    UI 182, the harness 143, engine2 33, domain 20. One directory at a time (rule 10), the budget
+    falling with each.
 
 28b. **The units sweep, once, at the source.** Rule 9 is a rule with no sweep behind it. Walk
     every rate, flow and index at the point it is WRITTEN, establish its periodicity and unit, and
@@ -1207,7 +1199,7 @@ none of them steps a week of the simulation. Green before every commit.
 | Command | Note |
 |---|---|
 | `npx tsc --noEmit` | |
-| `npx eslint src scripts test --no-warn-ignored --max-warnings 1139` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
+| `npx eslint src scripts test --no-warn-ignored --max-warnings 997` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
 | `npm test` | the unit suite: contracts and arithmetic, never a run |
 | `bash scripts/check-hygiene.sh` | carries `check-atlas.sh` and the stated-literal ratchets |
 | `npm run build` | |
@@ -1334,6 +1326,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**29-iii-d — THE DEAD CONDITIONS IN THE UI AND THE HARNESS, AND 29-iii IS DONE.** Ninety-one.
+  The harness: `(s.institutionalEntities || [])` five times, the region and household guards, a
+  `[0]` that is `.at(0)`, a boolean hashed through a cast the `typeof` had already earned. The UI:
+  every panel's `frame` was `stack[stack.length - 1]` typed as always there, so twenty `frame ?`
+  branches read as dead — it is `stack.at(-1)` and they are right; the statements' `latest`/`prior`
+  the same; the region objects' `filter(!!obj)` on a total store, the `parse` guards that cast a
+  typed-in word to a `RegionId` before testing it (now `Object.hasOwn`), `r.weather &&`,
+  `r.sovereignCurve &&`, an index page's `!raw`. Sparse stores fixed at the declaration:
+  `Company.outputInventoryBySubUnit` (only what the firm has produced), the FX pairs' illiquidity,
+  the occupation pools' UI read, and the per-tenor and per-line records the pages index. 1,139 →
+  997, and the 331 dead conditions are gone from every directory: what stands is 29-iv's 997
+  defensive reads. Gates green; no run (rule 11).
 
 **29-iii-c-ii — THE SIMULATION'S SPARSE STORES SAY SO.** Thirty-eight guards on reads the types
   said could not miss, and every one was a store declared total that is sparse by nature. Fixed at

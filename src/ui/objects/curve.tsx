@@ -16,10 +16,10 @@ export const curve = defineObject<Region>({
   words: ['curve', 'curves'],
   searchable: true,
   find: regionOf,
-  list: (world) => REGION_IDS.map((r) => ({ id: r, obj: world.state.regions[r] })).filter((x) => !!x.obj),
+  list: (world) => REGION_IDS.map((r) => ({ id: r, obj: world.state.regions[r] })),
   label: (_w, id) => ({ ticker: `${id} curve`, name: `${id} sovereign curve`, kind: 'sovereign curve', region: id }),
   keywords: (_w, id) => [id.toLowerCase(), 'curve', 'yields', 'rates', 'sovereign'],
-  parse: (world, phrase) => { const p = phrase.trim().toLowerCase(); const m = p.match(/^([a-z]+) (curve|yields|rates)$/); return m && world.state.regions[m[1].toUpperCase() as 'USA'] ? m[1].toUpperCase() : undefined; },
+  parse: (world, phrase) => { const p = phrase.trim().toLowerCase(); const m = p.match(/^([a-z]+) (curve|yields|rates)$/); return m && Object.hasOwn(world.state.regions, m[1].toUpperCase()) ? m[1].toUpperCase() : undefined; },
   headline: (_w, _id, r) => ({ value: pctLevel(r.zeroRates?.tenor10Y, 2), sub: '10y' }),
   series: (world, id) => [
     ...TENORS.map((t) => taped(world, `curve:${id}:${t}`, t.toLowerCase(), 'zero yield', (v) => pctLevel(v, 2))),
@@ -52,7 +52,7 @@ export const curve = defineObject<Region>({
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           {TENORS.map((t) => <KV key={t} k={t.toLowerCase()} v={pctLevel(tenorRate(r, t), 2)} />)}
-          <KV k="traded this week" hint="the rest is the fit" v={r.sovereignCurve && r.sovereignCurve.tradedTenorsYears.length > 0 ? r.sovereignCurve.tradedTenorsYears.map((y) => (y < 1 ? `${Math.round(y * 52)}w` : `${y.toFixed(y % 1 === 0 ? 0 : 1)}y`)).join(' · ') : 'nothing'} />
+          <KV k="traded this week" hint="the rest is the fit" v={r.sovereignCurve.tradedTenorsYears.length > 0 ? r.sovereignCurve.tradedTenorsYears.map((y) => (y < 1 ? `${Math.round(y * 52)}w` : `${y.toFixed(y % 1 === 0 ? 0 : 1)}y`)).join(' · ') : 'nothing'} />
           <KV k="overnight repo" v={pctLevel(r.repoRateAnnual, 2)} />
           <KV k="expected inflation" hint="the market's, annual" v={pctLevel(r.expectedInflation, 2)} />
           <KV k="dot plot" hint="1y · 2y" v={`${pctLevel(r.dotPlot1Y, 2)} · ${pctLevel(r.dotPlot2Y, 2)}`} />

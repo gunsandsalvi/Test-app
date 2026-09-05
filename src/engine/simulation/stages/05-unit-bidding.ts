@@ -409,7 +409,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
     ctx.updatedCompanies.forEach((c) => {
       if (!openEstateIds.has(c.id)) return;
       const index = byRegion[c.region as RegionId];
-      const rows = Object.entries(c.outputInventoryBySubUnit ?? {}).filter(([, r]) => r.unitsHeld > 0.0001);
+      const rows = Object.entries(c.outputInventoryBySubUnit).filter(([, r]) => r !== undefined && r.unitsHeld > 0.0001);
       if (rows.length === 0) return;
       lookup.byTicker.set(c.ticker, c);
       lookup.byId.set(c.id, c);
@@ -437,7 +437,7 @@ interface SourcingContext {
   unitMassTonnes: Record<string, number>;
   fxToUsd: FxToUsd;
   /** XB6 — how deep each currency pair is, which is what the invoice currency is priced on. */
-  fxPairIlliquidity: Record<string, number>;
+  fxPairIlliquidity: Partial<Record<string, number>>;
   quotedPairs: { base: RegionId; quote: RegionId }[];
   /** Whether that week's book for a good left unfilled DEMAND rather than unsold supply — which
    *  is what decides who can insist on being paid in their own money. */

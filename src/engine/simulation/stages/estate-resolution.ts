@@ -455,7 +455,7 @@ function sellPlantToBidders(
 /** What a workout could not sell perishes: every finished-stock row and any input lot still on
  *  the dead firm is scrapped where it sits — unsold distressed goods, never a sale to nobody. */
 function perishStock(ctx: WeeklyStepContext, comp: Company): void {
-  Object.keys(comp.outputInventoryBySubUnit ?? {}).forEach((subUnitId) => scrapOutputUnitsTo(comp, subUnitId, 0, 0));
+  Object.keys(comp.outputInventoryBySubUnit).forEach((subUnitId) => scrapOutputUnitsTo(comp, subUnitId, 0, 0));
   Object.entries(materializeInputInventory(ctx.v2, comp.id)).forEach(([subUnitId, lots]) => {
     scrapInputUnits(ctx.v2, comp, subUnitId, lots.reduce((a, l) => a + l.unitsHeld, 0));
   });

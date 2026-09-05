@@ -331,7 +331,7 @@ function printOwnershipTraces(state: GameState, week: number): void {
     const deskFace: Record<string, { corp: number; loan: number; cp: number }> = {};
     regionIds.forEach((r) => { deskFace[r] = { corp: 0, loan: 0, cp: 0 }; });
     state.companies.forEach((c) => {
-      if (!c.bankBalanceSheet || !deskFace[c.region]) return;
+      if (!c.bankBalanceSheet) return;
       // §3.13-BOOK d3d: the desk's rows off the register, in face.
       const face = (kind: string): number => deskRowsOf(ensureV2(state), c.id, kind).reduce((a, p) => a + p.units, 0);
       deskFace[c.region].corp += face('CORP_BOND');
@@ -345,7 +345,7 @@ function printOwnershipTraces(state: GameState, week: number): void {
 
 /** A region's institutional book — cash (the account, §5-WIRES A3.2), repo lent, the rows. */
 const institutionalBookOf = (s: GameState, region: RegionId) =>
-  (s.institutionalEntities || [])
+  s.institutionalEntities
     .filter((e) => e.region === region && !e.isDefaulted
       && e.entityType !== 'MONEY_MARKET_FUND' && e.entityType !== 'ETF')
     .reduce(
@@ -384,7 +384,7 @@ function checkInstitutionalBookConservation(prevBooks: Map<RegionId, number>, st
     }
     // The money fund's own conservation: everything it holds is owed to its shareholders at
     // the stable $1 NAV, so book and shares may drift apart only by the week's accruals.
-    (state.institutionalEntities || [])
+    state.institutionalEntities
       .filter((e) => e.region === region && !e.isDefaulted && e.entityType === 'MONEY_MARKET_FUND')
       .forEach((mmf) => {
         const bookLocal = entityCashOf(ensureV2(state), mmf) + ((mmf as { repoLentLocal?: number }).repoLentLocal ?? 0)
@@ -573,11 +573,10 @@ function checkCentralBankIdentity(state: GameState, week: number) {
 function checkLaborMarketIdentity(state: GameState, week: number) {
   REGION_IDS_SEED_ORDER.forEach((region) => {
     const reg = state.regions[region];
-    if (!reg?.occupationPools) return;
     const employerHeadcount = state.companies
       .filter((c) => c.region === region && isActiveCompany(c))
       .reduce((a, c) => a + c.employeeCount, 0) // §7.246: unclamped (§7.46 L7)
-      + (reg.smePools || []).reduce((a, s) => a + s.employment, 0)
+      + reg.smePools.reduce((a, s) => a + s.employment, 0)
       + reg.governmentEmployment;
     const poolEmployed = Object.values(reg.occupationPools).reduce((a: number, p: OccupationPool) => a + (p.employed ?? 0), 0);
     // Tight band (0.2%): the pools are DERIVED from this exact sum by the end-of-week
@@ -609,9 +608,9 @@ function checkLaborMarketIdentity(state: GameState, week: number) {
 function checkHouseholdCohortIdentity(state: GameState, week: number) {
   REGION_IDS_SEED_ORDER.forEach((region) => {
     const reg = state.regions[region];
-    const hs = reg?.householdState;
-    const cohorts = hs?.cohorts;
-    if (!hs || !cohorts || cohorts.length === 0) {
+    const hs = reg.householdState;
+    const cohorts = hs.cohorts;
+    if (!cohorts || cohorts.length === 0) {
       violations.push({ week, message: `${region}: household cohorts missing — HH4's decomposition is not being built` });
       return;
     }
@@ -653,7 +652,7 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
     // HH4c: tier net worths are splits of the same marked components — they must sum to the
     // aggregate exactly (loose band only for rounding).
     const wd = reg.wealthDistribution;
-    if (wd && (hs.netWorthLocal ?? 0) !== 0) {
+    if ((hs.netWorthLocal ?? 0) !== 0) {
       const tierSum = Object.values(wd).reduce((a: number, t: { shareOfNetWorthLocal?: number }) => a + (t.shareOfNetWorthLocal ?? 0), 0);
       if (Math.abs(tierSum - (hs.netWorthLocal ?? 0)) / Math.max(1, Math.abs(hs.netWorthLocal ?? 1)) > 1e-3) {
         violations.push({
@@ -687,7 +686,7 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
 }
 
 function checkBeneficiaryClaimsHaveHolders(state: GameState, week: number) {
-  const owedLocal = (state.institutionalEntities || [])
+  const owedLocal = state.institutionalEntities
     .reduce((sum, e) => sum + ((e as { beneficiaryLiabilityLocal?: number }).beneficiaryLiabilityLocal ?? 0), 0);
   const heldLocal = REGION_IDS_SEED_ORDER
     .reduce((sum, r) => sum + (state.regions[r]?.householdState?.institutionalClaimsLocal ?? 0), 0);
@@ -799,7 +798,6 @@ function checkOwnershipConservation(state: GameState, week: number) {
     const reg = state.regions[id];
     (['equityOwnership', 'corpBondOwnership', 'sovBondOwnership'] as const).forEach(key => {
       const o = reg[key];
-      if (!o) return;
       // OWN1: every share here is measured off the register, which attributes a holding to its
       // ISSUER's region — so a foreign fund's paper is already INSIDE `institutionalShare` and
       // there is nothing separate to add. (This comment used to say foreign ownership was "not
@@ -1062,7 +1060,7 @@ const hhModule: HarnessModule = (() => {
         const sellableLocal = etfRows.reduce((a: number, x) => {
           const f = s.institutionalEntities?.find((e: InstitutionalEntity) => e.id === x.fundId);
           const sh = f ? etfSharesOutstandingOf(ensureV2(s), f.id) : 0;
-          const nav = sh > 0 && f ? ((f.itemizedHoldings ?? []).reduce((b: number, hh: ItemizedHolding) => b + (hh.quantityOrNotionalLocal ?? 0), 0) + Math.max(0, f ? entityCashOf(ensureV2(s), f) : 0)) / sh : 0;
+          const nav = sh > 0 && f ? ((f.itemizedHoldings ?? []).reduce((b: number, hh: ItemizedHolding) => b + (hh.quantityOrNotionalLocal ?? 0), 0) + Math.max(0, entityCashOf(ensureV2(s), f))) / sh : 0;
           return a + (x.shares ?? 0) * nav;
         }, 0);
         out.push(`      deposit headroom over the buffer ${B(headroomLocal)} vs a ${B(gapLocal)}/wk gap = ${gapLocal > 0 ? (headroomLocal / gapLocal).toFixed(0) : '∞'} weeks before forced selling starts`);
@@ -1154,7 +1152,7 @@ const hhModule: HarnessModule = (() => {
         if (kill) {
           const target = x.companies
             .filter(c => c.region === 'USA' && isActiveCompany(c))
-            .sort((a, b) => b.employeeCount - a.employeeCount)[0];
+            .sort((a, b) => b.employeeCount - a.employeeCount).at(0);
           if (target) {
             killedName = `${target.ticker} (${target.sector})`;
             killedJobs = target.employeeCount;
@@ -1194,7 +1192,7 @@ function couponReceipts(s: GameState, region: RegionId) {
       .reduce((x: number, p) => x + (p.faceLocal * (cb[p.bondId] ?? 0)) / 52, 0), 0);
   const insts = s.institutionalEntities
     .filter((e: InstitutionalEntity) => e.region === region && !e.isDefaulted)
-    .reduce((a: number, e: InstitutionalEntity) => a + (e.itemizedHoldings || [])
+    .reduce((a: number, e: InstitutionalEntity) => a + e.itemizedHoldings
       .filter((h: ItemizedHolding) => h.instrumentType === 'GOV_BOND' && h.issuerRegion === region)
       .reduce((x: number, h: ItemizedHolding) => x + ((h.quantityOrNotionalLocal ?? 0) * rate(h.instrumentId)) / 52, 0), 0);
   const central = centralBankPositions(ensureV2(s), region)
@@ -1894,7 +1892,7 @@ function canonicalFingerprint(state: GameState): string {
     const t = typeof v;
     if (t === 'number') { h.update('d'); num(v as number); return; }
     if (t === 'string') { h.update('s'); h.update(v as string); h.update('\0'); return; }
-    if (t === 'boolean') { h.update(v ? 'T' : 'F'); return; }
+    if (t === 'boolean') { h.update((v as boolean) ? 'T' : 'F'); return; }
     if (t === 'bigint') { h.update('B'); h.update((v as bigint).toString()); return; }
     if (t === 'function' || t === 'symbol') { h.update('x'); return; }
     const o = v as object;
@@ -1991,7 +1989,7 @@ const bookTraceModule: HarnessModule = {
     REGION_IDS_SEED_ORDER.forEach((region) => {
       const decompose = (s: GameState) => {
         const parts = { cashLocal: 0, repoLentLocal: 0 } as Record<string, number>;
-        (s.institutionalEntities || []).forEach((e) => {
+        s.institutionalEntities.forEach((e) => {
           if (e.region !== region || e.isDefaulted
             || e.entityType === 'MONEY_MARKET_FUND' || e.entityType === 'ETF') return;
           parts.cashLocal += entityCashOf(ensureV2(s), e);
@@ -2020,7 +2018,7 @@ const bookTraceModule: HarnessModule = {
       let heldOnDeadIssuerLocal = 0;
       const issuerAliveById = new Map<string, boolean>();
       state.companies.forEach((c) => { if (c.region === region) issuerAliveById.set(c.id, isActiveCompany(c)); });
-      (state.institutionalEntities || []).forEach((e) => {
+      state.institutionalEntities.forEach((e) => {
         if (e.isDefaulted) return;
         e.itemizedHoldings.forEach((h) => {
           if (h.issuerRegion !== region) return;
@@ -2034,7 +2032,7 @@ const bookTraceModule: HarnessModule = {
       });
       const creditOutstandingLocal = state.companies
         .filter((c) => c.region === region && isActiveCompany(c))
-        .reduce((s2: number, c) => s2 + (c.debtTranches || []).reduce((x: number, t) => x + Math.max(0, t.principalLocal), 0), 0);
+        .reduce((s2: number, c) => s2 + c.debtTranches.reduce((x: number, t) => x + Math.max(0, t.principalLocal), 0), 0);
       console.log(`  [book] w${w} ${region} ${(total(before) / 1e9).toFixed(1)}B -> ${(total(after) / 1e9).toFixed(1)}B`
         + ` | credit held/outstanding ${(creditHeldLocal / 1e9).toFixed(1)}/${(creditOutstandingLocal / 1e9).toFixed(1)}`
         + ` = ${(creditOutstandingLocal > 0 ? creditHeldLocal / creditOutstandingLocal : 0).toFixed(3)}`
@@ -2146,8 +2144,8 @@ const spiralModule: HarnessModule = {
     if (!SPIRAL) return;
     REGION_IDS_SEED_ORDER.forEach((region) => {
       const r = state.regions[region];
-      const smeEmployment = (r.smePools || []).reduce((a, s) => a + (s.employment ?? 0), 0);
-      const poolCashNeg = (r.smePools || []).filter((s) => poolCashOf(ensureV2(state), region, s.industry) < 0).length;
+      const smeEmployment = r.smePools.reduce((a, s) => a + (s.employment ?? 0), 0);
+      const poolCashNeg = r.smePools.filter((s) => poolCashOf(ensureV2(state), region, s.industry) < 0).length;
       const gov = governmentOf(region, r, materializeGovLadder(ensureV2(state), region));
       const { overrunLocal } = gov.overrun();
       console.log(`  [spiral] w${w} ${region}`
@@ -2433,7 +2431,6 @@ function runHarness() {
     // second one, never reconcile the difference.
     REGION_IDS.forEach((regionId) => {
       const reg = state.regions?.[regionId];
-      if (!reg) return;
       const bankHeldLocal = banksOf(state.companies, regionId)
         .reduce((a: number, c: Company) => a + (c.bankBalanceSheet!.sovereignAccruedCouponLocal ?? 0), 0);
       if (bankHeldLocal - (reg.sovereignCouponPayableLocal ?? 0) > 5e6) {
@@ -2660,7 +2657,7 @@ function runHarness() {
   // then produces something else. This is that gap, measured in one pass rather than discovered one
   // row at a time. A ratio far from 1.00 is a quantity the seed asserts and the engine disagrees
   // with; it is a defect list, and it is meant to flatten.
-  if (seededProbe) {
+  { // the probe was seeded at week 0 (above), so the comparison always has its baseline
     console.log('--- §5-STRUCT step 6: the seed against the settled world (1.00 = the seed was right) ---');
     compareToSettled(seededProbe, probeSteadyState(state)).forEach((p) => {
       console.log(`  ${p.name.padEnd(26)} seed ${p.seeded.toPrecision(6).padStart(12)} -> settled ${p.settled.toPrecision(6).padStart(12)}  x${p.ratio.toFixed(3)}`);

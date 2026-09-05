@@ -11,7 +11,6 @@ export interface MarketIndex { id: string; constituents: { instrumentId: string;
 
 function indexesOf(world: World): MarketIndex[] {
   const raw = world.state.marketIndexes;
-  if (!raw) return [];
   return (Array.isArray(raw) ? raw : Object.values(raw)) as MarketIndex[];
 }
 

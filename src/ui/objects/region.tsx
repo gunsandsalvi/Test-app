@@ -18,7 +18,7 @@ export const region = defineObject<Region>({
   words: ['region', 'regions'],
   searchable: true,
   find: regionOf,
-  list: (world) => REGION_IDS.map((r) => ({ id: r, obj: world.state.regions[r] })).filter((x) => !!x.obj),
+  list: (world) => REGION_IDS.map((r) => ({ id: r, obj: world.state.regions[r] })),
   label: (_w, id, r) => ({ ticker: id, name: r.name, kind: 'region' }),
   keywords: (_w, _id, r) => [r.name.toLowerCase(), r.currency.toLowerCase(), 'economy'],
   headline: (_w, _id, r) => ({ value: pctLevel(r.unemploymentRate), sub: 'unemployment', neg: r.unemploymentRate > r.nairu }),
@@ -62,7 +62,7 @@ export const region = defineObject<Region>({
     const markets = Object.keys(r.categoryDemand).length;
     const pools = (r.smePools ?? []).length;
     const cohorts = (r.householdState?.cohorts ?? []).length;
-    const weather = r.weather && r.weather.severity !== 'Normal' ? `${r.weather.type.toLowerCase()}, ${r.weather.severity.toLowerCase()}` : undefined;
+    const weather = r.weather.severity !== 'Normal' ? `${r.weather.type.toLowerCase()}, ${r.weather.severity.toLowerCase()}` : undefined;
     return (
       <>
         <ObjectHeader name={r.name} sub={<>{r.currency} · {r.centralBank} · {words(r.cycleRegime)} · sovereign {r.sovereignRating}{weather ? ` · ${weather}` : ''}</>} />

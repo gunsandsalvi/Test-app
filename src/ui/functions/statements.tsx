@@ -53,8 +53,8 @@ function Statement({ units, asOf, lines }: { units: string; asOf: string; lines:
 
 function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; tab: string; nav: import('../ui').Nav }) {
   const hist = c.historicalFundamentals ?? [];
-  const latest = hist[hist.length - 1];
-  const prior = hist[hist.length - 2];
+  const latest = hist.at(-1);
+  const prior = hist.at(-2);
   const asOf = latest ? `${quarterLabel(latest.week)} · filed ${formatDate(latest.week)}` : formatDate(world.state.currentWeek);
   const bank = c.bankBalanceSheet;
   const tabs = bank ? ['bank sheet', 'income'] : ['income', 'balance sheet', 'cash flow', 'tax'];
