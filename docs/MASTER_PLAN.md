@@ -512,15 +512,6 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    d5. **A CLAIM ON A POSITION IS A LIEN ON A LOT** (added 2026-09-04; split 2026-09-05, found
-        writing it: the three claims bind three different stores, and only the first binds a
-        register row). d5a (repo pledges are liens on the sovereign rows) and d5b (stock-loan
-        collateral is a lien on the lender's account) are in §9. Depends on (f)'s lots for
-        identified assets; fungible ones carry it now. What is left:
-    d5c. **POSTED INITIAL MARGIN IS A LIEN ON THE ACCOUNT THAT HOLDS IT.**
-        `fxDealerBook.initialMarginHeldLocal` is a scalar on the desk; the margin it holds is a
-        lien on its securities account, so `the-derivative-layer.md` D3 ("held, not consumed") is
-        true on the poster's side.
     e. **COLLAPSE THE FOUR TAXONOMIES** into the index's kind.
     f. **ONE POSITION BOOK, AS LOTS** — `v2.holdings` and `v2.lots` merge. A fungible asset sums
        its lots, an identified one addresses them, and **every position gains a basis**, which
@@ -1707,6 +1698,17 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d5c — POSTED INITIAL MARGIN IS A LIEN ON THE DEALER'S ACCOUNT.**
+`FxDealerBook.initialMarginHeldLocal` is deleted. A client's margin is a lien on the dealer's
+securities account in the contract's money (`accounts.ts:setAccountLien`), and the contract
+ledger is its one writer: a strike raises it, the lifecycle's keep releases it with the contract,
+a novation moves it with the dealer (`contract-ledger.ts:syncMarginLiens`, after every derivative
+write). The sheet's `clientMarginLocal` is a read of the lien where the FX desk used to copy the
+scalar. `initialMarginLocal` moved to the class registry so the ledger sizes the lien from the
+profile the stage does. `O13` now checks every account lien against the claim that binds it —
+stock-loan collateral and initial margin alike. `the-derivative-layer.md` D3 closes. This closes
+d5 (d5a/b/c). Byte-identical. Gates green; no run.
 
 **13-BOOK d5b — STOCK-LOAN CASH COLLATERAL IS A LIEN ON THE LENDER'S ACCOUNT.** The account
 store gained one column (`world.ts:PersistentAccounts.lien`): the part of a row's balance the

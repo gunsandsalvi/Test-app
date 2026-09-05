@@ -9,8 +9,8 @@
  *
  * DRV: the balance-sheet half — the PFE add-on, the budget share, the capacity — moved to
  * `domain/derivatives/registry.ts`, ONE rule for every derivative class the desk writes. What
- * stays here is the desk's net INVENTORY by currency (what the spot desk has to work, XB2f) and
- * the initial margin it holds as a liability.
+ * stays here is the desk's net INVENTORY by currency (what the spot desk has to work, XB2f); the
+ * initial margin it holds is a lien on its account (§3.13-BOOK d5c).
  */
 
 import { RegionId } from './geography';
@@ -19,8 +19,8 @@ import { RegionId } from './geography';
 export interface FxDealerBook {
   /** Net notional the desk is long in each foreign currency (negative = short). */
   netNotionalByRegion: Record<string, number>;
-  /** Initial margin held from clients — the desk's cash, and its liability back to them. */
-  initialMarginHeldLocal: number;
+  // §3.13-BOOK d5c: the initial margin the desk holds from clients is a LIEN on its securities
+  // account (`accounts.ts:accountLienOf`), written by the contract ledger; not a scalar here.
   /** Gross notional outstanding — a measurement of the one derivative book, kept beside the
    *  net so the spot desk reads one struct. */
   grossNotionalLocal: number;
@@ -35,7 +35,7 @@ export const DEALER_QUOTE_WIDTH_BPS = 150;
 
 /** An empty desk, for a bank that has not written a forward yet. */
 export function emptyFxDealerBook(): FxDealerBook {
-  return { netNotionalByRegion: {}, initialMarginHeldLocal: 0, grossNotionalLocal: 0 };
+  return { netNotionalByRegion: {}, grossNotionalLocal: 0 };
 }
 
 export type { RegionId };

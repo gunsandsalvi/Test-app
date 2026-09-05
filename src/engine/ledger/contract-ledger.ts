@@ -24,7 +24,8 @@ import { setAccountLien } from './accounts';
 import { REGION_IDS, type CurrencyCode } from '../../domain/geography';
 import type { SecurityLoan } from '../../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../../domain/prime-brokerage';
-import { bankPartyOf, companyPartyOf } from '../../domain/party';
+import { bankPartyOf, bankSecuritiesPartyOf, companyPartyOf } from '../../domain/party';
+import { initialMarginLocal } from '../../domain/derivatives/registry';
 import type { TradeInvoice } from '../../domain/trade-invoice';
 import type { LpCommitment } from '../../domain/commitment';
 import type { EntityId, InstrumentId } from '../../domain/ids';
@@ -51,6 +52,32 @@ const rowOfContract = (c: DerivativeContract): number => {
   return r === undefined ? defect(`derivative ${c.id} is not on the contract store`) : r;
 };
 
+/**
+ * §3.13-BOOK d5c — POSTED INITIAL MARGIN IS A LIEN ON THE DEALER'S ACCOUNT. A client's margin sits
+ * on the desk's securities account in the contract's money; every derivative write below leaves
+ * each dealer's lien at exactly the margin its live contracts carry, so a strike raises it, a
+ * settle or close-out releases it and a novation moves it — and the desk's `clientMarginLocal`
+ * is a read of it. Only a bank on the B side holds margin (`derivative-lifecycle.ts`).
+ */
+function marginByDealer(book: readonly DerivativeContract[]): Map<string, Map<CurrencyCode, number>> {
+  const out = new Map<string, Map<CurrencyCode, number>>();
+  book.forEach((c) => {
+    if (c.b.kind !== 'BANK') return;
+    const m = initialMarginLocal(c);
+    if (!(m > 0)) return;
+    const byCurrency = out.get(c.b.id) ?? new Map<CurrencyCode, number>();
+    byCurrency.set(c.currency, (byCurrency.get(c.currency) ?? 0) + m);
+    out.set(c.b.id, byCurrency);
+  });
+  return out;
+}
+function syncMarginLiens(v2: V2World, before: Map<string, Map<CurrencyCode, number>>, after: Map<string, Map<CurrencyCode, number>>): void {
+  new Set([...before.keys(), ...after.keys()]).forEach((bankId) => {
+    const was = before.get(bankId) ?? new Map<CurrencyCode, number>(), now = after.get(bankId) ?? new Map<CurrencyCode, number>();
+    new Set([...was.keys(), ...now.keys()]).forEach((currency) => setAccountLien(v2, bankSecuritiesPartyOf(bankId as EntityId), currency, now.get(currency) ?? 0));
+  });
+}
+
 /** Every live derivative, materialized in store order — the audits', the UI's and the harness's read. */
 export function derivativesOf(v2: V2World): DerivativeContract[] {
   return rowsOfKind(v2, 'DERIVATIVE').map((r) => tagRow(materializeDerivative(v2, r), r));
@@ -72,17 +99,20 @@ export function derivativesBookOf(ctx: WeeklyStepContext): DerivativeContract[] 
 export function strikeDerivatives(ctx: WeeklyStepContext, struck: DerivativeContract[]): void {
   if (struck.length === 0) return;
   const book = derivativesBookOf(ctx);
+  const before = marginByDealer(book);
   struck.forEach((c) => {
     resolvePartyRef(c.a, `derivative ${c.id} party a`); resolvePartyRef(c.b, `derivative ${c.id} party b`);
     tagRow(c, writeDerivativeRow(ctx.v2, c));
   });
   book.push(...struck);
   if (ctx.derivativeStanding?.book === book) ctx.derivativeStanding.index.extend(book);
+  syncMarginLiens(ctx.v2, before, marginByDealer(book));
 }
 
 /** The lifecycle's survivors after a settle or a close-out: their rows stay (marks written back),
  *  every other derivative row is freed, and the copy becomes the survivors. */
 export function keepDerivatives(ctx: WeeklyStepContext, kept: DerivativeContract[]): void {
+  const before = marginByDealer(derivativesBookOf(ctx));
   const rows = kept.map((c) => {
     const r = rowOfContract(c);
     writeSettledMark(ctx.v2, r, c.settledMarkLocal);
@@ -90,10 +120,12 @@ export function keepDerivatives(ctx: WeeklyStepContext, kept: DerivativeContract
   });
   relinkKind(ctx.v2, 'DERIVATIVE', rows);
   ctx.derivativesBook = kept;
+  syncMarginLiens(ctx.v2, before, marginByDealer(kept));
 }
 
 /** A novation: every contract naming the old party names the new one, which must exist. */
 export function novateDerivatives(ctx: WeeklyStepContext, rekey: (p: DerivativeParty) => DerivativeParty): void {
+  const before = marginByDealer(derivativesBookOf(ctx));
   ctx.derivativesBook = derivativesBookOf(ctx).map((c) => {
     const a = rekey(c.a), b = rekey(c.b);
     if (a === c.a && b === c.b) return c;
@@ -103,6 +135,7 @@ export function novateDerivatives(ctx: WeeklyStepContext, rekey: (p: DerivativeP
     writeDerivativeParties(ctx.v2, r, a, b);
     return tagRow({ ...c, a, b }, r);
   });
+  syncMarginLiens(ctx.v2, before, marginByDealer(ctx.derivativesBook));
 }
 
 /**

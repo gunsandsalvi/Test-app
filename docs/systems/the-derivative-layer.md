@@ -115,7 +115,7 @@ checked by `scripts/check-atlas.sh`.
 | **D2 variation margin: the change in the mark, in cash, every period** | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ⚠️ |
 | D2.a real money leaving one account and arriving in another | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
 | **D2.b VERIFY Σ VM paid = Σ received, every period** | — | ❌ |
-| D3 margin is held, not consumed; the poster gets it back | `src/engine/simulation/stages/derivative-lifecycle.ts:releaseInitialMargin` | ⚠️ |
+| D3 margin is held, not consumed; the poster gets it back | `src/engine/ledger/accounts.ts:setAccountLien` · `src/engine/simulation/stages/derivative-lifecycle.ts:releaseInitialMargin` | ✅ |
 | D4 a margin call must be met or the position is closed out | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
 | D4.a meeting it may force a sale | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageCloseSweep` | ⚠️ |
 | D5 margin rises when volatility rises — procyclical, measured | — | ❌ |
@@ -290,14 +290,16 @@ returns a count of contracts closed and nothing else; the cash legs are indistin
 journal from any other `derivative close-out` reason. **A measurement, for §3 step 38** — the node
 is a VERIFY, and what it wants is a read of the loss chain, not a new mechanism.
 
-### ⚠️ D3 — THE MARGIN COMES BACK, BUT NOBODY OWNS IT IN THE MEANTIME
+### ✅ D3 — CLOSED: THE MARGIN IS A LIEN ON THE DESK'S ACCOUNT WHILE IT IS HELD (§9.13-BOOK d5c)
 
-`releaseInitialMargin` returns the posted cash when the contract ends, which is the half that was
-missing before and now works. What is still absent is the poster's *claim*: the cash leaves the
-holder's balance (`fx-forward.ts:362`) and is carried only as the desk's liability
-(`FxDealerBook.initialMarginHeldLocal`, written to the sheet as `clientMarginLocal`). The poster's own
-books show the money simply gone. "Held, not consumed" is true of the desk's side and not of the
-poster's. Closes with step 17's margin rebuild.
+`releaseInitialMargin` returns the posted cash when the contract ends, and while it is held it
+is no longer only the desk's scalar liability: the contract ledger sets a LIEN on the desk's
+securities account (`accounts.ts:setAccountLien`, in the contract's money) to exactly the margin
+its live contracts carry — a strike raises it, a settle or close-out releases it, a novation
+moves it with the dealer — and the sheet's `clientMarginLocal` is a read of it. The poster's
+claim therefore exists in one place, on the account that owes it, and `O13` checks the lien
+against the contracts every week. What the poster's own NAV read does with that claim is
+`hedge-funds.md`'s B5 (gross, net and equity as three reads).
 
 ### Also marked, briefly
 

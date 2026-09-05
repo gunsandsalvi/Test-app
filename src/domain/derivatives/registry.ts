@@ -27,6 +27,13 @@ export const DERIVATIVE_CLASSES: Record<DerivativeClassId, DerivativeClassProfil
 export const derivativeProfile = (id: DerivativeClassId): DerivativeClassProfile =>
   DERIVATIVE_CLASSES[id];
 
+/** Initial margin on a contract: the A side's cash, held by the B side for the contract's life.
+ *  §3.13-BOOK d5c: the ledger writes it as a lien on the dealer's account, so it lives with the
+ *  profile it is sized from rather than in a stage. */
+export function initialMarginLocal(c: Pick<DerivativeContract, 'classId' | 'notional'>): number {
+  return c.notional * derivativeProfile(c.classId).initialMarginRate;
+}
+
 /** The registry's order is the order the one derivative stage runs the classes within a phase of
  *  the week (stages/derivatives.ts): swaps, then protection, then futures, then forwards. A new
  *  class takes its place here and nowhere else. */

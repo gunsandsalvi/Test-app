@@ -74,12 +74,11 @@ export function absorbBankSheet(v2: V2World, acquirerId: EntityId, targetId: Ent
     transferHolding(v2, from, to, spec, 'bank resolution: desk assumed');
   });
   if (target.fxDealerBook) {
-    const mine = acquirer.fxDealerBook ?? { netNotionalByRegion: {}, initialMarginHeldLocal: 0, grossNotionalLocal: 0 };
+    const mine = acquirer.fxDealerBook ?? { netNotionalByRegion: {}, grossNotionalLocal: 0 };
     const net = { ...mine.netNotionalByRegion };
     Object.entries(target.fxDealerBook.netNotionalByRegion || {}).forEach(([k, v]) => { net[k] = (net[k] ?? 0) + v; });
     acquirer.fxDealerBook = {
       ...mine, netNotionalByRegion: net,
-      initialMarginHeldLocal: mine.initialMarginHeldLocal + target.fxDealerBook.initialMarginHeldLocal,
       grossNotionalLocal: mine.grossNotionalLocal + target.fxDealerBook.grossNotionalLocal,
     };
     target.fxDealerBook = undefined;

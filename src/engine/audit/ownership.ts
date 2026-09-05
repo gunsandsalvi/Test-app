@@ -2,7 +2,9 @@
 
 import { GameState, RegionId } from '../../types';
 import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf, liveObligationPartiesOf, securityLoanBookOf } from '../ledger/contract-ledger';
-import { accountLienOf, heldCurrenciesOf } from '../ledger/accounts';
+import { accountKey } from '../ledger/accounts';
+import { bankSecuritiesPartyOf } from '../../domain/party';
+import { initialMarginLocal } from '../../domain/derivatives/registry';
 import type { CurrencyCode } from '../../domain/geography';
 import { deskRowsOf } from '../desk-register';
 import { deskBankIdOf } from '../ledger/holdings-ledger';
@@ -584,32 +586,36 @@ function o12(state: GameState, week: number): AuditFinding[] {
 }
 
 /**
- * O13 — §3.13-BOOK d5b. AN ACCOUNT LIEN IS WHAT THE LOAN BOOK'S COLLATERAL SAYS. Per lender and
- * currency, the lien on the lender's account equals the collateral its open stock loans carry:
- * the loan book is the one writer of the liens, so a gap is a write that bypassed it.
+ * O13 — §3.13-BOOK d5b/d5c. AN ACCOUNT LIEN IS THE CLAIM THAT BINDS IT. Per account row, the lien
+ * equals what the books say the party only holds: a lender's stock-loan collateral per money
+ * (d5b), a dealer's initial margin on its live derivatives per money (d5c). The books are the
+ * liens' only writers, so a gap is a write that bypassed them, or a claim with no lien.
  */
 function o13(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
-  const heldByLender = new Map<string, Map<CurrencyCode, number>>();
+  const expected = new Map<string, number>();
+  const claim = (party: PartyRef, currency: CurrencyCode, usd: number) => {
+    const k = accountKey(party, currency);
+    expected.set(k, (expected.get(k) ?? 0) + usd);
+  };
   REGION_IDS.forEach((r) => securityLoanBookOf(v2, r).forEach((l) => {
-    if (l.lender.kind !== 'INSTITUTION') return;
-    const byCurrency = heldByLender.get(l.lender.id) ?? new Map<CurrencyCode, number>();
-    byCurrency.set(l.currency, (byCurrency.get(l.currency) ?? 0) + Math.max(0, l.collateralLocal));
-    heldByLender.set(l.lender.id, byCurrency);
+    if (l.lender.kind === 'INSTITUTION') claim(l.lender, l.currency, Math.max(0, l.collateralLocal));
   }));
-  let off = 0, offLocal = 0;
-  (state.institutionalEntities ?? []).forEach((e) => {
-    const held = heldByLender.get(e.id) ?? new Map<CurrencyCode, number>();
-    // Every money the lender holds a lien in, and every money the book says it should.
-    const currencies = new Set<CurrencyCode>(held.keys());
-    heldCurrenciesOf(v2, { kind: 'INSTITUTION', id: e.id }).forEach((row) => currencies.add(row.currency));
-    currencies.forEach((currency) => {
-      const gap = Math.abs(accountLienOf(v2, { kind: 'INSTITUTION', id: e.id }, currency) - (held.get(currency) ?? 0));
-      if (gap > 1) { off++; offLocal += gap; }
-    });
+  derivativesOf(v2).forEach((c) => {
+    if (c.b.kind === 'BANK') claim(bankSecuritiesPartyOf(c.b.id), c.currency, initialMarginLocal(c));
   });
-  if (off) out.push({ family: 'O', check: 'O13 account liens equal collateral held', week, usd: offLocal, message: `${off} lender accounts (${B(offLocal)}) carry a lien that disagrees with the stock-loan book's collateral` });
+  let off = 0, offLocal = 0;
+  const seen = new Set<string>();
+  const A = v2.accounts;
+  for (let r = 0; r < A.n; r++) {
+    const k = v2.refs.accountKeys.strings[A.keyRef[r]];
+    seen.add(k);
+    const gap = Math.abs(A.lien[r] - (expected.get(k) ?? 0));
+    if (gap > 1) { off++; offLocal += gap; }
+  }
+  expected.forEach((usd, k) => { if (!seen.has(k) && usd > 1) { off++; offLocal += usd; } });
+  if (off) out.push({ family: 'O', check: 'O13 account liens equal the claims that bind them', week, usd: offLocal, message: `${off} account rows (${B(offLocal)}) carry a lien that disagrees with the collateral and margin the books say they hold` });
   return out;
 }
 

@@ -45,7 +45,7 @@ import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { initialMarginLocal } from '../derivative-lifecycle';
 import { derivativesBookOf, strikeDerivatives, tradeInvoicesOf } from '../../../ledger/contract-ledger';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
-import { cashOf, bankReservesOf } from '../../../ledger/accounts';
+import { cashOf, bankReservesOf, partyLienLocal } from '../../../ledger/accounts';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
 import { fxBasisInstrumentId } from '../../../../domain/instrument-keys';
@@ -151,7 +151,6 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     desk.book.grossNotionalLocal += c.notional;
     const foreign = regionReferenceOf(c);
     desk.book.netNotionalByRegion[foreign] = (desk.book.netNotionalByRegion[foreign] ?? 0) + c.notional;
-    desk.book.initialMarginHeldLocal += initialMarginLocal(c);
   }
   // The dealers a holder in each region can face, in the order the roster lists them.
   const dealerBanksByRegion = new Map<RegionId, EntityId[]>();
@@ -383,7 +382,6 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
       // BUYS it: the desk is long. Signing this the other way survives only while the basis reads
       // |net| — it becomes load-bearing the moment the desk has to delta-hedge a direction.
       desk.book.netNotionalByRegion[issuer] = (desk.book.netNotionalByRegion[issuer] ?? 0) + writableLocal;
-      desk.book.initialMarginHeldLocal += marginLocal;
       desk.marginReceivedLocal += marginLocal;
       struck.push(contract);
     });
@@ -423,11 +421,12 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
     // THE LINE IS A READ OF THE LIVE BOOK, not a running total. It used to ACCUMULATE each
     // week's new margin and nothing ever subtracted from it, so a desk's margin liability grew
     // for ever while the contracts behind it matured away — two representations of one quantity,
-    // and the one on the sheet could only diverge. `initialMarginHeldLocal` is summed from the
-    // contracts that are actually live, this week's strikes included, so it cannot disagree.
+    // and the one on the sheet could only diverge. §3.13-BOOK d5c: the margin the desk holds is
+    // the LIEN on its securities account, which the contract ledger set from the contracts that
+    // are actually live, this week's strikes included — the line is that read.
     const nextSheet = {
       ...sheet,
-      clientMarginLocal: desk.book.initialMarginHeldLocal,
+      clientMarginLocal: partyLienLocal(ctx.v2, bankSecuritiesPartyOf(bank.id)),
       fxDealerBook: desk.book,
     };
     // The company IS the write; the channel copy in `companyUpdates` was dead post-08.

@@ -227,3 +227,30 @@ test('a repo pledge is a lien on the borrower\'s row: it cannot be sold under, i
     setActiveWireWorld(undefined);
   }
 });
+
+test('§3.13-BOOK d5c: a client\'s initial margin is a lien on the dealer\'s securities account for the contract\'s life', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const a = { kind: 'INSTITUTION' as const, id: asEntityId('INST-A') };
+  const dealer = asEntityId('USA_BANK1'), other = asEntityId('USA_BANK2');
+  setActiveWireWorld(wireWorldOf(v2, [{ id: dealer }, { id: other }], [{ id: a.id }]));
+  const ctx = { v2 } as unknown as WeeklyStepContext;
+  try {
+    const forward: DerivativeContract = {
+      id: 'USA-FXF-1-0', classId: 'FX_FORWARD', regionId: 'USA', currency: 'USD', a, b: { kind: 'BANK', id: dealer }, notional: 1e6, strike: 1.1,
+      reference: { kind: 'REGION', regionId: 'EUR' }, termKey: '', settledMarkLocal: 0, struckWeek: 1, maturityWeek: 14,
+    };
+    strikeDerivatives(ctx, [forward]);
+    const marginLocal = 1e6 * 0.02;
+    assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: dealer }, 'USD'), marginLocal, 'the strike wrote the lien');
+    assert.equal(partyLienLocal(v2, { kind: 'BANK_SECURITIES', id: dealer }), marginLocal);
+    // A resolution novates the book: the lien follows the dealer.
+    novateDerivatives(ctx, (p) => (p.kind === 'BANK' && p.id === dealer ? { kind: 'BANK', id: other } : p));
+    assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: dealer }, 'USD'), 0);
+    assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: other }, 'USD'), marginLocal);
+    // The contract settles away: the margin is returned and the lien with it.
+    keepDerivatives(ctx, []);
+    assert.equal(accountLienOf(v2, { kind: 'BANK_SECURITIES', id: other }, 'USD'), 0);
+  } finally {
+    setActiveWireWorld(undefined);
+  }
+});

@@ -25,7 +25,7 @@ import { bankSecuritiesParty } from '../../../domain/party';
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../domain/derivatives/contract';
 import { DerivativeMarketView } from '../../../domain/derivatives/profile';
-import { derivativeProfile } from '../../../domain/derivatives/registry';
+import { derivativeProfile, initialMarginLocal } from '../../../domain/derivatives/registry';
 import { StandingBook } from '../../../domain/derivatives/standing-book';
 import { WeeklyStepContext } from './context';
 import { buildEntityIndex, companyOfParty } from '../../ledger/entity-index';
@@ -265,7 +265,5 @@ export function settleDerivativeClass(
   return net;
 }
 
-/** Initial margin on a contract about to be struck: the A side's cash, held by the B side. */
-export function initialMarginLocal(c: Pick<DerivativeContract, 'classId' | 'notional'>): number {
-  return c.notional * derivativeProfile(c.classId).initialMarginRate;
-}
+// §3.13-BOOK d5c: sized with the class profile it reads (`registry.ts:initialMarginLocal`).
+export { initialMarginLocal };
