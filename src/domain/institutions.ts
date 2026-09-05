@@ -143,6 +143,9 @@ export interface InstitutionalEntity {
   lastAnnualUnderwritingResultLocal?: number;
   /** HH1c — PENSION_FUND: benefits paid out over the last year, against the promises it holds. */
   lastAnnualBenefitOutflowLocal?: number;
+  /** §3.16b-i — INSURER: its book, its price and its own loss experience (`InsuranceBook`). Opened
+   *  by its profile the first week it writes, moved by the market (16b-ii). */
+  insurance?: InsuranceBook;
   // §3.13-BOOK dIV: a fund's shares in issue live on the instrument index, never here.
   stockPrice: number;
   itemizedHoldings: ItemizedHolding[];
@@ -236,4 +239,69 @@ export function institutionTotalAssetsLocal(
 /** The seed's read, before the register exists: cash plus the entity's own itemized rows. */
 export function seedInstitutionTotalAssetsLocal(e: { itemizedHoldings: { quantityOrNotionalLocal?: number }[] }, openingCashLocal: number): number {
   return openingCashLocal + e.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalLocal ?? 0), 0);
+}
+
+/**
+ * §3.16b — INSURANCE IS A MARKET, NOT THREE PRICE-TAKERS. An insurer carries a BOOK of cover, it
+ * QUOTES a price for that cover, and the price answers its OWN losses and its OWN capital. The
+ * pool it used to be handed pro rata by capital, at a premium its capital let it write, was
+ * three price-takers with no price between them.
+ */
+export interface InsuranceBook {
+  /** The cover it carries: the insurable base (a firm's plant and revenue, a household's net
+   *  worth and income) its policies stand behind — the unit a policy is written on. */
+  coverLocal: number;
+  /** The premium rate per unit of cover it QUOTES for the coming week, annual: its price. */
+  rateAnnual: number;
+  /** Claims per unit of cover it has EXPERIENCED on its own book, annual, trailing over the term
+   *  of a policy (`INSURANCE_POLICY_TERM_WEEKS`) — the first term of its price. */
+  lossPerCoverAnnual: number;
+}
+
+/** A policy runs a year: the window an insurer's own experience is read over, and (16b-ii) the
+ *  share of its book that re-shops each week. */
+export const INSURANCE_POLICY_TERM_WEEKS = 52;
+
+/** What a firm has to lose, and therefore insures: its plant and the revenue that runs through it. */
+export const corporateInsurableBaseLocal = (c: { grossPPELocal?: number; annualRevenue: number }): number =>
+  Math.max(0, c.grossPPELocal ?? 0) + Math.max(0, c.annualRevenue);
+
+/** What a household sector has to lose: its net worth and its income. */
+export const householdInsurableBaseLocal = (netWorthLocal: number, incomeLocal: number): number =>
+  Math.max(0, netWorthLocal) + Math.max(0, incomeLocal);
+
+/**
+ * THE QUOTE. A unit of cover must earn the claims it is expected to bring PLUS the return on the
+ * surplus the insurer has to hold against it: it holds `1 / premiumToSurplus` of surplus per unit
+ * of premium, and that surplus must earn its hurdle. So `rate = loss + hurdle × rate / PSR`, and
+ * the rate solves to `loss / (1 − hurdle / PSR)`. An insurer with worse experience, or a higher
+ * hurdle, quotes higher — and (16b-ii) loses the policy to the one that quotes lower.
+ */
+export function quoteInsuranceRate(args: { lossPerCoverAnnual: number; requiredReturnAnnual: number; premiumToSurplus: number }): number {
+  const charge = args.requiredReturnAnnual / args.premiumToSurplus;
+  if (!(charge < 1)) throw new Error(`insurance quote: a hurdle of ${args.requiredReturnAnnual} over a premium-to-surplus of ${args.premiumToSurplus} leaves no rate that earns it`);
+  return Math.max(0, args.lossPerCoverAnnual) / (1 - charge);
+}
+
+/** The insurer's experience moves one policy-term's step toward what its book actually cost it. */
+export function nextLossPerCover(trailingAnnual: number, realisedAnnual: number, termWeeks: number = INSURANCE_POLICY_TERM_WEEKS): number {
+  return trailingAnnual + (realisedAnnual - trailingAnnual) / termWeeks;
+}
+
+/**
+ * THE BOOK OPENS at what the seed stated: the region's cover split across its insurers by their
+ * capital (what the pool did), at the one rate that makes the region's premiums what its
+ * insurers' capital let them write (`PREMIUM_TO_SURPLUS_RATIO`), with the experience the seed's
+ * loss ratio implies at that rate. From here every number is the insurer's own.
+ */
+export function openInsuranceBook(args: {
+  regionBaseLocal: number;
+  ownSurplusLocal: number;
+  regionSurplusLocal: number;
+  seedLossRatio: number;
+}): InsuranceBook {
+  const share = args.regionSurplusLocal > 0 ? Math.max(0, args.ownSurplusLocal) / args.regionSurplusLocal : 0;
+  const regionPremiumsAnnual = Math.max(0, args.regionSurplusLocal) * PREMIUM_TO_SURPLUS_RATIO;
+  const rateAnnual = args.regionBaseLocal > 0 ? regionPremiumsAnnual / args.regionBaseLocal : 0;
+  return { coverLocal: args.regionBaseLocal * share, rateAnnual, lossPerCoverAnnual: rateAnnual * args.seedLossRatio };
 }

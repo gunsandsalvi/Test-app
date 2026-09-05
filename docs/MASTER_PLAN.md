@@ -547,11 +547,20 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-16b. **Insurance is a market, not three price-takers.** A policy moves to the insurer that
-    prices lower, and an insurer's price answers its own losses and its own capital. The three
-    insurers exist; the market between them does not. Verify: premium shares move week to week,
-    and an insurer under a capital action loses book before it loses its licence.
-
+16b. **Insurance is a market, not three price-takers** — split 2026-09-05; 16b-i (the book and
+    the price: an insurer quotes a rate off its own losses and its own capital, and its premiums
+    and claims are its own) is in §9. What is left:
+16b-ii. **THE MARKET.** A policy moves to the insurer that prices lower. Each week the share of
+    every insurer's book that renews (`INSURANCE_POLICY_TERM_WEEKS`, a year's policies renewing
+    one week at a time) plus the growth of what there is to insure re-shops: it goes to the
+    lowest quote with CAPACITY — the cover an insurer's surplus can stand behind at its own rate,
+    `surplus × PREMIUM_TO_SURPLUS_RATIO / rate` — and past that to the next lowest. An insurer
+    with no surplus has no capacity and loses its renewals: it loses book before it loses its
+    licence.
+16b-iii. **VERIFY, in §6 and the harness:** premium shares move week to week (the harness
+    prints each region's insurers' cover shares and their weekly change), and an insurer under a
+    capital action loses book first (the measure: cover share against surplus share, by insurer).
+    Measure, do not fix (§6).
 17. **Derivatives are centrally cleared, and margin is risk-based** (user). Today a contract is
     bilateral (`contract.ts:39-41`, parties `a`/`b`) and `initialMarginRate` is a flat stated
     number per class — **0 for CDS, IRS and commodity futures, 0.02 for FX forwards**
@@ -1632,6 +1641,26 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**16b-i — AN INSURER HAS A BOOK, A PRICE AND ITS OWN LOSSES.** The three insurers were price-
+takers: each wrote the premium its capital let it (`surplus × PREMIUM_TO_SURPLUS_RATIO`), the
+stage pooled every insurer's premiums, split the pool between firms and households by what they
+had to lose, handed each insurer its CAPITAL share of it and paid claims at the POOLED loss
+rate — no insurer had a price, a book or its own losses. Now `institutions.ts:InsuranceBook` on
+the entity: the cover it stands behind (the insurable base its policies cover), the rate it
+quotes, and its own trailing loss per unit of cover. `quoteInsuranceRate` is the price: the claims
+a unit of cover is expected to bring plus the hurdle on the surplus held against the premium —
+`loss / (1 − hurdle / PSR)`, the hurdle `entityRequiredReturn`'s own — so worse experience or
+dearer capital quotes higher. The profile writes the book at its rate and draws its OWN claims off
+its own cover and experience (the seed's 0.70 loss ratio and its noise stay 31b's, now applied
+to the loss per cover); the book opens the first week at what the seed stated
+(`openInsuranceBook`: the region's cover split by capital, at the one rate that makes the
+region's premiums what its capital let it write). The stage pays each insurer its own premiums
+from every policyholder's share of what there is to insure, returns each insurer's own claims,
+records each insurer's own underwriting result, moves its experience one policy-term step toward
+what the week cost it, and re-quotes. The cover still follows the insurable base at each
+insurer's seed share — 16b-ii moves it. Atlas A4.a ⚠️. `test/insurance.test.ts`. Gates green; no
+run.
 
 **16-ii — A BOND TAP.** A corporate deal REOPENS the bond it has. `primary-market.ts:tapTargetOf`
 names the issuer's senior fixed bond whose remaining life is nearest the standard tenor and

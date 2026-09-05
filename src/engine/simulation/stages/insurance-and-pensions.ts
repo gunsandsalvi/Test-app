@@ -31,10 +31,14 @@
  */
 
 import { GameState, Company } from '../../../types';
+import type { EntityId } from '../../../domain/ids';
 import { companyParty } from '../../../domain/party';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
-import { isActiveCompany } from '../../../domain/company';
+import { isActiveCompany, managedEntityIdsOf } from '../../../domain/company';
+import { corporateInsurableBaseLocal, householdInsurableBaseLocal, quoteInsuranceRate, nextLossPerCover, PREMIUM_TO_SURPLUS_RATIO, InsuranceBook } from '../../../domain/institutions';
+import { entityRequiredReturn } from './asset-allocation';
+import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS } from '../../bootstrap/population';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 
@@ -61,9 +65,6 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
  * now `1 / remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS)` — derived from the hazard.
  */
 
-/** What a firm has to lose, and therefore insures: its plant and the revenue that runs through it. */
-const corporateInsurableBaseLocal = (c: Company) => Math.max(0, c.grossPPELocal ?? 0) + Math.max(0, c.annualRevenue);
-
 export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepContext): void {
   // This stage moved every one of its flows by DIRECT balance mutation — `comp.cash`,
   // entity `cashLocal`, household deposits — with zero payment instructions in the file, so no bank
@@ -73,18 +74,22 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
   // stat annotations) are not money movements and stay.
   const underwritingByEntityId = new Map<string, number>();
   const benefitsByEntityId = new Map<string, number>();
+  /** §3.16b-i: each insurer's book after this week — its experience moved, its price re-quoted. */
+  const bookByEntityId = new Map<string, InsuranceBook>();
 
   REGION_IDS.forEach((region) => {
     const reg = ctx.updatedRegions[region];
     const hs = reg?.householdState;
     if (!hs) return;
 
-    // ---- The week's premium pool, from the insurers' own already-struck P&L. ----
+    // ---- §3.16b-i — EACH INSURER'S OWN WEEK, from its already-struck P&L: the premiums its book
+    // earns at ITS price, the claims ITS book brought. There is no pool: what a policyholder pays
+    // each insurer is that insurer's cover of it at that insurer's rate, and what comes back is
+    // that insurer's own claims on it. ----
     const insurers = ctx.updatedCompanies.filter(
       (c) => c.region === region && c.institutionalEntityType === 'INSURER' && isActiveCompany(c)
     );
     const weeklyPremiumsLocal = insurers.reduce((a, c) => a + (c.insurancePremiumsWrittenLocal ?? 0) / 52, 0);
-    const weeklyClaimsLocal = insurers.reduce((a, c) => a + (c.insuranceClaimsPaidLocal ?? 0) / 52, 0);
     // IND19/IND-R4 — THE EXPENSE RATIO IS GONE, AND ITS ABSENCE HERE IS THE POINT.
     //
     // This line used to subtract `premiums x INSURER_EXPENSE_RATIO`, and its own comment gave the
@@ -100,73 +105,93 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       (c) => c.region === region && isActiveCompany(c) && !c.isBankEntity && !c.isInstitutionalEntity
     );
     const corporateBaseLocal = operating.reduce((a, c) => a + corporateInsurableBaseLocal(c), 0);
-    const householdBaseLocal = Math.max(0, hs.netWorthLocal) + Math.max(0, reg.estimatedHouseholdIncomeLocal);
+    const householdBaseLocal = householdInsurableBaseLocal(hs.netWorthLocal, reg.estimatedHouseholdIncomeLocal);
     const totalBaseLocal = corporateBaseLocal + householdBaseLocal;
     if (!(totalBaseLocal > 0) || !(weeklyPremiumsLocal > 0)) return;
 
-    const corporateShare = corporateBaseLocal / totalBaseLocal;
-    const corporatePremiumsLocal = weeklyPremiumsLocal * corporateShare;
-    const householdPremiumsLocal = weeklyPremiumsLocal - corporatePremiumsLocal;
-    const claimRecoveryRate = weeklyPremiumsLocal > 0 ? weeklyClaimsLocal / weeklyPremiumsLocal : 0;
-
-    // ---- The insurers that carry the pool, pro-rata by their capital. ----
+    // ---- The insurers, each with its own book: the cover it carries, the premiums that cover
+    // earned this week at its own rate, the claims its own book brought. ----
     const insurerEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === region && e.entityType === 'INSURER' && !e.isDefaulted
     );
-    const insurerCapitalLocal = insurerEntities.reduce((a, e) => a + Math.max(0, e.equityCapitalLocal), 0) || 1;
-    const insurerShares = insurerEntities.map((e) => ({
-      id: e.id, share: Math.max(0, e.equityCapitalLocal) / insurerCapitalLocal,
-    }));
-    if (insurerShares.length === 0) return;
+    const companyByEntityId = new Map<EntityId, Company>();
+    insurers.forEach((c) => companyByEntityId.set(managedEntityIdsOf(c)[0], c));
+    type InsurerWeek = { id: EntityId; coverLocal: number; premiumLocal: number; claimLocal: number };
+    const weeks: InsurerWeek[] = [];
+    insurerEntities.forEach((e) => {
+      const c = companyByEntityId.get(e.id);
+      const book = e.insurance;
+      if (!c || !book) return;
+      weeks.push({ id: e.id, coverLocal: book.coverLocal, premiumLocal: (c.insurancePremiumsWrittenLocal ?? 0) / 52, claimLocal: (c.insuranceClaimsPaidLocal ?? 0) / 52 });
+    });
+    if (weeks.length === 0) return;
+    const coverTotalLocal = weeks.reduce((a, w) => a + w.coverLocal, 0);
+    if (!(coverTotalLocal > 0)) return;
 
-    // ---- Companies: a real operating expense, and the claims that come back against it. ----
+    // ---- Companies: a real operating expense, and the claims that come back against it. A
+    // policyholder's share of every insurer's book is its share of what there is to insure; it
+    // pays each insurer that share of that insurer's premiums, at that insurer's rate. ----
     operating.forEach((comp) => {
-      const share = corporateInsurableBaseLocal(comp) / Math.max(1, corporateBaseLocal);
-      const premiumLocal = corporatePremiumsLocal * share;
-      if (!(premiumLocal > 0)) return;
-      const claimLocal = premiumLocal * claimRecoveryRate;
-      insurerShares.forEach(({ id, share: insurerShare }) => {
+      const share = corporateInsurableBaseLocal(comp) / totalBaseLocal;
+      if (!(share > 0)) return;
+      weeks.forEach((w) => {
+        const premiumLocal = w.premiumLocal * share;
+        if (!(premiumLocal > 0)) return;
         pay(ctx, {
           payer: companyParty(comp),
-          payee: { kind: 'INSTITUTION', id },
-          amount: premiumLocal * insurerShare,
+          payee: { kind: 'INSTITUTION', id: w.id },
+          amount: premiumLocal,
           currency: currencyOf(comp.region),
           reason: 'insurance premium',
         });
-        pay(ctx, {
-          payer: { kind: 'INSTITUTION', id },
+        const claimLocal = w.claimLocal * share;
+        if (claimLocal > 0) pay(ctx, {
+          payer: { kind: 'INSTITUTION', id: w.id },
           payee: companyParty(comp),
-          amount: claimLocal * insurerShare,
+          amount: claimLocal,
           currency: currencyOf(comp.region),
           reason: 'insurance claim',
         });
       });
     });
 
-    // ---- Insurers: record what the float cost them (a stat, not a cash move — the cash
-    //      arrived through the premium/claim legs above). ----
-    const underwritingResultLocal = weeklyPremiumsLocal - weeklyClaimsLocal;
-    insurerShares.forEach(({ id, share }) => {
-      // Recorded for `entityRequiredReturn`: what the float COST this insurer, which is what
-      // decides how hard its assets have to work.
-      underwritingByEntityId.set(id, underwritingResultLocal * share * 52);
-    });
-
     // ---- Households: their premium and claim legs, against the same insurers. ----
-    insurerShares.forEach(({ id, share }) => {
-      pay(ctx, {
+    const householdShare = householdBaseLocal / totalBaseLocal;
+    weeks.forEach((w) => {
+      if (w.premiumLocal * householdShare > 0) pay(ctx, {
         payer: { kind: 'HOUSEHOLD', region },
-        payee: { kind: 'INSTITUTION', id },
-        amount: householdPremiumsLocal * share,
+        payee: { kind: 'INSTITUTION', id: w.id },
+        amount: w.premiumLocal * householdShare,
         currency: currencyOf(region),
         reason: 'insurance premium',
       });
-      pay(ctx, {
-        payer: { kind: 'INSTITUTION', id },
+      if (w.claimLocal * householdShare > 0) pay(ctx, {
+        payer: { kind: 'INSTITUTION', id: w.id },
         payee: { kind: 'HOUSEHOLD', region },
-        amount: householdPremiumsLocal * claimRecoveryRate * share,
+        amount: w.claimLocal * householdShare,
         currency: currencyOf(region),
         reason: 'insurance claim',
+      });
+    });
+
+    // ---- Insurers: what the float cost each of them (a stat, not a cash move — the cash
+    // arrived through the legs above), its experience moved one policy-term's step toward what
+    // its book cost it this week, and its PRICE for next week re-quoted off that experience and
+    // its own capital's hurdle. The cover it carries follows what there is to insure, at its
+    // share — until 16b-ii lets a policy move to whoever quotes lower. ----
+    weeks.forEach((w) => {
+      const e = insurerEntities.find((x) => x.id === w.id)!;
+      const book = e.insurance!;
+      // Recorded for `entityRequiredReturn`: what the float COST this insurer, which is what
+      // decides how hard its assets have to work.
+      underwritingByEntityId.set(w.id, (w.premiumLocal - w.claimLocal) * 52);
+      const realisedLossPerCover = w.coverLocal > 0 ? (w.claimLocal * 52) / w.coverLocal : book.lossPerCoverAnnual;
+      const lossPerCoverAnnual = nextLossPerCover(book.lossPerCoverAnnual, realisedLossPerCover);
+      const hurdle = entityRequiredReturn(e, institutionTotalAssetsLocal(ctx, e));
+      bookByEntityId.set(w.id, {
+        coverLocal: totalBaseLocal * (w.coverLocal / coverTotalLocal),
+        lossPerCoverAnnual,
+        rateAnnual: quoteInsuranceRate({ lossPerCoverAnnual, requiredReturnAnnual: hurdle, premiumToSurplus: PREMIUM_TO_SURPLUS_RATIO }),
       });
     });
 
@@ -232,11 +257,13 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     const underwritingLocal = underwritingByEntityId.get(e.id);
     const benefitsLocal = benefitsByEntityId.get(e.id);
-    if (underwritingLocal === undefined && benefitsLocal === undefined) return e;
+    const book = bookByEntityId.get(e.id);
+    if (underwritingLocal === undefined && benefitsLocal === undefined && book === undefined) return e;
     return {
       ...e,
       ...(underwritingLocal !== undefined ? { lastAnnualUnderwritingResultLocal: underwritingLocal } : {}),
       ...(benefitsLocal !== undefined ? { lastAnnualBenefitOutflowLocal: benefitsLocal } : {}),
+      ...(book !== undefined ? { insurance: book } : {}),
     };
   });
 }
