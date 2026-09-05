@@ -136,9 +136,15 @@ export interface HousingMarket {
   baselineHomePriceLocal: number;
   priceIndex: number;
   historicalPrices: number[];
-  /** §3.15-iii: the owner-occupier share of households, a FRACTION (0.62) — it was named `…Pct`
-   *  and one reader divided it by a hundred. */
-  ownershipRate: number;
+  /**
+   * §3.26b-i — THE DWELLING REGISTER: the household sector's owner-occupied dwellings, in UNITS.
+   * Seeded once as the seed's opening share of households (`createHousingMarket`) and moved
+   * only by what changes hands — a household's purchase of a new dwelling at the goods auction
+   * (`05-unit-bidding.ts`, a HOUSE wire), later a foreclosure and an estate's sale. The ownership
+   * rate and the stock's value are READS of it (`domain/housing.ts`); the rate was a constant
+   * written once, so the stock moved only with the population and construction never entered it.
+   */
+  ownerOccupiedUnits: number;
   mortgageOriginationVolumeLocal: number;
   /**
    * HSG — the BEST mortgage quote in this region last week, annual.
@@ -246,9 +252,9 @@ export interface HouseholdState {
    * 1,061B of mortgage debt and owned no house: a balance sheet with the liability and not the
    * asset, which biases net worth down by the largest thing most households own.
    *
-   * Built from physical units — owning households times the median price — rather than backed out
-   * of the debt, so a move in home prices moves household wealth, which is the transmission the
-   * omission was suppressing.
+   * §3.26b-i: the sheet's line is a READ of the dwelling register at this week's price
+   * (`domain/housing.ts:housingStockValueLocal`), carried here as the week's mark — never backed
+   * out of the debt, so a move in home prices moves household wealth.
    */
   housingStockLocal: number;
   /** The owners' share of it, after the mortgages secured on it. A derived view, carried for the UI. */

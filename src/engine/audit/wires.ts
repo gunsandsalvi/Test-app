@@ -7,7 +7,7 @@ import { GameState } from '../../types';
 import { instrumentIssuerOf } from '../../engine2/instruments';
 import { asInstrumentId } from '../../domain/ids';
 import { AuditFinding, B } from './types';
-import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey, registerQtyByKind, plantCostByCompany, queueCostByCompany } from './snapshot';
+import { AuditSnapshot, ladderUSDByKey, ladderUSDByTicker, goodsUnitsByKey, registerQtyByKind, plantCostByCompany, queueCostByCompany, dwellingUnitsByRegion } from './snapshot';
 import type { PlantFlow } from '../../domain/plant';
 import { isTrancheKind } from '../../domain/assets';
 import { ensureV2 } from '../../engine2/world';
@@ -177,6 +177,15 @@ export function auditWires(prev: AuditSnapshot | undefined, state: GameState, we
       out.push({ family: 'W', check: 'W6 wires reproduce the plant', week, usd: gaps.reduce((a, g) => a + Math.abs(g.gapLocal), 0), message: `${gaps.length} firms' plant moved by other than commissioning, wear, scrap and wires (${gaps.slice(0, 4).map((g) => `${name(g.companyId)} ${g.side} ${B(g.gapLocal)}`).join(' | ')}${gaps.length > 4 ? ' | …' : ''}) — plant that moved with no wire, or entered or left service with no record` });
     }
   }
+  // W7: the DWELLING identity (§3.26b-i) — per region, in units, the household sector's
+  // owner-occupied stock changes by exactly the dwellings its wires brought in less those they
+  // took out. Nothing else may move it.
+  if (prev?.dwellingUnitsByRegion) {
+    const gaps = dwellingIdentityGaps(prev.dwellingUnitsByRegion, dwellingUnitsByRegion(state), w.dwellingNetUnitsByRegion ?? {});
+    if (gaps.length > 0) {
+      out.push({ family: 'W', check: 'W7 wires reproduce the dwellings', week, usd: gaps.reduce((a, g) => a + Math.abs(g.gapUnits), 0), message: `${gaps.length} regions' owner-occupied dwellings moved by other than their wires (${gaps.slice(0, 4).map((g) => `${g.region} ${g.gapUnits.toFixed(1)}u`).join(' | ')}) — a dwelling that changed hands with no wire, or a count written by hand` });
+    }
+  }
   // W5: the REGISTER's change is the replay of its wires — in the asset's own unit, shares, so
   // that a re-mark cannot move it. Only institutions hold register rows, so what the register
   // took in is what the wires delivered to an institution net of what they took away.
@@ -252,5 +261,20 @@ export function plantIdentityGaps(
     if (Math.abs(deltaQ - explainedQ) > Math.max(1, grossQ * 1e-6)) gaps.push({ companyId: id, side: 'queue', gapLocal: deltaQ - explainedQ });
   });
   gaps.sort((a, b) => Math.abs(b.gapLocal) - Math.abs(a.gapLocal));
+  return gaps;
+}
+
+/** W7's arithmetic, pure: per region, the dwelling register's change against its wires, at W4's dust rule. */
+export function dwellingIdentityGaps(
+  prevUnits: Record<string, number>, nowUnits: Record<string, number>, netUnits: Record<string, number>
+): { region: string; gapUnits: number }[] {
+  const gaps: { region: string; gapUnits: number }[] = [];
+  new Set([...Object.keys(prevUnits), ...Object.keys(nowUnits), ...Object.keys(netUnits)]).forEach((region) => {
+    const delta = (nowUnits[region] ?? 0) - (prevUnits[region] ?? 0);
+    const wired = netUnits[region] ?? 0;
+    const gross = Math.abs(delta) + Math.abs(wired);
+    if (Math.abs(delta - wired) > Math.max(0.5, gross * 1e-6)) gaps.push({ region, gapUnits: delta - wired });
+  });
+  gaps.sort((a, b) => Math.abs(b.gapUnits) - Math.abs(a.gapUnits));
   return gaps;
 }

@@ -982,7 +982,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     return { households: tierHouseholds, priceLocal: affordableLoanLocal / MORTGAGE_LTV_AT_ORIGINATION };
   }).sort((a, b) => b.priceLocal - a.priceLocal);
   // The week's supply: existing owners selling, plus what construction actually completed.
-  const owningHouseholdsCount = householdsCount * Math.max(0, prevHousing.ownershipRate ?? 0.6);
+  // §3.26b-i: the owners are the register's units, not a rate times the population.
+  const owningHouseholdsCount = Math.max(0, prevHousing.ownerOccupiedUnits);
   // HSG: what the banks measured off their own vintage cross-sections last week — one sale per
   // tenure plus the owners who can now afford to trade up. The seed rate stands in only before
   // the first bank pass has run (§7.4).

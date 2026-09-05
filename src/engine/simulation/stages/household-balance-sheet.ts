@@ -1,4 +1,5 @@
 import { entityCashOf, householdDepositsOf } from '../../ledger/accounts';
+import { housingStockValueLocal } from '../../../domain/housing';
 import { marketCapAt, etfSharesOutstandingOf } from '../../../engine2/instruments';
 /**
  * The household balance sheet, and the claims that link it to the institutions.
@@ -33,7 +34,7 @@ import { institutionProfile } from '../../../domain/institution-profiles';
 import { WeeklyStepContext } from './context';
 import { ETF_INCEPTION_NAV_PER_SHARE } from '../../../domain/etf';
 import { bookHeadOf } from '../../../engine2/holdings';
-import { AVERAGE_HOUSEHOLD_SIZE, WealthTier } from '../../../domain/region-macro';
+import { WealthTier } from '../../../domain/region-macro';
 import { WEALTH_TIERS } from '../../macro/household-cohorts';
 import {
   householdDirectEquityLocal, householdEtfHoldingsLocal, householdPrivateBusinessEquityLocal } from '../../macro/household-portfolio';
@@ -132,15 +133,10 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const realClaimsLocal = etfHoldingsLocal + directEquityLocal + privateBusinessEquityLocal + institutionalClaimsLocal;
 
     // ---- 6. HH2: the house. Households carried the mortgage and not the asset it secures. ----
-    // Built from physical units — owning households at this week's median price — rather than
-    // backed out of the debt, so a move in home prices moves household wealth. Backing it out of
-    // the mortgage would have pinned the stock to the borrowing and left prices with no channel,
-    // which is the transmission the omission was suppressing in the first place.
-    const housingMarket = reg.housingMarket;
-    const owningHouseholds = housingMarket
-      ? (Math.max(0, reg.totalPopulation) / AVERAGE_HOUSEHOLD_SIZE) * Math.max(0, housingMarket.ownershipRate)
-      : 0;
-    const housingStockLocal = owningHouseholds * Math.max(0, housingMarket?.medianHomePriceLocal ?? 0);
+    // §3.26b-i: the dwelling register's units at this week's median price (one owner of the
+    // read, `domain/housing.ts`) — never backed out of the debt, so a move in home prices moves
+    // household wealth, which is the transmission the omission was suppressing.
+    const housingStockLocal = housingStockValueLocal(reg.housingMarket);
     const mortgageLocal = hs.mortgageDebtLocal ?? 0;
     const homeEquityLocal = housingStockLocal - mortgageLocal;
 

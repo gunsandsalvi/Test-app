@@ -19,6 +19,7 @@
  * its own inventory would have each write clobber the other.
  */
 
+import { moveDwellings } from '../../ledger/dwelling-ledger';
 import { arrivePlant } from '../../ledger/plant-ledger';
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
 import { bookTradeInvoices } from '../../ledger/contract-ledger';
@@ -2368,7 +2369,15 @@ function runSubUnitMarkets(
       const buyer = partyOfKey(buyerKey, buyerRegion, lookup);
       const reason = buyer.kind === 'HOUSEHOLD' ? 'household purchase' : buyer.kind === 'GOVERNMENT' ? 'government procurement' : 'goods sold to the segment';
       lots.forEach(l => {
-        deliverGoods(partyOfKey(l.sellerKey, origin, lookup), buyer, subUnitId, l.units, book.clearedPriceLocal, reason);
+        const sellerParty = partyOfKey(l.sellerKey, origin, lookup);
+        deliverGoods(sellerParty, buyer, subUnitId, l.units, book.clearedPriceLocal, reason);
+        // §3.26b-i — a household's purchase of a dwelling is the dwelling changing hands: the
+        // GOOD wire above is the build consumed on receipt (W4's sink); the HOUSE wire is the
+        // asset that now has an owner, and the register moves by exactly it (W7).
+        if (subUnitId === 'residential_construction' && buyer.kind === 'HOUSEHOLD') {
+          moveDwellings(sellerParty, buyer, buyerRegion, l.units, book.clearedPriceLocal, 'household purchase of a new dwelling');
+          ctx.updatedRegions[buyerRegion].housingMarket.ownerOccupiedUnits += l.units;
+        }
       });
     });
   });

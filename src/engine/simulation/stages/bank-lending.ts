@@ -1,4 +1,5 @@
 import { levelPaymentFactor } from '../../../domain/pricing';
+import { housingStockValueLocal } from '../../../domain/housing';
 import type { Ticker } from '../../../domain/ids';
 import { openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf, seedBankBookLocalOf } from '../../ledger/accounts';
 /**
@@ -535,11 +536,7 @@ export function migrateHouseholdDebtAtSeed(
     + annuityWeeklyPrincipalLocal(hs.otherConsumerLoanDebtLocal, policyRate + termMarginBps / 10000, CONSUMER_TERM_SEED_WAM_WEEKS)
     + hs.creditCardDebtLocal * CARD_MIN_PRINCIPAL_RATE_WEEKLY
   ));
-  const housingStockLocal = hs.housingStockLocal && hs.housingStockLocal > 0
-    ? hs.housingStockLocal
-    : (reg.housingMarket
-      ? (Math.max(0, reg.totalPopulation) / AVERAGE_HOUSEHOLD_SIZE) * Math.max(0, reg.housingMarket.ownershipRate) * Math.max(0, reg.housingMarket.medianHomePriceLocal)
-      : 0);
+  const housingStockLocal = housingStockValueLocal(reg.housingMarket); // §3.26b-i: the register's read
   // Seeded as the engine's own shape: NET mortgage credit — buyers' new loans at the
   // origination LTV minus sellers' remaining loans (at the book's average LTV) the sales retire.
   const seedAvgLtv = housingStockLocal > 0 ? Math.min(2, hs.mortgageDebtLocal / housingStockLocal) : 1;
@@ -628,7 +625,7 @@ export function runBankHouseholdLending(
   // Mortgage severity reads the sector's REAL home equity (HH2): foreclosure recovers the house
   // less the cost of selling it, against the loan — deep equity means small severity, and a
   // price crash walks severity up as LTV approaches 1.
-  const housingStockLocal = Math.max(0, hs?.housingStockLocal ?? 0);
+  const housingStockLocal = housingStockValueLocal(reg.housingMarket); // §3.26b-i: the register's read, not the sheet's carried line
   // DIST/HSG — SEVERITY IS `E[f(LTV)]` NOW, NOT `f(E[LTV])`.
   //
   // It used to read one average LTV for the whole region — measured at 0.340 — into a curve that

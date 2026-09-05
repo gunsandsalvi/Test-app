@@ -256,6 +256,8 @@ interface WireSummary {
   plantNetCostByCompany: Record<string, number>;
   queueNetCostByCompany: Record<string, number>;
   plantFlowByCompany: Record<string, PlantFlow>;
+  /** §3.26b-i W7: dwellings the household sector took in net of what it gave up, per region, in units. */
+  dwellingNetUnitsByRegion: Record<string, number>;
   goodsOutUnitsByKey?: Record<string, number>;
   goodsInUnitsByKey?: Record<string, number>;
   goodsDeliveredByKey?: Record<string, number>;
@@ -281,6 +283,7 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
   const goodsNetUnitsByKey: Record<string, number> = {};
   const plantNetCostByCompany: Record<string, number> = {};
   const queueNetCostByCompany: Record<string, number> = {};
+  const dwellingNetUnitsByRegion: Record<string, number> = {};
   const registerNetQtyByKind: Record<string, number> = {};
   const w5Trace = typeof process !== 'undefined' && process.env?.W5_TRACE === '1';
   const registerNetQtyByHolder: Record<string, number> | undefined = w5Trace ? {} : undefined;
@@ -313,6 +316,12 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
     valueUSDByKind[k] = (valueUSDByKind[k] ?? 0) + valueLocal;
     if (k === 'MONEY') continue;
     const from = partyOf(j.fromId[i]), to = partyOf(j.toId[i]);
+    if (k === 'HOUSE') {
+      // The register is the household sector's, per region; a builder or a pool is a source.
+      if (to.kind === 'HOUSEHOLD') dwellingNetUnitsByRegion[to.region] = (dwellingNetUnitsByRegion[to.region] ?? 0) + j.quantity[i];
+      if (from.kind === 'HOUSEHOLD') dwellingNetUnitsByRegion[from.region] = (dwellingNetUnitsByRegion[from.region] ?? 0) - j.quantity[i];
+      continue;
+    }
     if (k === 'PLANT') {
       // A firm (or a bank) holds a register; a pool is a source (a birth's carve-out) and holds none.
       const map = assetText(j.assetRef[i]) === 'PLANT_QUEUE' ? queueNetCostByCompany : plantNetCostByCompany;
@@ -351,5 +360,5 @@ export function summarizeWires(j: WireJournal, moneyPending: { numeraire: number
       if (to.kind === 'COMPANY') { const rg = regionOfIssuer(to.id); if (rg) { const key = `${rg}|${k}`; issuerNetUSDByKey[key] = (issuerNetUSDByKey[key] ?? 0) - valueLocal; if (issuerNetUSDByTicker) { const tk = `${to.id}|${k}`; issuerNetUSDByTicker[tk] = (issuerNetUSDByTicker[tk] ?? 0) - valueLocal; } } }
     }
   }
-  return { count: j.n, byKind, valueUSDByKind, moneyPendingLocal, moneyByCurrency, moneyPendingByCurrency, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, plantNetCostByCompany, queueNetCostByCompany, plantFlowByCompany: j.plantFlows, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
+  return { count: j.n, byKind, valueUSDByKind, moneyPendingLocal, moneyByCurrency, moneyPendingByCurrency, houseNetUSDByKey, ...(houseNetUSDByAsset ? { houseNetUSDByAsset } : {}), issuerNetUSDByKey, issuerNetUSDByTicker, goodsNetUnitsByKey, registerNetQtyByKind, ...(registerNetQtyByHolder ? { registerNetQtyByHolder } : {}), goodsFlowByKey: j.goodsFlows, plantNetCostByCompany, queueNetCostByCompany, plantFlowByCompany: j.plantFlows, dwellingNetUnitsByRegion, ...(goodsTrace ? { goodsOutUnitsByKey, goodsInUnitsByKey, goodsDeliveredByKey: j.goodsDelivered, goodsInByTicker } : {}) };
 }

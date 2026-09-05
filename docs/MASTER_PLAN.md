@@ -551,11 +551,15 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26b. **Housing clears.** `housingStockUSD`, a median price and an ownership rate are an
-    aggregate marked by formula — dwellings have no owners and no price anyone struck, which
-    rule 3 does not allow and no step currently covers. Households, builders and estates clear
-    dwellings by price; the aggregate becomes a read of units with owners, and houses get their
-    wires.
+26b-ii. **THE HOUSE PRICE IS A BOOK.** The affordability walk (`evolution.ts:marginalPriceLocal`)
+    prices the marginal buyer honestly and nobody transacts: it becomes a clearing with named
+    sides, in UNITS — the sellers are the owners whose tenure ends (the turnover the banks
+    measure off their own vintages) and, after 37-HOUSING, the estates' foreclosed dwellings,
+    each with a reservation (an owner cannot sell below its mortgage payoff, and can refuse —
+    B4); the buyers are the wealth tiers at what each can borrow at the keenest quote (B2). The
+    struck price is `medianHomePriceLocal`; the struck units are what changed hands, and the
+    mortgage origination reads them instead of `stock × turnover` (`bank-lending.ts:789`). B1
+    ⚠️→✅, B4 ⚠️→✅ (volumes collapse before prices: a bid under the reservation clears nothing).
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
@@ -971,15 +975,20 @@ step that owns its node; where it does not yet, the step below is the owner.
     walk and both elasticities, and this is the half it did not cover (`inventoryLevelPct`'s walk
     now lives in `07-commodities.ts`). The goods side's W4 units identity is the machinery it needs.
 
-37-HOUSING. **NO DWELLING EXISTS AS AN OBJECT.** (housing C5, C4/C4.a, and 26b/13's item 1.) Stock is
-    `population/2.5 × ownershipRate × medianHomePrice`; `HOME_OWNERSHIP_RATE` is written once at
-    init and never again; construction output never enters the stock; the wire ledger **declares an
-    asset kind `'HOUSE'` and no wire of that kind is ever written.** And **the lending standard
-    never tightens** — `MORTGAGE_DSTI_LIMIT` and `MORTGAGE_LTV_AT_ORIGINATION` are constants no
-    code path writes — so half the housing cycle is missing and only the rate channel loops.
-    The price itself is honest and worth protecting (a real marginal-buyer walk over tier
-    affordability at the keenest bank quote, floored at build cost). Medium; needs step 26's
-    unit-of-plant decision first.
+37-HOUSING. **A DEFAULT SEIZES NO HOUSE, AND THE LENDING STANDARD NEVER TIGHTENS.** (housing C4/C4.a,
+    C5, A3; after 26b-ii.) 26b-i gave the owner-occupied stock its units, its owner and its wire
+    (`HousingMarket.ownerOccupiedUnits`, `ledger/dwelling-ledger.ts`, W7); 26b-ii makes the price
+    a book. What is left of the cycle's other half: `vLossLocal` (`bank-lending.ts`) reduces a
+    vintage's principal and the bank's P&L and **no house is repossessed, nothing is sold, and no
+    foreclosed supply reaches the market** — the extra supply that makes a falling price fall
+    further does not exist; a foreclosure is a HOUSE wire from the household sector to the
+    estate (or the bank) and the estate's sale at the book is what it fetches (C4.a). And **the
+    lending standard never tightens** — `MORTGAGE_DSTI_LIMIT` and `MORTGAGE_LTV_AT_ORIGINATION`
+    are constants no code path writes — so only the rate channel loops: the bank already measures
+    everything a standard should respond to (`mortgageSeverity` off its own LTV cross-section,
+    `bankHurdle`, `headroomLocal`), so the two constants become reads of the same measurements
+    the quote already uses (C5, C5.a). The rental stock has no dwelling behind it (A3): a landlord
+    is a firm producing a service, not the owner of a dwelling somebody lives in. Medium.
 
 37-SECURITISE. **THE INSTRUMENT HALF OF THE SME SYSTEM DOES NOT EXIST.** (sme-pools C1–C6, D1–D4.a,
     E2/E3; housing C6; banks-capital D2's other side.) Zero hits in `src` for a vehicle, a tranche
@@ -1352,6 +1361,28 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26b-i — DWELLINGS EXIST: THE OWNER-OCCUPIED STOCK IS UNITS WITH AN OWNER, AND A HOUSE GETS ITS
+  WIRE.** (rule 10 split of "Housing clears"; 26b-ii in §3.) The stock was `population/2.5 ×
+  ownershipRate × medianHomePrice`, computed identically in two places, and `HOME_OWNERSHIP_RATE`
+  was written once and never again — the number of dwellings moved only with the population, and
+  the houses built this week did not exist next week. `HousingMarket.ownerOccupiedUnits` is the
+  register: the household sector's dwellings in units, seeded once as the seed's opening share
+  of households and moved only by what changes hands. A household's purchase of a
+  `residential_construction` unit at the goods auction IS a new dwelling (the pattern
+  `passenger_vehicles` → `durableGoodsStockUnits` already carried): the GOOD wire is the build
+  consumed on receipt, the dwelling itself a HOUSE wire from the builder to the household sector
+  (`ledger/dwelling-ledger.ts:moveDwellings` — `wire.ts`'s declared, never-written kind, written
+  at last; `wire-world.ts` resolves `DWELLING:<region>`), and the register moves by exactly it in
+  the same loop. `domain/housing.ts`: `ownershipRateOf` and `housingStockValueLocal` are reads of
+  the register (the bank pass read the household sheet's carried copy; both read the one function
+  now); `evolution.ts`'s turnover supply reads the register's units. `summarizeWires` nets HOUSE
+  wires per region's household sector, the audit's snapshot reads every region's units, and
+  `audit/wires.ts` W7 closes the identity per region (`dwellingIdentityGaps`, pure). housing A4
+  ❌→✅, A1 ❌→⚠️ and E1 ❌→⚠️ (the owner is the sector, not a named household; the rental stock
+  has no dwelling behind it), A3 and D1 re-cited; 37-HOUSING's text corrected to what is left
+  (foreclosure, the standard, the rental join). `test/housing.test.ts`. Gates green; no run
+  (rule 11).
 
 **26-f-iv-c — CAPACITY READS THE VINTAGES WHOSE KIND SERVES THE LINE.** A line's capacity was
   `unitsPerNetPpeDollar × net plant` of the WHOLE register, so a steel mill's heavy equipment

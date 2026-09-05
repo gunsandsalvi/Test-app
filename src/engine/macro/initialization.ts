@@ -104,6 +104,8 @@ export function createWealthDistribution(estimatedHouseholdIncomeLocal: number):
 // own generated income primitive — replacing the previous per-region literal base prices.
 const AVG_HOUSEHOLD_SIZE = 2.5;
 const HOME_PRICE_TO_HOUSEHOLD_INCOME_MULTIPLE = 4.2;
+/** §3.26b-i: the seed's OPENING owner-occupier share — written once into the dwelling register's
+ *  unit count, and the count moves only by what changes hands from then on. */
 const HOME_OWNERSHIP_RATE = 0.62;
 
 export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncomeLocal: number, population: number): HousingMarket {
@@ -116,7 +118,7 @@ export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncome
     baselineHomePriceLocal: basePrice,
     priceIndex: 1.0,
     historicalPrices: Array(52).fill(basePrice),
-    ownershipRate: HOME_OWNERSHIP_RATE,
+    ownerOccupiedUnits: Math.round(households * HOME_OWNERSHIP_RATE),
     mortgageOriginationVolumeLocal: estimatedHouseholdIncomeLocal * 0.05,
   };
 }

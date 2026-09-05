@@ -86,11 +86,11 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| **A1 a durable, immovable asset owned by a named party** | — | ❌ |
+| **A1 a durable, immovable asset owned by a named party** | `src/domain/region-macro.ts:HousingMarket` · `src/domain/housing.ts:ownershipRateOf` | ⚠️ |
 | A1.a location is part of the identity | `src/domain/region-macro.ts:HousingMarket` | ⚠️ |
 | A2 it yields a service, consumed by whoever lives in it | `src/domain/industry-registry.ts:housing_rental_services` | ⚠️ |
-| A3 owner and occupier can differ, and then there is rent | `src/engine/macro/initialization.ts:HOME_OWNERSHIP_RATE` | ⚠️ |
-| **A4 the stock is finite and changes slowly** | `src/engine/macro/evolution.ts:owningHouseholdsCount` | ❌ |
+| A3 owner and occupier can differ, and then there is rent | `src/domain/housing.ts:ownershipRateOf` · `src/domain/industry-registry.ts:housing_rental_services` | ⚠️ |
+| A4 the stock is finite and changes slowly | `src/engine/ledger/dwelling-ledger.ts:moveDwellings` · `src/engine/macro/evolution.ts:owningHouseholdsCount` | ✅ |
 | A5 it depreciates and needs maintenance | — | ❌ |
 | B1 it clears between buyers and sellers, per location | `src/engine/macro/evolution.ts:marginalPriceLocal` | ⚠️ |
 | B2 demand is governed by what the buyer can borrow | `src/engine/macro/evolution.ts:affordabilityByTier` | ✅ |
@@ -107,12 +107,12 @@ checked by `scripts/check-atlas.sh`.
 | **C5 the lender's standard is a DECISION, and it tightens** | `src/domain/banking.ts:MORTGAGE_DSTI_LIMIT` | ❌ |
 | C5.a which feeds back into B2.a — the housing cycle | `src/engine/simulation/stages/bank-lending.ts:affordabilityGate` | ⚠️ |
 | C6 mortgages can be pooled and sold to a named holder | — | ❌ |
-| D1 house price changes are household wealth changes | `src/engine/simulation/stages/household-balance-sheet.ts:housingStockLocal` | ✅ |
+| D1 house price changes are household wealth changes | `src/domain/housing.ts:housingStockValueLocal` · `src/engine/simulation/stages/household-balance-sheet.ts:housingStockLocal` | ✅ |
 | D2 housing construction is investment and employment | `src/domain/industry-registry.ts:residential_construction` | ✅ |
 | D3 rent is a large component of the consumer price level | `src/engine/simulation/stages/price-index.ts:buildCpiBasket` | ✅ |
 | D4 mortgage debt is the largest household liability | `src/engine/simulation/stages/bank-lending.ts:mortgageDebtLocal` | ✅ |
 | D5 VERIFY the rate reaches consumption by two distinguishable channels | — | ❌ |
-| **E1 FORBID no house without an owner in the register** | `src/engine/ledger/wire.ts:HOUSE` | ❌ |
+| **E1 FORBID no house without an owner in the register** | `src/engine/ledger/dwelling-ledger.ts:moveDwellings` · `src/engine/audit/wires.ts:dwellingIdentityGaps` | ⚠️ |
 | **E2 FORBID no exogenous house price path** | `src/engine/macro/evolution.ts:newMedianHomePriceLocal` | ✅ |
 | E3 FORBID no mortgage without a lender's balance sheet | `src/engine/simulation/stages/bank-lending.ts:HouseholdLoanPool` | ✅ |
 | E4 VERIFY Σ owed = Σ held, exactly | `src/engine/simulation/stages/02b-bank-diversification.ts:mortgageDebtLocal` | ✅ |
@@ -121,38 +121,36 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ A1 / A4 / E1 — SAY IT PLAINLY: THERE ARE NO HOUSES
+### ⚠️ A1 / ✅ A4 / ⚠️ E1 — THE OWNER-OCCUPIED STOCK IS UNITS WITH AN OWNER NOW
 
-The tree's biggest finding, and it is not "housing is thin" — it is that **no dwelling exists as
-an object anywhere in this model.** The entire housing stock is one arithmetic expression,
-computed identically in two places (`household-balance-sheet.ts:147-150` and
-`bank-lending.ts:501`):
+*2026-09-05 (§9.26b-i).* It was the tree's biggest finding: **no dwelling existed as an object
+anywhere in this model.** The entire housing stock was one arithmetic expression, computed
+identically in two places — `owningHouseholds = population / 2.5 × ownershipRate`, `stock =
+owningHouseholds × medianHomePrice` — with `HOME_OWNERSHIP_RATE = 0.62` written once at
+initialization and never again, so the number of dwellings moved only when the population did,
+residential construction's real cleared output entered the price walk's supply and was never added
+to the stock (the houses built this week did not exist next week), and the wire ledger's declared
+`'HOUSE'` kind had no writer.
 
-```
-owningHouseholds = (totalPopulation / AVERAGE_HOUSEHOLD_SIZE) * housingMarket.ownershipRate;
-housingStockLocal  = owningHouseholds * housingMarket.medianHomePriceLocal;
-```
+Now: `HousingMarket.ownerOccupiedUnits` is the household sector's dwellings, in UNITS — seeded once
+as the seed's opening share of households and moved only by what changes hands. A household's
+purchase of a `residential_construction` unit at the goods auction IS a new dwelling: the GOOD wire
+is the build consumed on receipt (W4's sink), and the dwelling itself is a HOUSE wire from the
+builder to the household sector (`ledger/dwelling-ledger.ts:moveDwellings`), the register moving by
+exactly it. The ownership rate (`domain/housing.ts:ownershipRateOf`) and the stock's value
+(`housingStockValueLocal`, one owner — the bank pass and the household sheet read the same
+function) are READS of the register, and `audit/wires.ts` W7 closes the identity per region every
+week: Δ units = HOUSE wires in − out.
 
-Three consequences, each of which is a node above:
-
-- **A1 / E1.** There is no house, so there is no owner. The wire ledger's asset-kind union
-  actually **declares** `'HOUSE'` (`ledger/wire.ts:18,22`) and no wire of that kind is ever
-  written — `grep -w HOUSE src` finds the two declarations and nothing else. A dwelling never
-  changes hands; ownership is `ownershipRate`, a number.
-- **A4.** The "stock" is a function of **population and a constant**. `HOME_OWNERSHIP_RATE = 0.62`
-  is written once at initialization (`macro/initialization.ts:118`) and never written again — the
-  only other reads spread `prevHousing`. So the number of dwellings moves only when the population
-  does. Residential construction's real cleared output (`resSupplyUnits`) enters the *price walk's*
-  supply term and **is never added to the stock**: the houses built this week do not exist next
-  week. That is A4 inverted — the stock cannot change at all, while the tree asks that it change
-  slowly.
+- **A4 ✅.** The stock is finite, and it changes only by construction that a household bought —
+  slowly, at the builders' cleared pace.
+- **A1 ⚠️ / E1 ⚠️.** A dwelling has an owner in the ledger's sense — a party, the region's household
+  SECTOR — and a location (the region), and every move is a wire. What it is not yet is a house
+  owned by a named household with a named mortgage on it (households are cohorts, not names), and
+  the rental stock has no dwelling behind it at all (A3 below): a landlord is a firm producing a
+  service, not the owner of a dwelling somebody lives in. **§3 step 26b-ii** makes the price a book
+  with named sides; **37-HOUSING** the foreclosure that seizes and sells one.
 - **A5.** Nothing depreciates and nobody maintains anything.
-
-**Already §3 step 26b** ("Housing clears… dwellings have no owners and no price anyone struck…
-houses get their wires"), and it is **also §3 step 13's item 1** — housing is one of the two
-classes in that step's survey with *no units at all*. This mapping is a second witness to both and
-adds the two facts they do not carry: the `HOUSE` wire kind already exists and is dead, and
-construction output is disconnected from the stock.
 
 ### ❌ C5 — THE LENDING STANDARD IS TWO CONSTANTS, AND IT NEVER TIGHTENS
 
@@ -230,9 +228,10 @@ supplier can serve it, and it lands in the CPI basket — so D3 is genuinely ✅
 payment to real landlord firms.
 
 What is missing is the join to A1. The landlord is a *firm producing a service*, not the owner of
-a dwelling somebody lives in, and the owner/renter split is `ownershipRate`, frozen at 0.62
-forever. So a household can never buy the house it rents, tenure never changes, and rent and
-ownership are two unconnected markets over the same absent asset. Closes with 26b.
+a dwelling somebody lives in; the owner/renter split is a READ of the dwelling register now
+(§9.26b-i: `ownershipRateOf`, which rises as households buy new dwellings) rather than a constant,
+but a household still cannot buy the house it rents, so rent and ownership remain two unconnected
+markets over one asset that exists on only one side. Closes with 26b-ii and 37-HOUSING.
 
 ### Also marked, briefly
 

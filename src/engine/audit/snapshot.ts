@@ -31,10 +31,10 @@ interface RegionSnapshot {
   bankDepositsLocal: number;
   bankLoansLocal: number;
 }
-export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingLocal?: number; /** §3.13c: the dated tail per currency, for the exact form of W1 */ moneyPendingByCurrency?: Record<string, number>; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number>; /** W5: register shares held per asset kind */ registerQtyByKind?: Record<string, number>; /** W5_TRACE=1: per `holderId|kind` */ registerQtyByHolder?: Record<string, number>; /** §3.26-f-iii W6: gross plant per firm, in cost, and the construction queue */ plantCostByCompany?: Record<string, number>; queueCostByCompany?: Record<string, number> };
+export type AuditSnapshot = Partial<Record<RegionId, RegionSnapshot>> & { moneyPendingLocal?: number; /** §3.13c: the dated tail per currency, for the exact form of W1 */ moneyPendingByCurrency?: Record<string, number>; /** §5-WIRES W3: Σ ladder principal per `region|kind` */ ladderUSDByKey?: Record<string, number>; /** LADDER_TRACE=1: per `ticker|kind` */ ladderUSDByTicker?: Record<string, number>; /** §5-WIRES W4: units of goods held per `region|subUnit` (output stock + input lots + in transit) */ goodsUnitsByKey?: Record<string, number>; /** W5: register shares held per asset kind */ registerQtyByKind?: Record<string, number>; /** W5_TRACE=1: per `holderId|kind` */ registerQtyByHolder?: Record<string, number>; /** §3.26-f-iii W6: gross plant per firm, in cost, and the construction queue */ plantCostByCompany?: Record<string, number>; queueCostByCompany?: Record<string, number>; /** §3.26b-i W7: owner-occupied dwellings per region, in units */ dwellingUnitsByRegion?: Record<string, number> };
 
 export function snapshotOf(state: GameState): AuditSnapshot {
-  const out: AuditSnapshot = { moneyPendingLocal: state.lastWires?.moneyPendingLocal ?? 0, moneyPendingByCurrency: state.lastWires?.moneyPendingByCurrency ?? {}, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined, goodsUnitsByKey: goodsUnitsByKey(state), registerQtyByKind: registerQtyByKind(state), registerQtyByHolder: process.env.W5_TRACE === '1' ? registerQtyByHolder(state) : undefined, plantCostByCompany: plantCostByCompany(state), queueCostByCompany: queueCostByCompany(state) };
+  const out: AuditSnapshot = { moneyPendingLocal: state.lastWires?.moneyPendingLocal ?? 0, moneyPendingByCurrency: state.lastWires?.moneyPendingByCurrency ?? {}, ladderUSDByKey: ladderUSDByKey(state), ladderUSDByTicker: process.env.LADDER_TRACE === '1' ? ladderUSDByTicker(state) : undefined, goodsUnitsByKey: goodsUnitsByKey(state), registerQtyByKind: registerQtyByKind(state), registerQtyByHolder: process.env.W5_TRACE === '1' ? registerQtyByHolder(state) : undefined, plantCostByCompany: plantCostByCompany(state), queueCostByCompany: queueCostByCompany(state), dwellingUnitsByRegion: dwellingUnitsByRegion(state) };
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     const cb = reg?.centralBankSheet;
@@ -164,5 +164,15 @@ export function queueCostByCompany(state: GameState): Record<string, number> {
     const q = (c.assetsUnderConstruction ?? []).reduce((a, l) => a + l.valueLocal, 0);
     if (q) out[c.id] = q;
   }
+  return out;
+}
+
+/** §3.26b-i W7: every region's owner-occupied dwellings, in units — the register W7 replays. */
+export function dwellingUnitsByRegion(state: GameState): Record<string, number> {
+  const out: Record<string, number> = {};
+  REGION_IDS.forEach((r) => {
+    const u = state.regions[r]?.housingMarket?.ownerOccupiedUnits;
+    if (u) out[r] = u;
+  });
   return out;
 }
