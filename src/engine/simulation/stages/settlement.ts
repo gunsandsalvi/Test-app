@@ -195,6 +195,8 @@ export function internReason(reason: string): number {
   reasonCategoryById.push(categoryOfReason(reason));
   return id;
 }
+/** §3.15-v: the id a reason HAS, or nothing — a READ for the surface, which must not intern. */
+export const reasonIdOf = (reason: string): number | undefined => reasonIdByText.get(reason);
 /** The text behind an interned reason — the ledgers still key by it. */
 export const reasonText = (id: number): string => reasonById[id];
 /** W2 — table size and texts-from-index, to seed a worker's reason table id-for-id. */
@@ -442,7 +444,7 @@ export interface SettlementReport {
   accountUnmappedByKind: Map<string, number>;
 }
 
-export { partyId, partyOf, partyKey, partyFromKey } from '../../ledger/party';
+export { partyId, partyIdOf, partyOf, partyKey, partyFromKey } from '../../ledger/party';
 
 /**
  * Execute the week's instructions.

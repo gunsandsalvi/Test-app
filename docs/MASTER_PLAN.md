@@ -548,7 +548,6 @@ written from here):
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
 15. **Search by asset, price and spread together** (rule 9) — split 2026-09-05, one commit each:
-15-v. **`statements.tsx:174` calls engine interning in render** — stop it.
 15b. **News slice 2.** The derivation cites the books and ranks by size; what it still cannot
     tell is a story that develops. Follow-ups through an estate, an auction that failed or came
     in under-subscribed, and contract-break streaks. (The fourth item on the original list,
@@ -1644,6 +1643,15 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**15-v — NO INTERNING IN RENDER.** `statements.tsx` computed a firm's unpaid taxes by calling
+`partyId(companyParty(c))` and `internReason(CORPORATE_TAX_REASON)` in render — both intern on
+first sight, so looking at a statement could add a row to the engine's party and reason tables
+(atlas E3, "no surface that changes the model"). `party.ts:partyIdOf` and
+`settlement.ts:reasonIdOf` are the read-only lookups (nothing for the unseen, which owes nothing),
+and `ui/world.ts:unpaidTaxesOf` is the typed selector the statement reads, like every other read
+the surface takes. `test/settlement-lookups.test.ts` shows the lookups grow neither table. With
+this, step 15 is done. Gates green; no run.
 
 **15-iv — ONE CALENDAR.** `domain/calendar.ts` holds the epoch — week 0 is 1 January 2027, the
 user's rule — with `dateOfWeek` and `yearOfWeek`; `ui/calendar.ts` keeps only the UI's spellings

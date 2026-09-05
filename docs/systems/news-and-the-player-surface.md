@@ -268,7 +268,9 @@ with `newsGenerator.ts` in the same delete.
 `ui/world.ts` and every object and function module take `World` and return elements. No render path
 mutates `GameState` or `V2World`; `recordTape` appends to the UI's own tape. The one place a surface
 could have written the model — `executeTrade` — is never called. So the atlas's measurements are not
-contaminated by being taken.
+contaminated by being taken. (§9.15-v: one render did reach the engine's intern tables —
+`statements.tsx` called `partyId` and `internReason`, which add a row on first sight; it now reads
+through `ui/world.ts:unpaidTaxesOf`, on the read-only `partyIdOf` and `reasonIdOf`.)
 
 **The shell (2026-09-05, §9.14-SHELL).** Not a node — the surface's own mechanics, recorded here because this is the tree the surface sits
 in. Every long list renders through `ui.tsx:Table`, which caps at `TABLE_CAP` rows and says so

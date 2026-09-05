@@ -1,6 +1,5 @@
 import { RegionId } from '../../domain/geography';
 import { bankSovereignBookLocal } from '../../engine/sovereign-register';
-import { companyParty } from '../../domain/party';
 /**
  * AU · statements — a firm's P&L, balance sheet and cash flow (the latest filed quarter beside
  * the one before), a bank's sheet, an institution's assets and liabilities, a region's national
@@ -9,15 +8,13 @@ import { companyParty } from '../../domain/party';
  */
 
 import { Company, InstitutionalEntity, Region } from '../../types';
-import { currencyOf } from '../../domain/geography';
 
-import { undueOwedByPayer, partyId, internReason, CORPORATE_TAX_REASON } from '../../engine/simulation/stages/settlement';
 import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksLocal, addDepositLines, ZERO_DEPOSIT_LINES } from '../../domain/banking';
 import { FunctionModule } from '../fn';
 import { Card, Hint, KV, Tabs, T, mono } from '../ui';
 import { statementLocal, pct, pctLevel, ratio, changePct, money } from '../format';
 import { formatDate, quarterLabel } from '../calendar';
-import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
+import { World, companyOf, institutionOf, regionOf, bookOf, unpaidTaxesOf } from '../world';
 import { bookBasisLocal, bookUnrealisedLocal, bookRealisedOf, bookAccruedLocal } from '../../engine2/holdings';
 import { bankRwaLocal } from '../../domain/bank-pricing';
 
@@ -177,7 +174,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
   } else {
     body = (
       <Card style={{ padding: '2px 0' }}>
-        <KV k="tax accrued, unpaid" hint="the dated wires to the treasury" v={money(world.state.pendingPaymentJournal ? undueOwedByPayer(world.state.pendingPaymentJournal, partyId(companyParty(c)), internReason(CORPORATE_TAX_REASON), world.state.currentWeek, currencyOf(c.region), ensureV2(world.state).fx) : 0)} />
+        <KV k="tax accrued, unpaid" hint="the dated wires to the treasury" v={money(unpaidTaxesOf(world, c))} />
         <KV k="loss carryforward" v={money(c.taxLossCarryforwardLocal)} />
         <KV k="tax basis of plant" hint="double-declining" v={money(c.taxBasisPpeLocal)} />
         <KV k="deferred tax liability" v={money(c.deferredTaxLiabilityLocal)} />

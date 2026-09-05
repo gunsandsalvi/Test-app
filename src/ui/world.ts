@@ -20,6 +20,9 @@ import { registerBooks } from '../engine/ledger/holdings-ledger';
 import { forEachSovereignPosition, centralBankBookLocal } from '../engine/sovereign-register';
 import { asInstrumentId } from '../domain/ids';
 import { isActiveCompany } from '../domain/company';
+import { undueOwedByPayer, partyIdOf, reasonIdOf, CORPORATE_TAX_REASON } from '../engine/simulation/stages/settlement';
+import { companyParty } from '../domain/party';
+import { currencyOf } from '../domain/geography';
 
 export type { ObjectRef, ObjectType, ObjectLabel, Series } from './types';
 export { refKey, sameRef } from './types';
@@ -256,4 +259,20 @@ export function contractsOf(world: World, party: { kind: string; key: string }):
     (p.kind === party.kind || (party.kind === 'BANK' && (p.kind === 'BANK' || p.kind === 'BANK_SECURITIES' || p.kind === 'BANK_CREDIT')))
     && ((p.ticker ?? p.id ?? p.region) === party.key);
   return derivativesOf(world.v2).filter((k) => same(k.a as never) || same(k.b as never));
+}
+
+/**
+ * §3.15-v — A firm's tax accrued and not yet paid: the dated wires to the treasury still in the
+ * payment journal. A READ: the party's and the reason's ids are looked up, never interned — a
+ * render used to call `partyId` and `internReason`, which add a row to the engine's tables on
+ * first sight, so looking at a statement could grow the model (atlas E3). A party or a reason the
+ * ledgers have never seen owes nothing.
+ */
+export function unpaidTaxesOf(world: World, c: Company): number {
+  const j = world.state.pendingPaymentJournal;
+  if (!j) return 0;
+  const payer = partyIdOf(companyParty(c));
+  const reason = reasonIdOf(CORPORATE_TAX_REASON);
+  if (payer === undefined || reason === undefined) return 0;
+  return undueOwedByPayer(j, payer, reason, world.state.currentWeek, currencyOf(c.region), ensureV2(world.state).fx);
 }

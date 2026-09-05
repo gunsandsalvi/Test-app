@@ -75,6 +75,13 @@ export function partyId(p: PartyRef): number {
   return id;
 }
 
+/** §3.15-v: the id a party HAS, or nothing — a READ, so a render path can ask without adding a
+ *  row to the intern table. A party the ledgers have never seen owes and is owed nothing. */
+export function partyIdOf(p: PartyRef): number | undefined {
+  const kindIdx = KIND_INDEX.get(p.kind);
+  return kindIdx === undefined ? undefined : idByKindName[kindIdx].get(partyName(p));
+}
+
 /** The party behind an id, for the apply pass. */
 export const partyOf = (id: number): PartyRef => partyRefById[id];
 
