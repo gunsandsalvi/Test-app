@@ -64,10 +64,10 @@ export interface EtfFund {
  * indifference point that gives the share book its demand curve, and the reason a premium is
  * bounded by something real rather than by a number.
  *
- * Buying the basket directly costs the constituent books' dealer spread on every name in it. An
- * investor will therefore pay up to that same cost as a premium over net asset value and not a
- * basis point more, because past it the cheaper route is to go and buy the shares. One input, and
- * it is a price the model already sets.
+ * Buying the basket directly costs the equity desks' own width on every name in it — what they
+ * posted this week (§3.26-e-iii), not a stated spread. An investor will therefore pay up to that
+ * same cost as a premium over net asset value and not a basis point more, because past it the
+ * cheaper route is to go and buy the shares. One input, and it is a price the model already sets.
  */
 export function basketAssemblyCostRate(bookSpreadBps: number): number {
   return Math.max(0, bookSpreadBps) / 10000;

@@ -141,7 +141,7 @@ has not printed twice is quoted on its financing alone. C3 ✅. C5 ⚠️: the w
 of C1 (inventory, funds, limit), C2 (the skew) and C3 (risk); C4 — an informed client widening it
 — has no mechanism, because B2's flow is invisible. The underwriting fee's `bookSpreadBps` reads
 the same width, capacity-weighted over the desks that posted (`dealer-desks.ts:buildDealerDeskBook`).
-`DESK_SPREAD_BPS_BY_BOOK` now serves only the FX pip and the ETF assembly cost — §3 step 26-e-iii.*
+`DESK_SPREAD_BPS_BY_BOOK` is deleted at §9.26-e-iii: the FX pip is each desk's own width on the pair (`fxConversionPipOf`) and the ETF basket's assembly cost is the equity desks' width that week.*
 
 
 *2026-09-05 (§9.26-e-i). The fee on the mid is gone. `ClearingParams.dealerSpreadBps`, the
@@ -152,7 +152,7 @@ bps on every share flow is gone, and `settleClearedBook` no longer pays fee inco
 banks by market share — only the rounding dust of the legs still lands there, which is what dust
 does. C5.a ✅ and F3 ✅ (a desk's P&L is its fills and its marks, `bookPnL`, and nothing times
 volume). What the table still does is the second job below — the WIDTH of every desk's schedule —
-and that is §3 step 26-e-ii; the FX pip and the ETF assembly cost are 26-e-iii. The text below
+and that was §9.26-e-ii; the FX pip and the ETF assembly cost went at §9.26-e-iii. The text below
 describes the fee as it stood.*
 
 

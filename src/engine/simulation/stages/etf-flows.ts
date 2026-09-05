@@ -46,7 +46,6 @@ import { BUFFER_TARGET_WEEKS } from '../../macro/household-cohorts';
 import { measuredWeeklyMove, medianOf } from '../../../domain/volatility';
 import { ringFill, rowOf } from '../../../engine2/world';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
-import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 
@@ -658,8 +657,6 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   //
   // So a week the APs can absorb prints at net asset value and a week they cannot prints a
   // premium — which is what an ETF's premium IS, rather than a number derived from one.
-  const shareBookSpreadBps = DESK_SPREAD_BPS_BY_BOOK['equity'];
-  const assemblyCostRate = basketAssemblyCostRate(shareBookSpreadBps);
   // The ETF_SHARE rows of the whole register, once. Each fund below asked every entity for
   // its holding of THAT fund by reducing over the entity's entire book — 27 funds x 75 entities x
   // ~1,600 rows is 3.2M row visits a week to read a few thousand positions. One pass, indexed by
@@ -690,6 +687,10 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     if (!(navPerShare > 0)) return;
     // §3.13-BOOK dIII: the book clears the share under the ONE key the register holds it by.
     const instrumentId = etfShareId(fund.id);
+    // §3.26-e-iii: assembling the index means crossing the equity desks' schedules in the fund's
+    // region — their own width this week (07e publishes it). A week no desk quoted equities is a
+    // week the shares crossed at the level alone, and the basket costs nothing beside it.
+    const assemblyCostRate = basketAssemblyCostRate(ctx.equityDeskWidthBpsByRegion.get(fund.region) ?? 0);
 
     // What the investors hold between them, and what each of them wants to hold.
     const heldSharesByInvestor = new Map<EntityId, number>();

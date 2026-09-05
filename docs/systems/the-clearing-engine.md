@@ -213,8 +213,8 @@ as the desks' own `fullSizeStatRange`. *§9.26-e-ii closed that half too: the wi
 `domain/dealer-desk.ts:deskScheduleWidth` — the desk's financing for the week at the cleared repo
 rate plus the instrument's measured weekly move at the bank's own risk aversion — so the
 schedules the spread is read off are built from the desk's own cost, and the bid–offer is what
-those schedules produce. The table's last readers (the FX pip, the ETF assembly cost) are §3 step
-26-e-iii.*
+those schedules produce. The table's last readers (the FX pip, the ETF assembly cost) went at
+§9.26-e-iii, and the table with them.*
 
 **Already §3 step 26** (`dealer-desk.ts:117` is on its list). Second witness, with the mechanism
 named: it is not only a cost charged, it is the shape of the desks' curve.

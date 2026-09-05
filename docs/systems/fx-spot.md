@@ -87,13 +87,13 @@ checked by `scripts/check-atlas.sh`.
 | B2 a party with a money it does not want | `src/engine/simulation/stages/fx-squaring.ts:squareInterbankFxPositions` | ✅ |
 | B3 an investor changing its currency mix | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
 | B4 a hedger closing an exposure | `src/domain/derivatives/classes/fx-forward.ts:equityHedgeRatioFor` | ✅ |
-| B5 a dealer, whose reason is spread and inventory | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ✅ |
+| B5 a dealer, whose reason is spread and inventory | `src/domain/dealer-desk.ts:fxConversionPipOf` | ✅ |
 | B5.a it is not obliged to take whatever arrives | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ✅ |
 | B6 the central bank participates with a limit | `src/domain/fx-market.ts:CENTRAL_BANK_FX_INTERVENTION_SHARE` | ✅ |
 | C1 participants post schedules in rate space | `src/engine/simulation/stages/financial-clearing-engine.ts:ParticipantDemand` | ✅ |
 | C2 it clears per pair and consistently across pairs | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
 | C2.a cross-consistency constrains the clearing | `src/engine/simulation/stages/fx-clearing.ts:statKind` | ✅ |
-| C3 the bid–offer is a consequence | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ⚠️ |
+| C3 the bid–offer is a consequence | `src/domain/dealer-desk.ts:fxConversionPipOf` | ✅ |
 | C4 imbalance moves the rate | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ✅ |
 | C5 one rate in force for the period | `src/engine2/world.ts:openFxWeek` | ✅ |
 | C6 flat flow ⇒ no drift; one-way flow ⇒ a move | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
@@ -150,14 +150,19 @@ carry the cross prints through `publishFxRates` into the rate object, teach `con
 cleared cross over a triangulated one, and the difference between them becomes a measurable
 arbitrage the desks are already positioned to take.
 
-### ⚠️ C3 — THE SPREAD IS A CONSTANT PER BOOK
+### ✅ C3 (closed) — THE SPREAD WAS A CONSTANT PER BOOK
 
-`DESK_SPREAD_BPS_BY_BOOK.fx` is a per-book constant applied to the cleared rate when a client
-converts (`fx-funding.ts`). Node C3, and `dealer-desks.md` C5.a, require the opposite: the
-bid–offer is the OUTPUT of the desk's inventory, funding cost, risk and adverse selection, read off
-what it posted. A constant cannot skew with inventory, cannot widen under stress, and cannot
-refuse. This is `dealer-desks.md`'s finding and is recorded there; noted here as the second
-witness.
+*2026-09-05 (§9.26-e-iii).* `DESK_SPREAD_BPS_BY_BOOK.fx` was a 2bp constant applied to the cleared
+rate when a client converted (`fx-funding.ts`, and the goods auction's cross-border invoices and
+households and treasuries buying abroad in `05-unit-bidding.ts`), paid to the region's banks by
+market share. Each desk now earns ITS OWN pip on its share of the flow —
+`domain/dealer-desk.ts:fxConversionPipOf`, the desk's width on a rate of one: financing for the
+week until it squares at the FX session, at the cleared repo rate, plus the pair's own measured
+weekly move (`domain/volatility.ts:measuredWeeklyMove` on the pair's prints) at the bank's own risk
+aversion. A pair that has not printed twice is quoted on financing alone; a region's aggregate
+flow abroad is priced on the mean move over its pairs. The table is deleted. What C3 still lacks
+is what `dealer-desks.md` C4 lacks — adverse selection — and the skew with inventory belongs to
+the FX book's own schedules (B5.a).
 
 ### ✅ C6 — NO CAP ON THE WEEKLY MOVE
 

@@ -270,6 +270,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       unitPriceOf: (i) => refPriceOf(regionCompanies[i]),
     });
     const deskParticipants = deskBook.participants;
+    // §3.26-e-iii: what the equity desks quoted this week is what assembling a basket through them costs.
+    ctx.equityDeskWidthBpsByRegion.set(regionId, deskBook.bookWidthBps);
     const deskTickers = deskTickersOf(deskParticipants);
 
     // OWN7, second half: the desks' own books join the float now that they exist.

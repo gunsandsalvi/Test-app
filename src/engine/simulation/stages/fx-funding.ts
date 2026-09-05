@@ -33,31 +33,52 @@
  * in the same pass as the payment that forced it — rule 5, both legs one pass.
  */
 
-import { CurrencyCode, CURRENCY_CODES, RegionId, currencyOf } from '../../../domain/geography';
+import { CurrencyCode, CURRENCY_CODES, CURRENCY_BY_REGION, REGION_IDS, RegionId, currencyOf } from '../../../domain/geography';
 import type { EntityId } from '../../../domain/ids';
 import { bankSecuritiesPartyOf } from '../../../domain/party';
 import { convert } from '../../../domain/currency';
-import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
+import { fxConversionPipOf } from '../../../domain/dealer-desk';
+import { riskAversionOf } from '../../../domain/preferences';
+import { measuredWeeklyMove } from '../../../domain/volatility';
 import { Company, banksOf } from '../../../domain/company';
 import { balanceOf, homeCurrencyOf } from '../../ledger/accounts';
 import { PartyRef, partyOf } from '../../ledger/party';
 import { WeeklyStepContext } from './context';
 import { PaymentJournal, pay, rowDue } from './settlement';
 
-/** One quote, shared with every other FX charge in the model (`domain/dealer-desk.ts`). */
-const FX_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK.fx;
 /** Below this a shortfall is float dust on a netted position, not a trade (rule 7). */
 const MIN_TRADE = 1e-6;
 
 /** The desks a region's conversions go through: its banks, pro rata by market share. */
-function deskSharesOf(firms: readonly Company[], region: RegionId): { id: EntityId; share: number }[] {
+function deskSharesOf(firms: readonly Company[], region: RegionId): { id: EntityId; share: number; bank: Company }[] {
   const banks = banksOf(firms, region);
   const total = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
   if (banks.length === 0) return [];
   return banks.map((b) => ({
     id: b.id,
     share: total > 0 ? (b.bankMarketShare ?? 0) / total : 1 / banks.length,
+    bank: b,
   }));
+}
+
+/** The measured weekly move of the pair between two currencies, off the world's own prints;
+ *  undefined before the pair has printed twice. */
+function pairMoveOf(ctx: WeeklyStepContext, a: CurrencyCode, b: CurrencyCode): number | undefined {
+  const ra = REGION_IDS.find((r) => CURRENCY_BY_REGION[r] === a);
+  const rb = REGION_IDS.find((r) => CURRENCY_BY_REGION[r] === b);
+  if (!ra || !rb) return undefined;
+  const pair = ctx.updatedFxPairs.find((p) => (p.base === ra && p.quote === rb) || (p.base === rb && p.quote === ra));
+  return measuredWeeklyMove(pair?.historicalRates);
+}
+
+/** §3.26-e-iii: what THIS desk charges to stand in for the other side of the pair for a week —
+ *  its own width (`domain/dealer-desk.ts:fxConversionPipOf`), never a stated pip. */
+function pipOf(ctx: WeeklyStepContext, bank: Company, move: number | undefined): number {
+  return fxConversionPipOf({
+    repoRateAnnual: ctx.updatedRegions[bank.region as RegionId].repoRateAnnual,
+    measuredWeeklyMove: move,
+    riskAversion: riskAversionOf(bank.management),
+  });
 }
 
 /**
@@ -102,19 +123,21 @@ export function fundForeignCurrencyShortfalls(
 ): void {
   const net = netByPartyAndCurrency(journal, week);
   if (net.size === 0) return;
-  const desksByRegion = new Map<RegionId, { id: EntityId; share: number }[]>();
+  const desksByRegion = new Map<RegionId, { id: EntityId; share: number; bank: Company }[]>();
   const desksFor = (region: RegionId) => {
     let d = desksByRegion.get(region);
     if (!d) { d = deskSharesOf(ctx.updatedCompanies, region); desksByRegion.set(region, d); }
     return d;
   };
 
-  /** The client buys `amount` of `cur` and pays for it in `home`, plus the desk's spread. */
-  const buy = (client: PartyRef, desks: { id: EntityId; share: number }[], cur: CurrencyCode, home: CurrencyCode, amount: number) => {
-    const costHome = convert(amount, cur, home, ctx.fx) * (1 + FX_SPREAD_BPS / 10000);
-    desks.forEach(({ id: deskBankId, share }) => {
+  /** The client buys `amount` of `cur` and pays for it in `home`, plus each desk's own pip. */
+  const buy = (client: PartyRef, desks: { id: EntityId; share: number; bank: Company }[], cur: CurrencyCode, home: CurrencyCode, amount: number) => {
+    const costHomeAtMid = convert(amount, cur, home, ctx.fx);
+    const move = pairMoveOf(ctx, cur, home);
+    desks.forEach(({ id: deskBankId, share, bank }) => {
       if (share <= 0) return;
       const desk: PartyRef = bankSecuritiesPartyOf(deskBankId);
+      const costHome = costHomeAtMid * (1 + pipOf(ctx, bank, move));
       pay(ctx, { payer: client, payee: desk, amount: costHome * share, currency: home, reason: 'fx conversion: currency bought' });
       pay(ctx, { payer: desk, payee: client, amount: amount * share, currency: cur, reason: 'fx conversion: currency delivered' });
     });
@@ -149,10 +172,12 @@ export function fundForeignCurrencyShortfalls(
       if (cur === home) return;
       const surplus = balanceOf(ctx.v2, ref, cur) + (byCur.get(CURRENCY_CODES.indexOf(cur)) ?? 0);
       if (!(surplus > MIN_TRADE)) return;
-      const proceeds = convert(surplus, cur, home, ctx.fx) * (1 - FX_SPREAD_BPS / 10000);
-      desks.forEach(({ id: deskBankId, share }) => {
+      const proceedsAtMid = convert(surplus, cur, home, ctx.fx);
+      const move = pairMoveOf(ctx, cur, home);
+      desks.forEach(({ id: deskBankId, share, bank }) => {
         if (share <= 0) return;
         const desk: PartyRef = bankSecuritiesPartyOf(deskBankId);
+        const proceeds = proceedsAtMid * (1 - pipOf(ctx, bank, move));
         pay(ctx, { payer: ref, payee: desk, amount: surplus * share, currency: cur, reason: 'fx conversion: currency sold' });
         pay(ctx, { payer: desk, payee: ref, amount: proceeds * share, currency: home, reason: 'fx conversion: proceeds delivered' });
       });

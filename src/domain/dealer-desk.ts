@@ -50,26 +50,6 @@ import { asTicker } from './ids';
 
 const DEALER_DESK_SHARE_OF_BALANCE_SHEET = 0.25;
 
-/**
- * §3.26-e-i/ii: what is left of this table is the FX conversion pip (`fx-funding.ts`,
- * `05-unit-bidding.ts`) and the ETF basket's assembly cost (`etf-flows.ts`) — §3 step 26-e-iii
- * deletes it. It was the fee every book charged on the mid (gone, 26-e-i) and the width of every
- * desk's schedule (`deskScheduleWidth` below, 26-e-ii).
- */
-export const DESK_SPREAD_BPS_BY_BOOK: Record<string, number> = {
-  'sovereign bond': 5,
-  bill: 2,               // the tightest market there is
-  'commercial paper': 5, // short, high-grade, but a credit — wider than a bill, tighter than a bond
-  'corporate bond': 15,
-  'leveraged loan': 20,  // loan secondary markets trade wider than investment grade
-  equity: 8,
-  commodity: 15,
-  derivatives: 20,
-  // §7.282: spot FX for corporate flow — majors trade tighter than any bond but a client
-  // conversion still pays a pip; 2bps sits with the bill book, which is the right company.
-  fx: 2,
-};
-
 /** One name a desk is long (or short, when negative) in one book. */
 export interface DealerDeskPosition {
   /**
@@ -180,4 +160,18 @@ export function deskScheduleWidth(args: {
   if (args.statKind === 'PRICE_LIKE') return Math.max(1e-9, Math.abs(args.currentStat) * costShare);
   const durationYears = Math.max(1 / 52, args.durationYears);
   return Math.max(1e-9, (costShare / durationYears) * 10000);
+}
+
+/**
+ * §3.26-e-iii — THE FX CONVERSION PIP IS THE DESK'S OWN WIDTH. A client converting through a
+ * bank's FX desk pays what standing in for the other side costs that desk until it squares at
+ * the week's FX session: financing for the week at the cleared repo rate, plus the pair's own
+ * measured weekly move at the bank's own risk aversion — `deskScheduleWidth` on a rate of one.
+ * Returned as a fraction of the amount converted. It replaced a stated 2bp.
+ */
+export function fxConversionPipOf(args: { repoRateAnnual: number; measuredWeeklyMove: number | undefined; riskAversion: number }): number {
+  return deskScheduleWidth({
+    statKind: 'PRICE_LIKE', currentStat: 1, durationYears: 0,
+    repoRateAnnual: args.repoRateAnnual, measuredWeeklyMove: args.measuredWeeklyMove, riskAversion: args.riskAversion,
+  });
 }

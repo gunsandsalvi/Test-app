@@ -551,12 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-e-iii. **The FX pip and the ETF assembly cost are desks' widths.** `fx-funding.ts` and
-    `05-unit-bidding.ts` (a converting firm, a household or a treasury buying abroad) pay a stated
-    2bp pip to the region's banks by market share; `etf-flows.ts` sizes a basket's assembly cost
-    from the equity table. Each is the FX desks' or the equity desks' own width from 26-e-ii,
-    earned by the desk whose schedule was crossed; then `DESK_SPREAD_BPS_BY_BOOK` and its dead
-    `commodity`/`derivatives` entries are deleted. fx-spot B5/C3.
 26-f. **WHAT PLANT IS, decided once — and one depreciation schedule.** *(11e's last slice, folded
     in here deliberately: the seed and every birth assign `grossPPELocal` with no wire and there
     is no asset kind for plant — `ASSET_KINDS` carries `HOUSE`, not plant. You cannot wire a thing
@@ -1368,6 +1362,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-e-iii — THE FX PIP AND THE ETF ASSEMBLY COST ARE DESKS' WIDTHS, AND THE TABLE IS GONE.** A
+  client converting currency — a firm short of a foreign money at settlement (`fx-funding.ts`), a
+  cross-border invoice, a household or a treasury buying abroad (`05-unit-bidding.ts`) — paid a
+  stated 2bp to its region's banks by market share. Each desk now earns ITS OWN pip on its share
+  of the flow: `domain/dealer-desk.ts:fxConversionPipOf`, the desk's width on a rate of one —
+  financing for the week until it squares at the FX session, at the cleared repo rate, plus the
+  pair's own measured weekly move at the bank's own risk aversion; a pair that has not printed
+  twice is quoted on financing alone, and a region's aggregate flow abroad on the mean move over
+  its pairs. The ETF basket's assembly cost — the investor's indifference point that bounds a
+  premium — is the equity desks' own width that week (07e publishes `equityDeskWidthBpsByRegion`,
+  `etf-flows.ts` reads it; a week no desk quoted costs nothing beside the level).
+  `DESK_SPREAD_BPS_BY_BOOK`, its `dealers.ts` re-export and its dead `commodity`/`derivatives`
+  entries are deleted: no stated spread is left in the model. fx-spot B5 re-cited, C3 ⚠️→✅.
+  Gates green; no run (rule 11).
 
 **26-e-ii — THE WIDTH OF A DESK'S SCHEDULE IS WHAT CARRYING THE POSITION COSTS IT.** The table's
   second job: every desk's `fullSizeStatRange` — how far the level must move in its favour for it

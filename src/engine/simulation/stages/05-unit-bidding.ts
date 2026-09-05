@@ -50,12 +50,12 @@ import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
 import { laneDistanceNm, REGION_IDS, currencyOf } from '../../../domain/geography';
 import { SourcingSplit } from './sourcing-intent';
 import { chooseInvoiceRegion, invoiceCurrencyOf } from '../../../domain/invoice-currency';
-import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
+import { fxConversionPipOf } from '../../../domain/dealer-desk';
 import { costOfCapitalOf, riskFreeRateOf, weeklyCapitalChargeLocal } from '../../../domain/company-week/cost-of-capital';
 import { paymentTermWeeks } from '../../../domain/trade-invoice';
 import { computeAnnualDefaultProbability } from './shared-helpers';
 import { getFxToUsd } from './06-fx-and-trade';
-import { realizedAnnualVol } from '../../../domain/volatility';
+import { realizedAnnualVol, measuredWeeklyMove } from '../../../domain/volatility';
 import { weeklyWageBillLocal, getBaseAnnualWageLocal } from '../../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { cashOf } from '../../ledger/accounts';
@@ -157,6 +157,28 @@ function computeRecipeInputNeedLocal(comp: Company, inputSubUnitId: string, week
  *  week hands a new array, so the memo lapses with it). List order is the firms' own, which is
  *  what keeps the fee pay sequence and its floats identical to the inline filter's. */
 const fxFeeBanksCache = new WeakMap<object, Map<string, { banks: Company[]; totalShare: number }>>();
+/** §3.26-e-iii: the pair's measured weekly move between two regions' currencies; undefined before
+ *  it has printed twice. A region's aggregate flow abroad reads the mean over its pairs. */
+function fxPairMoveOf(ctx: WeeklyStepContext, a: RegionId, b: RegionId): number | undefined {
+  const pair = ctx.updatedFxPairs.find((p) => (p.base === a && p.quote === b) || (p.base === b && p.quote === a));
+  return measuredWeeklyMove(pair?.historicalRates);
+}
+function fxRegionMeanMoveOf(ctx: WeeklyStepContext, region: RegionId): number | undefined {
+  const moves = ctx.updatedFxPairs.filter((p) => p.base === region || p.quote === region)
+    .map((p) => measuredWeeklyMove(p.historicalRates)).filter((m): m is number => m !== undefined);
+  return moves.length > 0 ? moves.reduce((a, m) => a + m, 0) / moves.length : undefined;
+}
+/** What THIS bank's desk charges to stand in for the other side for a week: its own width
+ *  (`domain/dealer-desk.ts:fxConversionPipOf`) — financing at the cleared repo rate plus the
+ *  pair's measured move at its own risk aversion. It replaced a stated 2bp. */
+function fxPipOf(ctx: WeeklyStepContext, bank: Company, move: number | undefined): number {
+  return fxConversionPipOf({
+    repoRateAnnual: ctx.updatedRegions[bank.region].repoRateAnnual,
+    measuredWeeklyMove: move,
+    riskAversion: riskAversionOf(bank.management),
+  });
+}
+
 function fxFeeBanksOf(firms: Company[], region: RegionId): { banks: Company[]; totalShare: number } {
   let byRegion = fxFeeBanksCache.get(firms);
   if (!byRegion) { byRegion = new Map(); fxFeeBanksCache.set(firms, byRegion); }
@@ -2197,20 +2219,23 @@ function runSubUnitMarkets(
         // share, landing cash + equity through settlement's own BANK leg like every other
         // dealer fee. Domestic trades convert nothing and pay nothing.
         if (!isDomestic) {
-          const fxFeeLocal = invoicedLocal * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
-          if (fxFeeLocal > 0.01) {
-            // The region's fee-earning desks, memoised on the firm array's identity:
+          if (invoicedLocal > 0.01) {
+            // The region's desks, memoised on the firm array's identity:
             // this filtered all ~2,500 firms PER CROSS-BORDER INVOICE (same list order kept,
             // so the pay sequence and every float are the ones the inline filter produced).
+            // §3.26-e-iii: each desk earns ITS OWN pip on its share of the flow.
             const { banks: buyerBanks, totalShare } = fxFeeBanksOf(ctx.prevActiveFirms, plan.regionId);
+            const pairMove = fxPairMoveOf(ctx, plan.regionId, origin);
             buyerBanks.forEach((b) => {
               const share = totalShare > 0
                 ? ((b.bankMarketShare ?? 0) || 1) / totalShare : 0;
               if (share <= 0) return;
+              const fxFeeLocal = invoicedLocal * share * fxPipOf(ctx, b, pairMove);
+              if (!(fxFeeLocal > 0.01)) return;
               pay(ctx, {
                 payer: companyParty(comp),
                 payee: bankParty(b),
-                amount: fxFeeLocal * share,
+                amount: fxFeeLocal,
                 currency: currencyOf(comp.region),
                 reason: 'fx conversion spread',
               });
@@ -2288,19 +2313,25 @@ function runSubUnitMarkets(
         payByIds(ctx, hhPid.get(buyerRegion)!, pidOfCarrier(distributorId), amountLocal, currencyOf(buyerRegion), R_CHANNEL);
       });
     });
-    // The FX spread's LAST payers: a household or a treasury buying abroad converts at the same
-    // pip through the same desks (the buyer region's banks, pro rata) as any converting firm.
+    // The FX pip's LAST payers: a household or a treasury buying abroad converts through the
+    // same desks (the buyer region's banks, pro rata) as any converting firm, at each desk's own
+    // pip — §3.26-e-iii; the flow is an aggregate over origins, so the move it is priced on is
+    // the mean over the region's pairs.
     MARKET_REGION_IDS.forEach((buyerRegion) => {
-      const hhFeeLocal = (hhAbroadByRegion.get(buyerRegion) ?? 0) * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
-      const govFeeLocal = (govAbroadByRegion.get(buyerRegion) ?? 0) * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
-      if (!(hhFeeLocal > 0.01 || govFeeLocal > 0.01)) return;
+      const hhAbroadLocal = hhAbroadByRegion.get(buyerRegion) ?? 0;
+      const govAbroadLocal = govAbroadByRegion.get(buyerRegion) ?? 0;
+      if (!(hhAbroadLocal > 0.01 || govAbroadLocal > 0.01)) return;
       const { banks: fxBanks, totalShare } = fxFeeBanksOf(ctx.prevActiveFirms, buyerRegion);
+      const regionMove = fxRegionMeanMoveOf(ctx, buyerRegion);
       fxBanks.forEach((b) => {
         const share = totalShare > 0 ? ((b.bankMarketShare ?? 0) || 1) / totalShare : 0;
         if (share <= 0) return;
+        const pip = fxPipOf(ctx, b, regionMove);
         const bankPid = partyId(bankParty(b));
-        if (hhFeeLocal > 0.01) payByIds(ctx, hhPid.get(buyerRegion)!, bankPid, hhFeeLocal * share, currencyOf(buyerRegion), R_FX_SPREAD);
-        if (govFeeLocal > 0.01) payByIds(ctx, govPid.get(buyerRegion)!, bankPid, govFeeLocal * share, currencyOf(buyerRegion), R_FX_SPREAD);
+        const hhFeeLocal = hhAbroadLocal * share * pip;
+        const govFeeLocal = govAbroadLocal * share * pip;
+        if (hhFeeLocal > 0.01) payByIds(ctx, hhPid.get(buyerRegion)!, bankPid, hhFeeLocal, currencyOf(buyerRegion), R_FX_SPREAD);
+        if (govFeeLocal > 0.01) payByIds(ctx, govPid.get(buyerRegion)!, bankPid, govFeeLocal, currencyOf(buyerRegion), R_FX_SPREAD);
       });
     });
   });

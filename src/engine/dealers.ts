@@ -19,9 +19,8 @@ import { AssetType, Company, Dealer } from '../types';
 import type { V2World } from '../engine2/world';
 import { deskRowsOf, deskGrossLocal } from './desk-register';
 import { assertNever } from '../domain/defect';
-import { dealerDeskCapacityLocal, DESK_SPREAD_BPS_BY_BOOK, DESK_BOOK_KIND } from '../domain/dealer-desk';
+import { dealerDeskCapacityLocal, DESK_BOOK_KIND } from '../domain/dealer-desk';
 
-export { DESK_SPREAD_BPS_BY_BOOK };
 import { BASEL_MIN_LEVERAGE_RATIO, leverageHeadroomLocal } from './macro/banking';
 import { banksOf } from '../domain/company';
 

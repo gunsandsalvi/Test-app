@@ -366,6 +366,9 @@ export interface WeeklyStepContext {
    *  one (tenor, yield) point per bond and bill that traded, deposited by 07c and 07f and read by
    *  `sovereign-curve.ts`, which is the ONE owner that fits the curve and publishes its points. */
   sovereignCurvePoints: Map<RegionId, { tenorYears: number; yield: number }[]>;
+  /** §3.26-e-iii: the width the equity desks posted this week per region, in bps (07e writes,
+   *  the ETF book reads it as the cost of assembling a basket through them). */
+  equityDeskWidthBpsByRegion: Map<RegionId, number>;
 
   // Stage 11 output, read by stage 13
   weeklyInterestIncomeLocal: number;
@@ -499,6 +502,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     tradeInvoiceFxGainLocal: 0,
     tradeInvoiceWriteOffLocal: 0,
     sovereignCurvePoints: new Map(),
+    equityDeskWidthBpsByRegion: new Map(),
 
     weeklyInterestIncomeLocal: 0,
     weeklyFinancingCostLocal: 0,
