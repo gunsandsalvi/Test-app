@@ -101,7 +101,7 @@ checked by `scripts/check-atlas.sh`.
 | **C2.a FORBID no exogenous default event** | `src/engine/simulation/stages/bank-lending.ts:smePoolAnnualPd` | ⚠️ |
 | C3 it triggers things | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | C4 every default traceable to its cause | `src/engine2/stage08-back.ts:defaultedTickers` | ✅ |
-| D1 assets realised, sold to named buyers | `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` · `src/engine/simulation/stages/estate-resolution.ts:sellInventoryToPeers` | ⚠️ |
+| D1 assets realised, sold to named buyers | `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` · `src/engine/simulation/stages/05-unit-bidding.ts:estateSellers` | ✅ |
 | D2 proceeds distributed by seniority | `src/engine/simulation/stages/estate-resolution.ts:distribute` | ✅ |
 | D2.a recovery is what the assets fetched | `src/domain/estate.ts:realisedDebtRecoveryRate` | ✅ |
 | D3 losses land on named holders, in proportion | `src/engine/simulation/stages/estate-resolution.ts:reduceHolding` | ✅ |
@@ -207,7 +207,7 @@ seniority) rather than to build anything.
 
 **§3 step 37-ESTATE**, very small.
 
-### ⚠️ D1 — THE PLANT IS AUCTIONED; THE STOCK IS STILL A DISPOSAL SCHEDULE
+### ✅ D1 — THE PLANT IS AUCTIONED, AND THE STOCK SELLS WHERE THE GOODS SELL
 
 *2026-09-05 (§9.20-i-a): the plant clears.* `sellPlantToBidders` offers each week's slice, at any
 price, in a PRICE_LIKE book whose unit is a currency unit of net book, and the region's same-sector
@@ -217,11 +217,14 @@ the price falls, its cash bounds what it can pay, and what clears moves at book 
 price paid into the estate. What no bidder takes goes back to the estate for next week's offer,
 until the programme's last week abandons it. The buyers are named and the price is struck.
 
-The inventory is not: `sellInventoryToPeers` still sells each week's slice **pro rata to the
-peers' cash** at `slice × (1 − hurdle × turnoverWeeks / 52)`, the last stated price in a death.
-Finished stock belongs in the goods auction, where the buyers of goods are, and input lots with the
-peers that consume them — **§3 step 20-i-b**. D2.a is then whole: recovery is what the assets
-fetched, struck by somebody, for every asset class.
+*2026-09-05 (§9.20-i-b): so does the stock.* The dead firm is a SELLER in the goods auction — 05
+admits an open estate's rows as offers at no reservation (`estateSellers`), its input lots having
+become stock for sale on its own rows at the filing (`goods-ledger.ts:reclassifyInputLotsAsStock`,
+a receiver runs no plant) — so what the stock fetches is struck by the buyers of the goods, the
+invoices collect onto the estate's account, and the rows empty by wire. The firm's own turnover
+is only a deadline: what is unsold when it runs out has found no buyer at any price and perishes
+(`perishStock`). D2.a is whole: recovery is what the assets fetched, struck by somebody, for every
+asset class — cash is cash, receivables are the real invoice book, stock and plant are auctioned.
 
 ### ⚠️ D4 / D4.a — THE SUPPLIERS' LOSS IS REAL; THE EMPLOYEES' JOBS JUST STOP BEING COUNTED
 

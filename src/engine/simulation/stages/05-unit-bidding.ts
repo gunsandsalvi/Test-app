@@ -292,6 +292,10 @@ interface RegionMarketIndex {
    *  floor decomposition asked weeklyWageBillLocal once per LINE per market, with inputs
    *  that cannot change inside the stage (a supplier sits only in its own region's index). */
   currentPayrollByFirm: Map<Company, number>;
+  /** §3.20-i-b — dead firms in an open workout, selling their stock at no reservation. A
+   *  liquidation sale is a seller in the market where the buyers of the goods are; it makes
+   *  nothing, buys nothing, and offers every row it holds until the rows are empty. */
+  estateSellers: Set<Company>;
 }
 
 /**
@@ -333,6 +337,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
       lineBySupplierBySubUnit: new Map(),
       capexBuyers: [],
       currentPayrollByFirm: new Map(),
+      estateSellers: new Set(),
     };
   });
   const lookup: GlobalFirmLookup = { byTicker: new Map(), byId: new Map(), byKey: new Map() };
@@ -368,6 +373,28 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
   };
   ctx.prevActiveFirms.forEach(walk);
   ctx.prevActivePrivateFirms.forEach(walk);
+  // §3.20-i-b — THE ESTATE SELLS IN THE GOODS AUCTION. A firm in an open workout is dead to every
+  // other book, but its stock is real goods and the buyers of those goods are here. It is a
+  // supplier of every row it holds, at no reservation, and nothing else: not a buyer, not a
+  // capex buyer, no product line, no production.
+  const openEstateIds = new Set((ctx.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
+  if (openEstateIds.size > 0) {
+    ctx.updatedCompanies.forEach((c) => {
+      if (!openEstateIds.has(c.id)) return;
+      const index = byRegion[c.region as RegionId];
+      if (!index) return;
+      const rows = Object.entries(c.outputInventoryBySubUnit ?? {}).filter(([, r]) => r.unitsHeld > 0.0001);
+      if (rows.length === 0) return;
+      lookup.byTicker.set(c.ticker, c);
+      lookup.byId.set(c.id, c);
+      lookup.byKey.set(c.id, c);
+      index.estateSellers.add(c);
+      rows.forEach(([subUnitId]) => {
+        const arr = index.suppliersBySubUnit.get(subUnitId);
+        if (arr) arr.push(c); else index.suppliersBySubUnit.set(subUnitId, [c]);
+      });
+    });
+  }
   // The ticker pass, AFTER every id is in: on a key that is both, the ticker wins.
   lookup.byTicker.forEach((c, ticker) => lookup.byKey.set(ticker, c));
   return { byRegion, lookup };
@@ -863,6 +890,18 @@ function buildRegionSupplyPlans(
   const lineByCo = index.lineBySupplierBySubUnit.get(subUnitId);
 
   suppliers.forEach(comp => {
+    // §3.20-i-b — a workout's stock: everything the row holds, at any price, no production.
+    if (index.estateSellers.has(comp)) {
+      const held = getOutputInventoryUnits(comp, subUnitId);
+      if (held > 0.0001) {
+        plans.push({
+          key: comp.ticker, regionId, company: comp, initialInventoryUnits: held,
+          targetProductionUnits: 0, targetProductionLocal: 0, arrivedProductionUnits: 0,
+          openOfferUnits: held, minPriceLocal: 0,
+        });
+      }
+      return;
+    }
     const line = lineByCo!.get(comp)!;
     const warehouseCapacityLocal = comp.annualRevenue * 0.15;
     const currentInvLocal = getOutputInventoryLocal(comp, subUnitId);
@@ -1858,7 +1897,10 @@ function runSubUnitMarkets(
     // What lands in the warehouse is what the pipeline FINISHED, not what was started.
     // W4: the ledger records the production and sets the stock; every unit delivered
     // (contract or market) left by a wire written where the buyer was known.
-    settleOutputInventory(supUp, plan.regionId, subUnitId, plan.initialInventoryUnits, plan.arrivedProductionUnits,
+    // §3.20-i-b — a dead seller's row is written on the firm itself: stage 08 skips a dead
+    // firm, so a week update for it would land nowhere and the goods that left by wire would
+    // still stand on the estate's row.
+    settleOutputInventory(indexes[plan.regionId].estateSellers.has(comp) ? comp : supUp, plan.regionId, subUnitId, plan.initialInventoryUnits, plan.arrivedProductionUnits,
       contractSalesUnitsThisSubUnit, soldUnits, results[plan.regionId].clearedPriceLocal);
     if (plan.wipQueue) {
       if (!supUp.wipBySubUnit) supUp.wipBySubUnit = { ...(comp.wipBySubUnit ?? {}) };

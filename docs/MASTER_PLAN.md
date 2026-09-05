@@ -549,14 +549,6 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-20-i-b. **THE ESTATE'S STOCK CLEARS AGAINST BIDDERS** (rule 6's pairing: where a bound covered a
-    missing mechanism, build the mechanism; the plant's auction is 20-i-a — §9). The inventory is
-    the last stated price in a death: `sellInventoryToPeers` sells each week's slice pro rata to
-    the peers' cash at `slice × (1 − min(0.9, hurdle × turnoverWeeks / 52))`. Finished stock
-    belongs in the goods auction, where the buyers of goods are — the dead firm stays a SELLER in
-    05 at no reservation until its rows are empty, which is what a liquidation sale is — and
-    input lots go to the peers that consume them, bid at their own landed cost for the input.
-    Closes `firm-birth-and-death.md` D1 and D2.a for every asset class.
 20-ii. **EVERY OVERDRAFT LENDER GETS REAL CAPACITY.** `overdraft-sweep.ts` lends with no headroom
     test at all: a firm's close-of-day revolver tap, a fund's prime-brokerage draw past its line,
     a pool's SME facility draw are all funded by the house bank whatever its capital and reserve
@@ -1543,6 +1535,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20-i-b — THE ESTATE'S STOCK SELLS WHERE THE GOODS SELL.** The inventory was the last stated price
+  in a death: a slice per week at `1 − min(0.9, hurdle × turnoverWeeks / 52)` off book, pro rata to
+  the peers' cash. Now the dead firm is a SELLER in the goods auction: 05 admits an open estate's
+  rows as offers at no reservation (`RegionMarketIndex.estateSellers` — a supplier of every row it
+  holds and nothing else, its row written on the firm itself since stage 08 skips the dead), and
+  at the filing every input lot becomes stock for sale on its own rows
+  (`goods-ledger.ts:reclassifyInputLotsAsStock`: a receiver runs no plant; same holder, same
+  good, a reclassification not a wire). What the stock fetches is struck by the buyers of the
+  goods, the invoices collect onto the estate's account through trade settlement, and the
+  estate's inventory is read off the rows as they empty. The firm's own turnover is only a
+  deadline: what is unsold when it runs out perishes (`perishStock`), as at the close.
+  `sellInventoryToPeers` and the input-lot transfer to peers are deleted. The news line says the
+  stock sold at the goods auction and the plant went to the bidders. `firm-birth-and-death.md`
+  D1 ✅, `corporate-credit.md` G4 ✅ (76 rows: 47 ✅, 21 ⚠️, 8 ❌). Gates green; no run.
 
 **20-i-a — THE ESTATE'S PLANT CLEARS AGAINST BIDDERS.** Step 20 split per rule 1.10 (20-i-a plant,
   20-i-b stock, 20-ii the overdraft lenders' capacity, 20-iii occupational mobility; its LOLR

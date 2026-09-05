@@ -20,8 +20,8 @@ import { bankParty, bankSecuritiesParty, ccpParty, companyParty, companyPartyOf 
 import { currencyOf } from '../../../domain/geography';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
-import { moveOutputUnits, scrapOutputUnitsTo, moveInputUnits, scrapInputUnits, scrapGoods } from '../../ledger/goods-ledger';
-import { totalInputValueLocal, inputUnitsHeld, materializeInputInventory } from '../../../engine2/lots';
+import { scrapOutputUnitsTo, scrapInputUnits, scrapGoods, reclassifyInputLotsAsStock } from '../../ledger/goods-ledger';
+import { totalInputValueLocal, materializeInputInventory } from '../../../engine2/lots';
 import { closeOutDerivativesOfParty } from './derivative-lifecycle';
 import { retireLadderFace, rebuildLadder } from '../../ledger/tranche-ledger';
 import { transferHolding } from '../../ledger/holdings-ledger';
@@ -169,6 +169,9 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // buyers of its assets pay INTO it, its receivables collect ONTO it (trade-settlement's
     // dead-seller fix), and the waterfall pays claimants OUT of it — every leg between named
     // accounts, the boundary out of the story entirely.
+    // §3.20-i-b — the receiver runs no plant: every input lot becomes stock for sale, on the
+    // firm's own rows, so the goods auction can offer it with the finished goods.
+    Object.keys(materializeInputInventory(ctx.v2, comp.id)).forEach((subUnitId) => reclassifyInputLotsAsStock(ctx.v2, comp, subUnitId));
     estates.push(estate);
     byCompanyId.set(comp.id, estate);
   });
@@ -215,11 +218,19 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     const weeksOpen = week - estate.openedWeek;
     const weeksLeft = (horizonWeeks: number): number => Math.max(1, Math.ceil(horizonWeeks) - weeksOpen);
 
-    // Inventory leaves at the company's OWN turnover — the rate its market was taking the goods
-    // before it failed — and at the discount a buyer needs for holding it that long.
+    // §3.20-i-b — THE STOCK SELLS IN THE GOODS AUCTION. The dead firm is a seller at no
+    // reservation in every market its rows name (05 admits an open estate's rows as offers), so
+    // what the stock fetches is struck by the buyers of the goods, and the estate's inventory
+    // is read off the rows above as they empty. The programme keeps only a DEADLINE: the firm's
+    // own turnover says how long its market took to absorb this much stock, and what is still
+    // unsold when that runs out has found no buyer at any price — it perishes.
     const turnoverWeeks = Math.max(1, inventoryTurnoverWeeks(comp, estate.assets.inventoryLocal));
-    const invSoldLocal = estate.assets.inventoryLocal / weeksLeft(turnoverWeeks);
-    estate.assets.inventoryLocal -= invSoldLocal;
+    const stockUpdate = ctx.companyUpdates[estate.ticker];
+    thisWeek.inventorySoldLocal += (stockUpdate?.salesLocal ?? 0) + (stockUpdate?.tradeReceivableBookedLocal ?? 0);
+    if (comp && weeksLeft(turnoverWeeks) <= 1 && estate.assets.inventoryLocal > 0) {
+      perishStock(ctx, comp);
+      estate.assets.inventoryLocal = 0;
+    }
 
     // Plant is OFFERED at the rate its region actually buys capital goods against the plant
     // already installed there — the schedule says how much comes to market each week, and the
@@ -233,13 +244,6 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     estate.assets.ppeLocal -= weeksLeft(ppeWeeks) <= 1 ? ppeOfferedLocal : plant.soldLocal;
     thisWeek.ppeSoldLocal += plant.soldLocal;
     thisWeek.plantPriceOfBook = plant.priceOfBook;
-
-    // Inventory still leaves on the workout's own schedule and discount, to the same peers pro
-    // rata to their cash — the last stated price in a death, and §3 step 20-i-b's: finished
-    // stock belongs in the goods auction, input lots with the peers that consume them.
-    const invPriceLocal = invSoldLocal * (1 - Math.min(0.9, (hurdle * turnoverWeeks) / 52));
-    sellInventoryToPeers(ctx, estate, comp, invSoldLocal, invPriceLocal);
-    thisWeek.inventorySoldLocal += invSoldLocal;
 
     // The waterfall pays out of the account everything above pays INTO: cash it died with,
     // invoice collections, this week's asset sales (pending until the close, counted here).
@@ -265,9 +269,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
       // A closed estate takes no more delivery — what is still on its
       // way is scrapped by wire (the carrier writes it off), and any last lots go with it.
       if (comp) {
-        Object.entries(materializeInputInventory(ctx.v2, comp.id)).forEach(([subUnitId, lots]) => {
-          scrapInputUnits(ctx.v2, comp, subUnitId, lots.reduce((a, l) => a + l.unitsHeld, 0));
-        });
+        perishStock(ctx, comp);
         scrapConsignmentsOf(state, comp.ticker, comp.id);
       }
       // A closed estate leaves no ladder — whatever face no claim covered is
@@ -412,69 +414,13 @@ function sellPlantToBidders(
   return { soldLocal, priceOfBook: price };
 }
 
-/**
- * The week's inventory slice goes to NAMED PEERS pro rata to their own cash, paying the
- * workout's discounted price into the estate's account and taking the dead firm's real
- * sub-unit rows with their units. A week with no peer able to pay scraps the slice — unsold
- * distressed inventory perishes, never a sale to nobody. (§3 step 20-i-b puts the finished
- * stock in the goods auction and the input lots with the peers that consume them.)
- */
-function sellInventoryToPeers(
-  ctx: WeeklyStepContext, estate: Estate, comp: Company | undefined,
-  invSoldLocal: number, invPriceLocal: number
-): void {
-  if (invPriceLocal <= 1) return;
-  const peers = peersOf(ctx, estate, comp);
-  const totalPeerCashLocal = peers.reduce((a, c) => a + cashOf(ctx.v2, c), 0);
-  if (totalPeerCashLocal <= 1) return;
-  const weekPriceLocal = invPriceLocal;
-  // The week's slice is of the whole inventory — finished stock AND input lots (step 8).
-  const preInvLocal = Object.values(comp?.outputInventoryBySubUnit ?? {}).reduce((a, r) => a + Math.max(0, r.valueLocal), 0)
-    + (comp ? totalInputValueLocal(ctx.v2, comp.id) : 0);
-  const origRows: Record<string, { unitsHeld: number; valueLocal: number }> = {};
-  Object.entries(comp?.outputInventoryBySubUnit ?? {}).forEach(([k, r]) => { origRows[k] = { unitsHeld: r.unitsHeld, valueLocal: r.valueLocal }; });
-  const origInputUnits: Record<string, number> = {};
-  if (comp) Object.keys(materializeInputInventory(ctx.v2, comp.id)).forEach((k) => { origInputUnits[k] = inputUnitsHeld(ctx.v2, comp.id, k); });
-  peers.forEach((peer) => {
-    const peerCashLocal = cashOf(ctx.v2, peer);
-    const share = peerCashLocal / totalPeerCashLocal;
-    const payLocal = Math.min(weekPriceLocal * share, peerCashLocal);
-    if (payLocal <= 1) return;
-    pay(ctx, {
-      payer: companyParty(peer),
-      payee: companyPartyOf(estate.companyId),
-      amount: payLocal,
-      currency: currencyOf(estate.regionId),
-      reason: 'estate inventory sold to peers',
-    });
-    estate.lastWeek?.buyerIds.push(peer.id);
-    // What the payment buys, at the same share: the inventory rows with their real units.
-    if (comp && invSoldLocal > 0 && preInvLocal > 0) {
-      // The slice each peer takes moves by wire, off the ORIGINAL rows (the shares
-      // are of the week's slice, not of what earlier peers left).
-      const frac = Math.min(1, (invSoldLocal * share) / preInvLocal);
-      Object.entries(origRows).forEach(([subUnitId, row]) => {
-        moveOutputUnits(comp, peer, subUnitId, row.unitsHeld * frac, row.valueLocal * frac, 'estate inventory sold to peers');
-      });
-      // The input lots the receiver holds go the same way, by wire.
-      Object.entries(origInputUnits).forEach(([subUnitId, units]) => {
-        moveInputUnits(ctx.v2, comp, peer, subUnitId, units * frac, ctx.nextWeek, 'estate input inventory sold to peers');
-      });
-    }
+/** What a workout could not sell perishes: every finished-stock row and any input lot still on
+ *  the dead firm is scrapped where it sits — unsold distressed goods, never a sale to nobody. */
+function perishStock(ctx: WeeklyStepContext, comp: Company): void {
+  Object.keys(comp.outputInventoryBySubUnit ?? {}).forEach((subUnitId) => scrapOutputUnitsTo(comp, subUnitId, 0, 0));
+  Object.entries(materializeInputInventory(ctx.v2, comp.id)).forEach(([subUnitId, lots]) => {
+    scrapInputUnits(ctx.v2, comp, subUnitId, lots.reduce((a, l) => a + l.unitsHeld, 0));
   });
-  // The rest of the week's slice is scrappage — unsold distressed inventory perishes.
-  if (comp && invSoldLocal > 0 && preInvLocal > 0) {
-    // The rows land exactly where the old scaling put them (`row *= keepFrac`): what the peers
-    // did not take of the week's slice is scrapped, by wire-less transformation.
-    const keepFrac = Math.max(0, 1 - invSoldLocal / preInvLocal);
-    Object.entries(origRows).forEach(([subUnitId, row]) => {
-      scrapOutputUnitsTo(comp, subUnitId, row.unitsHeld * keepFrac, row.valueLocal * keepFrac);
-    });
-    Object.entries(origInputUnits).forEach(([subUnitId, units]) => {
-      const keepUnits = units * keepFrac;
-      scrapInputUnits(ctx.v2, comp, subUnitId, Math.max(0, inputUnitsHeld(ctx.v2, comp.id, subUnitId) - keepUnits));
-    });
-  }
 }
 
 /** The waterfall: secured first, then unsecured, then whatever is left for equity. */

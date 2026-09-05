@@ -160,6 +160,24 @@ export function moveInputUnits(v2: V2World, from: { id: EntityId; ticker: string
   return n;
 }
 
+/**
+ * §3.20-i-b — AN ESTATE'S INPUT LOTS BECOME STOCK FOR SALE. A receiver does not run the plant,
+ * so what the dead firm bought to consume is now goods it holds to sell: the lots leave the
+ * input chain FIFO and land on the firm's own finished-stock row of the same good, at the cost
+ * they were carried at. Same holder, same good, same units — a reclassification, not a wire —
+ * and the goods auction then offers the row like any seller's. Returns the units moved.
+ */
+export function reclassifyInputLotsAsStock(v2: V2World, comp: StockHolder, subUnitId: string): number {
+  const drawn = consumeFifo(v2, comp.id, subUnitId, Number.POSITIVE_INFINITY);
+  const units = drawn.availableUnits;
+  if (!(units > 1e-9)) return 0;
+  let costLocal = 0; for (const c of drawn.costsLocal) costLocal += c;
+  const inv = comp.outputInventoryBySubUnit ?? (comp.outputInventoryBySubUnit = {});
+  const row = inv[subUnitId] ?? (inv[subUnitId] = { unitsHeld: 0, valueLocal: 0 });
+  row.unitsHeld += units; row.valueLocal += costLocal;
+  return units;
+}
+
 /** Input lots perish or are abandoned: the units leave the chain FIFO and are scrapped. */
 export function scrapInputUnits(v2: V2World, from: { id: string; region: RegionId }, subUnitId: string, units: number): void {
   if (!(units > 1e-9)) return;

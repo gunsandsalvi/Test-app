@@ -211,7 +211,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | G1 a missed payment or breach is an EVENT holders observe | `src/domain/company-week/credit-standing.ts:isInDefault` | ⚠️ |
 | **G2 acceleration** | — | ❌ |
 | G3 default: the claim becomes a claim on an estate | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
-| G4 the estate is realised — sold for what it fetches, not book | `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` · `src/engine/simulation/stages/estate-resolution.ts:sellInventoryToPeers` | ⚠️ |
+| G4 the estate is realised — sold for what it fetches, not book | `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` · `src/engine/simulation/stages/05-unit-bidding.ts:estateSellers` | ✅ |
 | **G5 the waterfall pays by SENIORITY** | `src/engine/simulation/stages/estate-resolution.ts:distribute` | ⚠️ |
 | G5.a a junior claim can recover nothing | `src/domain/estate.ts:claimsAtSeniority` | ⚠️ |
 | G6 the holder books the loss, on a date | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
@@ -227,7 +227,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-**76 rows: 46 ✅, 22 ⚠️, 8 ❌** — COUNTED, not adjusted (§5's lesson from §9.13-CREDIT row 2:
+**76 rows: 47 ✅, 21 ⚠️, 8 ❌** — COUNTED, not adjusted (§5's lesson from §9.13-CREDIT row 2:
 a tally nobody recounts drifts as silently as a mark nobody re-marks). Re-marked at rows 1, 3, 4
 and 5; row 4 moved D2 ⚠️→✅ and D8 ❌→✅ and DELETED the two "bonds and loans" sub-rows it added at
 row 1, which had nothing left to say once every book cleared, and row 5 moved E3 ❌→✅ by wiring the
@@ -381,15 +381,14 @@ that pass 3 of the weekly walk, the half that makes the DESKS holders of record,
 tranche-keyed desk book up by ISSUER and missing every position since 13b: the desks accrued
 nothing at all until it was repaired.
 
-### ⚠️ G4 — THE PLANT IS SOLD FOR WHAT IT FETCHES; THE STOCK STILL AT A DISCOUNT OFF BOOK
+### ✅ G4 — THE ESTATE IS SOLD FOR WHAT IT FETCHES
 
-*2026-09-05 (§9.20-i-a):* the plant clears. `sellPlantToBidders` offers each week's slice (the
-region's own capital-goods absorption still sets the RATE) in a PRICE_LIKE book and the same-sector
-peers bid from their own return on capital against the hurdle; the print is what the plant fetched.
-The inventory is still `sellInventoryToPeers`' formula discount off book, `sold × (1 − hurdle ×
-turnoverWeeks/52)`, pro rata to the peers' cash — **§3 step 20-i-b** puts the finished stock in the
-goods auction and the input lots with the peers that consume them. What a unit of plant IS remains
-§3 steps 13 and 26's.
+*2026-09-05 (§9.20-i-a, 20-i-b):* the plant clears — `sellPlantToBidders` offers each week's slice
+(the region's own capital-goods absorption still sets the RATE) in a PRICE_LIKE book and the
+same-sector peers bid from their own return on capital against the hurdle — and the stock sells in
+the goods auction, the dead firm a seller at no reservation (`05-unit-bidding.ts:estateSellers`),
+its input lots reclassified as stock at the filing. Nothing in a workout is priced by a formula off
+book any more; what a unit of plant IS remains §3 steps 13 and 26's.
 
 ### ⚠️ H4 / ❌ H4.a — THE CDS FALLS BACK TO THE OAS, WHICH DELETES THE BASIS
 

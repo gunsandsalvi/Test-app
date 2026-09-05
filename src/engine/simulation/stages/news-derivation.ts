@@ -293,10 +293,12 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
     const left = estateAssetsLocal(e.assets);
     const classes = [['secured lenders', w.paidByClassLocal[0]], ['unsecured creditors', w.paidByClassLocal[1]], ['equity', w.paidByClassLocal[2]]] as const;
     const paidText = classes.filter(([, usd]) => usd >= 1e5).map(([who, usd]) => `${M(usd)} to ${who}`).join(', ');
-    const soldText = sold >= 1e5
-      ? `${w.inventorySoldLocal >= 1e5 ? `${M(w.inventorySoldLocal)} of stock` : ''}${w.inventorySoldLocal >= 1e5 && w.ppeSoldLocal >= 1e5 ? ' and ' : ''}${w.ppeSoldLocal >= 1e5 ? `${M(w.ppeSoldLocal)} of plant${w.plantPriceOfBook !== undefined ? ` at ${(w.plantPriceOfBook * 100).toFixed(0)}% of book` : ''}` : ''}`
-        + (buyers.length ? ` went to ${buyers.map((b) => b.ticker).join(', ')}` : ' found no buyer and was scrapped')
-      : '';
+    // §3.20-i-b: the stock sells in the goods auction to whoever buys the goods; the plant goes
+    // to the named peers that bid for it.
+    const soldParts: string[] = [];
+    if (w.inventorySoldLocal >= 1e5) soldParts.push(`${M(w.inventorySoldLocal)} of stock sold at the goods auction`);
+    if (w.ppeSoldLocal >= 1e5) soldParts.push(`${M(w.ppeSoldLocal)} of plant${w.plantPriceOfBook !== undefined ? ` at ${(w.plantPriceOfBook * 100).toFixed(0)}% of book` : ''}${buyers.length ? ` went to ${buyers.map((b) => b.ticker).join(', ')}` : ''}`);
+    const soldText = soldParts.join(', ');
     push({
       id: `estate-week-${e.ticker}-${week}`,
       kind: paid >= 1e5 ? 'estate pays' : 'estate sells',
