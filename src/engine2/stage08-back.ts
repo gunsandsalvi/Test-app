@@ -81,7 +81,7 @@ const round4 = (v: number) => Math.round(v * 10000) / 10000;
 /** IND4 — a firm's payout discipline is its INDUSTRY's, from the registry. */
 function fixedShareOf(comp: Company): number {
   const base = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5;
-  const primary = (comp.productLines || [])[0];
+  const primary = (comp.productLines ?? []).at(0);
   const industry = primary ? industryOfSubUnit(primary.subUnitId) : undefined;
   return industry ? base * financingProfileOf(industry).fixedRateTilt : base;
 }
@@ -313,7 +313,7 @@ function runCapitalBlock(row: number, L: BackLanes, args: {
     / Math.max(1, Number.isNaN(priorGrowth) ? 1 : priorGrowth);
   const isAutomating = growthCapexIntensity > 0.05 && newExecutionQuality > 1.0;
   // SCALE — cloned only when actually written (replacement-neutral for the battery replays).
-  let newOccupationMixDrift = priorOccupationMixDrift || {};
+  let newOccupationMixDrift = priorOccupationMixDrift;
   if (isAutomating) {
     newOccupationMixDrift = { ...newOccupationMixDrift };
     // §3.18-ii: the ±15% caps on the drift are gone (rule 6); the mix is the labour market's.
@@ -2127,7 +2127,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const newSeniorBondYield = reg.zeroRates.tenor5Y + filedFiveYearSpreadBps / 10000;
 
     const quarterIdx = Math.floor((nextWeek - 1) / 13) + 4;
-    const prevSnapshot = comp.historicalFundamentals ? comp.historicalFundamentals[comp.historicalFundamentals.length - 1] : undefined;
+    const prevSnapshot = comp.historicalFundamentals.at(-1);
     // §3.13-BOOK d3c: the treasury's book is its register rows, at their marked value.
     const currentTreasuryHoldingsLocal = sovereignBookLocalOf(d.v2, comp.id);
     // Real current-portion-of-debt: tranches actually maturing within a year, from this
@@ -2167,7 +2167,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // the garbage collector. Same floats on every reporting week (prevSnapshot chains only
     // through reporting weeks in both worlds).
     const histFundamentals = (() => {
-      if (!isReportingThisWeek) return comp.historicalFundamentals || [];
+      if (!isReportingThisWeek) return comp.historicalFundamentals;
       const currentSnapshot = buildQuarterlyFundamentalSnapshot(
         nextWeek,
         formatQuarterFilingDate(quarterIdx),
@@ -2197,7 +2197,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         annualInterest,
         totalInputValueLocal(v2, L8.companyId[row])
       );
-      return [...(comp.historicalFundamentals || []).slice(-7), currentSnapshot];
+      return [...comp.historicalFundamentals.slice(-7), currentSnapshot];
     })();
 
     const systemicStressFactor = systemicStressFactorGlobal + Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.3;
@@ -2228,7 +2228,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         calculatedRevVol = Math.sqrt(var2 / rvLen2) / meanRev;
       }
     }
-    const calculatedSegmentFinancials: SegmentFinancial[] = (updatedProductLines || []).map(line => {
+    const calculatedSegmentFinancials: SegmentFinancial[] = updatedProductLines.map(line => {
       const share = line.revenueShare || 1.0;
       return {
         subUnitId: line.subUnitId,

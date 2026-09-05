@@ -561,7 +561,8 @@ export function materializePrimeBrokerageLine(v2: V2World, r: number): PrimeBrok
 /** Write an invoice as a new row (ledger-internal). Returns the row. */
 export function writeInvoiceRow(v2: V2World, inv: TradeInvoice): number {
   const S = mutableObligations(v2);
-  const currencyId = CURRENCY_ID[inv.currency as CurrencyCode];
+  // The invoice names its money as a string; a string that is no currency has no id, and the type says so.
+  const currencyId = Object.hasOwn(CURRENCY_ID, inv.currency) ? CURRENCY_ID[inv.currency as CurrencyCode] : undefined;
   if (currencyId === undefined) return defect(`trade invoice ${inv.sellerId}>${inv.buyerId} is in ${inv.currency}, which is no currency`);
   const r = allocRow(S);
   const kindRef = internType(v2, 'TRADE_INVOICE');

@@ -31,7 +31,7 @@ test('a bond pledged against nothing held is over-pledged by the whole face', ()
 });
 
 test('the tolerance is a rounding allowance and nothing more', () => {
-  assert.ok(PLEDGE_ROUNDING_TOLERANCE_LOCAL <= 1);
+  assert.equal(PLEDGE_ROUNDING_TOLERANCE_LOCAL, 1, 'one unit of money, the smallest a face can be rounded by');
   assert.equal(isFullyBacked(position([['USA-GOV-5Y-INIT', 1_000_000.5]], [['USA-GOV-5Y-INIT', 1_000_000]])), true);
   assert.equal(isFullyBacked(position([['USA-GOV-5Y-INIT', 1_000_002]], [['USA-GOV-5Y-INIT', 1_000_000]])), false);
 });

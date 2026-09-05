@@ -18,6 +18,7 @@
 
 import { REGION_IDS, RegionId } from './geography';
 import { Region } from './region-macro';
+import type { CategoryDemandState } from './market-microstructure';
 import { Commodity, COMMODITY_CATEGORY_LINKAGE } from './instruments';
 import { localToUsd, FxToUsd } from './currency';
 import { defect } from './defect';
@@ -55,7 +56,9 @@ export function worldPrintOf(subUnitId: string, regions: Record<RegionId, Region
   let suppliedUnits = 0;
   let demandedUnits = 0;
   REGION_IDS.forEach((r) => {
-    const cd = regions[r]?.categoryDemand[subUnitId];
+    // A category this region does not carry has no entry. `Region.categoryDemand` is declared
+    // total and is sparse (§3.29-iv owns the type); the read says the truth here.
+    const cd = regions[r].categoryDemand[subUnitId] as CategoryDemandState | undefined;
     if (!cd) return;
     demandedUnits += cd.totalUnitsDemandedThisWeek ?? 0;
     const units = cd.totalUnitsSuppliedThisWeek ?? 0;

@@ -59,9 +59,10 @@ interface ContractTable {
   escalationBaseLocal: Float64Array;
   next: Int32Array;
   /** Per region key: chain head/tail per sub-unit index, and the bucket order (see header). */
-  headByRegion: Record<string, Int32Array>;
+  /** Per region, created the first time the region is asked for — SPARSE until then. */
+  headByRegion: Partial<Record<string, Int32Array>>;
   tailByRegion: Record<string, Int32Array>;
-  suOrderByRegion: Record<string, number[]>;
+  suOrderByRegion: Partial<Record<string, number[]>>;
 }
 
 export function newContractTable(): ContractTable {
@@ -108,13 +109,15 @@ function grow(T: ContractTable): void {
 
 function regionTables(T: ContractTable, region: string): { head: Int32Array; tail: Int32Array; suOrder: number[] } {
   let head = T.headByRegion[region];
-  if (!head) {
+  let suOrder = T.suOrderByRegion[region];
+  if (!head || !suOrder) {
     head = new Int32Array(NSUB).fill(-1);
     T.headByRegion[region] = head;
     T.tailByRegion[region] = new Int32Array(NSUB).fill(-1);
-    T.suOrderByRegion[region] = [];
+    suOrder = [];
+    T.suOrderByRegion[region] = suOrder;
   }
-  return { head, tail: T.tailByRegion[region], suOrder: T.suOrderByRegion[region] };
+  return { head, tail: T.tailByRegion[region], suOrder };
 }
 
 /** Append a newly-formed contract at the tail of its (region, sub-unit) chain. */
@@ -246,6 +249,7 @@ export function endOfWeekCompact(v2: V2World): void {
   for (const region of Object.keys(T.suOrderByRegion)) {
     const head = T.headByRegion[region];
     const order = T.suOrderByRegion[region];
+    if (!head || !order) continue; // a region's three tables are created together (`regionTables`)
     T.suOrderByRegion[region] = order.filter((su) => head[su] >= 0);
   }
 }

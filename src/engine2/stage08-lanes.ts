@@ -230,7 +230,7 @@ export function buildBackLanes(
       && entityIds.has(managedEntityIdsOf(c)[0]) ? 1 : 0;
     L.occupationMixDrift[i] = c.occupationMixDrift;
     // IND4 — the same read maxDividendPayoutRatioOf made (0.6 = its stated default).
-    const primaryLine = lines[0];
+    const primaryLine = lines.at(0);
     const primaryIndustry = primaryLine ? industryOfSubUnit(primaryLine.subUnitId) : undefined;
     L.maxPayoutRatio[i] = primaryIndustry ? financingProfileOf(primaryIndustry).maxPayoutRatio : 0.6;
     L.mgmtPatienceWeeks[i] = patienceWeeksOf(c.management);

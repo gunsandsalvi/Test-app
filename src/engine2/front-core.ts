@@ -31,7 +31,7 @@ import { patienceWeeksOf } from '../domain/preferences';
 import { Company, RegionId } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { isActiveCompany } from '../domain/company';
-import { CATEGORY_INPUT_REQUIREMENTS } from '../domain/market-microstructure';
+import { CATEGORY_INPUT_REQUIREMENTS, type CategoryDemandState } from '../domain/market-microstructure';
 import { SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
 import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
 import { industryOfSubUnit, firmInputIntensities, annualCarryingCostRateOf, INDUSTRY_REGISTRY } from '../domain/industry-registry';
@@ -263,7 +263,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
   for (const c of companies) {
     nTr += ladderRowsOf(v2, c.id).length;
     nPl += c.productLines?.length ?? 0;
-    nOut += Object.keys(c.outputInventoryBySubUnit || {}).length;
+    nOut += Object.keys(c.outputInventoryBySubUnit).length;
     nUc += (c.assetsUnderConstruction?.length ?? 0) + (companyUpdates[c.ticker]?.capexUnderConstruction?.length ?? 0);
     nSh += supplyRelsByCustomer.get(c.id)?.length ?? 0;
   }
@@ -346,7 +346,8 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     S.effectiveTaxRate[ri] = reg.effectiveTaxRate;
     const supplied = suppliedSubUnitsByRegion.get(regionIds[ri]);
     for (let si = 0; si < NSUB; si++) {
-      const cd = reg.categoryDemand[SUBUNITS[si]];
+      // The store is declared total and is sparse (§3.29-iv owns its type); the read says the truth.
+      const cd = reg.categoryDemand[SUBUNITS[si]] as CategoryDemandState | undefined;
       const at = ri * NSUB + si;
       if (cd) {
         S.mktExists[at] = 1;
@@ -463,7 +464,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
       S.plMktShare[atPl] = l.categoryMarketShare;
       atPl++;
     }
-    for (const [su, inv] of Object.entries(comp.outputInventoryBySubUnit || {})) {
+    for (const [su, inv] of Object.entries(comp.outputInventoryBySubUnit)) {
       S.outSub[atOut] = SUBUNIT_INDEX.get(su) ?? -1;
       S.outUnits[atOut] = inv.unitsHeld;
       S.outValue[atOut] = inv.valueLocal;

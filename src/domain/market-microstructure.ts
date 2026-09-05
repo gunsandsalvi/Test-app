@@ -126,7 +126,8 @@ export function createSeedCategoryDemandState(
 }
 
 // BP1a: derived from the industry registry (recipeInputs per producing industry).
-export const CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<string, number>>> = VIEW_CATEGORY_INPUT_REQUIREMENTS;
+/** Keyed by category and SPARSE: a category with no recipe has no entry (§3.29-iii: the type says so). */
+export const CATEGORY_INPUT_REQUIREMENTS: Partial<Record<string, Partial<Record<string, number>>>> = VIEW_CATEGORY_INPUT_REQUIREMENTS;
 
 export interface SupplyRelationship {
   /** §3.13-BOOK slice (c2a): both ends of a supply relationship are FIRMS. */

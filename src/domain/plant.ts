@@ -139,7 +139,7 @@ export function mergePlant(a: readonly PlantVintage[], b: readonly PlantVintage[
   const all = [...a, ...b].filter((v) => v.costLocal > 0).sort(byAge);
   const out: PlantVintage[] = [];
   for (const v of all) {
-    const last = out[out.length - 1];
+    const last = out.at(-1);
     if (last && last.enteredServiceWeek === v.enteredServiceWeek && last.usefulLifeYears === v.usefulLifeYears && last.kind === v.kind) {
       out[out.length - 1] = { ...last, costLocal: last.costLocal + v.costLocal };
     } else out.push({ ...v });

@@ -32,7 +32,7 @@ test('a firm\'s mix is its lines\' industries\' by revenue share, normalised; a 
   const half = capitalMixOf([{ subUnitId: 'upstream_extraction', revenueShare: 0.5 }, { subUnitId: 'enterprise_software', revenueShare: 0.5 }], 'OPERATING');
   assert.ok(Math.abs(half.heavy_equipment - (refinery.heavy_equipment + software.heavy_equipment) / 2) < 1e-12, 'weighted by revenue share');
   const bank = capitalMixOf([], 'BANK');
-  assert.ok(bank.commercial_construction > 0 && bank.enterprise_software > 0 && bank.heavy_equipment === undefined, 'premises and systems');
+  assert.ok(bank.commercial_construction > 0 && bank.enterprise_software > 0 && !Object.hasOwn(bank, 'heavy_equipment'), 'premises and systems');
   assert.ok(Math.abs(sum(sectorCapitalMix('Tech')) - 1) < 1e-12);
   assert.ok(Math.abs(sum(registryCapitalMix()) - 1) < 1e-12);
 });
@@ -50,7 +50,7 @@ test('a set of firms\' investment is split the way their own capex is', () => {
 
 test('§3.26-f-iv-b: what a purchase IS is the buyer\'s question, not the good\'s', () => {
   // heavy_equipment is in some recipes; to a firm whose recipe does not consume it, it is plant.
-  const consumer = Object.values(INDUSTRY_REGISTRY).flatMap((s) => s.subUnits).find((su) => (su.recipeInputs ?? {}).heavy_equipment !== undefined);
+  const consumer = Object.values(INDUSTRY_REGISTRY).flatMap((s) => s.subUnits).find((su) => Object.hasOwn(su.recipeInputs ?? {}, 'heavy_equipment'));
   assert.ok(consumer, 'some recipe consumes heavy equipment');
   assert.equal(purchaseKindOf('heavy_equipment', [{ subUnitId: consumer!.unitId, revenueShare: 1 }], 'OPERATING'), 'RECIPE_INPUT');
   assert.equal(purchaseKindOf('heavy_equipment', [{ subUnitId: 'enterprise_software', revenueShare: 1 }], 'OPERATING'), 'CAPITAL_GOOD', 'a software firm\'s heavy equipment is plant, not a lot it never draws');

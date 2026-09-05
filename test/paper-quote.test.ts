@@ -29,7 +29,7 @@ test('a corporate bond quotes its price and the OAS the price implies; unprinted
     setClearedPrice(v2, bond, px);
     const q = paperQuoteOf(v2, bond, rates, 10);
     assert.ok(q && Math.abs(q.pricePerFace - px) < 1e-12);
-    assert.ok(q && q.spreadBps !== undefined && Math.abs(q.spreadBps - 250) < 0.01, 'the spread comes back off the price');
+    assert.ok(q.spreadBps !== undefined && Math.abs(q.spreadBps - 250) < 0.01, 'the spread comes back off the price');
     assert.equal(q?.yieldAnnual, undefined);
   } finally {
     setActiveWireJournal(undefined);

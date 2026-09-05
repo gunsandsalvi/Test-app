@@ -1336,7 +1336,7 @@ export function purchaseKindOf(
   buyerProductLines: { subUnitId: string; revenueShare?: number }[] | undefined,
   buyerProfileKey: string
 ): PurchaseKind {
-  if (firmInputIntensities(buyerProductLines, buyerProfileKey)[unitId] !== undefined) return 'RECIPE_INPUT';
+  if (Object.hasOwn(firmInputIntensities(buyerProductLines, buyerProfileKey), unitId)) return 'RECIPE_INPUT';
   if (byId.get(unitId)?.usefulLifeYears !== undefined) return 'CAPITAL_GOOD';
   return 'OPERATING';
 }

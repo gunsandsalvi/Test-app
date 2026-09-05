@@ -557,8 +557,12 @@ written from here):
     always-falsy, no overlap) are each one of two things: a check that never fires — §7.234's class,
     a guard against a state the type already excludes, and rule 12 says delete it, not the rule —
     or a type that LIES, where the guard is the only thing catching a runtime `undefined` the
-    declaration denies, and the fix is the declaration (an optional field, a narrower union), never
-    the guard. One directory at a time (rule 10), the budget falling with each.
+    declaration denies, and the fix is the declaration (an optional field, a `Partial<Record>` for
+    a sparse store), never the guard. One directory at a time (rule 10), the budget falling with
+    each: **a** domain, engine2 and test (26) is DONE; **b** `src/engine` outside the simulation
+    (69: `audit/prices.ts` 12, `macro/evolution.ts` 14, `companyGenerator.ts` 8, the seed 8);
+    **c** `src/engine/simulation` (151: `shared-helpers.ts` 15, `02b` 12, `bank-lending.ts` 12,
+    `labor-market.ts` 12, `05` 9); **d** `src/ui` and `scripts/harness.ts` (96).
 29-iv. **The defensive reads.** The 1,223 `??` and `?.` on values the types say are never nullish
     are the same choice per site: a fallback that cannot run (delete it — a `?? 0` that never
     fires is a stated number with no owner, rule 2) or a type that lies (fix it). `scripts/harness.ts`
@@ -1204,7 +1208,7 @@ none of them steps a week of the simulation. Green before every commit.
 | Command | Note |
 |---|---|
 | `npx tsc --noEmit` | |
-| `npx eslint src scripts test --no-warn-ignored --max-warnings 1565` | **THE RATCHET, again.** 1,565 is the `no-unnecessary-condition` backlog the type-aware rules found when §9.29-ii turned them on; it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower the number here and in `package.json` with each payment |
+| `npx eslint src scripts test --no-warn-ignored --max-warnings 1531` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
 | `npm test` | the unit suite: contracts and arithmetic, never a run |
 | `bash scripts/check-hygiene.sh` | carries `check-atlas.sh` and the stated-literal ratchets |
 | `npm run build` | |
@@ -1331,6 +1335,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**29-iii-a — THE DEAD CONDITIONS IN DOMAIN, ENGINE2 AND TEST.** Twenty-six, and they sorted
+  cleanly into the two kinds. Guards the type already excludes, deleted: `if (!inv)` on a
+  non-optional inventory (twice), `x || {}` and `x || []` on non-optional fields (six in
+  `stage08-back.ts`/`front-core.ts`), a test's `q &&` on a value that is never null, a `<= 1` on
+  the literal 1 (the pin is now `equal`). Types that lied, fixed at the declaration: three sparse
+  stores declared total — `SUBUNIT_PHYSICAL`, `CATEGORY_INPUT_REQUIREMENTS` and the contract
+  table's per-region heads — are `Partial<Record<…>>` now, so every read of them says the key can
+  be missing and the guards that caught it are true to the type; `array[i]` reads that can run
+  off the end read `.at(i)`, which is `T | undefined`; a currency looked up by a string is
+  `Object.hasOwn` first. `Region.categoryDemand` is the one declared-total sparse store left, and
+  its two reads here say so at the site (`as … | undefined`) while 29-iv owns the type. A
+  `const x: T | undefined = record[k]` annotation does NOT count — assignment narrows it back to
+  `T`, and the rule sees through it; the store's type is the only honest place. 1,565 → 1,531.
+  Gates green; no run (rule 11).
 
 **29-ii — THE TWO PAID-FOR LINT RULES ARE ON, AND THEIR BACKLOG IS A RATCHET.** `eslint.config.js`
   named `no-floating-promises` and `no-unnecessary-condition` as the rules this project paid for and

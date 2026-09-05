@@ -53,7 +53,8 @@ interface SubUnitPhysical {
  * TRADABILITY` table asserted — where the ordering disagrees with it, the disagreement is the
  * finding.
  */
-export const SUBUNIT_PHYSICAL: Record<string, SubUnitPhysical> = VIEW_SUBUNIT_PHYSICAL;
+/** Keyed by sub-unit id and SPARSE: a unit with no physical row is not physical (§3.29-iii: the type says so). */
+export const SUBUNIT_PHYSICAL: Partial<Record<string, SubUnitPhysical>> = VIEW_SUBUNIT_PHYSICAL;
 
 export function deliveryModeOf(subUnitId: string): DeliveryMode {
   return SUBUNIT_PHYSICAL[subUnitId]?.deliveryMode ?? 'PHYSICAL';

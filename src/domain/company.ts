@@ -746,14 +746,12 @@ export function corporateTreasuryTargetLocal(cashLocal: number, annualRevenueLoc
 
 export function getOutputInventoryLocal(comp: Company, subUnitId?: string): number {
   const inv = comp.outputInventoryBySubUnit;
-  if (!inv) return 0;
   if (subUnitId) return inv[subUnitId]?.valueLocal ?? 0;
   return Object.values(inv).reduce((s, entry) => s + entry.valueLocal, 0);
 }
 
 export function getOutputInventoryUnits(comp: Company, subUnitId?: string): number {
   const inv = comp.outputInventoryBySubUnit;
-  if (!inv) return 0;
   if (subUnitId) return inv[subUnitId]?.unitsHeld ?? 0;
   return Object.values(inv).reduce((s, entry) => s + entry.unitsHeld, 0);
 }
