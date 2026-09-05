@@ -80,7 +80,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 a stock of productive assets held by a named firm | `src/engine2/stage08-back.ts:newGrossPPELocal` | ✅ |
 | A2 capacity is a function of the stock | `src/engine/simulation/stages/05-unit-bidding.ts:unitsPerNetPpeDollar` | ✅ |
 | **A3 it depreciates — a cost and a reduction** | `src/domain/company-week/capital-programme.ts:weeklyDepreciationLocal` | ⚠️ |
-| A4 capital is specific | `src/engine/simulation/stages/estate-resolution.ts:sellAssetsToPeers` | ⚠️ |
+| A4 capital is specific | `src/engine/simulation/stages/estate-resolution.ts:peersOf` | ⚠️ |
 | A5 its value is what it can produce; it can be written down | `src/domain/company-week/capital-programme.ts:capacityRetirement` | ⚠️ |
 | **B1 invests when the return beats the cost of capital** | `src/domain/company-week/capital-programme.ts:desiredGrowthCapex` | ❌ |
 | B1.a the return comes from expected demand and price | `src/engine2/stage08-lanes.ts:categoryShortfall` | ⚠️ |
@@ -98,7 +98,7 @@ checked by `scripts/check-atlas.sh`.
 | C4 it is irreversible | `src/domain/company-week/capital-programme.ts:capacityRetirement` | ✅ |
 | D1 K′ = K + I − D, per firm | `src/engine2/stage08-back.ts:newAccumulatedDepreciationLocal` | ✅ |
 | D2 the aggregate stock is Σ(firms) | `src/engine/simulation/stages/estate-resolution.ts:regionalPpeAbsorptionWeeks` | ✅ |
-| D3 a failed firm's capital goes to somebody named | `src/engine/simulation/stages/estate-resolution.ts:sellAssetsToPeers` | ✅ |
+| D3 a failed firm's capital goes to somebody named | `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` | ✅ |
 | **D4 capacity, output and utilisation reconcile** | — | ❌ |
 | E1 investment is a large, volatile component of demand | `src/engine/simulation/stages/05-unit-bidding.ts:capexPurchasesLocal` | ✅ |
 | E2 it employs people to build the capital | `src/domain/company-week/labor-demand.ts:employerWeekPosting` | ✅ |
@@ -204,7 +204,7 @@ communicate through a cash balance with a one-week lag and no shared hurdle. Fal
 ### ⚠️ A4 / A5 — PLANT IS ONE DOLLAR NUMBER
 
 `grossPPELocal` is a scalar. It has no type, no vintage and no location beyond its owner, so A4's
-specificity exists only as an accident of ownership: `sellAssetsToPeers` will only sell a dead firm's
+specificity exists only as an accident of ownership: `sellPlantToBidders` will only sell a dead firm's
 plant to same-region, same-sector peers, and a buyer converts those dollars into capacity at **its
 own** `unitsPerNetPpeDollar` — a steel mill's plant becomes whatever the buyer makes. A5 is the same
 shape: plant is carried at cost less straight-line depreciation and is never revalued against what it

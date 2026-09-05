@@ -73,6 +73,8 @@ export interface Estate {
   /** §3.15b-i: what the workout did in its latest week — the record a story that develops is
    *  told from. Opened fresh by the stage each week it runs the estate. */
   lastWeek?: EstateWeek;
+  /** §3.20-i-a: the plant auction's last print, per unit of net book — where the next solve starts. */
+  plantPriceOfBook?: number;
 }
 
 /** One week of a workout: what the waterfall paid each class, what was sold and to whom. */
@@ -81,7 +83,10 @@ interface EstateWeek {
   /** Paid by class, indexed by `CLAIM_SENIORITY − 1`: secured, unsecured, equity. */
   paidByClassLocal: [number, number, number];
   inventorySoldLocal: number;
+  /** Net book value of plant that found a bidder this week. */
   ppeSoldLocal: number;
+  /** §3.20-i-a: what a unit of that book fetched at auction; undefined when nothing was offered or bid. */
+  plantPriceOfBook?: number;
   /** The peers that bought the week's stock and plant. */
   buyerIds: EntityId[];
 }

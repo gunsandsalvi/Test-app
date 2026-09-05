@@ -294,7 +294,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
     const classes = [['secured lenders', w.paidByClassLocal[0]], ['unsecured creditors', w.paidByClassLocal[1]], ['equity', w.paidByClassLocal[2]]] as const;
     const paidText = classes.filter(([, usd]) => usd >= 1e5).map(([who, usd]) => `${M(usd)} to ${who}`).join(', ');
     const soldText = sold >= 1e5
-      ? `${w.inventorySoldLocal >= 1e5 ? `${M(w.inventorySoldLocal)} of stock` : ''}${w.inventorySoldLocal >= 1e5 && w.ppeSoldLocal >= 1e5 ? ' and ' : ''}${w.ppeSoldLocal >= 1e5 ? `${M(w.ppeSoldLocal)} of plant` : ''}`
+      ? `${w.inventorySoldLocal >= 1e5 ? `${M(w.inventorySoldLocal)} of stock` : ''}${w.inventorySoldLocal >= 1e5 && w.ppeSoldLocal >= 1e5 ? ' and ' : ''}${w.ppeSoldLocal >= 1e5 ? `${M(w.ppeSoldLocal)} of plant${w.plantPriceOfBook !== undefined ? ` at ${(w.plantPriceOfBook * 100).toFixed(0)}% of book` : ''}` : ''}`
         + (buyers.length ? ` went to ${buyers.map((b) => b.ticker).join(', ')}` : ' found no buyer and was scrapped')
       : '';
     push({

@@ -549,11 +549,31 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-20. **Where a bound covered a missing mechanism, BUILD THE MECHANISM** (rule 6's pairing). Named:
-    the estate's asset sale clears against real bidders instead of `sold × (1 − min(0.9, …))`
-    (`estate-resolution.ts:213`) and peers are allocated by a bid, not pro rata to cash; the LOLR and
-    every overdraft lender get real capacity (`overdraft-sweep.ts` lends with no headroom test at
-    all); occupational supply gets mobility so a shortage can be relieved (`labor-market.ts:502`).
+20-i-b. **THE ESTATE'S STOCK CLEARS AGAINST BIDDERS** (rule 6's pairing: where a bound covered a
+    missing mechanism, build the mechanism; the plant's auction is 20-i-a — §9). The inventory is
+    the last stated price in a death: `sellInventoryToPeers` sells each week's slice pro rata to
+    the peers' cash at `slice × (1 − min(0.9, hurdle × turnoverWeeks / 52))`. Finished stock
+    belongs in the goods auction, where the buyers of goods are — the dead firm stays a SELLER in
+    05 at no reservation until its rows are empty, which is what a liquidation sale is — and
+    input lots go to the peers that consume them, bid at their own landed cost for the input.
+    Closes `firm-birth-and-death.md` D1 and D2.a for every asset class.
+20-ii. **EVERY OVERDRAFT LENDER GETS REAL CAPACITY.** `overdraft-sweep.ts` lends with no headroom
+    test at all: a firm's close-of-day revolver tap, a fund's prime-brokerage draw past its line,
+    a pool's SME facility draw are all funded by the house bank whatever its capital and reserve
+    position. The lender's capacity is what `banking.ts:leverageHeadroomLocal` already says it is;
+    a draw past it is refused, and the refused party's instruction is a non-performance the
+    settlement close records (`ctx.overdraftStreaks` already counts the sweeps). What a refused
+    non-performance DOES to the payer — a firm that cannot pay is in default of payment — is
+    20-LLR's, which owns the funding channel; this step is the lender's side only. (The LOLR's
+    own capacity, which this step's first draft also named, is 20-LLR's whole subject and is
+    not duplicated here.)
+20-iii. **OCCUPATIONAL SUPPLY GETS MOBILITY.** `labor-market.ts` fixes each occupation's labour
+    force at `totalLaborForce × share` and a shortage in one occupation is permanent: seekers go
+    to zero, hiring stops, and nothing moves a person from an occupation with idle seekers to one
+    with open vacancies. Mobility is a flow between occupations, from the one whose wage and
+    vacancy rate say it is over-supplied to the one that is short, at a rate that takes time
+    (retraining is search with a longer lag); the shares become a state the flow moves, not a
+    constant. Closes `labour.md` A3.a's second half — a shortage can be relieved.
 
 20b. **The interbank unsecured market.** The last boundary line's named successor, and it was
     never built: surplus banks lend to short ones at policy plus the borrower's own spread, and
@@ -1523,6 +1543,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20-i-a — THE ESTATE'S PLANT CLEARS AGAINST BIDDERS.** Step 20 split per rule 1.10 (20-i-a plant,
+  20-i-b stock, 20-ii the overdraft lenders' capacity, 20-iii occupational mobility; its LOLR
+  clause was 20-LLR's subject already and is not duplicated). The workout's plant was `slice × (1
+  − min(0.9, hurdle × weeks / 52))` allocated pro rata to the peers' cash — a stated haircut and
+  a bound, nobody bidding. Now `sellPlantToBidders` offers each week's slice at any price in a
+  PRICE_LIKE book (unit: one currency unit of net book) and the region's same-sector firms bid
+  from their own books: reservation `min(1, ebit / net plant / hurdle)`, size ramping to the
+  firm's own capital programme as the price falls to half its reservation, cash bounding what it
+  pays at its reservation; the cleared price is paid into the estate's account, the plant moves
+  at book, the print is kept on the estate (`plantPriceOfBook`) for the next solve, and what no
+  bidder takes returns to the estate until the programme's last week abandons it. The news line
+  says what a unit of book fetched. `firm-birth-and-death.md` D1 re-cited (plant ✅, stock still
+  the schedule → 20-i-b), `the-capital-programme.md` D3 re-cited. Gates green; no run.
 
 **19-ii — THE DEAD EXPORTS ARE GONE.** The sweep measured 389 exported names in 164 files that
   no other file read. The pass had two arms and `tsc`/`eslint` were the judge of each: the

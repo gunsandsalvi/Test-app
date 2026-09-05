@@ -101,7 +101,7 @@ checked by `scripts/check-atlas.sh`.
 | **C2.a FORBID no exogenous default event** | `src/engine/simulation/stages/bank-lending.ts:smePoolAnnualPd` | ⚠️ |
 | C3 it triggers things | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | C4 every default traceable to its cause | `src/engine2/stage08-back.ts:defaultedTickers` | ✅ |
-| D1 assets realised, sold to named buyers | `src/engine/simulation/stages/estate-resolution.ts:sellAssetsToPeers` | ⚠️ |
+| D1 assets realised, sold to named buyers | `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` · `src/engine/simulation/stages/estate-resolution.ts:sellInventoryToPeers` | ⚠️ |
 | D2 proceeds distributed by seniority | `src/engine/simulation/stages/estate-resolution.ts:distribute` | ✅ |
 | D2.a recovery is what the assets fetched | `src/domain/estate.ts:realisedDebtRecoveryRate` | ✅ |
 | D3 losses land on named holders, in proportion | `src/engine/simulation/stages/estate-resolution.ts:reduceHolding` | ✅ |
@@ -207,23 +207,27 @@ seniority) rather than to build anything.
 
 **§3 step 37-ESTATE**, very small.
 
-### ⚠️ D1 — THE ASSET SALE IS A DISPOSAL SCHEDULE, NOT A CLEARED PRICE
+### ⚠️ D1 — THE PLANT IS AUCTIONED; THE STOCK IS STILL A DISPOSAL SCHEDULE
 
-`sellAssetsToPeers` sells each week's slice to the region's same-sector active firms **pro rata to
-their cash**, at `slice × (1 − hurdle × horizonWeeks / 52)`. Nobody bids. The discount is a stated
-present-value haircut rather than what a buyer would pay, the allocation is by balance size rather
-than by willingness, and a week with no peer able to pay **scraps** the slice. D1 says "sold to named
-buyers at cleared prices"; the buyers are named and the price is not cleared.
+*2026-09-05 (§9.20-i-a): the plant clears.* `sellPlantToBidders` offers each week's slice, at any
+price, in a PRICE_LIKE book whose unit is a currency unit of net book, and the region's same-sector
+firms bid: each one's reservation is `min(1, roc / hurdle)` read off its own `ebit / net plant`
+against the ten-year rate plus the equity premium, its size ramps to its own capital programme as
+the price falls, its cash bounds what it can pay, and what clears moves at book for the cleared
+price paid into the estate. What no bidder takes goes back to the estate for next week's offer,
+until the programme's last week abandons it. The buyers are named and the price is struck.
 
-This is rule 3's shape and the reason it matters here is D2.a: recovery is only "what the assets
-fetched" if what they fetched was struck by somebody. **§3 step 37-ESTATE**, and it is naturally the
-same one as `m-and-a.md` B2 (a distressed sale and a takeover are the same auction).
+The inventory is not: `sellInventoryToPeers` still sells each week's slice **pro rata to the
+peers' cash** at `slice × (1 − hurdle × turnoverWeeks / 52)`, the last stated price in a death.
+Finished stock belongs in the goods auction, where the buyers of goods are, and input lots with the
+peers that consume them — **§3 step 20-i-b**. D2.a is then whole: recovery is what the assets
+fetched, struck by somebody, for every asset class.
 
 ### ⚠️ D4 / D4.a — THE SUPPLIERS' LOSS IS REAL; THE EMPLOYEES' JOBS JUST STOP BEING COUNTED
 
 Suppliers: `trade-settlement.ts:53` writes the invoice off when the buyer is not active, and the
 seller takes the loss on its own book — a real, traceable D4, and the best of the three.
-Capital: `sellAssetsToPeers` moves it to named peers — real.
+Capital: `sellPlantToBidders` moves it to the named peers that bid for it — real, and priced.
 Employees: `stage08-back.ts:2316` sets `employeeCount = 0`, and `runLaborReconciliationStage` sums
 employment over `isActiveCompany` firms only, so the headcount simply disappears from the region's
 matched stock. **There is no separation event**: those workers never enter `separationsByOcc`, are

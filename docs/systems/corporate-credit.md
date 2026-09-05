@@ -211,7 +211,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | G1 a missed payment or breach is an EVENT holders observe | `src/domain/company-week/credit-standing.ts:isInDefault` | ⚠️ |
 | **G2 acceleration** | — | ❌ |
 | G3 default: the claim becomes a claim on an estate | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
-| G4 the estate is realised — sold for what it fetches, not book | `src/engine/simulation/stages/estate-resolution.ts:sellAssetsToPeers` | ⚠️ |
+| G4 the estate is realised — sold for what it fetches, not book | `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` · `src/engine/simulation/stages/estate-resolution.ts:sellInventoryToPeers` | ⚠️ |
 | **G5 the waterfall pays by SENIORITY** | `src/engine/simulation/stages/estate-resolution.ts:distribute` | ⚠️ |
 | G5.a a junior claim can recover nothing | `src/domain/estate.ts:claimsAtSeniority` | ⚠️ |
 | G6 the holder books the loss, on a date | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
@@ -381,15 +381,15 @@ that pass 3 of the weekly walk, the half that makes the DESKS holders of record,
 tranche-keyed desk book up by ISSUER and missing every position since 13b: the desks accrued
 nothing at all until it was repaired.
 
-### ⚠️ G4 — THE ESTATE SELLS AT A DISCOUNT OFF BOOK, NOT AT A PRICE
+### ⚠️ G4 — THE PLANT IS SOLD FOR WHAT IT FETCHES; THE STOCK STILL AT A DISCOUNT OFF BOOK
 
-`estate-resolution.ts:214` sells plant as `estate.assets.ppeLocal / weeksLeft(ppeWeeks)` and
-`:224-225` prices the slice at `sold × (1 − hurdle × weeks/52)`. The RATE is real and well argued
-(the region's own capital-goods absorption, the company's own inventory turnover) and the BUYERS are
-real named peers who pay. The PRICE is a formula discount off a book value. That is not G4's "sold
-for what they fetch" — it is what §3 step 13 means when it says plant has no units and no price, seen
-from the one place in the model where plant is definitely being sold. **Already §3 steps 13 and 26**
-(which own "what a unit of plant IS"); recorded here as the second witness.
+*2026-09-05 (§9.20-i-a):* the plant clears. `sellPlantToBidders` offers each week's slice (the
+region's own capital-goods absorption still sets the RATE) in a PRICE_LIKE book and the same-sector
+peers bid from their own return on capital against the hurdle; the print is what the plant fetched.
+The inventory is still `sellInventoryToPeers`' formula discount off book, `sold × (1 − hurdle ×
+turnoverWeeks/52)`, pro rata to the peers' cash — **§3 step 20-i-b** puts the finished stock in the
+goods auction and the input lots with the peers that consume them. What a unit of plant IS remains
+§3 steps 13 and 26's.
 
 ### ⚠️ H4 / ❌ H4.a — THE CDS FALLS BACK TO THE OAS, WHICH DELETES THE BASIS
 

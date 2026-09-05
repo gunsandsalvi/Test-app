@@ -42,6 +42,8 @@ import { pay, pendingSettlementLocal, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { cashOf } from '../../ledger/accounts';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { asInstrumentId } from '../../../domain/ids';
 import { facilitiesOfBorrower, issuerIdOf } from '../../../engine2/tranches';
 import type { InstrumentId } from '../../../domain/ids';
 import { regionOf, typeOf } from '../../../engine2/world';
@@ -219,25 +221,25 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     const invSoldLocal = estate.assets.inventoryLocal / weeksLeft(turnoverWeeks);
     estate.assets.inventoryLocal -= invSoldLocal;
 
-    // Plant goes to peers as cheap capex, at the rate its region actually buys capital goods
-    // against the plant already installed there. Slow, and the discount is the largest, because
-    // the buyer's money is tied up longest.
+    // Plant is OFFERED at the rate its region actually buys capital goods against the plant
+    // already installed there — the schedule says how much comes to market each week, and the
+    // BIDDERS say what it fetches (§3.20-i-a). What finds no bid goes back to the estate for next
+    // week's offer, until the programme's last week, when the unwanted plant is abandoned: a
+    // scrap is not a sale to nobody.
     const ppeWeeks = Math.max(1, regionalPpeAbsorptionWeeks(ctx, index, estate.regionId));
-    const ppeSoldLocal = estate.assets.ppeLocal / weeksLeft(ppeWeeks);
-    estate.assets.ppeLocal -= ppeSoldLocal;
-
-    // "peers as cheap capex" MEANS PEERS NOW: the same-sector firms of the region buy
-    // the week's slices at the workout's discounts, pay the estate's account by instruction,
-    // and take the plant onto their own books (the discount is their bargain — the reason
-    // distressed assets clear at all). A week with no peer able to pay scraps that week's
-    // slice instead: unsold distressed inventory perishes and an unclaimed plant is
-    // abandonment, not a sale to nobody.
+    const ppeOfferedLocal = estate.assets.ppeLocal / weeksLeft(ppeWeeks);
     const hurdle = Math.max(0.01, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + EQUITY_RISK_PREMIUM);
+    const plant = sellPlantToBidders(ctx, estate, comp, ppeOfferedLocal, hurdle);
+    estate.assets.ppeLocal -= weeksLeft(ppeWeeks) <= 1 ? ppeOfferedLocal : plant.soldLocal;
+    thisWeek.ppeSoldLocal += plant.soldLocal;
+    thisWeek.plantPriceOfBook = plant.priceOfBook;
+
+    // Inventory still leaves on the workout's own schedule and discount, to the same peers pro
+    // rata to their cash — the last stated price in a death, and §3 step 20-i-b's: finished
+    // stock belongs in the goods auction, input lots with the peers that consume them.
     const invPriceLocal = invSoldLocal * (1 - Math.min(0.9, (hurdle * turnoverWeeks) / 52));
-    const ppePriceLocal = ppeSoldLocal * (1 - Math.min(0.9, (hurdle * ppeWeeks) / 52));
-    sellAssetsToPeers(ctx, index, estate, comp, invSoldLocal, invPriceLocal, ppeSoldLocal, ppePriceLocal);
+    sellInventoryToPeers(ctx, estate, comp, invSoldLocal, invPriceLocal);
     thisWeek.inventorySoldLocal += invSoldLocal;
-    thisWeek.ppeSoldLocal += ppeSoldLocal;
 
     // The waterfall pays out of the account everything above pays INTO: cash it died with,
     // invoice collections, this week's asset sales (pending until the close, counted here).
@@ -315,25 +317,117 @@ function scrapConsignmentsOf(state: GameState, ticker: Ticker, companyId: string
   });
 }
 
-/**
- * The week's asset slices go to NAMED PEERS: the region's same-sector active firms,
- * pro rata to their own cash, paying the workout's discounted price into the estate's account
- * and taking the assets onto their books (plant at book value — the discount is the bargain;
- * inventory as the dead firm's real sub-unit rows, transferred with their units). A week with
- * no peer able to pay scraps that week's slice — unsold distressed inventory perishes and an
- * unclaimed plant is abandonment, never a sale to nobody.
- */
-function sellAssetsToPeers(
-  ctx: WeeklyStepContext, index: EstateIndex, estate: Estate, comp: Company | undefined,
-  invSoldLocal: number, invPriceLocal: number, ppeSoldLocal: number, ppePriceLocal: number
-): void {
-  if (invPriceLocal <= 1 && ppePriceLocal <= 1) return;
-  const peers = ctx.updatedCompanies.filter((c) =>
+/** The firms that can use a dead firm's assets: capital is specific (`the-capital-programme.md`
+ *  A4), so the bidders are the region's same-sector active firms with money to pay. */
+function peersOf(ctx: WeeklyStepContext, estate: Estate, comp: Company | undefined): Company[] {
+  return ctx.updatedCompanies.filter((c) =>
     c.region === estate.regionId && c.sector === comp?.sector && isActiveCompany(c)
     && !c.isBankEntity && !c.isInstitutionalEntity && c.id !== estate.companyId && cashOf(ctx.v2, c) > 0);
+}
+
+/**
+ * §3.20-i-a — THE PLANT CLEARS AGAINST BIDDERS. The estate offers the week's slice, at any
+ * price, in a PRICE_LIKE book whose unit is one currency unit of NET BOOK value; the peers bid.
+ *
+ * A peer's bid is read off its own books, not stated. It earns a return on the capital it
+ * already runs — `ebit / net plant` — and a unit of the dead firm's plant bought at price `p`
+ * earns it that return on `p`. It is indifferent where that return equals its cost of capital
+ * (the hurdle: the ten-year rate plus the equity premium), so its reservation is `min(1, roc /
+ * hurdle)`: a firm earning twice the hurdle pays par, since new plant costs par and nothing
+ * makes used plant worth more; one earning half the hurdle pays half of book. Below its
+ * reservation its size ramps in, reaching its full want where the return on the price paid is
+ * twice the hurdle (`p = reservation / 2`). Its want is its own capital programme — the year's
+ * growth and maintenance spend, which distressed plant substitutes for — and its cash bounds
+ * what it can pay for at its reservation. What clears moves to the buyers at book (the bargain
+ * is book minus the price, as before) and the price is paid into the estate's account.
+ *
+ * Nobody bids → nothing clears → the caller keeps the plant for next week's offer. The print is
+ * kept on the estate so the next solve starts from it.
+ */
+function sellPlantToBidders(
+  ctx: WeeklyStepContext, estate: Estate, comp: Company | undefined, offeredLocal: number, hurdle: number
+): { soldLocal: number; priceOfBook: number | undefined } {
+  if (!(offeredLocal > 1)) return { soldLocal: 0, priceOfBook: undefined };
+  const instrumentId = asInstrumentId(`ESTATE-PLANT:${estate.companyId}`);
+  const bidders: ClearingParticipant[] = [];
+  peersOf(ctx, estate, comp).forEach((peer) => {
+    const netPpeLocal = (peer.grossPPELocal ?? 0) - (peer.accumulatedDepreciationLocal ?? 0);
+    if (!(netPpeLocal > 0)) return; // no plant of its own: no return on capital to read a bid from
+    const roc = (peer.ebit ?? 0) / netPpeLocal;
+    const reservation = Math.min(1, roc / hurdle);
+    if (!(reservation > 0.01)) return;
+    const wantLocal = Math.max(0, (peer.growthCapex ?? 0) + (peer.maintenanceCapex ?? 0));
+    if (!(wantLocal > 1)) return;
+    bidders.push({
+      id: peer.id,
+      currentHoldingsByInstrumentId: new Map([[instrumentId, 0]]),
+      demandByInstrumentId: new Map<InstrumentId, ParticipantDemand>([[instrumentId, {
+        reservationStat: reservation,
+        fullSizeStatRange: reservation / 2,
+        maxHoldingLocal: wantLocal,
+        // Book units it can pay for at its reservation; every cleared price is at or below it.
+        maxNetPurchaseLocal: cashOf(ctx.v2, peer) / reservation,
+      }]]),
+    });
+  });
+  if (bidders.length === 0) return { soldLocal: 0, priceOfBook: undefined };
+  const instrument: ClearingInstrument = {
+    id: instrumentId,
+    outstandingLocal: offeredLocal,
+    tradableFloatLocal: offeredLocal,
+    currentStat: estate.plantPriceOfBook ?? 1,
+    statKind: 'PRICE_LIKE',
+    durationYears: 0,
+  };
+  // The estate: holds the slice, wants none of it at any price — a liquidation, not a quote.
+  const seller: ClearingParticipant = {
+    id: estate.companyId,
+    currentHoldingsByInstrumentId: new Map([[instrumentId, offeredLocal]]),
+    demandByInstrumentId: new Map<InstrumentId, ParticipantDemand>([[instrumentId, { reservationStat: 0, fullSizeStatRange: 1, maxHoldingLocal: 0 }]]),
+  };
+  const result = clearFinancialAsset([instrument], [seller, ...bidders], {
+    dealerSpreadBps: 0, // no desk stands in a workout
+    unsoldStaysWithHolder: true, // what no bidder takes stays the estate's
+  });
+  const price = result.newStatById.get(instrumentId);
+  if (price === undefined || !(price > 0)) return { soldLocal: 0, priceOfBook: undefined };
+  let soldLocal = 0;
+  bidders.forEach((b) => {
+    const takenLocal = result.newParticipantHoldings.get(b.id)?.get(instrumentId) ?? 0;
+    if (!(takenLocal > 1)) return;
+    const peer = ctx.updatedCompanies.find((c) => c.id === b.id);
+    if (!peer) return;
+    pay(ctx, {
+      payer: companyParty(peer),
+      payee: companyPartyOf(estate.companyId),
+      amount: takenLocal * price,
+      currency: currencyOf(estate.regionId),
+      reason: 'estate plant sold at auction',
+    });
+    peer.grossPPELocal = (peer.grossPPELocal ?? 0) + takenLocal;
+    estate.lastWeek?.buyerIds.push(peer.id);
+    soldLocal += takenLocal;
+  });
+  estate.plantPriceOfBook = price;
+  return { soldLocal, priceOfBook: price };
+}
+
+/**
+ * The week's inventory slice goes to NAMED PEERS pro rata to their own cash, paying the
+ * workout's discounted price into the estate's account and taking the dead firm's real
+ * sub-unit rows with their units. A week with no peer able to pay scraps the slice — unsold
+ * distressed inventory perishes, never a sale to nobody. (§3 step 20-i-b puts the finished
+ * stock in the goods auction and the input lots with the peers that consume them.)
+ */
+function sellInventoryToPeers(
+  ctx: WeeklyStepContext, estate: Estate, comp: Company | undefined,
+  invSoldLocal: number, invPriceLocal: number
+): void {
+  if (invPriceLocal <= 1) return;
+  const peers = peersOf(ctx, estate, comp);
   const totalPeerCashLocal = peers.reduce((a, c) => a + cashOf(ctx.v2, c), 0);
   if (totalPeerCashLocal <= 1) return;
-  const weekPriceLocal = invPriceLocal + ppePriceLocal;
+  const weekPriceLocal = invPriceLocal;
   // The week's slice is of the whole inventory — finished stock AND input lots (step 8).
   const preInvLocal = Object.values(comp?.outputInventoryBySubUnit ?? {}).reduce((a, r) => a + Math.max(0, r.valueLocal), 0)
     + (comp ? totalInputValueLocal(ctx.v2, comp.id) : 0);
@@ -351,15 +445,10 @@ function sellAssetsToPeers(
       payee: companyPartyOf(estate.companyId),
       amount: payLocal,
       currency: currencyOf(estate.regionId),
-      reason: 'estate asset sale to peers',
+      reason: 'estate inventory sold to peers',
     });
     estate.lastWeek?.buyerIds.push(peer.id);
-    // What the payment buys, at the same share: the plant at its book value (the buyer's
-    // bargain is book minus price), and the inventory rows with their real units.
-    const ppeShareLocal = ppeSoldLocal * share;
-    if (ppeShareLocal > 0) {
-      peer.grossPPELocal = (peer.grossPPELocal ?? 0) + ppeShareLocal;
-    }
+    // What the payment buys, at the same share: the inventory rows with their real units.
     if (comp && invSoldLocal > 0 && preInvLocal > 0) {
       // The slice each peer takes moves by wire, off the ORIGINAL rows (the shares
       // are of the week's slice, not of what earlier peers left).
