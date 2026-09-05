@@ -264,14 +264,19 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
     // it is long, or written back when the pair comes off — is a one-sided seat at the level
     // the pair pays: a buyer opens holding its size and sells the credit below its reservation,
     // a writer takes above it (`indexHolderQuote`'s two shapes).
-    ctx.relativeValueLegs.filter((l) => l.market === 'CDS_PROTECTION' && l.regionId === regionId).forEach((leg) => {
+    const bookIds = new Set(referenceIssuers.flatMap((c) => CDS_TENORS.map((tenor) => cdsInstrumentId(regionId, c.id, tenor))));
+    const legSeats = new Map<string, ClearingParticipant>();
+    ctx.relativeValueLegs.filter((l) => l.market === 'CDS_PROTECTION' && l.regionId === regionId && bookIds.has(l.instrumentId)).forEach((leg) => {
       const id = leg.instrumentId;
-      if (!referenceIssuers.some((c) => CDS_TENORS.some((tenor) => cdsInstrumentId(regionId, c.id, tenor) === id))) return;
       const q = indexHolderQuote({ reservationBps: leg.reservationPrice, rangeBps: leg.fullSizePriceRange, gapLocal: leg.faceLocal });
       if (!(q.maxHoldingLocal > 0)) return;
-      openingByParticipant.set(leg.entityId, new Map([[id, q.currentHoldingLocal]]));
+      // One seat per book, whatever the names its legs are on (§3.17f-ii).
+      let p = legSeats.get(leg.entityId);
+      if (!p) { p = { id: leg.entityId, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: new Map() }; legSeats.set(leg.entityId, p); participants.push(p); openingByParticipant.set(leg.entityId, new Map()); }
+      p.currentHoldingsByInstrumentId.set(id, q.currentHoldingLocal);
+      p.demandByInstrumentId.set(id, { reservationStat: q.reservationStat, maxHoldingLocal: q.maxHoldingLocal, fullSizeStatRange: q.fullSizeStatRange });
+      openingByParticipant.get(leg.entityId)!.set(id, q.currentHoldingLocal);
       shortByInstrument.set(id, (shortByInstrument.get(id) ?? 0) + q.currentHoldingLocal);
-      participants.push({ id: leg.entityId, currentHoldingsByInstrumentId: new Map([[id, q.currentHoldingLocal]]), demandByInstrumentId: new Map([[id, { reservationStat: q.reservationStat, maxHoldingLocal: q.maxHoldingLocal, fullSizeStatRange: q.fullSizeStatRange }]]) });
     });
     if (participants.length === 0) return;
 

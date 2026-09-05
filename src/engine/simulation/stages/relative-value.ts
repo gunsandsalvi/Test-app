@@ -30,13 +30,14 @@ import { institutionPartyKey } from '../../../domain/derivatives/contract';
 import { initialMarginRateOf } from '../../../domain/derivatives/registry';
 import { BOND_FUTURE_TERM_KEY, nextDeliveryWeek, bondDurationYears, bondFutureWeeklyMoveOf } from '../../../domain/derivatives/classes/bond-future';
 import { bondFutureInstrumentId } from '../../../domain/instrument-keys';
-import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, edgeBps, arbTargetShare, arbSizeShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
+import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, edgeBps, arbTargetShare, arbSizeShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
 import { asInstrumentId } from '../../../domain/ids';
 import { trancheClearedPricePerFace, trancheTerms, rowSpreadBps, priceAtSpreadOnTranche, IS_BOND_ROW } from '../../credit-price';
 import { ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
 import { bookRowsOf, instrumentIdAt, rowUnits, rowBasisLocal as rowBasisOf } from '../../../engine2/holdings';
 import { CDS_BENCHMARK_TENOR, CDS_TENOR_YEARS, cdsTenorWeeksOf } from '../../../domain/derivatives/classes/cds';
-import { cdsInstrumentId } from '../../../domain/instrument-keys';
+import { cdsInstrumentId, creditIndexInstrumentId } from '../../../domain/instrument-keys';
+import { CDS_INDEX_TENOR_WEEKS } from '../../../domain/derivatives/classes/cds-index';
 import { isActiveCompany } from '../../../domain/company';
 import { sovereignRowsOf } from '../../sovereign-register';
 import { primeBrokerageBookOf, derivativesBookOf, securityLoanBookOf } from '../../ledger/contract-ledger';
@@ -58,6 +59,54 @@ export function runRelativeValueStage(state: GameState, ctx: WeeklyStepContext):
   const week = ctx.nextWeek;
   readBondBasis(ctx, funds, view, standing, book, week);
   readCdsBasis(ctx, funds, view, standing, book, week);
+  readIndexBasis(ctx, funds, view, standing, book, week);
+}
+
+/** §3.17f-ii — THE INDEX AGAINST ITS NAMES: the series on the run against its constituents'
+ *  benchmark prints, both directions, both legs protection and both margined. */
+function readIndexBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view: DerivativeLifecycleView, standing: StandingBook, book: DerivativeContract[], week: number): void {
+  REGION_IDS.forEach((regionId: RegionId) => {
+    const reg = ctx.updatedRegions[regionId];
+    if (!reg || reg.creditIndexSeriesId === undefined) return;
+    const regionFunds = funds.filter((f) => f.region === regionId);
+    if (regionFunds.length === 0) return;
+    const seriesId = reg.creditIndexSeriesId;
+    const series = reg.creditIndexSeries?.[seriesId];
+    const hist = reg.creditIndexSpreadHistoryBySeries?.[seriesId];
+    const indexPrintBps = hist?.[hist.length - 1];
+    if (!series || !(indexPrintBps !== undefined && indexPrintBps > 0)) return;
+    const names = series.constituents.map((id) => ({ id, printBps: view.cdsSpreadBps(id, CDS_BENCHMARK_TENOR) })).filter((nm) => nm.printBps > 0);
+    if (names.length === 0) return;
+    const namesMeanBps = names.reduce((a, nm) => a + nm.printBps, 0) / names.length;
+    const indexId = creditIndexInstrumentId(seriesId);
+    const indexMarginRate = initialMarginRateOf({ classId: 'CDS_INDEX', regionId, reference: { kind: 'BASKET', regionId, seriesId }, termKey: '', maturityWeek: week + CDS_INDEX_TENOR_WEEKS }, view);
+    const namesMarginRate = names.reduce((a, nm) => a + initialMarginRateOf({ classId: 'CDS', regionId, reference: { kind: 'ISSUER', issuerId: nm.id }, termKey: CDS_BENCHMARK_TENOR, maturityWeek: week + cdsTenorWeeksOf(CDS_BENCHMARK_TENOR) }, view), 0) / names.length;
+    const weeklyMoveBps = Math.max(1, view.creditIndexWeeklyMoveBps(regionId, seriesId) ?? 1);
+    regionFunds.forEach((fund) => {
+      const read = indexArbRead({ indexPrintBps, namesMeanBps, indexMarginRate, namesMarginRate, requiredReturnAnnual: entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund)) });
+      const share = arbTargetShare(edgeBps(read.long), edgeBps(read.mirror), weeklyMoveBps);
+      const key = institutionPartyKey(fund.id);
+      // The position: written less bought on the index line; bought less written across the names.
+      const indexNet = standing.coverLocal('CDS_INDEX', 'b', key, seriesId) - standing.coverLocal('CDS_INDEX', 'a', key, seriesId);
+      const namesNet = names.reduce((a, nm) => a + standing.coverLocal('CDS', 'a', key, nm.id, CDS_BENCHMARK_TENOR) - standing.coverLocal('CDS', 'b', key, nm.id, CDS_BENCHMARK_TENOR), 0);
+      if (share === 0 && Math.abs(indexNet) <= 1 && Math.abs(namesNet) <= 1) return;
+      const lines = book.filter((c) => ((c.classId === 'CDS_INDEX' && c.reference.kind === 'BASKET' && c.reference.seriesId === seriesId)
+        || (c.classId === 'CDS' && c.reference.kind === 'ISSUER' && names.some((nm) => nm.id === (c.reference as { issuerId: string }).issuerId)))
+        && ((c.a.kind === 'INSTITUTION' && c.a.id === fund.id) || (c.b.kind === 'INSTITUTION' && c.b.id === fund.id)));
+      const pnlLocal = lines.reduce((a, c) => a + (c.a.kind === 'INSTITUTION' && c.a.id === fund.id ? 1 : -1) * (c.settledMarkLocal ?? 0), 0);
+      const stopped = stoppedOut(pnlLocal, lines.reduce((a, c) => a + c.initialMarginLocal, 0));
+      // Nothing is funded: the pair is what the fund's capital margins on both legs.
+      const carriedFace = arbCapacityLocal(entityCashOf(ctx.v2, fund), fund.primeBrokerageAvailableLocal) / Math.max(1e-9, indexMarginRate + namesMarginRate);
+      const exposureFace = Math.max(Math.abs(indexNet), Math.abs(namesNet));
+      const targetFace = stopped ? 0 : exposureFace > carriedFace ? Math.sign(share || indexNet) * carriedFace : share * carriedFace;
+      const forced = stopped || exposureFace > carriedFace;
+      const indexDelta = targetFace - indexNet;
+      const namesDelta = targetFace - namesNet;
+      const legs = indexArbLegs({ regionId, indexInstrumentId: indexId, names: names.map((nm) => ({ instrumentId: cdsInstrumentId(regionId, nm.id, CDS_BENCHMARK_TENOR), printBps: nm.printBps })), faceLocal: targetFace, indexPrintBps, namesMeanBps, carryBps: read.long.carryBps, weeklyMoveBps });
+      if (Math.abs(indexDelta) > 1) ctx.relativeValueLegs.push({ ...legs.index, entityId: fund.id, faceLocal: indexDelta, forced });
+      if (Math.abs(namesDelta) > 1) legs.names.forEach((leg) => ctx.relativeValueLegs.push({ ...leg, entityId: fund.id, faceLocal: -namesDelta / names.length, forced }));
+    });
+  });
 }
 
 /** §3.17f-i — THE CDS–CASH BASIS: every name in the fund's region with a protection print and a

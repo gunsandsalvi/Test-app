@@ -24,7 +24,7 @@ import type { EntityId, InstrumentId } from './ids';
 import { bondFuturesCarryPrice } from './derivatives/classes/bond-future';
 
 /** The markets a leg can clear in. A comparable joins by naming the two its legs need. */
-export type ComparableMarket = 'SOVEREIGN_CASH' | 'BOND_FUTURE' | 'CORP_BOND_CASH' | 'CDS_PROTECTION';
+export type ComparableMarket = 'SOVEREIGN_CASH' | 'BOND_FUTURE' | 'CORP_BOND_CASH' | 'CDS_PROTECTION' | 'CDS_INDEX_PROTECTION';
 
 /** One leg of a pair, as the market that clears it reads it: a size (+ long / − short, in face),
  *  the price it is worth doing at (a long buys below it, a short sells above it), how far past
@@ -188,5 +188,41 @@ export function cdsBasisLegs(args: {
       market: 'CDS_PROTECTION', regionId: args.regionId, instrumentId: args.cdsInstrumentId, faceLocal: -args.faceLocal,
       reservationPrice: args.cashSpreadBps - args.carryBps, fullSizePriceRange: range, budgetLocal: 0,
     },
+  };
+}
+
+/**
+ * §3.17f-ii — THE INDEX AGAINST ITS NAMES, READ. A line on a basket against the basket's own
+ * names at the same tenor: the disagreement is the index print less the equal-weighted mean of
+ * the names' prints; the carry is the return the margin on BOTH legs needs — nothing is funded,
+ * both legs are protection. + is the index rich (write the index, buy the names); the mirror is
+ * the same number with its sign turned.
+ */
+export function indexArbRead(args: { indexPrintBps: number; namesMeanBps: number; indexMarginRate: number; namesMarginRate: number; requiredReturnAnnual: number }): { long: ComparableRead; mirror: ComparableRead } {
+  const deviationBps = args.indexPrintBps - args.namesMeanBps;
+  const carryBps = (Math.max(0, args.indexMarginRate) + Math.max(0, args.namesMarginRate)) * Math.max(0, args.requiredReturnAnnual) * 10000;
+  return { long: { deviationBps, carryBps }, mirror: { deviationBps: -deviationBps, carryBps } };
+}
+
+/**
+ * §3.17f-ii — THE INDEX AGAINST ITS NAMES, AS LEGS. A signed face on the index line (+ written,
+ * − bought) and the opposite face spread equal-weighted over the names. The index is written
+ * down to the names' mean plus the carry and bought up to it less the carry; each name's cover is
+ * bought up to its own print plus what the pair has to spare, written down to its print less it.
+ */
+export function indexArbLegs(args: {
+  regionId: RegionId; indexInstrumentId: InstrumentId; names: { instrumentId: InstrumentId; printBps: number }[];
+  faceLocal: number; indexPrintBps: number; namesMeanBps: number; carryBps: number; weeklyMoveBps: number;
+}): { index: RelativeValueLeg; names: RelativeValueLeg[] } {
+  const range = Math.max(1e-6, args.weeklyMoveBps);
+  const spare = Math.max(0, Math.abs(args.indexPrintBps - args.namesMeanBps) - args.carryBps);
+  const indexReservation = args.faceLocal >= 0 ? args.namesMeanBps + args.carryBps : args.namesMeanBps - args.carryBps;
+  const n = Math.max(1, args.names.length);
+  return {
+    index: { market: 'CDS_INDEX_PROTECTION', regionId: args.regionId, instrumentId: args.indexInstrumentId, faceLocal: args.faceLocal, reservationPrice: indexReservation, fullSizePriceRange: range, budgetLocal: 0 },
+    names: args.names.map((nm) => ({
+      market: 'CDS_PROTECTION' as const, regionId: args.regionId, instrumentId: nm.instrumentId, faceLocal: -args.faceLocal / n,
+      reservationPrice: args.faceLocal >= 0 ? nm.printBps + spare : nm.printBps - spare, fullSizePriceRange: range, budgetLocal: 0,
+    })),
   };
 }

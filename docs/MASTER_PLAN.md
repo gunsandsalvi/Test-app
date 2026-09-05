@@ -560,11 +560,6 @@ written from here):
     ETF premium (the authorised participants, `etf-flows.ts`), the cross-currency basis (the
     desks, 17b-iv-b, and the swap lines, 17b-v), and a good's price across regions (sourcing,
     05). What is left, in order:
-17f-ii. **The index against its names** (`Region.creditIndexBasisBps`, 17d-ii). A rich index
-    is sold and its names bought as protection — one index leg against a basket of single-name
-    legs at the benchmark tenor, sized equal-weighted; the mirror the other way. Both legs are
-    protection, so both clear in the CDS books already reading the legs; the carry is the margin
-    on both.
 17f-iii. **The swap spread** (`Region.swapSpreadBpsByTenor`, `irs.ts:300`). A swap paying more
     than the sovereign at the same tenor is received against the bond sold short — needs the
     sovereign borrow (17e-iii-b, done) and the swap book reading a leg; the mirror pays fixed
@@ -1584,7 +1579,17 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17f-i — THE CDS–CASH BASIS JOINS THE REGISTRY.** The second comparable: for every active
+**17f-ii — THE INDEX AGAINST ITS NAMES.** `indexArbRead`: the series' last print against the
+  equal-weighted mean of its constituents' benchmark prints, both directions, the carry the
+  required return on the margin of BOTH legs (nothing is funded); `indexArbLegs`: a signed face
+  on the line (written down to the mean + carry, bought up to the mean − carry) and the opposite
+  face split equally over the names (each bought up to its print + the pair's spare, written
+  down to its print − it). `readIndexBasis` in the stage: position = written − bought on the
+  line, bought − written across the names; capacity = capital ÷ (index + names margin rates);
+  stop and line as before. The index book takes a `CDS_INDEX_PROTECTION` leg as a seat; the
+  CDS book now seats a book ONCE across all its `CDS_PROTECTION` legs (17f-i pushed one seat
+  per leg under one id — fixed, rule 12). Atlas: cds A5.b cited. Gates green; no run.
+- **17f-i — THE CDS–CASH BASIS JOINS THE REGISTRY.** The second comparable: for every active
   non-bank issuer in the fund's region with a protection print, the issuer's own rung nearest
   the benchmark tenor (`ladderRowsOf` through `IS_BOND_ROW`, with a cleared price and
   `rowSpreadBps`) against `cdsSpreadBps` at c5. `cdsBasisRead`: deviation = rung spread − cds

@@ -108,7 +108,7 @@ checked by `scripts/check-atlas.sh`.
 | A4.a FORBID no protection on an entity nobody can observe failing | `src/engine/audit/ownership.ts:o5` | ✅ |
 | A5 the index: a fixed basket traded as one line | `src/domain/derivatives/classes/cds-index.ts:CDS_INDEX_PROFILE` · `src/engine/simulation/stages/derivative-markets/cds-index.ts:runCdsIndexMarket` | ✅ |
 | A5.a a series: names fixed at the roll, a name's event settles its weight once for the line | `src/engine/simulation/stages/derivative-markets/cds-index.ts:runCdsIndexMarket` · `src/domain/derivatives/classes/cds-index.ts:pendingEventsOf` · `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ✅ |
-| A5.b the index clears, and the index-versus-single-name basis is measured | `src/domain/derivatives/classes/cds-index.ts:indexHolderQuote` · `src/domain/derivatives/classes/cds-index.ts:indexBasisBps` | ✅ |
+| A5.b the index clears, and the index-versus-single-name basis is measured | `src/domain/derivatives/classes/cds-index.ts:indexHolderQuote` · `src/domain/derivatives/classes/cds-index.ts:indexBasisBps` · `src/domain/relative-value.ts:indexArbRead` | ✅ |
 | B1 the buyer of protection has a reason | `src/domain/derivatives/classes/cds.ts:protectionNeedLocal` · `src/engine/simulation/stages/derivative-markets/cds.ts:runCdsMarket` | ✅ |
 | B1.a a bank hedges a loan it cannot sell | `src/domain/derivatives/classes/cds.ts:LARGE_EXPOSURE_LIMIT_OF_CAPITAL` | ✅ |
 | B2 the seller of protection has a reason | `src/engine/simulation/stages/asset-allocation.ts:computeReservationSpreadBps` | ✅ |
@@ -168,6 +168,12 @@ The natural pair for it is step 17f's registry of comparables, which needs an im
 what the CDS-versus-bond relationship *should* be.
 
 ### ✅ A5 / A5.a / A5.b — THE INDEX IS A SERIES, IT SETTLES, AND IT CLEARS
+
+*2026-09-05 (§9.17f-ii).* The index-versus-single-name basis has a trader: the relative-value
+book reads the series on the run against its constituents' benchmark prints
+(`relative-value.ts:indexArbRead`), writes a rich index down to the names plus the margin's carry
+and buys its names, or the mirror, each leg a one-sided seat in the book that clears it
+(`indexArbLegs`). A basis that survives it is a finding.
 
 *2026-09-05 (§9.17d-ii).* The line clears on its own book (`runCdsIndexMarket`): an insurer or
 pension fund under its corporate-credit target WRITES index protection for the gap and one over it

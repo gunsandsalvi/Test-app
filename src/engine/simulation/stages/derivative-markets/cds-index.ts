@@ -158,6 +158,13 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
       const gapLocal = targetShare * totalAssetsLocal - institutionBookLocal(ctx.v2, entity.id, isCreditClass);
       seat(entity.id, party, indexHolderQuote({ reservationBps, rangeBps, gapLocal: Math.max(-houseLocal, Math.min(houseLocal, gapLocal)) }));
     });
+    // §3.17f-ii: a relative-value book's leg on the line — the index written against its names
+    // bought, or the mirror — is a one-sided seat at the level the pair pays.
+    ctx.relativeValueLegs.filter((l) => l.market === 'CDS_INDEX_PROTECTION' && l.regionId === regionId && l.instrumentId === instrumentId).forEach((leg) => {
+      const party: DerivativeParty = { kind: 'INSTITUTION', id: leg.entityId };
+      const houseLocal = memberNotionalCapacityLocal(ctx, capacity, party, money, marginRate);
+      seat(leg.entityId, party, indexHolderQuote({ reservationBps: leg.reservationPrice, rangeBps: leg.fullSizePriceRange, gapLocal: Math.max(-houseLocal, Math.min(houseLocal, leg.faceLocal)) }));
+    });
     if (participants.length === 0 || !(floatLocal > 0)) return;
 
     registerBook(ctx.v2, instrumentId, 'CDS_INDEX', money);

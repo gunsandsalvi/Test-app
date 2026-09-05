@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, edgeBps, arbSizeShare, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
+import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, edgeBps, arbSizeShare, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
 import { bondFuturesCarryPrice } from '../src/domain/derivatives/classes/bond-future';
 import { asInstrumentId } from '../src/domain/ids';
 
@@ -82,4 +82,20 @@ test('CDS basis: the read is the rung\'s spread less the protection\'s, and the 
   assert.equal(legs.protection.market, 'CDS_PROTECTION');
   assert.equal(legs.protection.faceLocal, -500, 'cover bought is the credit sold');
   assert.equal(legs.protection.reservationPrice, 220, 'buys cover while the rung pays it plus the carry');
+});
+
+// §3.17f-ii — the index against its names: both legs protection, both margined, both directions.
+test('index arb: the read is the print against the names\' mean with the margin on both legs as carry; the legs split the names equally', () => {
+  const r = indexArbRead({ indexPrintBps: 130, namesMeanBps: 100, indexMarginRate: 0.02, namesMarginRate: 0.03, requiredReturnAnnual: 0.10 });
+  assert.equal(r.long.deviationBps, 30);
+  assert.ok(Math.abs(r.long.carryBps - 50) < 1e-9);
+  assert.equal(r.mirror.deviationBps, -30);
+  const names = [{ instrumentId: asInstrumentId('USA-CDS-A-c5'), printBps: 90 }, { instrumentId: asInstrumentId('USA-CDS-B-c5'), printBps: 110 }];
+  const rich = indexArbLegs({ regionId: 'USA', indexInstrumentId: asInstrumentId('USA-CDX-1'), names, faceLocal: 1000, indexPrintBps: 160, namesMeanBps: 100, carryBps: 20, weeklyMoveBps: 8 });
+  assert.equal(rich.index.faceLocal, 1000, 'a rich index is written');
+  assert.equal(rich.index.reservationPrice, 120, 'down to the names plus the carry');
+  assert.deepEqual(rich.names.map((l) => [l.faceLocal, l.reservationPrice]), [[-500, 130], [-500, 150]], 'each name bought up to its print plus the spare 40');
+  const cheap = indexArbLegs({ regionId: 'USA', indexInstrumentId: asInstrumentId('USA-CDX-1'), names, faceLocal: -1000, indexPrintBps: 60, namesMeanBps: 100, carryBps: 20, weeklyMoveBps: 8 });
+  assert.equal(cheap.index.reservationPrice, 80, 'a cheap index is bought up to the names less the carry');
+  assert.deepEqual(cheap.names.map((l) => [l.faceLocal, l.reservationPrice]), [[500, 70], [500, 90]], 'each name written down to its print less the spare');
 });
