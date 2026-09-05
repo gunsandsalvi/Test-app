@@ -128,3 +128,34 @@ test('a share at or beyond the whole shelf life takes the stock, and never more 
   assert.deepEqual(none[sub], { unitsHeld: 30, valueLocal: 90 }, 'a negative rate cannot create units');
   assert.equal(summarizeWires(j).goodsFlowByKey[`USA|${sub}`]?.scrappedUnits, 30);
 });
+
+// §3.13-INV-iv — WHAT A BATCH COST, AND WHETHER THERE WAS A BATCH AT ALL.
+import { advanceProductionPipeline } from '../src/engine/simulation/stages/05-unit-bidding';
+
+test('a lead is a queue: what arrives is what was started that many weeks ago, with its own cost', () => {
+  // Week 1 on a three-week line: the queue seeds full, so the firm is in steady state rather than
+  // a year of nothing — and what arrives is one week's batch, not three.
+  const w1 = advanceProductionPipeline(undefined, 3, 10, 30);
+  assert.deepEqual({ u: w1.arrivedUnits, v: w1.arrivedValueLocal }, { u: 10, v: 30 });
+  assert.equal(w1.queue.length, 3);
+  // A dearer week goes in behind the cheaper ones and comes out three weeks later, at ITS cost.
+  let q = w1.queue;
+  for (const [units, cost] of [[10, 60], [10, 90], [10, 120]] as const) {
+    q = advanceProductionPipeline(q, 3, units, cost).queue;
+  }
+  const arrived = advanceProductionPipeline(q, 3, 0, 0);
+  assert.equal(arrived.arrivedValueLocal, 60, 'the week that cost 60 arrives, not the week that cost 120');
+});
+
+test('a week that starts nothing capitalises nothing — a cost per unit is never a division by zero', () => {
+  // The caller hands a zero cost when it starts no units; the lot that reaches the queue is empty
+  // in both, so nothing downstream can read an infinite unit cost off it.
+  const idle = advanceProductionPipeline(undefined, 2, 0, 0);
+  assert.deepEqual(idle.queue, [{ units: 0, valueLocal: 0 }, { units: 0, valueLocal: 0 }]);
+  const drained = advanceProductionPipeline(idle.queue, 2, 0, 0);
+  assert.equal(drained.arrivedUnits, 0);
+  assert.equal(drained.arrivedValueLocal, 0);
+  // A line with no lead at all passes the week straight through, cost and units together.
+  const instant = advanceProductionPipeline(undefined, 0, 7, 21);
+  assert.deepEqual({ u: instant.arrivedUnits, v: instant.arrivedValueLocal, q: instant.queue }, { u: 7, v: 21, q: [] });
+});

@@ -405,12 +405,16 @@ written from here):
     earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
     all). Seven slices, in this order, because each one is load-bearing for the next:
 
-    iv. **WHAT A UNIT COST TO MAKE IS AN HONEST NUMBER.** The pipeline books the whole line's
-       weekly operating cost against that week's batch, so a throttled week inflates the unit cost
-       and a zero-unit week makes it INFINITE; the weather's yield loss shrinks `arrivedUnits` and
-       leaves the value whole, so the survivors absorb the cost of the lost; and a virgin pipeline's
-       first touch mints `lead` weeks of cost from nothing. Nothing reads any of it today, which is
-       why it has never been audited — a cost basis built on it would be worthless.
+    iv-b. **A FIRM ENTERING A LINE IS GIVEN `lead` WEEKS OF WORK IN PROGRESS, AND ITS COST.**
+       `advanceProductionPipeline` seeds a virgin queue with `lead` copies of this week's batch —
+       deliberately, and for a good reason it states: the alternative is a year of zero output from
+       every construction firm at week one, an opening condition nobody chose. What was never
+       decided is the COST. The seeded lots carry `lead × the week's operating cost`, so a firm
+       that starts a new line mid-run is credited with months of manufacturing it never paid for —
+       and §9.13-INV-v is about to put that on a balance sheet with no cash leg and no counterparty.
+       Either the opening pipeline is an opening STOCK, stated and costless like the seed's plant
+       (`the-seed.md` A3), or a firm entering a line builds up from empty and the units are what
+       has to be reconsidered. Decide it, state it where the queue is seeded, and pin it.
     v. **FINISHED STOCK IS LOTS AT COST.** Not a GOOD row: the register permits exactly one GOOD
        row per (firm, sub-unit) and `openGoodsPass` addresses chains by `firmRow × NSUB + sub`, so
        a second chain is silently orphaned — and merging the two would make the recipe draw consume
@@ -1226,6 +1230,26 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-iv — WHAT A BATCH COST, AND WHETHER THERE WAS A BATCH AT ALL.** A cost basis is only worth
+  as much as the cost under it, and nothing read this number, so nothing had ever checked it.
+  **No units, no capitalised cost.** The week's operating cost — the line's share of the firm's
+  payroll, inputs and residual — was capitalised into the production queue whenever the price
+  covered it, INCLUDING the weeks where demand led the firm to start nothing: a lot of
+  `{units: 0, valueLocal: a whole week of payroll and inputs}`, whose cost per unit is infinite.
+  The firm still incurs it (the ledger pays those wages either way); there is simply nothing for it
+  to attach to. A THROTTLED week is deliberately left alone: a line's whole cost over a smaller
+  batch is a higher unit cost, which is what running a plant below its rate does.
+  **And the yield loss is stated where it happens.** The weather takes units and leaves the batch's
+  value whole, so what survives is dearer per unit than what was started — normal waste absorbed
+  into the cost of the survivors, which is the rule (abnormal waste is a period expense, and this
+  model has no normal/abnormal split to hang that on). It cost nothing to leave implicit while no
+  reader existed; 13-INV-v gives it one, so it is written down at the site rather than discovered
+  there. Pinned in `test/inventory.test.ts`: a dearer week enters the queue behind the cheaper ones
+  and arrives at ITS own cost `lead` weeks later, an idle week capitalises nothing, and a line with
+  no lead passes cost and units through together. Gates green; no run (rule 11). Split (rule 1.10):
+  `13-INV-iv-b`, the `lead` weeks of work in progress — and of COST — a firm entering a line is
+  given, which is a decision nobody has made rather than a slip.
 
 **13-INV-iii — THE GOODS PRICE IS STORED, AND STEP 13'S ITEM 3 IS CLOSED.** *"The goods auction
   already computes the price it needs and discards it. It has to be stored per `region|subUnit|week`

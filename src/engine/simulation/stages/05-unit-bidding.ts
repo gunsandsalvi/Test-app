@@ -272,7 +272,7 @@ interface WipLot { units: number; valueLocal: number }
  * firm at week one, which is an opening condition nobody chose and not a statement about
  * production time (a stated table survives only until the mechanism has something in it).
  */
-function advanceProductionPipeline(
+export function advanceProductionPipeline(
   existing: WipLot[] | undefined,
   leadWeeks: number,
   startedUnits: number,
@@ -1191,17 +1191,33 @@ function buildRegionSupplyPlans(
     // The firm offers what it HAS plus what its plant FINISHED this week, not what it
     // started. For a good made on demand these are the same number and nothing changes; for a
     // 26-week build the offer is what was begun half a year ago, which is the point.
+    // §3.13-INV-iv — WHAT THE BATCH COST, and it is only a cost if there is a batch. The week's
+    // operating cost used to be capitalised whenever the price covered it, INCLUDING the weeks
+    // where demand led the firm to start nothing: a lot of `{units: 0, valueLocal: a whole week of
+    // payroll and inputs}`, whose cost per unit is infinite. The firm still incurs that cost — the
+    // ledger pays its wages either way — but there is nothing for it to attach to, and under a
+    // cost basis (13-INV-v) it would be a warehouse valued at a division by zero. A throttled week
+    // is different and is left alone: a line's whole cost over a smaller batch IS a higher unit
+    // cost, which is what running a plant below its rate does.
     const pipeline = advanceProductionPipeline(
       comp.wipBySubUnit?.[subUnitId],
       productionLeadWeeksOf(subUnitId),
       targetProductionUnits,
-      coversUnitCost ? weeklyOperatingCostLocal : 0
+      coversUnitCost && targetProductionUnits > 0 ? weeklyOperatingCostLocal : 0
     );
     // §3.22 / goods.md B4 — YIELD: what the plant FINISHED is what the weather left of it. A
     // drought, a freeze-off or a flood in THIS region takes its stated share of the affected
     // commodity's harvest (`macro/weather.ts`), which is that commodity's value share of this
     // sub-unit's output. The lost units were paid for and never exist — that is what a loss is —
     // and the ledger records what actually arrived, so W4 holds without a scrap.
+    //
+    // §3.13-INV-iv — AND THE SURVIVORS CARRY THE WHOLE BATCH'S COST, deliberately. The batch's
+    // value is not scaled down with its units, so what arrives is dearer per unit than what was
+    // started: a harvest that loses a tenth of its crop spent the same to grow it. That is normal
+    // waste absorbed into the cost of what survived, which is the accounting rule (abnormal waste
+    // is a period expense — this model has no abnormal/normal split, and would need one before it
+    // could book the other treatment). It cost nothing to leave implicit while no reader existed;
+    // 13-INV-v gives it one, so it is stated here rather than discovered there.
     const arrivedUnits = pipeline.arrivedUnits * (1 - subUnitYieldLossShareOf(reg.weather, subUnitId));
     // The caller trims this to what the contracts left behind, once they have settled against
     // the same stock. Here it is simply everything the firm can sell.
