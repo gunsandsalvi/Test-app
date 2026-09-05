@@ -134,7 +134,7 @@ export function nativeFrontCore(
     F.carryingCostLocal, F.newRevenue, F.measuredInputConsumptionWeeklyLocal,
     F.newEbitda, F.newEbit, F.newNetIncome, F.newEps,
     F.taxPaidAnnualRateLocal, F.newInputSupplyConstraintFactor, F.newRecentFulfillmentEMA, F.targetProductionLocal,
-    O.plNewComp, O.plNewShare, O.outNewValue, O.ucKeep,
+    O.plNewComp, O.plNewShare, O.ucKeep,
     O.industrialLineAt, O.badLineAt,
     O.costWage, O.costInput, O.costDecay, O.costCrowd,
     O.taxCarryforwardOut, O.taxBasisOut, O.deferredTaxOut,

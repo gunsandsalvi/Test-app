@@ -360,7 +360,7 @@ static void growFc(int need){
    tablesAndLots (13): RECIPE_START, RECIPE_INPUT, RECIPE_INTENSITY, HAS_INDUSTRY,
      IS_SUBSCRIPTION, CARRY_RATE_WEEKLY, INDUSTRIAL_SET, L.units, L.priceUSD, L.acquiredWeek,
      L.next, L.head, L.tail
-   outArrs (39): F lanes then O lanes, the order in native-kernels.ts FRONT_OUT_ORDER
+   outArrs (38): F lanes then O lanes, the order in native-kernels.ts FRONT_OUT_ORDER
    scalars (f64): n, week, NSUB, churn, weight, freeHeadIn */
 static napi_value FrontCore(napi_env env, napi_callback_info info){
   size_t argc = 4; napi_value argv[4];
@@ -413,7 +413,7 @@ static napi_value FrontCore(napi_env env, napi_callback_info info){
   NEXT_O_F64(Fcarrying); NEXT_O_F64(Frevenue); NEXT_O_F64(FinputCons);
   NEXT_O_F64(Febitda); NEXT_O_F64(Febit); NEXT_O_F64(Fnet); NEXT_O_F64(Feps);
   NEXT_O_F64(FtaxPaid); NEXT_O_F64(FinputConstraint); NEXT_O_F64(FfulfillEMA); NEXT_O_F64(FtargetProd);
-  NEXT_O_F64(OplNewComp); NEXT_O_F64(OplNewShare); NEXT_O_F64(OoutNewValue); NEXT_O_U8(OucKeep);
+  NEXT_O_F64(OplNewComp); NEXT_O_F64(OplNewShare); NEXT_O_U8(OucKeep);
   NEXT_O_I32(OindustrialLineAt); NEXT_O_I32(ObadLineAt);
   NEXT_O_F64(OcostWage); NEXT_O_F64(OcostInput); NEXT_O_F64(OcostDecay); NEXT_O_F64(OcostCrowd);
   NEXT_O_F64(OtaxCarry); NEXT_O_F64(OtaxBasis); NEXT_O_F64(Odeferred);
@@ -457,7 +457,6 @@ static napi_value FrontCore(napi_env env, napi_callback_info info){
     for (int o = outStart[row]; o < outStart[row+1]; o++){
       double costUSD = outValue[o] * (outSub[o] >= 0 ? CARRY_RATE_WEEKLY[outSub[o]] : 0);
       carryingCostUSD += costUSD;
-      OoutNewValue[o] = jmax(0, outValue[o] - costUSD);
     }
     Fcarrying[row] = carryingCostUSD;
     rng_state = rngSeed[row] ? rngSeed[row] : 0x9e3779b9u;

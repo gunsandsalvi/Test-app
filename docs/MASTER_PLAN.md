@@ -405,15 +405,6 @@ written from here):
     earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
     all). Seven slices, in this order, because each one is load-bearing for the next:
 
-    ii-c. **THE DEAD LANE GOES, AND THE MIRROR GETS A GATE.** `O.outNewValue` and the
-       `CARRY_RATE_WEEKLY` table are written by BOTH cores and read by nobody since §9.13-INV-ii-b;
-       they leave the JS and the `native/kernels.c` mirror together. The reason they are still
-       there is the real finding: the two cores share three POSITIONAL argument lists and the only
-       thing holding them in step is a comment saying *change both or neither* — the gates never
-       load `kernels.node`, so a mismatched position would corrupt every firm's week and no §4
-       check would see it. The lane cannot be removed safely until that is a TEST: run both cores
-       over one small synthetic seam and assert every output lane agrees. Then the removal is
-       provable, and so is the next twenty years of edits to that file.
     iii. **THE GOODS PRICE IS STORED** — step 13's item 3, *the cheapest half of the whole step*.
        The auction's cleared price per `region|subUnit` goes in `v2.prices` (whose own header
        already names `setOutputStock` as the same defect one asset class over); the region's
@@ -1240,6 +1231,23 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-ii-c — THE DEAD LANE GOES, AND THE TWO CORES ARE HELD IN STEP BY A CHECK.** The real
+  finding was not the lane. `native/kernels.c` is a hand-written mirror of the JS front core and
+  the two exchange their arrays through THREE POSITIONAL LISTS — 65 seam, 13 tables-and-lots, 38
+  outputs — in which nothing is named on the way across: position 41 in the JS array is whatever
+  the C reads 41st. The only thing holding them together was a COMMENT saying *change both or
+  neither*, and no §4 gate loads `kernels.node` at all, so a lane added or removed on one side
+  would shift every lane after it, corrupt every firm's week, and leave the whole suite green.
+  `test/native-mirror.test.ts` counts the arity of all three lists on both sides — a slot being one
+  advance of the C's cursor, whether through a `NEXT_*` macro or the one hand-written read that
+  wants an array's length too — and checks the C's own header comment against the code beneath it,
+  so the documentation cannot rot either. It needs no addon and runs everywhere. PROVED by probe:
+  one table dropped on the JS side alone fails it with the right message, and restoring it clears.
+  Only then the removal: `O.outNewValue` — the fee written off the asset that §9.13-INV-ii-b left
+  read by nobody — is gone from the JS core, the marshaling and the C together, 39 lanes to 38,
+  and the addon is rebuilt so the artifact on disk is not a stale 39-lane signature (which would
+  have been worse than never having built it). Gates green; no run (rule 11).
 
 **13-INV-ii-b — THE WAREHOUSE FEE AND THE SPOILAGE ARE TWO THINGS, AND `goods.md` E4 GETS ITS
   WRITER.** `annualCarryingCostRateOf` was *warehouse cost per tonne ÷ value density* **plus**

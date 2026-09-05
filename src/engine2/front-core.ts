@@ -213,7 +213,6 @@ export interface FrontCoreOut {
   plNewComp: Float64Array;
   plNewShare: Float64Array;
   /** Per output-stock entry: the carrying-decayed value. */
-  outNewValue: Float64Array;
   /** Per construction entry: 1 = still under construction. */
   ucKeep: Uint8Array;
   /** Line index (within the firm's CSR span) of the industrial override line, -1 = none. */
@@ -504,7 +503,6 @@ export function allocCoreOut(S: FrontSeam): FrontCoreOut {
   return {
     plNewComp: lane64(S.plStart[n]),
     plNewShare: lane64(S.plStart[n]),
-    outNewValue: lane64(S.outStart[n]),
     ucKeep: lane8(S.ucStart[n]),
     industrialLineAt: lane32(n).fill(-1),
     badLineAt: lane32(n).fill(-1),
@@ -607,7 +605,6 @@ export function runFrontCore(
     for (let o = S.outStart[row]; o < S.outStart[row + 1]; o++) {
       const costLocal = S.outValue[o] * (S.outSub[o] >= 0 ? CARRY_RATE_WEEKLY[S.outSub[o]] : 0);
       carryingCostLocal += costLocal;
-      O.outNewValue[o] = Math.max(0, S.outValue[o] - costLocal);
     }
     F.carryingCostLocal[row] = carryingCostLocal;
 
@@ -814,11 +811,9 @@ export function applyFrontPost(
     // stays (`F.carryingCostLocal`, the fee half of the rate); shrinking the asset for it does
     // not. What genuinely leaves the stock is SPOILAGE, applied in units where the week's record
     // is decided (`stage08-back`) — here it would be discarded by that merge for every good that
-    // traded, which is what happened to the write-down this replaces.
-    //
-    // `O.outNewValue` is still written by both cores and is now read by nobody; the lane and its
-    // table leave the JS and the C together, under §3's `13-INV-ii-c`, which is also where the
-    // mirror gets the agreement gate that "change both or neither" is asking a comment to do.
+    // traded, which is what happened to the write-down this replaces. §3.13-INV-ii-c deleted the
+    // lane from both cores, under the arity gate that now holds them in step
+    // (`test/native-mirror.test.ts`).
     const outRec: Partial<Record<string, { unitsHeld: number; valueLocal: number }>> = {};
     for (let o = S.outStart[row]; o < S.outStart[row + 1]; o++) {
       outRec[SUBUNITS[S.outSub[o]]] = { unitsHeld: S.outUnits[o], valueLocal: S.outValue[o] };
