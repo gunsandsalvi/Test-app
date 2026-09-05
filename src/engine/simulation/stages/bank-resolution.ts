@@ -20,7 +20,7 @@ import { bankSovereignBookLocal } from '../../sovereign-register';
 import { bankBookAssetsLocal, deskGrossLocal } from '../../desk-register';
 import { bankParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
-import { BankingSector, DepositLines } from '../../../domain/banking';
+import { BankingSector, DepositLines, swapLineDrawnLocal } from '../../../domain/banking';
 import { BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
 import { assumingCapitalLocal, chooseAssumingBank, isBankUnderPca, planBankResolution, restateBankSheetStatistics, PCA_CAPITAL_RATIO } from '../../../domain/bank-resolution';
 import { assumeBankBooks } from '../../ledger/bank-transfer';
@@ -38,13 +38,13 @@ import { businessLoanBookOf, consumerLoanBookOf } from '../../../domain/banking'
 import { moveSectorRowsToBank, bankReservesOf, bankDepositLines, heldCurrenciesOf } from '../../ledger/accounts';
 import type { Ticker, EntityId } from '../../../domain/ids';
 
-const sheetLinesLocal = (s: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, marginAtHouseLocal: number): number =>
+const sheetLinesLocal = (s: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, marginAtHouseLocal: number, swapLineLocal: number): number =>
   Math.abs(lines.householdLocal) + Math.abs(lines.corporateLocal) + Math.abs(lines.institutionalLocal)
   + Math.abs(lines.ccpLocal) + Math.abs(lines.smeLocal) + Math.abs(s.centralBankLoanLocal ?? 0)
   + Math.abs(s.bankEquityLocal) + Math.abs(s.srfBorrowingLocal ?? 0) + Math.abs(s.repoBorrowedLocal ?? 0)
   + Math.abs(businessLoanBookOf(s, facilityBookLocal)) + Math.abs(consumerLoanBookOf(s)) + Math.abs(sovLocal)
   + Math.abs(cashLocal) + Math.abs(s.repoLentLocal ?? 0) + Math.abs(s.onRrpLendingLocal ?? 0)
-  + Math.abs(s.sovereignAccruedCouponLocal ?? 0) + Math.abs(s.primeBrokerageLoansLocal ?? 0) + Math.abs(marginAtHouseLocal);
+  + Math.abs(s.sovereignAccruedCouponLocal ?? 0) + Math.abs(s.primeBrokerageLoansLocal ?? 0) + Math.abs(marginAtHouseLocal) + Math.abs(swapLineLocal);
 
 /**
  * Every link in the world that names the failed bank now names the assuming one.
@@ -145,12 +145,12 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     const ladderLocal = ladderRowsOf(ctx.v2, bank.id).reduce((a, r) => a + ctx.v2.tranches.principalLocal[r], 0);
     const cashLocal = bankReservesOf(ctx.v2, bank.id);
     const failingFacilityBookLocal = facilityBookOf(ctx.v2, bank.id);
-    const plan = planBankResolution(bank.bankBalanceSheet!, ladderLocal, assumingCapitalLocal(bank.bankBalanceSheet!, failingFacilityBookLocal), cashLocal, bankDepositLines(ctx, bank), failingFacilityBookLocal, bankBookAssetsLocal(ctx.v2, bank.id));
+    const plan = planBankResolution(bank.bankBalanceSheet!, ladderLocal, assumingCapitalLocal(bank.bankBalanceSheet!, failingFacilityBookLocal), cashLocal, bankDepositLines(ctx, bank), failingFacilityBookLocal, bankBookAssetsLocal(ctx.v2, bank.id), swapLineDrawnLocal(bank.bankBalanceSheet!, currencyOf(bank.region), ctx.fx));
     const traceOn = process.env.BANK_RESOLUTION_TRACE === '1';
     const traceSheet = (label: string, c: typeof bank) => {
       if (!traceOn || !c.bankBalanceSheet) return;
-      const f = fieldsOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id));
-      console.log(`  [res-trace] ${label} ${c.ticker} resid ${(residualOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id)) / 1e6).toFixed(3)}M :: `
+      const f = fieldsOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id), swapLineDrawnLocal(c.bankBalanceSheet, currencyOf(c.region), ctx.fx));
+      console.log(`  [res-trace] ${label} ${c.ticker} resid ${(residualOf(c.bankBalanceSheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id), swapLineDrawnLocal(c.bankBalanceSheet, currencyOf(c.region), ctx.fx)) / 1e6).toFixed(3)}M :: `
         + Object.entries(f).map(([k, v]) => `${k} ${(v / 1e9).toFixed(3)}B`).join(' | '));
     };
     traceSheet('before', bank); traceSheet('before', acquirer);
@@ -198,7 +198,7 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // Settlement rebuilds a bank's sheet as a new object; the handles above are last week's.
     const F = bank.bankBalanceSheet!;
     traceSheet('settled', bank); traceSheet('settled', acquirer);
-    const leftLocal = sheetLinesLocal(F, bankReservesOf(ctx.v2, bank.id), bankDepositLines(ctx, bank), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id), bankAtHouseLocal(ctx.v2, bank.id));
+    const leftLocal = sheetLinesLocal(F, bankReservesOf(ctx.v2, bank.id), bankDepositLines(ctx, bank), facilityBookOf(ctx.v2, bank.id), bankSovereignBookLocal(ctx.v2, bank.id), bankAtHouseLocal(ctx.v2, bank.id), swapLineDrawnLocal(F, currencyOf(bank.region), ctx.fx));
     if (leftLocal > 1e4) {
       const lines = Object.entries(F as unknown as Record<string, unknown>)
         .filter(([, v]) => typeof v === 'number' && Math.abs(v as number) > 1e4)

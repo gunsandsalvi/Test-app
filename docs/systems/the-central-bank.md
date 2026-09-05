@@ -109,7 +109,7 @@ checked by `scripts/check-atlas.sh`.
 | C4 reinvestment is a separate decision; the difference is QT | `src/domain/central-bank.ts:reinvestmentShare` | ✅ |
 | D1 the standing facility lends against collateral at a stated rate | `src/engine/macro/banking.ts:SRF_SPREAD_BPS` | ✅ |
 | D2 eligibility and haircuts are ITS choice, a policy instrument | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ⚠️ |
-| **D3 lender of last resort: freely, good collateral, penalty, solvent** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` | ❌ |
+| **D3 lender of last resort: freely, good collateral, penalty, solvent** | `src/engine/simulation/stages/bank-lending.ts:raiseCentralBankLoanLocal` · `src/engine/simulation/stages/swap-lines.ts:drawSwapLine` | ❌ |
 | **D3.a FORBID it does not lend to an insolvent bank** | `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` | ❌ |
 | **D4 it can REFUSE, and refusal must be reachable** | — | ❌ |
 | E1 the treasury banks with it; the account is a liability | `src/engine/ledger/accounts.ts:treasuryAccountOf` | ✅ |
@@ -129,6 +129,13 @@ checked by `scripts/check-atlas.sh`.
 ## 3. THE DIFF
 
 ### ❌ D3 / D3.a / D4 — THERE IS NO LENDER OF LAST RESORT, THERE IS A CREDIT LINE. KNOWN(20-LLR)
+
+*2026-09-05 (§9.17b-v). In FOREIGN money there is one now, and it has two of the four: the swap
+lines (`domain/swap-lines.ts`, `stages/swap-lines.ts`) lend freely — what the funding market left
+unfilled once the basis cleared past the line's price — and at a penalty (overnight plus
+`SWAP_LINE_SPREAD_BPS`), drawn by the central bank from the other central bank against its own
+money and on-lent to its banks for a quarter. Unsecured, and to any bank that came to the market:
+collateral and solvency are still the two the domestic line lacks, so the row stays ❌.*
 
 Bagehot's rule is four conditions and `raiseCentralBankLoanLocal` (`bank-lending.ts:917`) has one and a
 half:

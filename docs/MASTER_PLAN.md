@@ -547,12 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17b. **An options class, and the FX swap lines** — split 2026-09-05, one commit each; 17b-i
-    (the option class on the one book) is in §9. What is left, in order:
-17b-v. **THE SWAP LINES.** A central bank lends its currency to another central bank against
-    that bank's own, drawn when the basis clears past a stated width, on-lent to its banks at
-    the basis plus a penalty — the backstop that caps the basis, and a real event the news tells.
-
 17c. **Credit protection has ONE buyer and ONE reason** (user). `derivative-markets/cds.ts:60`
     builds hedge demand from the region's BANKS only, and within a bank only from
     `facilityRowsOf` — its loan book. So a bank's BOND book is unhedged, and nobody else in the
@@ -1612,6 +1606,33 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17b-v — THE SWAP LINES.** Step 17b is closed. `domain/swap-lines.ts`: the line's price is
+overnight plus `SWAP_LINE_SPREAD_BPS` (25, the standing dollar lines' — a policy primitive like the
+corridor), a draw runs `SWAP_LINE_TERM_WEEKS` (13), and the line lends what the funding market
+left unfilled once the basis cleared PAST its price, or when nobody lent (`swapLineDrawLocal`);
+while it stands the published basis is capped at the line's price (`cappedBasisBps`) — the cap
+is the price, not a bracket. `stages/swap-lines.ts:drawSwapLine`: the lending central bank
+creates its money and pays it to the borrowing region's bank (one cross-border instruction; the
+settlement's official-claim write records the borrowing central bank's deposit at the lending
+one); the borrowing central bank books the on-lending as its asset
+(`CentralBank.swapLineLentByRegion`, foreign money, in `centralBankAssetsLocal` at today's rates)
+and the home money it gave as its liability (`swapLineDepositsLocal`, in
+`centralBankLiabilitiesLocal`); the lending central bank books that home money as FX reserves;
+the bank books what it owes (`BankingSector.swapLineDrawnByRegion`, read in its money by
+`banking.ts:swapLineDrawnLocal`) — a foreign-money liability that revalues as its foreign
+reserves do, in the identity trace, the harness residual, the statement, M5, the resolution
+plan and the assumed liabilities, the seed's funding residual, the diversification's split and
+sum, a merger's transfer and the revaluation's net. `serviceSwapLines`, run by the funding
+market before each week's book: interest at overnight plus the spread paid to the borrowing
+central bank in its own money and remitted with its loan interest; at term the unwind at the
+original rate — the bank returns the foreign money to the central bank that created it and
+every line reverses. `xcs.ts:runXcsMarket` calls the backstop per pair after clearing, pro rata
+to each borrower's unfilled need. M2 gains "swap lines = banks' draws" per foreign money; the
+news tells every draw (7f, `swap line drawn`, urgent). Atlas central-bank D3 cites the line and
+stays ❌ (freely and at a penalty, but unsecured and to any bank), fx B3.a re-cited with the
+cap. `test/swap-lines.test.ts`: the draw rule, the cap, the interest; the draw on both books at
+today's rate. Gates green; no run.
 
 **17b-iv-b — ONE BASIS.** The forward prices off the funding basis. `classes/fx-forward.ts`:
 `cipForwardRate` (spot carried at the holder's and the issuer's overnight rates over the tenor)

@@ -25,6 +25,10 @@ export function absorbBankSheet(v2: V2World, acquirerId: EntityId, targetId: Ent
   // pools' rows move with `moveSectorRowsToBank` at the caller, the firms' and institutions'
   // accounts follow their house bank (`rekeyBankLinks`); nothing to move here.
   acquirer.centralBankLoanLocal = (acquirer.centralBankLoanLocal ?? 0) + centralBankLoanAssumedLocal; target.centralBankLoanLocal = 0;
+  // §3.17b-v: the swap-line draws are assumed whole, foreign money by foreign money.
+  const drawn = { ...(acquirer.swapLineDrawnByRegion ?? {}) };
+  Object.entries(target.swapLineDrawnByRegion ?? {}).forEach(([k, v]) => { drawn[k] = (drawn[k] ?? 0) + v; });
+  acquirer.swapLineDrawnByRegion = drawn; target.swapLineDrawnByRegion = {};
   // Secured lines and the paper behind them.
   acquirer.srfBorrowingLocal = (acquirer.srfBorrowingLocal ?? 0) + (target.srfBorrowingLocal ?? 0); target.srfBorrowingLocal = 0;
   acquirer.repoBorrowedLocal = (acquirer.repoBorrowedLocal ?? 0) + (target.repoBorrowedLocal ?? 0); target.repoBorrowedLocal = 0;

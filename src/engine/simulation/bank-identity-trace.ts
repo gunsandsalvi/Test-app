@@ -24,7 +24,8 @@ import { deskGrossLocal, deskSignedLocal } from '../desk-register';
 import { bankAtHouseLocal } from '../ledger/contract-ledger';
 import { businessLoanBookOf, consumerLoanBookOf } from '../../domain/banking';
 import { GameState } from '../../types';
-import { BankingSector } from '../../domain/banking';
+import { BankingSector, swapLineDrawnLocal } from '../../domain/banking';
+import { currencyOf } from '../../domain/geography';
 import { partyOf } from '../ledger/party';
 import { reasonText } from './stages/settlement';
 import { entityCashOf, bankReservesOf, bankDepositLines } from '../ledger/accounts';
@@ -54,13 +55,13 @@ const FIELD_SIGNS: Record<keyof ReturnType<typeof fieldsOf>, 1 | -1> = {
   smeDepositsLocal: 1, centralBankLoanLocal: 1, bankEquityLocal: 1, srfBorrowingLocal: 1, repoBorrowedLocal: 1,
   businessLoanBookLocal: -1, consumerLoanBookLocal: -1, sovHoldingsLocal: -1, cashReservesLocal: -1,
   repoLentLocal: -1, onRrpLendingLocal: -1, sovereignAccruedCouponLocal: -1, deskInventoryAbsLocal: -1,
-  primeBrokerageLoansLocal: -1, marginAtHouseLocal: -1,
+  primeBrokerageLoansLocal: -1, marginAtHouseLocal: -1, swapLineDrawnLocal: 1,
 };
 
 /** §3.13c: the return type is INFERRED, so its keys are a literal union and `FIELD_SIGNS` below
  *  is checked against them. Annotated `Record<string, number>` it was not: `keyof string-record`
  *  is `string`, so every key matched and nothing was verified. */
-export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, deskGrossLocal: number, marginAtHouseLocal: number) {
+export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, deskGrossLocal: number, marginAtHouseLocal: number, swapLineDrawnLocal: number) {
   return {
     depositsLocal: lines.householdLocal, corporateDepositsLocal: lines.corporateLocal,
     institutionalDepositsLocal: lines.institutionalLocal,
@@ -77,13 +78,15 @@ export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLin
     primeBrokerageLoansLocal: bs.primeBrokerageLoansLocal ?? 0,
     // §3.17-iv-b/c-i: the margin and the fund contribution the bank has at the clearing house, off the store.
     marginAtHouseLocal,
+    // §3.17b-v: the swap-line draws, in the bank's money.
+    swapLineDrawnLocal,
   };
 }
 
-export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, deskLocal: number, marginAtHouseLocal: number): number {
+export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, deskLocal: number, marginAtHouseLocal: number, swapLineLocal: number): number {
   return (
     lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
-    + lines.ccpLocal + lines.smeLocal + (bs.centralBankLoanLocal ?? 0)
+    + lines.ccpLocal + lines.smeLocal + (bs.centralBankLoanLocal ?? 0) + swapLineLocal
     + bs.bankEquityLocal + (bs.srfBorrowingLocal ?? 0) + (bs.repoBorrowedLocal ?? 0)
     - businessLoanBookOf(bs, facilityBookLocal) - consumerLoanBookOf(bs) - sovLocal - cashLocal
     - (bs.repoLentLocal ?? 0) - (bs.onRrpLendingLocal ?? 0)
@@ -133,8 +136,8 @@ export class BankIdentityTrace {
       if (!sheet) return;
       const lines = bankDepositLines(ctx, c);
       const facilityBookLocal = facilityBookOf(ctx.v2, c.id);
-      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id)));
-      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), deskSignedLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id)));
+      out.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id), swapLineDrawnLocal(sheet, currencyOf(c.region), ctx.fx)));
+      this.signedLast.set(c.ticker, residualOf(sheet, bankReservesOf(ctx.v2, c.id), lines, facilityBookLocal, bankSovereignBookLocal(ctx.v2, c.id), deskSignedLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id), swapLineDrawnLocal(sheet, currencyOf(c.region), ctx.fx)));
     });
     return out;
   }
@@ -146,7 +149,7 @@ export class BankIdentityTrace {
     const sheet = (!ctx.bankSheetChannelClosed && ctx.companyUpdates[this.focusTicker]?.bankBalanceSheet)
       || c?.bankBalanceSheet;
     if (!sheet || !c) return;
-    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id));
+    const now = fieldsOf(sheet, bankReservesOf(ctx.v2, c.id), bankDepositLines(ctx, c), facilityBookOf(ctx.v2, c.id), bankSovereignBookLocal(ctx.v2, c.id), deskGrossLocal(ctx.v2, c.id), bankAtHouseLocal(ctx.v2, c.id), swapLineDrawnLocal(sheet, currencyOf(c.region), ctx.fx));
     if (this.focusFields) {
       const parts: string[] = [];
       let residualDelta = 0;

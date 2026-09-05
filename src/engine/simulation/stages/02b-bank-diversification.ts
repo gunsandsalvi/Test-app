@@ -71,6 +71,7 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     businessLoans: [],
     householdLoans: (bs.householdLoans || []).map((pl) => ({ ...pl, principalLocal: pl.principalLocal * share })),
     centralBankLoanLocal: (bs.centralBankLoanLocal ?? 0) * share,
+    swapLineDrawnByRegion: Object.fromEntries(Object.entries(bs.swapLineDrawnByRegion ?? {}).map(([k, v]) => [k, v * share])),
   };
 }
 
@@ -521,6 +522,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       businessLoans: [],
       householdLoans: [],
       centralBankLoanLocal: sumField((s) => s.centralBankLoanLocal ?? 0),
+      swapLineDrawnByRegion: newSheets.reduce<Record<string, number>>((acc, { sheet }) => { Object.entries(sheet.swapLineDrawnByRegion ?? {}).forEach(([k, v]) => { acc[k] = (acc[k] ?? 0) + v; }); return acc; }, {}),
       sovereignAccruedCouponLocal: sumField((s) => s.sovereignAccruedCouponLocal ?? 0),
       primeBrokerageLoansLocal: sumField((s) => s.primeBrokerageLoansLocal ?? 0),
       householdDepositInterestWeeklyLocal: sumField((s) => s.householdDepositInterestWeeklyLocal ?? 0),

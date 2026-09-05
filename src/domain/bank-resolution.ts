@@ -49,10 +49,10 @@ export function bankSheetAssetsLocal(sheet: BankingSector, cashLocal: number, fa
 
 /** The liabilities an assuming bank takes on whole: every deposit class and the secured lines.
  *  Wholesale money and equity are the two the plan decides. */
-export function bankAssumedLiabilitiesLocal(sheet: BankingSector, lines: DepositLines): number {
+export function bankAssumedLiabilitiesLocal(sheet: BankingSector, lines: DepositLines, /** §3.17b-v: the swap-line draws, in the bank's money (`banking.ts:swapLineDrawnLocal`). */ swapLineLocal = 0): number {
   return lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
     + lines.smeLocal + lines.ccpLocal
-    + (sheet.repoBorrowedLocal ?? 0) + (sheet.srfBorrowingLocal ?? 0);
+    + (sheet.repoBorrowedLocal ?? 0) + (sheet.srfBorrowingLocal ?? 0) + swapLineLocal;
 }
 
 export interface BankResolutionPlan {
@@ -89,10 +89,10 @@ export interface BankResolutionPlan {
  * its holders take their loss through the estate, like any other issuer's bondholders.
  */
 export function planBankResolution(
-  sheet: BankingSector, ownLadderPrincipalLocal: number, acquirerCapitalLocal: number, cashLocal: number, lines: DepositLines, facilityBookLocal: number, bookAssetsLocal: number,
+  sheet: BankingSector, ownLadderPrincipalLocal: number, acquirerCapitalLocal: number, cashLocal: number, lines: DepositLines, facilityBookLocal: number, bookAssetsLocal: number, swapLineLocal = 0,
 ): BankResolutionPlan {
   const centralBankLoanLocal = Math.max(0, sheet.centralBankLoanLocal ?? 0);
-  const netBookLocal = bankSheetAssetsLocal(sheet, cashLocal, facilityBookLocal, bookAssetsLocal) - bankAssumedLiabilitiesLocal(sheet, lines) - centralBankLoanLocal;
+  const netBookLocal = bankSheetAssetsLocal(sheet, cashLocal, facilityBookLocal, bookAssetsLocal) - bankAssumedLiabilitiesLocal(sheet, lines, swapLineLocal) - centralBankLoanLocal;
   const capitalLocal = Math.max(0, acquirerCapitalLocal);
   const estateLocal = Math.max(0, netBookLocal - capitalLocal);
   const shortfallLocal = Math.max(0, capitalLocal - netBookLocal);

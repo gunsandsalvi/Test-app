@@ -27,6 +27,8 @@ import { overdraftRunIsTold } from '../../../domain/banking';
 import { reasonText } from './settlement';
 import { isActiveCompany, banksOf } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
+import { convert } from '../../../domain/currency';
+import { SWAP_LINE_SPREAD_BPS, SWAP_LINE_TERM_WEEKS } from '../../../domain/swap-lines';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, bankReservesOf, householdDepositsAt, treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
 import { auctionSummaryOf } from '../../../domain/government';
@@ -404,6 +406,31 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       materialityLocal: w.lossLocal,
       impactRegion: rid, affectedTicker: c?.ticker ?? fund?.ticker,
       urgent: past || mutualised,
+    });
+  });
+
+  // ---- 7f. §3.17b-v: a central bank drew its swap line — the funding basis cleared past the
+  // line's price, or nobody would lend, and the foreign money came from the other central bank. ----
+  REGION_IDS.forEach((rid) => {
+    const cb = ctx.updatedRegions[rid]?.centralBankSheet;
+    const draws = (cb?.swapLines ?? []).filter((d) => d.drawnWeek === week);
+    if (draws.length === 0) return;
+    const byCounterparty = new Map<string, { usd: number; banks: Set<string> }>();
+    draws.forEach((d) => { const e = byCounterparty.get(d.counterpartyRegion) ?? { usd: 0, banks: new Set() }; e.usd += convert(d.foreignLocal, currencyOf(d.counterpartyRegion), currencyOf(rid), ctx.fx); e.banks.add(d.bankId); byCounterparty.set(d.counterpartyRegion, e); });
+    byCounterparty.forEach((e, counterparty) => {
+      const basis = ctx.updatedRegions[rid]?.xcsBasisBps?.[counterparty];
+      push({
+        id: `swap-line-${rid}-${counterparty}-${week}`,
+        kind: 'swap line drawn',
+        category: 'CENTRAL_BANK',
+        title: `The ${rid} central bank draws its ${counterparty} swap line: ${M(e.usd)}`,
+        description: `${e.banks.size} ${rid} bank${e.banks.size === 1 ? '' : 's'} could not fund ${counterparty} money in the market at the line's price — the funding basis ${basis !== undefined ? `stands at ${basis.toFixed(0)}bp` : 'found no lender'} — and borrowed it from the ${rid} central bank, which drew it from the ${counterparty} central bank against its own money, at overnight plus ${SWAP_LINE_SPREAD_BPS}bp for ${SWAP_LINE_TERM_WEEKS} weeks.`,
+        cause: `The cross-currency funding market cleared past the swap line's price, which is the price that caps it.`,
+        refs: [region(rid), region(counterparty as RegionId)],
+        materialityLocal: e.usd,
+        impactRegion: rid,
+        urgent: true,
+      });
     });
   });
 

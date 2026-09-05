@@ -1,4 +1,4 @@
-import { RegionId } from '../../domain/geography';
+import { RegionId, currencyOf } from '../../domain/geography';
 import { bankSovereignBookLocal } from '../../engine/sovereign-register';
 /**
  * AU · statements — a firm's P&L, balance sheet and cash flow (the latest filed quarter beside
@@ -9,7 +9,7 @@ import { bankSovereignBookLocal } from '../../engine/sovereign-register';
 
 import { Company, InstitutionalEntity, Region } from '../../types';
 
-import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksLocal, addDepositLines, ZERO_DEPOSIT_LINES, depositsOf } from '../../domain/banking';
+import { loanBooksOf, businessLoanBookOf, consumerLoanBookOf, regionLoanBooksLocal, addDepositLines, ZERO_DEPOSIT_LINES, depositsOf, swapLineDrawnLocal } from '../../domain/banking';
 import { FunctionModule } from '../fn';
 import { Card, Hint, KV, Tabs, T, mono } from '../ui';
 import { statementLocal, pct, pctLevel, ratio, changePct, money } from '../format';
@@ -68,7 +68,8 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     const reservesLocal = bankReservesOf(ensureV2(world.state), c.id);
     const facilityBookLocal = facilityBookOf(ensureV2(world.state), c.id);
     const assets = loanBooksOf(bank, facilityBookLocal) + sov + reservesLocal + (bank.repoLentLocal ?? 0) + (bank.sovereignAccruedCouponLocal ?? 0) + desks + (bank.primeBrokerageLoansLocal ?? 0) + marginAtHouse;
-    const liabilities = deposits + (bank.centralBankLoanLocal ?? 0) + (bank.repoBorrowedLocal ?? 0) + (bank.srfBorrowingLocal ?? 0);
+    const swapLine = swapLineDrawnLocal(bank, currencyOf(c.region), ensureV2(world.state).fx); // §3.17b-v
+    const liabilities = deposits + (bank.centralBankLoanLocal ?? 0) + (bank.repoBorrowedLocal ?? 0) + (bank.srfBorrowingLocal ?? 0) + swapLine;
     body = (<>
       <Statement units="USD millions · the live sheet" asOf={formatDate(world.state.currentWeek)} lines={[
         { label: 'Business loans', usd: businessLoanBookOf(bank, facilityBookLocal) },
@@ -87,6 +88,7 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
         { label: 'Small-business deposits', usd: lines.smeLocal },
         { label: 'Clearing-house deposits', usd: lines.ccpLocal },
         { label: 'Central bank loan', usd: bank.centralBankLoanLocal ?? 0 },
+        { label: 'Swap-line draws · foreign money', usd: swapLine },
         { label: 'Repo borrowed · facility', usd: (bank.repoBorrowedLocal ?? 0) + (bank.srfBorrowingLocal ?? 0) },
         { label: 'Total liabilities', usd: liabilities, total: true },
         { label: 'Equity', usd: bank.bankEquityLocal, total: true },

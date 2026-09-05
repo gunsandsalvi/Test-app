@@ -27,7 +27,7 @@ import { openFxWeek } from '../../../engine2/world';
 import { centralBankAssetsLocal, centralBankLiabilitiesLocal } from '../../../domain/central-bank';
 import { centralBankSovereignAssetsLocal } from '../../sovereign-register';
 import { bankReservesOf, treasuryAccountOf, waysAndMeansOf, stateDepositLines } from '../../ledger/accounts';
-import { depositsOf } from '../../../domain/banking';
+import { depositsOf, swapLineDrawnLocal } from '../../../domain/banking';
 import { banksOf } from '../../../domain/company';
 import type { Ticker } from '../../../domain/ids';
 
@@ -42,7 +42,8 @@ const MIN_MARK = 1e-6;
 const bankNetOf = (state: GameState, ticker: Ticker): number => {
   const bank = state.companies.find((c) => c.ticker === ticker);
   if (!bank?.bankBalanceSheet) return 0;
-  return bankReservesOf(state.v2!, bank.id) - depositsOf(bank.bankBalanceSheet, stateDepositLines(state, bank));
+  // §3.17b-v: and the foreign money it owes its central bank on the swap lines.
+  return bankReservesOf(state.v2!, bank.id) - depositsOf(bank.bankBalanceSheet, stateDepositLines(state, bank)) - swapLineDrawnLocal(bank.bankBalanceSheet, currencyOf(bank.region), state.v2!.fx);
 };
 
 /** A central bank's book, both sides, in its own money. */

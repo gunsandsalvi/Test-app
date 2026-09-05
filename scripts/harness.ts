@@ -17,7 +17,7 @@
  * summary. Exit code 1 on any violation.
  */
 import { writeFileSync, readFileSync, existsSync } from 'fs';
-import { businessLoanBookOf, consumerLoanBookOf } from '../src/domain/banking';
+import { businessLoanBookOf, consumerLoanBookOf, swapLineDrawnLocal } from '../src/domain/banking';
 import { cashOf, entityCashOf, poolCashOf, householdDepositsOf, householdDepositsAt, resetAccount, adjustBankReserves, bankReservesOf, stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../src/engine/ledger/accounts';
 import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
@@ -2379,7 +2379,9 @@ function runHarness() {
         // HF1: margin loans to hedge funds are this bank's asset too.
         - (bs.primeBrokerageLoansLocal ?? 0)
         // §3.17-iv-b/c-i: and the margin and fund contribution it has at the clearing house.
-        - bankAtHouseLocal(ensureV2(state), c.id);
+        - bankAtHouseLocal(ensureV2(state), c.id)
+        // §3.17b-v: the swap-line draws are a liability, in the bank's money at today's rates.
+        + swapLineDrawnLocal(bs, currencyOf(c.region), ensureV2(state).fx);
       const idTraced = (process.env.BANK_ID_TRACE ?? '').split(',').includes(c.ticker);
       if (Math.abs(residualLocal) > 5e6 || idTraced) {
         // §7.302 — the composition, printed when it breaks: a 66B one-week residual during the

@@ -7,7 +7,7 @@
 
 import { GameState } from '../../types';
 import type { EntityId } from '../../domain/ids';
-import { loanBooksOf, depositsOf } from '../../domain/banking';
+import { loanBooksOf, depositsOf, swapLineDrawnLocal } from '../../domain/banking';
 import { AuditSnapshot } from './snapshot';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
 import { isActiveCompany, banksOf } from '../../domain/company';
@@ -71,6 +71,14 @@ function m2(state: GameState, week: number): AuditFinding[] {
     if (Math.abs(cb.currencyInCirculationLocal) > 1e6) out.push({ family: 'M', check: 'M2 currency plug', week, usd: cb.currencyInCirculationLocal, message: `${r}: currency in circulation ${B(cb.currencyInCirculationLocal)} is a residual nobody issued` });
     const cbLoans = sum(banksOf(state.companies, r), (b) => b.bankBalanceSheet!.centralBankLoanLocal ?? 0);
     if (Math.abs(cbLoans - (cb.loansToBanksLocal ?? 0)) > 1e6) out.push({ family: 'M', check: 'M2 central bank loans = banks\' borrowing', week, usd: cbLoans - (cb.loansToBanksLocal ?? 0), message: `${r}: banks owe the central bank ${B(cbLoans)}, its book says ${B(cb.loansToBanksLocal ?? 0)}` });
+    // §3.17b-v: the same two-sidedness for the swap lines — what the banks drew is what the
+    // central bank on-lent, per foreign money.
+    const drawn: Record<string, number> = {};
+    banksOf(state.companies, r).forEach((b) => Object.entries(b.bankBalanceSheet!.swapLineDrawnByRegion ?? {}).forEach(([k, v]) => { drawn[k] = (drawn[k] ?? 0) + v; }));
+    new Set([...Object.keys(drawn), ...Object.keys(cb.swapLineLentByRegion ?? {})]).forEach((k) => {
+      const gap = (drawn[k] ?? 0) - (cb.swapLineLentByRegion?.[k] ?? 0);
+      if (Math.abs(gap) > 1e6) out.push({ family: 'M', check: 'M2 swap lines = banks\' draws', week, usd: gap, message: `${r}: banks have drawn ${B(drawn[k] ?? 0)} of ${k} money on the swap line, the central bank's book says ${B(cb.swapLineLentByRegion?.[k] ?? 0)}` });
+    });
     // The same two-sided identity for the window's other side: what the lenders say they have
     // parked is what the central bank says it has taken. A lender that leaves the world with cash
     // still parked would otherwise leave the borrowing on the book with nobody to return it to.
@@ -133,7 +141,7 @@ function m5(state: GameState, week: number): AuditFinding[] {
     const sov = bankSovereignBookLocal(ensureV2(state), b.id); // §3.13-BOOK d3b: register rows
     const desks = deskSignedLocal(ensureV2(state), b.id); // §3.13-BOOK d3d: register rows, signed
     const assets = loanBooksOf(bs, facilityBookOf(ensureV2(state), b.id)) + sov + bankReservesOf(ensureV2(state), b.id) + (bs.repoLentLocal ?? 0) + (bs.sovereignAccruedCouponLocal ?? 0) + desks + (bs.primeBrokerageLoansLocal ?? 0);
-    const liabilities = depositsOf(bs, stateDepositLines(state, b)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0);
+    const liabilities = depositsOf(bs, stateDepositLines(state, b)) + (bs.centralBankLoanLocal ?? 0) + (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0) + swapLineDrawnLocal(bs, currencyOf(b.region), ensureV2(state).fx);
     const residual = assets - liabilities - bs.bankEquityLocal;
     if (Math.abs(residual) > Math.max(1e7, assets * 2e-3)) out.push({ family: 'M', check: 'M5 bank sheet closes', week, usd: residual, message: `${b.region}:${b.ticker} assets ${B(assets)} − liabilities ${B(liabilities)} − equity ${B(bs.bankEquityLocal)} = ${B(residual)}` });
   });

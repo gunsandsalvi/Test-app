@@ -2,6 +2,7 @@ import { openingCashOf, openSectorRow, stashOpeningCash, openAccount, depositLin
 import { bankParty } from '../../domain/party';
 import { accruedPerFace, weeksAccrued, banksOf } from '../../domain/company';
 import { currencyOf } from '../../domain/geography';
+import { swapLineDrawnLocal } from '../../domain/banking';
 import { V2World } from '../../engine2/world';
 /**
  * CLOSE C2 — THE SEED CLOSES (§5-CLOSE). Run once, after every book has been seeded and before
@@ -70,7 +71,7 @@ export function closeSeedMoney(
       // funding residual is struck on the rounded lines.
       const lines = depositLinesAt(v2, companies, institutionalEntities, b);
       const otherDepositsLocal = Math.round(Math.max(0, lines.corporateLocal)) + Math.round(Math.max(0, lines.institutionalLocal))
-        + Math.max(0, lines.smeLocal) + Math.max(0, lines.ccpLocal) + Math.max(0, s.centralBankLoanLocal ?? 0);
+        + Math.max(0, lines.smeLocal) + Math.max(0, lines.ccpLocal) + Math.max(0, s.centralBankLoanLocal ?? 0) + swapLineDrawnLocal(s, currencyOf(regionId), v2.fx);
       const needLocal = bankTotalAssetsLocal(s, openingCashOf(s), facilityBookOf(v2, b.id), seedBankBookLocalOf(s)) - s.bankEquityLocal - (s.repoBorrowedLocal ?? 0) - (s.srfBorrowingLocal ?? 0) - otherDepositsLocal;
       let lineLocal = 0;
       if (needLocal >= 0) {

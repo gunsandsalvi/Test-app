@@ -100,7 +100,7 @@ checked by `scripts/check-atlas.sh`.
 | B2.a CIP is a consequence of an arbitrage somebody takes, never an identity | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:runFxForwardMarket` · `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` | ✅ |
 | B2.b the arbitrage is not free — balance sheet, capital, credit lines | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ✅ |
 | **B3 the cross-currency basis is the deviation, a real price** | `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` | ✅ |
-| B3.a it widens when funding in one currency is scarce | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:entityHedgeToleranceBps` | ✅ |
+| B3.a it widens when funding in one currency is scarce | `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` · `src/domain/swap-lines.ts:cappedBasisBps` | ✅ |
 | B4 VERIFY a region with a foreign-currency funding deficit pays the basis | `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` | ⚠️ |
 | **C1 XCS: two legs, two currencies, notionals exchanged at start and end** | `src/domain/derivatives/classes/xcs.ts:XCS_PROFILE` · `src/domain/derivatives/profile.ts:DerivativeLeg` | ✅ |
 | C1.a it is an IRS with an FX leg, inheriting both curves | `src/domain/derivatives/classes/xcs.ts:XCS_PROFILE` | ⚠️ |
@@ -130,8 +130,10 @@ charge (`classes/fx-forward.ts:forwardStrikeOf`, `registry.ts:balanceSheetCharge
 holders take what that all-in basis leaves worth hedging, and the pair's forward basis is
 published as `Region.crossCurrencyBasisBps` — the funding basis plus the desks' charge, one
 number derived from the other rather than two prints of one price. `evolveFxPair` and
-`FxPair.basisSpreadBps` are gone: nothing walks a basis by formula. The paragraphs below are the
-state before it.*
+`FxPair.basisSpreadBps` are gone: nothing walks a basis by formula. And since §9.17b-v the basis
+has a ceiling that is a price: the central banks' swap lines lend the unfilled funding at overnight
+plus a stated spread once the basis clears past it (`domain/swap-lines.ts`), so B3.a's widening
+runs to the line's price and stops. The paragraphs below are the state before it.*
 
 *2026-09-05 (§9.17b-iv-a). C4 is the swap's: the cross-currency swap strikes AT the basis its
 funding book clears (`Region.xcsBasisBps`, per foreign region). B3 stays ⚠️, and for a reason

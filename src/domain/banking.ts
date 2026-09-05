@@ -1,3 +1,5 @@
+import { convert, type FxTable } from './currency';
+import { currencyOf, type CurrencyCode } from './geography';
 import { levelPaymentFactor } from './pricing';
 import { InstrumentId } from './ids';
 /**
@@ -192,6 +194,10 @@ export interface BankingSector {
    *  funding close, drawn when the week ends short of the buffer and repaid from excess cash. A
    *  named liability with a named creditor; wholesale money "from nobody" is gone. */
   centralBankLoanLocal?: number;
+  /** §3.17b-v — what this bank has drawn on its central bank's SWAP LINES, per lending region, in
+   *  that region's money: a foreign-currency loan from its own central bank, on-lent from the
+   *  line (`domain/swap-lines.ts`). Read in the bank's money by `swapLineDrawnLocal`. */
+  swapLineDrawnByRegion?: Record<string, number>;
   /** HH — a reported weekly FLOW (not a stock): interest this bank paid its household
    *  depositors, at its own deposit rate. Part of measured household income. */
   householdDepositInterestWeeklyLocal?: number;
@@ -443,6 +449,14 @@ export const MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER = 0.25;
 export const MORTGAGE_MIN_LOSS_SEVERITY = 0.05;
 
 /** The household book's risk-weighted footprint, per-kind. */
+/** §3.17b-v — the swap-line draws, in the bank's own money at today's rates: a foreign-money
+ *  liability, revalued as the bank's foreign reserves are. */
+export function swapLineDrawnLocal(s: { swapLineDrawnByRegion?: Record<string, number> }, money: CurrencyCode, fx: FxTable): number {
+  let total = 0;
+  Object.entries(s.swapLineDrawnByRegion ?? {}).forEach(([region, foreignLocal]) => { total += convert(foreignLocal, currencyOf(region as RegionId), money, fx); });
+  return total;
+}
+
 /** Every deposit-class liability on a sheet — the household, corporate, institutional, SME and
  *  clearing-house lines. ONE definition (§7.373): the money audit's snapshot once omitted a line
  *  its week-end read included, and the whole stock of that line printed as "unexplained" money

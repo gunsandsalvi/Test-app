@@ -548,6 +548,7 @@ export function evolveBankingSector(
     // silently dropped — two lines vanished every week until the identity caught it (804
     // violations). Same trap stage 08 documents; carried explicitly.
     centralBankLoanLocal: prevBanking.centralBankLoanLocal ?? 0,
+    swapLineDrawnByRegion: prevBanking.swapLineDrawnByRegion,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
     // G3c: the rate this bank actually decided to pay, published so nothing else has to

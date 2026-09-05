@@ -15,13 +15,23 @@
 
 import { RegionId } from './geography';
 import { CurrencyCode, NUMERAIRE } from './geography';
-import { FxTable, PARITY_FX, fromNumeraire } from './currency';
+import { FxTable, PARITY_FX, fromNumeraire, convert } from './currency';
+import { currencyOf } from './geography';
 
 export interface CentralBank {
   /** Real holdings of each foreign currency, in USD. Buying your own currency SPENDS these;
    *  selling it accumulates them. A central bank at zero cannot defend its currency, which is
    *  what makes a defence fail. */
   fxReservesByRegion?: Record<string, number>;
+  /** §3.17b-v — ASSET: the foreign money this central bank drew on its swap lines and on-lent to
+   *  its banks, per lending region, in that region's money (`domain/swap-lines.ts`); equals the
+   *  sum of its banks' `swapLineDrawnByRegion`. Read in this book's money by `swapLineLentLocal`. */
+  swapLineLentByRegion?: Record<string, number>;
+  /** §3.17b-v — LIABILITY: the home money this central bank gave the lending central banks for
+   *  the draws, in its own money; unwound at the draws' original rates. */
+  swapLineDepositsLocal?: number;
+  /** §3.17b-v — the draws outstanding, one record each, for the interest and the unwind. */
+  swapLines?: import('./swap-lines').SwapLineDraw[];
   region: RegionId;
   /** Assets: the real sovereign book, by tenor bucket. Clears in 07c like any other holder. */
   /** Asset: the unsecured loans to banks drawn at the funding close (the lender of
@@ -129,6 +139,13 @@ export function centralBankFxReservesLocal(cb: CentralBank): number {
  * is the mechanism a balance-sheet scalar cannot express, and it is the whole reason a currency
  * peg ever breaks.
  */
+/** §3.17b-v — what the central bank on-lent from its swap lines, in its own money at today's rates. */
+export function swapLineLentLocal(cb: Pick<CentralBank, 'swapLineLentByRegion'>, money: CurrencyCode, fx: FxTable): number {
+  let total = 0;
+  Object.entries(cb.swapLineLentByRegion ?? {}).forEach(([region, foreignLocal]) => { total += convert(foreignLocal, currencyOf(region as RegionId), money, fx); });
+  return total;
+}
+
 export function centralBankAssetsLocal(sovereignBookLocal: number, cb: CentralBank, waysAndMeansLocal: number, money: CurrencyCode = NUMERAIRE, fx: FxTable = PARITY_FX): number {
   // §3.13-BOOK d3a: the sovereign book is REGISTER ROWS, handed in — this file is domain and does
   // not read the store. §3.13e-ii: the paper at its mark PLUS the coupon accrued on it and not yet
@@ -136,7 +153,9 @@ export function centralBankAssetsLocal(sovereignBookLocal: number, cb: CentralBa
   // the remittance has already paid the treasury the income it stands for.
   return sovereignBookLocal + centralBankFxReservesLocal(cb) + (cb.loansToBanksLocal ?? 0)
     // §3.13c: the one line on this sheet held in the numéraire, brought to the book's own money.
-    + fromNumeraire(cb.foreignOfficialClaimsUSD ?? 0, money, fx) + (cb.standingFacilityLentLocal ?? 0) + waysAndMeansLocal;
+    + fromNumeraire(cb.foreignOfficialClaimsUSD ?? 0, money, fx) + (cb.standingFacilityLentLocal ?? 0) + waysAndMeansLocal
+    // §3.17b-v: the foreign money on-lent from the swap lines, at today's rates.
+    + swapLineLentLocal(cb, money, fx);
 }
 
 /**
@@ -155,7 +174,9 @@ export function centralBankIdentityResidualLocal(sovereignBookLocal: number, cb:
  *  parked at the reverse repo window. */
 export function centralBankLiabilitiesLocal(cb: CentralBank, bankReservesLocal: number, treasuryAccountLocal: number): number {
   return bankReservesLocal + treasuryAccountLocal + cb.currencyInCirculationLocal + (cb.reverseRepoBorrowedLocal ?? 0)
-    + (cb.fxRevaluationLocal ?? 0);
+    + (cb.fxRevaluationLocal ?? 0)
+    // §3.17b-v: the home money given to the lending central banks for the swap-line draws.
+    + (cb.swapLineDepositsLocal ?? 0);
 }
 
 /**
