@@ -94,11 +94,9 @@ export const region = defineObject<Region>({
           { fn: 'banks', sub: `${banks.length} banks` },
           { fn: 'firms', sub: `${firms.length} firms` },
           { fn: 'funds', sub: `${funds.length} funds` },
-          { fn: 'books', sub: 'the clearing books' },
           { fn: 'contracts', sub: 'the derivatives cleared here' },
           { fn: 'derivatives', sub: 'the clearing house · its members' },
           { fn: 'peers', sub: 'the four regions' },
-          { fn: 'diag', sub: 'the instruments' },
           { fn: 'links', sub: 'central bank · banks · lanes' },
         ]} />
         <AllRow fields={Object.keys(r).length} nav={nav} />

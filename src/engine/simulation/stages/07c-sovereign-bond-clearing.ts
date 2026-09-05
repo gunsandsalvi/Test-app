@@ -563,7 +563,6 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         unsoldStaysWithHolder: true,
       }
     );
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `sovereign bond:${id}`));
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} sovereign bond`);
 
     // Apply: real cleared yields -> refit the Nelson-Siegel curve so every other consumer rides

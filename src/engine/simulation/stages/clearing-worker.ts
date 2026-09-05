@@ -13,7 +13,6 @@ interface Job {
   n: number;
   pCount: number;
   dealerSpreadBps: number;
-  maxWeeklyStatMovePct: number; // always NaN: no cap (§5-CLOSE)
   unsoldStaysWithHolder: boolean;
   from: number;
   to: number;
@@ -34,12 +33,10 @@ function packViewsOnly(job: Job) {
   const dRes = f64(np), dRange = f64(np), dMaxH = f64(np), dMaxNet = f64(np), dMinH = f64(np), prevHolding = f64(np);
   const u8 = (len: number) => { const v = new Uint8Array(sab, off, len); off += len; return v; };
   const yieldLike = u8(n), skip = u8(n), present = u8(np);
-  const damperStreak = u8(n);
   return {
-    n, pCount, float, offering, withdrawStat, currentStat, yieldLike, damperStreak, skip,
+    n, pCount, float, offering, withdrawStat, currentStat, yieldLike, skip,
     present, dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding,
     dealerSpreadBps: job.dealerSpreadBps,
-    maxWeeklyStatMovePct: job.maxWeeklyStatMovePct,
     unsoldStaysWithHolder: job.unsoldStaysWithHolder === true,
   };
 }
@@ -52,7 +49,6 @@ port.on('message', (job: Job) => {
     from: shard.from,
     to: shard.to,
     clearedStat: shard.clearedStat,
-    damper: shard.damper,
     dealerInventory: shard.dealerInventory,
     primaryWithdrawn: shard.primaryWithdrawn,
     primaryMarketTake: shard.primaryMarketTake,

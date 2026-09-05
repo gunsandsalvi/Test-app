@@ -2,8 +2,7 @@
  * UNIT BRANDS (§7.241) — zero-cost compile-time families for the units this codebase has paid
  * for confusing: dollars in four price levels all named `USD` (`currency.ts` declares every
  * stored figure region-local; the suffix lies), shares carried in `…USD` fields (§7.165, twice),
- * percents wearing fractions' clothes (`MAX_WEEKLY_FX_MOVE_PCT = 8` vs `…_SPREAD_MOVE_PCT =
- * 0.25`), and weekly flows multiplied into annual ones (the credit-file cure ran 52× fast).
+ * percents wearing fractions' clothes (a `…_PCT = 8` beside a `…_PCT = 0.25`), and weekly flows multiplied into annual ones (the credit-file cure ran 52× fast).
  *
  * A brand erases to `number` — it stores raw in typed arrays and costs nothing at runtime, which
  * is what §7.228's columnar constraint requires. Arithmetic demotes to `number`; that is fine,

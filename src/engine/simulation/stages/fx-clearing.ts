@@ -191,8 +191,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       return;
     }
 
-    // XB6 — THE AUCTION RUNS ON THE CURRENCY BEING SOLD, and this is the FX leg of the damper
-    // defect (§6.1).
+    // XB6 — THE AUCTION RUNS ON THE CURRENCY BEING SOLD.
     //
     // The engine auctions a float to BUYERS: total demand falls as the stat rises, so a bigger
     // float always clears at a LOWER stat. That is exactly right when the float is the currency
@@ -202,9 +201,8 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     // speculators' reservation by `1 + sign x pct` reflected the LEVEL but could not fix the
     // SLOPE, and the level shift left the elastic side needing a 1.2% move before it would take
     // anything at all — so every week with a net flow the rate had to move, in the direction the
-    // geometry chose, until the damper stopped it. That is the −8.01% print, `MAX_WEEKLY_FX_MOVE_PCT`
-    // to the second decimal, 38 weeks in 40 (§7.77); and when the flow flipped, EUR escaping
-    // upward instead (§7.82). One defect, both directions.
+    // geometry chose (§7.77, §7.82: the −8.01% print 38 weeks in 40, and EUR escaping upward when
+    // the flow flipped). One defect, both directions.
     //
     // So: whichever currency is being SOLD is the one auctioned, priced in the other. Net supply
     // of the base runs the book as it stands; net demand for the base means the QUOTE currency is
@@ -349,7 +347,6 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const result = clearFinancialAsset([instrument], participants, {
       dealerSpreadBps: 0,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `fx:${id}`));
 
     const clearedBookStat = result.newStatById.get(instrument.id);
     clearedRateByPair.set(key, clearedBookStat !== undefined && clearedBookStat > 0 ? fromBook(clearedBookStat) : currentRate);

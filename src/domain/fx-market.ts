@@ -35,8 +35,8 @@
  * actually observed.
  *
  * What this replaces: three chosen numbers — a 1.2% required move, a 4% full-size range and a
- * 15% risk budget — which between them decided how much flow the FX market could absorb, i.e.
- * the other half of the damper defect. None of them was anything a fund did.
+ * 15% risk budget — which between them decided how much flow the FX market could absorb. None
+ * of them was anything a fund did.
  *
  * All three are now readings:
  *   - **The move it needs** is one standard deviation of that pair's OWN observed weekly moves.
@@ -98,15 +98,3 @@ export const CENTRAL_BANK_FX_INTERVENTION_SHARE = 0.10;
 /** The rate is a PRICE_LIKE statistic: demand falls as the currency gets dearer. */
 export const FX_STAT_KIND = 'PRICE_LIKE' as const;
 
-/**
- * The damper on a single week's move — intended as discrete-time smoothing, not a bound.
- *
- * IT IS NOT BEHAVING AS ONE, AND HAS BEEN MEASURED. Over 40 weeks the FX instrument printed
- * damper-bound in 38-39 of them per pair, with a minimum weekly move of -8.01% — this constant to
- * the second decimal, in the same direction week after week. The rate being published is the
- * damper, not a clearing level: "a bound is not a price" for the third time (§7.21, §7.75).
- * Re-measured after the FX mechanism sweep: still 9-28 pinned weeks per pair over 60. The cause
- * is that the inelastic float is systematically one-way and the elastic side below cannot absorb
- * it. Owner XB6. Do NOT widen this number — find the oversized flow.
- */
-export const MAX_WEEKLY_FX_MOVE_PCT = 8;

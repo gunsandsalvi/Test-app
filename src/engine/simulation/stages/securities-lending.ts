@@ -441,7 +441,6 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       // Bilateral between named holders and named funds; no dealer stands between them.
       dealerSpreadBps: 0,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `stock loan:${id}`));
 
     // ---- 4. STRIKE. At one cleared fee the lenders are fungible, so each borrower draws from
     // each of them in proportion to what that lender put up. A borrow the auction does not fill is
@@ -732,7 +731,6 @@ export function runBondLendingPass(state: GameState, ctx: WeeklyStepContext): vo
       });
       if (participants.length > 0) {
         const result = clearFinancialAsset(instruments, participants, { dealerSpreadBps: 0 });
-        ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `bond loan:${id}`));
         let seq = 0;
         bondIds.forEach((bondId) => {
           const instrumentId = sblInstrumentId(regionId, bondId);

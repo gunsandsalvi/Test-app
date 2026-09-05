@@ -172,9 +172,6 @@ interface Violation {
 const violations: Violation[] = [];
 /** §5-CLOSE — the audit's findings, kept apart so the scoreboard can be printed whole. */
 const auditFindings: AuditFinding[] = [];
-let damperBindStreak = new Map<string, number>();
-const damperPersistentBinds = new Set<string>();
-let damperWorstStreak = 0;
 let prevBooksForBookCheck: Map<RegionId, number> | null = null;
 
 // ---- shared helpers (used by checks, modules and the live line) ----
@@ -371,9 +368,8 @@ function checkInstitutionalBookConservation(prevBooks: Map<RegionId, number>, st
     const after = institutionalBookOf(state, region);
     if (!(before > 0)) return;
     const changePct = Math.abs(after - before) / before;
-    // §7.341: 10%, not 5% — the book is MARKED, and since the damper adapts (§7.338, a name
-    // bound k weeks gets a (1+k)× cap) a region's institutional book can legitimately re-mark
-    // by more than 5% in one week (JPN +6.7% at week 22, no leg missing). A missing cash leg
+    // §7.341: 10%, not 5% — the book is MARKED, and a region's institutional book can
+    // legitimately re-mark by more than 5% in one week (JPN +6.7% at week 22, no leg missing). A missing cash leg
     // is tens of per cent; the check keeps that purpose.
     if (changePct > 0.10) {
       violations.push({
@@ -2163,14 +2159,12 @@ const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule, fpMo
 function weekLine(s: GameState, w: number, newViol: number, totalViol: number, ms: number): string {
   const r = s.regions;
   const u = (id: RegionId) => ((r[id]?.unemploymentRate ?? 0) * 100).toFixed(1);
-  const bound = (s.lastWeekDamperBoundIds ?? []).length;
   const gdp = r.USA.derivedNominalGdpLocal ?? 0;
   return `w${String(w).padStart(3)} | viol +${String(newViol).padStart(2)} S${String(totalViol).padStart(4)}`
     + ` | u ${u('USA')}/${u('EUR')}/${u('UK')}/${u('JPN')}`
     + ` | pi ${((r.USA.inflation ?? 0) * 100).toFixed(2)}`
     + ` | GDP ${(gdp / 1e12).toFixed(2)}T`
     + ` | 10Y ${((r.USA.zeroRates?.tenor10Y ?? 0) * 100).toFixed(2)}`
-    + ` | bound ${String(bound).padStart(4)}`
     + ` | ${String(ms).padStart(4)}ms`;
 }
 
@@ -2438,7 +2432,7 @@ function runHarness() {
     // 5c. WS6: the overnight repo rate must print inside the administered corridor in every
     // region every week — not because anything clamps it, but because every lender's
     // reservation is its own posted floor and the SRF sits in the book as an elastic seat at
-    // the ceiling. A print outside the corridor means a schedule is wrong or the damper bound.
+    // the ceiling. A print outside the corridor means a schedule is wrong.
     // And pledged collateral can never exceed the pledger's holdings.
     REGION_IDS.forEach(regionId => {
       const reg = state.regions[regionId];
@@ -2530,25 +2524,6 @@ function runHarness() {
         });
       }
     });
-
-    // 5d. §6 damper diagnostic: the weekly damper is legitimate discrete-time smoothing, but a
-    // name held away from its solve for 3+ CONSECUTIVE weeks means the print is the damper,
-    // not the market. First run of this metric measured the condition as ENDEMIC — 3,450
-    // streak events across ~1,600 corp tranches, ~900 equity/loan names and 28 sovereign
-    // bucket-streaks in 60 weeks (the §7.21 HY saturation cohort and the §7.31 small-cap
-    // equity tail, mostly) — so it reports as an end-of-run measurement rather than
-    // per-instrument violations that would drown the harness. The number to watch DOWN as
-    // G6/HC-resolution give the wides a real buyer base.
-    {
-      const boundThisWeek = new Set<string>(state.lastWeekDamperBoundIds ?? []);
-      const next = new Map<string, number>();
-      boundThisWeek.forEach(id => next.set(id, (damperBindStreak.get(id) ?? 0) + 1));
-      next.forEach((streak, id) => {
-        if (streak >= 3) damperPersistentBinds.add(id);
-        damperWorstStreak = Math.max(damperWorstStreak, streak);
-      });
-      damperBindStreak = next;
-    }
 
     // 6. Bank capital ratio & NIM bands — every region (§4.0 Tier 1 item 17: only the USA was
     // banded, so EUR banks printed negative margins for the model's whole life unwatched).
@@ -2693,24 +2668,6 @@ function runHarness() {
     console.log(`${'stage'.padEnd(30)}${'mean ms'.padStart(9)}${'worst ms'.padStart(10)}${'share'.padStart(8)}`);
     rows.forEach(r => console.log(`${r.stage.padEnd(30)}${r.meanMs.toFixed(1).padStart(9)}${r.worstMs.toFixed(1).padStart(10)}${r.sharePct.toFixed(1).padStart(7)}%`));
     console.log(`per-week mean: ${(profiledMs / profiledWeeks).toFixed(0)} ms`);
-  }
-
-  console.log(`\n[damper] instruments persistently bound (3+ consecutive weeks): ${damperPersistentBinds.size}; worst streak ${damperWorstStreak} weeks — §6.1's promoted defect; watch it DOWN`);
-  // §7.288 — the decomposition the number always needed: WHICH BOOK pins its instruments.
-  // Every push site tags its ids `book:id`, so this is a read, not a guess.
-  {
-    const byBook = new Map<string, { n: number; up: number; down: number }>();
-    damperPersistentBinds.forEach((id) => {
-      const book = id.includes(':') ? id.slice(0, id.indexOf(':')) : 'untagged';
-      const row = byBook.get(book) ?? { n: 0, up: 0, down: 0 };
-      row.n++;
-      if (id.endsWith('+')) row.up++; else if (id.endsWith('-')) row.down++;
-      byBook.set(book, row);
-    });
-    // `+` = the market wanted the stat HIGHER than the damper printed, `-` = lower.
-    const rows = [...byBook.entries()].sort((a, b) => b[1].n - a[1].n)
-      .map(([k, r]) => `${k} ${r.n} (${r.up}+/${r.down}-)`).join(' | ');
-    console.log(`  [damper-by-book] persistent binds :: ${rows}`);
   }
 
   auditSummary(auditFindings, WEEKS).forEach((line) => console.log(line));

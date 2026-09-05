@@ -276,8 +276,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // OWN7, second half: the desks' own books join the float now that they exist.
     // `tradableFloatLocal` was `sharesOutstanding` — the whole company — while the only bidders
     // were institutions whose mandates keep them far below it, so the book asked a demand side
-    // that can never reach the supply to price it, and the level printed at the damper week after
-    // week (§6). Founders, households and corporates on the register do not bid, so their shares
+    // that can never reach the supply to price it (§6). Founders, households and corporates on the register do not bid, so their shares
     // were never for sale; the same carve-out 07c and 07f already make, computed the same way —
     // off what the real holders actually hold rather than a stated passive share.
     const deskHeldShares = positionsByInstrument(deskParticipants.map((d) => d.currentHoldingsByInstrumentId));
@@ -288,7 +287,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // (§7.166's row). When last week's liquidity ladder announces a sale (deposits and fund shares
     // both exhausted — `pendingDirectEquitySaleLocal`), the sector enters this session as a
     // SELLER: its shares, prorated across names by value, at reservation zero (a forced seller
-    // takes the print; the book's damper still bounds the week's move). Only the slice for sale
+    // takes the print). Only the slice for sale
     // joins the float — the rest stays as unsellable as it always was.
     //
     // §9.13-EQUITY: the shares are READ OFF THE HOUSEHOLD SECTOR'S OWN REGISTER BOOK. They used
@@ -459,7 +458,6 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       // position stays with its holder rather than falling to a dealer nobody names.
       unsoldStaysWithHolder: true,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `equity:${id}`));
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} equity`);
     // EQ_CONS_TRACE=1 — per-instrument share conservation across every cash-accounted
     // participant: Σ(new − prev) must be zero for a stock book with no primary; a nonzero sum

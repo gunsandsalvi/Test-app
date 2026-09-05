@@ -469,7 +469,6 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       unsoldStaysWithHolder: true,
     });
     const piById = new Map(allParticipants.map((pp, pi) => [pp.id, pi]));
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `leveraged loan:${id}`));
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} leveraged loan`);
 
     // THE PRINT, DEPOSITED — but only where there was something to trade. A book with no float and

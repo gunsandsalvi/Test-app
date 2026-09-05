@@ -134,17 +134,6 @@ function p3(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
-/** P4 — the damper is not the price: a name bound eight weeks running is a market that does not clear. */
-function p4(state: GameState, week: number): AuditFinding[] {
-  const out: AuditFinding[] = [];
-  const streaks = state.damperBindStreakById ?? {};
-  const byBook = new Map<string, number>();
-  Object.entries(streaks).forEach(([k, v]) => { if ((v ?? 0) >= 8) byBook.set(k.split(':')[0], (byBook.get(k.split(':')[0]) ?? 0) + 1); });
-  const total = sum([...byBook.values()], (x) => x);
-  if (total) out.push({ family: 'P', check: 'P4 no name bound eight weeks', week, usd: total, message: `${total} names bound 8+ weeks: ${[...byBook.entries()].map(([b, n]) => `${b} ${n}`).join(', ')}` });
-  return out;
-}
-
 /** X1 — the curve: forward rates non-negative, repo inside the corridor, deposits below policy, a solvent bank's margin positive. */
 function x1(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
@@ -293,7 +282,7 @@ function p6(state: GameState, week: number): AuditFinding[] {
 }
 
 export function auditPrices(state: GameState, week: number): AuditFinding[] {
-  return [...p1(state, week), ...p2(state, week), ...p3(state, week), ...p4(state, week), ...p5(state, week), ...p6(state, week), ...x1(state, week), ...x2(state, week), ...p8(state, week)];
+  return [...p1(state, week), ...p2(state, week), ...p3(state, week), ...p5(state, week), ...p6(state, week), ...x1(state, week), ...x2(state, week), ...p8(state, week)];
 }
 
 /**

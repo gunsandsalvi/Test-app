@@ -10,7 +10,7 @@ export type ObjectType =
   | 'market' | 'pool' | 'cohort' | 'occupation'
   | 'commodity' | 'fx' | 'curve' | 'centralbank'
   | 'tranche' | 'contract' | 'offering' | 'estate'
-  | 'book' | 'lane' | 'index';
+  | 'lane' | 'index';
 
 export interface ObjectRef { type: ObjectType; id: string }
 

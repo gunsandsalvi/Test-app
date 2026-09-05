@@ -549,18 +549,14 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-19. **Delete the dead bound machinery and the dead boundary scaffolding.** The damper never binds —
-    `runClearingKernel` stopped writing `out.damper`, so `damperBoundInstrumentIds` is permanently
-    empty while `setDamperStreaks`/`rollDamperStreaks`/`packed.damperStreak`/`GameState.damperBindStreakById`,
-    six adapters, `native-kernels.ts:62` and `audit/prices.ts:80` all still run. `MAX_WEEKLY_FX_MOVE_PCT`
-    (`fx-market.ts:112`) has NO use site and a fifteen-line doc describing a live damper that no
-    longer exists. Delete all of it, and every comment that still describes a boundary the model no
-    longer has. *(The dead-FILE half is done — §9's dead-file sweep. `engine2/state.ts` and
-    `stages/register-index.ts` were the sweep's two corrections: both have real importers and the
-    audit's claim that they had none was stale.)* **AND THE DEAD EXPORTS**, measured by the same
-    sweep: **369 exported names in 147 files appear in no other file** — over-exported internals
-    for the most part, dead constants for the rest. It is a mechanical pass (drop the `export`, or
-    the name, and let `tsc`/`eslint` say), and it belongs here rather than in a step of its own.
+19-ii. **THE DEAD EXPORTS** (19-i deleted the dead damper machinery and the FX cap — §9).
+    Measured by a sweep of every `export` in `src` against every other file in `src`, `scripts`
+    and `test`: **389 exported names in 164 files appear in no other file** — over-exported
+    internals for the most part, dead constants and functions for the rest (`accounts.ts` 19,
+    `engine2/world.ts` 11, `engine2/state.ts` 10, `units.ts` 9, `company.ts` 9). A mechanical
+    pass: drop the `export` where the name is used in its own file, delete the name where it is
+    used nowhere, and let `tsc`/`eslint` say. An atlas cite is not a use: a symbol only a tree
+    cites is dead code the tree is describing, and the row re-cites what replaced it.
 20. **Where a bound covered a missing mechanism, BUILD THE MECHANISM** (rule 6's pairing). Named:
     the estate's asset sale clears against real bidders instead of `sold × (1 − min(0.9, …))`
     (`estate-resolution.ts:213`) and peers are allocated by a bid, not pro rata to cash; the LOLR and
@@ -1536,7 +1532,25 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**18-iii — THE SMALL FLOORS AND CAPS ARE GONE, AND THE GUARD IS LOUD; 18 CLOSED.** Rule 6:
+**19-i — THE DEAD DAMPER MACHINERY AND THE FX CAP ARE GONE.** The damper never bound: the JS
+  kernel never wrote its flag, the C port only ever compared a solve to itself with no cap. Every
+  piece of the machinery is deleted — `ClearingInstrument.damperBindStreak`, the engine's
+  `damperStreak` and `damper` lanes, `damperBoundByIndex` / `damperBoundInstrumentIds` /
+  `fillDamperIds`, `setDamperStreaks` / `rollDamperStreaks` and the raw-id streak map,
+  `YIELD_LIKE_MIN_WEEKLY_MOVE_BPS` (a floor the damper justified: the repo haircut and the swap
+  book's two-sigma move now floor at the engine's one-basis-point resolution with no history,
+  and nowhere with it), the C kernel's `damper` output lane and its cap arithmetic (the addon is
+  rebuilt from source by `build:native`; the output order shifts by one), the four workers'
+  lanes and `maxWeeklyStatMovePct` job field, `WeeklyStepContext.damperBoundInstrumentIds` and
+  the fourteen adapters' pushes, `GameState.lastWeekDamperBoundIds` / `damperBindStreakById`
+  and core's roll, the audit's `P4` (a streak nothing wrote), the UI's clearing-book object and
+  `diag` function and `books` list (the instrument-name helpers moved to
+  `objects/instrument-ref.ts`), the tape's `bound` series, the harness's streak diagnostic and
+  week-line column, and `MAX_WEEKLY_FX_MOVE_PCT` (no use site) with every comment that still
+  described a boundary the model no longer has. Split per rule 1.10: 19-ii is the dead exports,
+  measured at 389 names in 164 files. Atlas: fx-spot C6 ✅, the-clearing-engine and
+  news-and-the-player-surface text, UNMAPPED. Gates green; no run.
+- **18-iii — THE SMALL FLOORS AND CAPS ARE GONE, AND THE GUARD IS LOUD; 18 CLOSED.** Rule 6:
   the insurer's and pension's hurdle bands [2%, 30%] and the pension's 20% funded-ratio floor
   (a barely funded pension needs an enormous return, and says so); the prime-brokerage haircut's
   1% floor (an unmeasured haircut lends without limit of the fund's own; the broker's room is

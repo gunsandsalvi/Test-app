@@ -136,10 +136,6 @@ export function recordTape(tape: Tape, state: GameState): void {
     put(`bank:${c.id}:central bank loan`, s.centralBankLoanLocal ?? 0);
     put(`bank:${c.id}:loans`, loanBooksOf(s, facilityBookOf(ensureV2(state), c.id)));
   });
-  const boundByBook = new Map<string, number>();
-  (state.lastWeekDamperBoundIds ?? []).forEach((id) => { const book = id.split(':')[0]; boundByBook.set(book, (boundByBook.get(book) ?? 0) + 1); });
-  boundByBook.forEach((n, book) => put(`book:${book}:bound`, n));
-  put('world:bound', (state.lastWeekDamperBoundIds ?? []).length);
 }
 
 export function tapeSeries(world: World, key: string): { weeks: number[]; values: number[] } {

@@ -13,7 +13,7 @@ import { money, pctLevel, count } from '../format';
 import { World, companyOf, institutionOf, regionOf, holdersOf, bookOf, sovereignHoldersOf } from '../world';
 import { centralBankBookLocal, bankSovereignBookLocal } from '../../engine/sovereign-register';
 import { refOfIdentifier, labelOf } from '../objects';
-import { instrumentName } from '../objects/book';
+import { instrumentName } from '../objects/instrument-ref';
 import { quoteOfInstrument, priceWord, spreadWord } from '../objects/tranche';
 import { banksOf } from '../../domain/company';
 import { institutionTotalAssetsFromState } from '../../engine/simulation/stages/institutional-balance-sheet';

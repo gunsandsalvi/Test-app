@@ -227,9 +227,8 @@ level the book actually solved — `newStatByIndex` carries no "did not trade" f
 does `ClearingResult`. The same is true of the bracket prints above and of `double-auction`'s
 anchor: last week's number is re-published as this week's print.
 
-The only staleness instrument in the engine is `damperBoundInstrumentIds`, which measures a
-different thing (a level held away by the damper) and is fed by a damper the file's own comment
-at `:788` says no longer exists.
+There is no staleness instrument in the engine at all (§9.19-i deleted the damper's — a level
+held away by a damper that no longer existed, fed by nothing).
 
 **§3 step 37-DVP**, and it is the same signature change as 21-BRACKET: once the solve returns
 whether it cleared, "no new print" is the same fact and the flag is free. Recommend folding it

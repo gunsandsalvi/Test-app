@@ -59,7 +59,6 @@ import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay, PartyRef, pendingSettlementLocal, institutionSpendableLocal } from './settlement';
 import {
   clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
-  YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
 } from './financial-clearing-engine';
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 
@@ -76,10 +75,9 @@ const CURVE_POINT_YEARS: [('tenor3M' | 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'ten
 
 /**
  * Derived GC haircuts: duration × the observed weekly yield repricing risk at that tenor
- * (2σ of weekly changes in the nearest curve point's cleared yield). With too little history
- * to estimate a standard deviation (a genuinely mathematical bound — σ needs at least two
- * observations), the engine's own minimum weekly repricing allowance stands in: the smallest
- * move the clearing damper will always permit is the smallest move a lender must assume.
+ * (2σ of weekly changes in the nearest curve point's cleared yield). §3.19-i: with too little
+ * history to estimate a standard deviation (σ needs two observations) the move is the engine's
+ * own resolution, one basis point — no floor of anyone's choosing stands under it.
  */
 /**
  * §3.13-SOV row 3 — A HAIRCUT IS THE BOND'S, BECAUSE DURATION IS THE BOND'S.
@@ -104,10 +102,10 @@ export function computeSovereignRepoHaircuts(
     const series = hist.map((h) => h[field]).filter((v) => Number.isFinite(v));
     const diffsBps: number[] = [];
     for (let i = 1; i < series.length; i++) diffsBps.push((series[i] - series[i - 1]) * 10000);
-    if (diffsBps.length < 2) return YIELD_LIKE_MIN_WEEKLY_MOVE_BPS;
+    if (diffsBps.length < 2) return 1;
     const mean = diffsBps.reduce((a, b) => a + b, 0) / diffsBps.length;
     const variance = diffsBps.reduce((a, b) => a + (b - mean) * (b - mean), 0) / (diffsBps.length - 1);
-    return Math.max(YIELD_LIKE_MIN_WEEKLY_MOVE_BPS, 2 * Math.sqrt(variance));
+    return 2 * Math.sqrt(variance);
   };
   const cache = new Map<string, number>();
   return (bondId: string) => {
@@ -479,11 +477,8 @@ export function runRegionalRepoSession(
       // Bilateral GC at one rate — no desk in the middle taking a spread out of it.
       dealerSpreadBps: 0,
       // Overnight money reprices to the corridor the week policy moves; the corridor — the
-      // participants' own posted outside options — is the real bound. The damper is set so wide
-      // it cannot be the thing that prints (the harness asserts the corridor every week, so a
-      // damper-bound print would be caught as a violation, per damper-diagnostic doctrine).
+      // participants' own posted outside options — is the real bound, and the harness asserts it.
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `repo:${id}`));
     const clearedBps = result.newStatById.get(args.instrumentId) ?? args.currentBps;
     const lentByParty = new Map<string, number>();
     let totalLentLocal = 0;

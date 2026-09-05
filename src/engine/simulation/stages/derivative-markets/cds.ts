@@ -310,7 +310,6 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
       // Bilateral between named desks and funds; the clearing house takes no fee on it yet.
       dealerSpreadBps: 0,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `cds:${id}`));
 
     // ---- 4. Strike the week's contracts. What a quoter holds against its opening is what it did:
     // above it, protection written; below it, protection bought. At one cleared spread the writers

@@ -179,7 +179,6 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
       durationYears: CDS_INDEX_TENOR_WEEKS / 52,
     };
     const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `cdx:${id}`));
     const clearedBps = result.newStatById.get(instrumentId);
     if (clearedBps === undefined) return;
 

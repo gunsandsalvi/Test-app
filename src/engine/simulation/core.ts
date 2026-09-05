@@ -5,7 +5,7 @@ import { runFxRevaluationStage } from './stages/fx-revaluation';
 import { toNumeraire } from '../../domain/currency';
 import { currencyOfId } from '../../engine2/world';
 import { runNewsDerivationStage } from './stages/news-derivation';
-import { rollDamperStreaks, setDamperStreaks } from './stages/financial-clearing-engine';
+
 import { GameState } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
@@ -138,8 +138,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     ensureManagements(state.companies, state.institutionalEntities ?? [], state.currentWeek);
   }
   const baseCtx = createInitialContext(state);
-  // The adaptive damper's memory for this week's books (financial-clearing-engine.ts).
-  setDamperStreaks(state.damperBindStreakById);
   // §5-STRUCT step 5: `ctx` is a binding the stage closures read at call time, so the runner can
   // swap a recording proxy in around each stage without any stage knowing. Off by default; when
   // off this costs one boolean test per stage and `ctx` is `baseCtx` throughout.
@@ -469,7 +467,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     overdraftStreaks: ctx.overdraftStreaks,
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.
-    dealers: dealersFromBanks(ctx.v2, (b) => bankReservesOf(ctx.v2, b.id), (b) => facilityBookOf(ctx.v2, b.id), (b) => bankBookAssetsLocal(ctx.v2, b.id), nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, damperBindStreakById: rollDamperStreaks(state.damperBindStreakById, ctx.damperBoundInstrumentIds), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
+    dealers: dealersFromBanks(ctx.v2, (b) => bankReservesOf(ctx.v2, b.id), (b) => facilityBookOf(ctx.v2, b.id), (b) => bankBookAssetsLocal(ctx.v2, b.id), nextState.companies), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
     // SETL2: the week's settlement, decomposed. §6 watches the boundary line DOWN, and a number
     // you cannot attribute is a number you cannot watch — this carries what hit it and why.
     lastSettlement: ctx.lastSettlementReport && {

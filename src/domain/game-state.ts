@@ -76,11 +76,6 @@ export interface GameState {
   /** §3.15b-iii — the parties the close swept into their bank's credit, and for how many weeks
    *  running, keyed by party key. Rolled by `overdraft-sweep.ts`; a clean close ends the run. */
   overdraftStreaks?: Record<string, import('./banking').OverdraftStreak>;
-  /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
-  lastWeekDamperBoundIds?: string[];
-  /** Signed consecutive-week bind streak per `book:id` (+ up, − down) — the adaptive damper's
-   *  memory (financial-clearing-engine.ts `damperBindStreak`). Rolled weekly by core.ts. */
-  damperBindStreakById?: Record<string, number>;
   /** GUARD — books that could not trade this week: no participant's ceiling exceeded its own
    * position. Must be empty; see WeeklyStepContext.deadCeilingBooks. */
   lastWeekDeadCeilingBooks?: string[];

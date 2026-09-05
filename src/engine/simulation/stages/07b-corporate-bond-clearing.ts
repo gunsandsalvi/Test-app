@@ -591,7 +591,6 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // §4.C int flip — participant index for the dense holdings matrix (a fund filtered out of
     // the book has no row, exactly as it had no map entry).
     const piById = new Map(allParticipants.map((pp, pi) => [pp.id, pi]));
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `corporate bond:${id}`));
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} corporate bond`);
 
     /**

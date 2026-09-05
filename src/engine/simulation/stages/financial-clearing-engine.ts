@@ -101,15 +101,6 @@ export interface ClearingInstrument {
    * fall as it gets cheaper, so demand DECREASES with the statistic.
    */
   statKind: 'YIELD_LIKE' | 'PRICE_LIKE';
-  /**
-   * Consecutive weeks this instrument's print has been held by the damper in one direction
-   * (the harness's streak, read back off `lastWeekDamperBoundIds`). The damper is discrete-time
-   * SMOOTHING: a one-week bind is noise it should absorb, a ten-week bind is a level it is
-   * hiding (§6.1's row). The cap widens by (1 + streak), so a trend converges geometrically
-   * and the print can never be the damper for long. A RESOLUTION rule (rule 2): the answer it
-   * converges to is the schedules', whatever the cap.
-   */
-  damperBindStreak?: number;
   /** Duration in years — retained for adapters that convert the cleared level into a price. */
   durationYears: number;
   /**
@@ -232,14 +223,6 @@ export function setDemand(D: DemandStaging, row: number, i: number, reservationS
   D.minH[at] = minHoldingLocal;
 }
 
-/**
- * The absolute floor the damper grants a YIELD_LIKE statistic's one-week move (the `+ 25` in
- * the damping arithmetic below). Exported with one owner because WS6's haircut derivation
- * needs the same number: the smallest repricing a lender must assume collateral can suffer in
- * one week is exactly the smallest move this engine will allow it to make.
- */
-export const YIELD_LIKE_MIN_WEEKLY_MOVE_BPS = 25;
-
 export interface ClearingParams {
   /** Bid/ask the dealer desk earns on the gross flow it facilitates. */
   dealerSpreadBps: number;
@@ -281,7 +264,6 @@ export interface ClearingResult {
    *  the same insertion order the per-fill writes had, and die when the last reader flips. */
   newStatByIndex: Float64Array;
   dealerInventoryByIndex: Float64Array;
-  damperBoundByIndex: Uint8Array;
   primaryByIndex: ({ withdrawn: boolean; marketTakeLocal: number; clearedStat: number } | undefined)[];
   /** pi * nInstruments + i; only fills > $1 are written, so 0 means absent. */
   holdingsMatrix: Float64Array;
@@ -299,14 +281,6 @@ export interface ClearingResult {
    * funds the inventory the dealer was left holding.
    */
   dealerNetCashLocal: number;
-  /**
-   * §6 damper diagnostic: instrument ids whose printed level was held away from the solved
-   * level by `maxWeeklyStatMovePct` this week. The damper is legitimate discrete-time
-   * smoothing, but it must never BIND persistently — a name clamped for weeks on end means
-   * the posted schedules disagree with the printed level and the print is the damper, not
-   * the market. The invariants harness tracks consecutive-week counts off this.
-   */
-  damperBoundInstrumentIds: string[];
   /**
    * WS8 — outcome of each instrument's primary offering, when it carried one: whether the
    * issuer withdrew at its walk-away, and how much of the new paper the PARTICIPANTS actually
@@ -527,8 +501,6 @@ export interface PackedClearing {
   withdrawStat: Float64Array; // NaN = none
   currentStat: Float64Array;
   yieldLike: Uint8Array;
-  /** Per-instrument damper widening (see ClearingInstrument.damperBindStreak). */
-  damperStreak: Uint8Array;
   skip: Uint8Array; // nothing to sell: pass current stat through
   // per (participant x instrument), row-major by participant
   present: Uint8Array;
@@ -547,7 +519,6 @@ export interface KernelShardResult {
   from: number;
   to: number;
   clearedStat: Float64Array;      // per instrument in [from, to)
-  damper: Uint8Array;
   dealerInventory: Float64Array;
   primaryWithdrawn: Uint8Array;
   primaryMarketTake: Float64Array;
@@ -568,38 +539,6 @@ export function packedClearingBytes(n: number, pCount: number): number {
   return f64 + u8 + 64; // alignment slack
 }
 
-/**
- * The week's damper streaks by RAW instrument id (the harness tag's `book:id±` with the book
- * stripped), set once a week by core.ts off `GameState.damperBindStreakById` so every adapter
- * widens without each one being taught the lookup. An id two books share takes the wider
- * streak for a week — a cap, never a level (§1.6).
- */
-let damperStreakByRawId = new Map<string, number>();
-
-
-export function setDamperStreaks(byTaggedId: Record<string, number> | undefined): void {
-  const next = new Map<string, number>();
-  Object.entries(byTaggedId ?? {}).forEach(([tagged, streak]) => {
-    const raw = tagged.includes(':') ? tagged.slice(tagged.indexOf(':') + 1) : tagged;
-    next.set(raw, Math.max(next.get(raw) ?? 0, Math.abs(streak)));
-  });
-  damperStreakByRawId = next;
-}
-
-/** Roll the streak map by one week: same direction extends, a flip or a release resets. */
-export function rollDamperStreaks(
-  prior: Record<string, number> | undefined,
-  boundThisWeek: string[]
-): Record<string, number> {
-  const out: Record<string, number> = {};
-  boundThisWeek.forEach((tagged) => {
-    const sign = tagged.endsWith('-') ? -1 : 1;
-    const key = tagged.replace(/[+-]$/, '');
-    const prev = prior?.[key] ?? 0;
-    out[key] = Math.sign(prev) === sign ? prev + sign : sign;
-  });
-  return out;
-}
 
 export function packClearing(
   instruments: ClearingInstrument[],
@@ -620,15 +559,14 @@ export function packClearing(
     const dRes = f64(np), dRange = f64(np), dMaxH = f64(np), dMaxNet = f64(np), dMinH = f64(np), prevHolding = f64(np);
     const u8 = (len: number) => { const v = new Uint8Array(buffer, off, len); off += len; return v; };
     const yieldLike = u8(n), skip = u8(n), present = u8(np);
-    const damperStreak = u8(n);
     packed = {
-      n, pCount, float, offering, withdrawStat, currentStat, yieldLike, damperStreak, skip,
+      n, pCount, float, offering, withdrawStat, currentStat, yieldLike, skip,
       present, dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding,
       dealerSpreadBps: params.dealerSpreadBps,
       unsoldStaysWithHolder: params.unsoldStaysWithHolder === true,
     };
     // Shared memory is reused across calls; zero what the packers below only conditionally set.
-    present.fill(0); skip.fill(0); yieldLike.fill(0); damperStreak.fill(0);
+    present.fill(0); skip.fill(0); yieldLike.fill(0);
     dRes.fill(0); dRange.fill(0); dMaxH.fill(0); dMaxNet.fill(0); dMinH.fill(0); prevHolding.fill(0);
   } else {
     packed = {
@@ -638,7 +576,6 @@ export function packClearing(
       withdrawStat: new Float64Array(n),
       currentStat: new Float64Array(n),
       yieldLike: new Uint8Array(n),
-      damperStreak: new Uint8Array(n),
       skip: new Uint8Array(n),
       present: new Uint8Array(n * pCount),
       dRes: new Float64Array(n * pCount),
@@ -658,7 +595,6 @@ export function packClearing(
     packed.withdrawStat[i] = inst.primaryWithdrawStat === undefined ? Number.NaN : inst.primaryWithdrawStat;
     packed.currentStat[i] = inst.currentStat;
     packed.yieldLike[i] = inst.statKind === 'YIELD_LIKE' ? 1 : 0;
-    packed.damperStreak[i] = Math.max(0, Math.min(255, Math.round(inst.damperBindStreak ?? damperStreakByRawId.get(inst.id) ?? 0)));
     packed.skip[i] = inst.tradableFloatLocal + offeringLocal > 0 ? 0 : 1;
   });
   participants.forEach((p, pi) => {
@@ -733,7 +669,6 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
   const out: KernelShardResult = {
     from, to,
     clearedStat: new Float64Array(span),
-    damper: new Uint8Array(span),
     dealerInventory: new Float64Array(span),
     primaryWithdrawn: new Uint8Array(span),
     primaryMarketTake: new Float64Array(span),
@@ -955,7 +890,6 @@ function accumulateShard(
   for (let i = shard.from; i < shard.to; i++) {
     const o = i - shard.from;
     result.newStatByIndex[i] = shard.clearedStat[o];
-    if (shard.damper[o]) result.damperBoundByIndex[i] = shard.damper[o];
     result.dealerInventoryByIndex[i] = shard.dealerInventory[o];
     if (shard.hasPrimary[o]) {
       result.primaryByIndex[i] = {
@@ -985,13 +919,6 @@ function accumulateShard(
     cashByPi[shard.fillPart[f]] = cashByPi[shard.fillPart[f]] - tradedLocal - feeLocal;
     result.totalDealerRevenueLocal += feeLocal;
     result.dealerNetCashLocal += tradedLocal + feeLocal;
-  }
-}
-
-/** The damper diagnostic ids (small; every book reads them) — eager, from the dense flags. */
-function fillDamperIds(result: ClearingResult, instIds: InstrumentId[]): void {
-  for (let i = 0; i < result.nInstruments; i++) {
-    if (result.damperBoundByIndex[i]) result.damperBoundInstrumentIds.push(instIds[i] + (result.damperBoundByIndex[i] === 2 ? '-' : '+'));
   }
 }
 
@@ -1096,7 +1023,6 @@ export function clearFinancialAsset(
   const result: ClearingResult = {
     newStatByIndex: new Float64Array(nDense),
     dealerInventoryByIndex: new Float64Array(nDense).fill(NaN),
-    damperBoundByIndex: new Uint8Array(nDense),
     primaryByIndex: new Array(nDense),
     holdingsMatrix: denseHold,
     nInstruments: nDense,
@@ -1145,7 +1071,6 @@ export function clearFinancialAsset(
     totalDealerRevenueLocal: 0,
     netCashDeltaByParticipantId: new Map(),
     dealerNetCashLocal: 0,
-    damperBoundInstrumentIds: [],
     anyCeilingAboveHolding: anyCeilingAboveHolding(instruments, participants),
   };
   participants.forEach((p) => {
@@ -1168,7 +1093,6 @@ export function clearFinancialAsset(
       const shards = shardedKernel.run(packed, sab);
       if (shards) {
         for (const shard of shards) accumulateShard(shard as never, instruments, result, cashByPi);
-        fillDamperIds(result, instIds);
         flushCash();
         return result;
       }
@@ -1177,7 +1101,6 @@ export function clearFinancialAsset(
       growKernelScratch(pCount);
       const shard = (nativeKernel ?? runClearingKernel)(packed, 0, packed.n);
       accumulateShard(shard, instruments, result, cashByPi);
-      fillDamperIds(result, instIds);
       flushCash();
       return result;
     }
@@ -1187,7 +1110,6 @@ export function clearFinancialAsset(
   growKernelScratch(packed.pCount);
   const shard = (nativeKernel ?? runClearingKernel)(packed, 0, packed.n);
   accumulateShard(shard, instruments, result, cashByPi);
-  fillDamperIds(result, instIds);
   flushCash();
   return result;
 }

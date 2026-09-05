@@ -22,13 +22,12 @@ import { tranche } from './tranche';
 import { contract } from './contract';
 import { offering } from './offering';
 import { estate } from './estate';
-import { book } from './book';
 import { lane } from './lane';
 import { index } from './index-object';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const OBJECTS: Record<ObjectType, ObjectModule<any>> = {
-  company, institution, region, market, pool, cohort, occupation, commodity, fx, curve, centralbank, tranche, contract, offering, estate, book, lane, index,
+  company, institution, region, market, pool, cohort, occupation, commodity, fx, curve, centralbank, tranche, contract, offering, estate, lane, index,
 };
 export const OBJECT_TYPES = Object.keys(OBJECTS) as ObjectType[];
 
@@ -80,13 +79,13 @@ export function refOfIdentifier(world: World, s: string | undefined | null): Obj
   if (c) return { type: 'company', id: c.id };
   const e = world.state.institutionalEntities.find((x) => x.id === q) ?? world.state.institutionalEntities.find((x) => x.ticker === upper);
   if (e) return { type: 'institution', id: e.id };
-  for (const type of ['commodity', 'fx', 'estate', 'book', 'lane', 'index'] as ObjectType[]) {
+  for (const type of ['commodity', 'fx', 'estate', 'lane', 'index'] as ObjectType[]) {
     if (OBJECTS[type].find(world, q) !== undefined) return { type, id: q };
   }
   return undefined;
 }
 
-/** A kind's word alone ("estates", "books", "central banks") names the screener over every one of that kind. */
+/** A kind's word alone ("estates", "lanes", "central banks") names the screener over every one of that kind. */
 export function kindOfWord(world: World, phrase: string): { type: ObjectType; ref?: ObjectRef; tab?: string } | undefined {
   const p = phrase.trim().toLowerCase();
   for (const type of OBJECT_TYPES) {

@@ -144,7 +144,6 @@ function runBondFuturesMarket({ ctx, week, view, standing }: DerivativeMarketRun
       durationYears,
     };
     const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `bf:${id}`));
     const cleared = result.newStatById.get(instrumentId);
     if (cleared === undefined) return;
 

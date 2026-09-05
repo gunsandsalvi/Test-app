@@ -37,10 +37,10 @@ import { materializeGovLadder } from '../../../engine2/tranches';
 import { sovereignTenorResolver } from '../../../domain/government';
 
 /**
- * The haircut a broker takes on each kind of collateral: the most that market's own clearing
- * engine will let the level move in one week. It is the same reasoning the repo desk's sovereign
- * haircuts use — the repricing a lender must assume before it could sell — read off the damper
- * rather than posted, so a broker's protection is tied to the market it would have to sell into.
+ * The haircut a broker takes on each kind of collateral: the move that market has been measured
+ * to make in one week. It is the same reasoning the repo desk's sovereign haircuts use — the
+ * repricing a lender must assume before it could sell — read off the market rather than posted,
+ * so a broker's protection is tied to the market it would have to sell into.
  * Sovereign paper is the exception: it is the collateral the repo book already prices, and its
  * haircut is derived there from that bucket's own observed volatility.
  */

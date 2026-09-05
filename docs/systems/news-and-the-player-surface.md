@@ -84,7 +84,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.a a stale mark must be visibly stale | `src/ui/objects/market.tsx:totalUnitsDemandedThisWeek` | ⚠️ |
 | A2 its own positions and balances, as the register holds them | `src/ui/functions/holders.tsx:CompanyHolders` | ⚠️ |
 | A3 public state: issuer, central bank, rating agency | `src/ui/objects/centralbank.tsx:centralbank` | ✅ |
-| **A4 FORBID no observer sees another party's private state** | `src/ui/functions/diag.tsx:diag` | ❌ |
+| **A4 FORBID no observer sees another party's private state** | `src/ui/functions/holders.tsx:CompanyHolders` | ❌ |
 | A5 published aggregates, with lag and revision | `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts:inflationIsMeasured` | ⚠️ |
 | A5.a a statistic available instantly and exactly is the internals | `src/ui/functions/macro.tsx:fxReservesLocal` | ❌ |
 | B1 an event is a change of state somebody would notice | `src/engine/simulation/stages/news-derivation.ts:runNewsDerivationStage` | ✅ |
@@ -181,9 +181,7 @@ register rows directly. The exceptions above are the exceptions.
 
 The surface is a full god-view and does not pretend otherwise. `functions/holders.tsx` shows every
 holder of any company's equity and debt with sizes; `holdings` shows any institution's whole book;
-`functions/lists.tsx` enumerates every bank, fund and pool; `functions/diag.tsx` shows which names
-the damper bound in every book this week, with streaks — a *market-internals* view no participant
-could have; `functions/statements.tsx` renders any firm's full financials; `objects/centralbank.tsx`
+`functions/lists.tsx` enumerates every bank, fund and pool; `functions/statements.tsx` renders any firm's full financials; `objects/centralbank.tsx`
 shows the treasury's overdraft.
 
 Marked `❌` rather than OUT OF SCOPE, but with the reason stated, because the two answers are
@@ -275,8 +273,7 @@ through `ui/world.ts:unpaidTaxesOf`, on the read-only `partyIdOf` and `reasonIdO
 **The shell (2026-09-05, §9.14-SHELL).** Not a node — the surface's own mechanics, recorded here because this is the tree the surface sits
 in. Every long list renders through `ui.tsx:Table`, which caps at `TABLE_CAP` rows and says so
 beneath them with the control that shows the rest; no caller slices (`screener.tsx`'s 400 with a
-hint, `book.tsx`'s 60 and `index-object.tsx`'s 40 in silence, `contracts.tsx`'s 100 and `diag.tsx`'s
-80 are gone). And the on-screen keyboard moves the command bar, not the page: `index.html` asks the
+hint, `index-object.tsx`'s 40 in silence and `contracts.tsx`'s 100 are gone). And the on-screen keyboard moves the command bar, not the page: `index.html` asks the
 keyboard to overlay the page rather than resize it, and `Aurora.tsx:useVisualViewport` reads what
 the keyboard did to the visual viewport — the shell counter-moves by its scroll offset and the bar
 alone moves up by the keyboard's height. §9.15-i: a tranche is searchable from the bar by its

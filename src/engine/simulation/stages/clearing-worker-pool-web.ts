@@ -105,9 +105,9 @@ function shardFromOut(out: SharedArrayBuffer, from: number, to: number, pCount: 
   const i32 = (len: number) => { const v = new Int32Array(out, off, len); off += len * 4; return v; };
   const fillInst = i32(cap), fillPart = i32(cap);
   const u8 = (len: number) => { const v = new Uint8Array(out, off, len); off += len; return v; };
-  const damper = u8(span), primaryWithdrawn = u8(span), hasPrimary = u8(span);
+  const primaryWithdrawn = u8(span), hasPrimary = u8(span);
   return {
-    from, to, clearedStat, damper, dealerInventory, primaryWithdrawn, primaryMarketTake, hasPrimary,
+    from, to, clearedStat, dealerInventory, primaryWithdrawn, primaryMarketTake, hasPrimary,
     fillInst: fillInst.subarray(0, fillCount),
     fillPart: fillPart.subarray(0, fillCount),
     fillFilled: fillFilled.subarray(0, fillCount),
@@ -128,7 +128,6 @@ function runShardedKernelWeb(packed: PackedClearing, sab: SharedArrayBuffer): Ke
   const jobMeta = {
     sab, n, pCount: packed.pCount,
     dealerSpreadBps: packed.dealerSpreadBps,
-    maxWeeklyStatMovePct: Number.NaN /* no cap (§5-CLOSE) */,
     unsoldStaysWithHolder: packed.unsoldStaysWithHolder,
   };
   for (let i = 0; i < w; i++) {

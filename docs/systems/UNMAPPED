@@ -99,7 +99,7 @@ src/ui/functions/overview.tsx
 src/ui/functions/peers.tsx
 src/ui/functions/screener.tsx
 src/ui/functions/sellers.tsx
-src/ui/objects/book.tsx
+src/ui/objects/instrument-ref.ts
 src/ui/objects/cohort.tsx
 src/ui/objects/commodity.tsx
 src/ui/objects/common.tsx

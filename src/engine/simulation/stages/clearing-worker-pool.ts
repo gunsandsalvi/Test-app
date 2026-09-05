@@ -83,7 +83,7 @@ export function sharedPackBuffer(bytes: number): SharedArrayBuffer | null {
 
 export interface ShardResultLike {
   from: number; to: number;
-  clearedStat: Float64Array; damper: Uint8Array; dealerInventory: Float64Array;
+  clearedStat: Float64Array; dealerInventory: Float64Array;
   primaryWithdrawn: Uint8Array; primaryMarketTake: Float64Array; hasPrimary: Uint8Array;
   fillInst: Int32Array; fillPart: Int32Array;
   fillFilled: Float64Array; fillTraded: Float64Array; fillFee: Float64Array;
@@ -102,7 +102,6 @@ export function runShardedKernel(packed: PackedClearing, sab: SharedArrayBuffer)
   const jobMeta = {
     sab, n, pCount: packed.pCount,
     dealerSpreadBps: packed.dealerSpreadBps,
-    maxWeeklyStatMovePct: Number.NaN /* no cap (§5-CLOSE) */,
     // Must travel with the job: the worker rebuilds the packed struct from these fields, and a
     // flag left behind here would run a DIFFERENT market in the worker path than in the serial
     // one — silently, because the rebuilt object is handed to the kernel as `never`.

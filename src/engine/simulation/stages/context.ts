@@ -142,11 +142,6 @@ export interface WeeklyStepContext {
   /** What each firm reported this week — written by stage 08's kernel, read by the news stage. */
   earningsReportedThisTurn: EarningsReport[];
   defaultedTickers: Ticker[];
-  /** §6 damper diagnostic: instrument ids whose print was held away from its solve this week,
-   * accumulated across every clearing stage; lands on GameState.lastWeekDamperBoundIds so the
-   * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
-   * market). */
-  damperBoundInstrumentIds: string[];
   /** §3.17e-ii-a — the relative-value books' legs for the week, stated before any book opens;
    *  the market that clears each leg reads it here (`stages/relative-value.ts`). */
   relativeValueLegs: (import('../../../domain/relative-value').RelativeValueLeg & { entityId: import('../../../domain/ids').EntityId })[];
@@ -422,7 +417,6 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     ratingChanges: [],
     earningsReportedThisTurn: [],
     defaultedTickers: [],
-    damperBoundInstrumentIds: [],
     relativeValueLegs: [],
     borrowNeeds: [],
     lentSharesByLender: new Map(),

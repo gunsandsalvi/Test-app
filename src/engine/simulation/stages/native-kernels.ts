@@ -13,8 +13,8 @@
  */
 import { createRequire } from 'node:module';
 import {
-  PackedClearing, KernelShardResult, registerNativeKernel, runClearingKernel,
-} from './financial-clearing-engine';
+  PackedClearing, KernelShardResult, registerNativeKernel,
+ } from './financial-clearing-engine';
 
 interface NativeAddon {
   clearingKernel(
@@ -45,7 +45,6 @@ if (addon) {
     const out: KernelShardResult = {
       from, to,
       clearedStat: new Float64Array(span),
-      damper: new Uint8Array(span),
       dealerInventory: new Float64Array(span),
       primaryWithdrawn: new Uint8Array(span),
       primaryMarketTake: new Float64Array(span),
@@ -57,18 +56,15 @@ if (addon) {
       fillFee: new Float64Array(span * packed.pCount),
       fillCount: 0,
     };
-    // The C port predates the adaptive-damper lane: a shard carrying a streak runs the JS
-    // kernel (canonical), so the oracle gate never compares a widened cap against a fixed one.
-    for (let i = from; i < to; i++) if (packed.damperStreak[i] !== 0) return runClearingKernel(packed, from, to);
     scalars[0] = packed.n; scalars[1] = packed.pCount;
-    scalars[2] = packed.dealerSpreadBps; scalars[3] = Number.NaN; // no cap (§5-CLOSE)
+    scalars[2] = packed.dealerSpreadBps; scalars[3] = Number.NaN; // §3.19-i: the cap slot is empty; the kernel reads nothing from it
     scalars[4] = packed.unsoldStaysWithHolder ? 1 : 0;
     out.fillCount = addon.clearingKernel(
       [packed.float, packed.offering, packed.withdrawStat, packed.currentStat,
         packed.yieldLike, packed.skip, packed.present,
         packed.dRes, packed.dRange, packed.dMaxH, packed.dMaxNet, packed.dMinH, packed.prevHolding],
       scalars,
-      [out.clearedStat, out.damper, out.dealerInventory, out.primaryWithdrawn,
+      [out.clearedStat, out.dealerInventory, out.primaryWithdrawn,
         out.primaryMarketTake, out.hasPrimary, out.fillInst, out.fillPart,
         out.fillFilled, out.fillTraded, out.fillFee],
     );

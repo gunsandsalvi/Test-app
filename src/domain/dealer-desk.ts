@@ -24,8 +24,7 @@
  *   - **Its size is its own capital.** Cash inventory consumes leverage capacity one-for-one
  *     (unlike the FX desk's PFE add-on), so capacity is a share of the bank's own leverage
  *     headroom, less what the bank's desks already carry across every book. A desk that is full
- *     stops absorbing, and the level gaps — which is what a supply curve IS, and the mechanism
- *     §6's damper defect says is missing.
+ *     stops absorbing, and the level gaps — which is what a supply curve IS.
  *
  * Because the desk is a participant, the engine already gives it everything: prior holdings, a
  * cash leg in `netCashDeltaByParticipantId`, and fills that ARE its new inventory. The adapters

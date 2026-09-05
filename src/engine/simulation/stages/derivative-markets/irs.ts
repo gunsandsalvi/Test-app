@@ -31,7 +31,7 @@ import {
   SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, repricingLossLocal,
 } from '../../../../domain/derivatives/classes/irs';
 import { DerivativeContract, DerivativeParty, bankPartyKey, companyPartyKey, institutionPartyKey } from '../../../../domain/derivatives/contract';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from '../financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
 import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
@@ -52,17 +52,17 @@ import type { EntityId } from '../../../../domain/ids';
 /**
  * The two-sigma one-week move in this region's own yields, in bps — the repricing every hedger
  * here has to decide whether it can absorb. Measured off the cleared curve's own history, the
- * same estimator the repo desk's haircuts use, with the engine's minimum allowance as the floor
- * when there is too little history to estimate one.
+ * same estimator the repo desk's haircuts use; §3.19-i: with too little history the move is the
+ * engine's own resolution, one basis point, and no floor stands under the estimate.
  */
 function twoSigmaYieldMoveBps(reg: { historicalZeroCurves?: { tenor10Y: number }[] }): number {
   const series = (reg.historicalZeroCurves ?? []).map((h) => h.tenor10Y).filter((v) => Number.isFinite(v));
   const diffs: number[] = [];
   for (let i = 1; i < series.length; i++) diffs.push((series[i] - series[i - 1]) * 10000);
-  if (diffs.length < 2) return YIELD_LIKE_MIN_WEEKLY_MOVE_BPS;
+  if (diffs.length < 2) return 1;
   const mean = diffs.reduce((a, b) => a + b, 0) / diffs.length;
   const variance = diffs.reduce((a, b) => a + (b - mean) * (b - mean), 0) / (diffs.length - 1);
-  return Math.max(YIELD_LIKE_MIN_WEEKLY_MOVE_BPS, 2 * Math.sqrt(variance));
+  return 2 * Math.sqrt(variance);
 }
 
 function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun): void {
@@ -247,7 +247,6 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
       // is DER's next slice, with the CDS and option books that share the machinery.
       dealerSpreadBps: 0,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `swap:${id}`));
 
     // ---- Strike the week's contracts. At one cleared par rate the receivers are fungible, so
     // each payer's hedge draws from each receiver in proportion to what that receiver took. ----

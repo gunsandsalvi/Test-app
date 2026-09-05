@@ -68,7 +68,6 @@ static napi_value arrAt(napi_env env, napi_value arr, uint32_t i){
 
 /* ================= THE CLEARING KERNEL (financial-clearing-engine.ts runClearingKernel) ===== */
 
-#define YIELD_LIKE_MIN_WEEKLY_MOVE_BPS 25.0
 
 static double *colRes, *colRange, *colMaxH, *colAfford, *colCore;
 static double *kernWanted, *kernCore, *kernFilled;
@@ -166,15 +165,15 @@ static double solveClearingStat(int isYieldLike, double floatUSD, double bLow, d
 /* clearingKernel(inArrs, scalars, outArrs) -> fillCount
    inArrs order:  float, offering, withdrawStat, currentStat, yieldLike, skip, present,
                   dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding
-   scalars (f64): n, pCount, dealerSpreadBps, maxWeeklyStatMovePct (NaN = none), unsold (0/1)
-   outArrs order: clearedStat, damper, dealerInventory, primaryWithdrawn, primaryMarketTake,
+   scalars (f64): n, pCount, dealerSpreadBps, (unused), unsold (0/1)
+   outArrs order: clearedStat, dealerInventory, primaryWithdrawn, primaryMarketTake,
                   hasPrimary, fillInst, fillPart, fillFilled, fillTraded, fillFee */
 static napi_value ClearingKernel(napi_env env, napi_callback_info info){
   size_t argc = 3; napi_value argv[3];
   napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
   double *sc = taPtr(env, argv[1], NULL);
   int n = (int)sc[0], pCount = (int)sc[1];
-  double dealerSpreadBps = sc[2], maxWeeklyStatMovePct = sc[3];
+  double dealerSpreadBps = sc[2];
   int unsold = sc[4] != 0;
   napi_value in = argv[0], out = argv[2];
   double *flt = taPtr(env, arrAt(env, in, 0), NULL), *offering = taPtr(env, arrAt(env, in, 1), NULL);
@@ -185,14 +184,13 @@ static napi_value ClearingKernel(napi_env env, napi_callback_info info){
   double *dMaxH = taPtr(env, arrAt(env, in, 9), NULL), *dMaxNet = taPtr(env, arrAt(env, in, 10), NULL);
   double *dMinH = taPtr(env, arrAt(env, in, 11), NULL), *prevHolding = taPtr(env, arrAt(env, in, 12), NULL);
   double *clearedStatA = taPtr(env, arrAt(env, out, 0), NULL);
-  uint8_t *damper = taPtr(env, arrAt(env, out, 1), NULL);
-  double *dealerInventory = taPtr(env, arrAt(env, out, 2), NULL);
-  uint8_t *primaryWithdrawn = taPtr(env, arrAt(env, out, 3), NULL);
-  double *primaryMarketTake = taPtr(env, arrAt(env, out, 4), NULL);
-  uint8_t *hasPrimary = taPtr(env, arrAt(env, out, 5), NULL);
-  int32_t *fillInst = taPtr(env, arrAt(env, out, 6), NULL), *fillPart = taPtr(env, arrAt(env, out, 7), NULL);
-  double *fillFilled = taPtr(env, arrAt(env, out, 8), NULL), *fillTraded = taPtr(env, arrAt(env, out, 9), NULL);
-  double *fillFee = taPtr(env, arrAt(env, out, 10), NULL);
+  double *dealerInventory = taPtr(env, arrAt(env, out, 1), NULL);
+  uint8_t *primaryWithdrawn = taPtr(env, arrAt(env, out, 2), NULL);
+  double *primaryMarketTake = taPtr(env, arrAt(env, out, 3), NULL);
+  uint8_t *hasPrimary = taPtr(env, arrAt(env, out, 4), NULL);
+  int32_t *fillInst = taPtr(env, arrAt(env, out, 5), NULL), *fillPart = taPtr(env, arrAt(env, out, 6), NULL);
+  double *fillFilled = taPtr(env, arrAt(env, out, 7), NULL), *fillTraded = taPtr(env, arrAt(env, out, 8), NULL);
+  double *fillFee = taPtr(env, arrAt(env, out, 9), NULL);
   growScratch(pCount);
   long fillCount = 0;
   for (int i = 0; i < n; i++){
@@ -222,10 +220,8 @@ static napi_value ClearingKernel(napi_env env, napi_callback_info info){
       int beyond = isYL ? solved > wStat : solved < wStat;
       if (beyond){ withdrawn = 1; liveFloat = flt[i]; solved = solveClearingStat(isYL, liveFloat, bLow, bHigh); }
     }
-    double maxMove = isnan(maxWeeklyStatMovePct) ? INFINITY
-      : fabs(currentStat) * maxWeeklyStatMovePct + (isYL ? YIELD_LIKE_MIN_WEEKLY_MOVE_BPS : 0);
-    double cleared = tofixed4(jmax(currentStat - maxMove, jmin(currentStat + maxMove, solved)));
-    damper[i] = fabs(solved - cleared) > jmax(1e-6, fabs(solved) * 1e-6) ? 1 : 0;
+    /* §3.19-i: the print IS the solve — there is no cap and no damper lane. */
+    double cleared = tofixed4(solved);
     clearedStatA[i] = isfinite(cleared) ? cleared : currentStat;
     double clearedStat = clearedStatA[i];
     double wantedTotal = 0, coreTotal = 0;

@@ -96,7 +96,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 the bid–offer is a consequence | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ⚠️ |
 | C4 imbalance moves the rate | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ✅ |
 | C5 one rate in force for the period | `src/engine2/world.ts:openFxWeek` | ✅ |
-| C6 flat flow ⇒ no drift; one-way flow ⇒ a move | `src/domain/fx-market.ts:MAX_WEEKLY_FX_MOVE_PCT` | ⚠️ |
+| C6 flat flow ⇒ no drift; one-way flow ⇒ a move | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
 | D1 a dealer is left with the other side | `src/domain/dealer-derivatives.ts:FxDealerBook` | ✅ |
 | D2 it can square, and squaring is a trade | `src/engine/simulation/stages/fx-squaring.ts:squareInterbankFxPositions` | ✅ |
 | D3 what it does not square, it carries and revalues | `src/engine/simulation/stages/fx-revaluation.ts:runFxRevaluationStage` | ✅ |
@@ -159,9 +159,12 @@ what it posted. A constant cannot skew with inventory, cannot widen under stress
 refuse. This is `dealer-desks.md`'s finding and is recorded there; noted here as the second
 witness.
 
-### ⚠️ C6 — A CAP ON THE WEEKLY MOVE
+### ✅ C6 — NO CAP ON THE WEEKLY MOVE
 
-`fx-market.ts:MAX_WEEKLY_FX_MOVE_PCT` bounds how far a rate may travel in a week. A bound is not a
+*2026-09-05 (§9.19-i). `MAX_WEEKLY_FX_MOVE_PCT` is deleted — it had no use site, and the damper
+it described no longer exists. A week's flow moves the rate as far as the elastic side lets it.*
+
+`fx-market.ts:MAX_WEEKLY_FX_MOVE_PCT` bounded how far a rate may travel in a week. A bound is not a
 price (rule 6) and rule 6 says no bounds of any kind; if a week's flow implies a bigger move, the
 bound is the mechanism that is missing — most likely the elastic participants' size. It belongs to
 §3 step 18's inventory of bounds to delete and is recorded there, with this tree as the reason the

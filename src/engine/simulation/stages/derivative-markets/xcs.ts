@@ -129,7 +129,6 @@ function runXcsMarket({ ctx, week, standing, view }: DerivativeMarketRun): void 
       if (participants.length === 0) { backstop(undefined, new Map()); return; }
 
       const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
-      ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `xcs:${id}`));
       const clearedBps = result.newStatById.get(instrumentId);
       if (clearedBps === undefined) { backstop(undefined, new Map()); return; }
 

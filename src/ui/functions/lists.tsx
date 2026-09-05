@@ -4,7 +4,7 @@
  */
 
 import { FunctionModule } from '../fn';
-import { Tabs, Card, KV, T } from '../ui';
+import {Tabs, Card, KV } from '../ui';
 import { pctLevel, num, count } from '../format';
 import { regionOf } from '../world';
 import { isActiveCompany, banksOf } from '../../domain/company';
@@ -14,7 +14,7 @@ import { Screener } from './screener';
 import { SectionLabel } from '../objects/common';
 import { asRegionId } from '../../domain/geography';
 
-const inRegion = (type: 'market' | 'pool' | 'cohort' | 'occupation' | 'book' | 'institution', world: import('../world').World, region: string): string[] =>
+const inRegion = (type: 'market' | 'pool' | 'cohort' | 'occupation' | 'institution', world: import('../world').World, region: string): string[] =>
   moduleOf(type).list(world).filter((x) => (moduleOf(type).label(world, x.id, x.obj).region ?? '') === region).map((x) => x.id);
 
 export const markets: FunctionModule = {
@@ -25,15 +25,6 @@ export const markets: FunctionModule = {
 export const pools: FunctionModule = {
   name: 'pools', appliesTo: ['region'], blurb: 'the small-business pools',
   render: ({ world, ref, nav }) => <Screener world={world} nav={nav} type="pool" ids={inRegion('pool', world, ref.id)} subtitle={ref.id} hide={['region']} />,
-};
-
-export const books: FunctionModule = {
-  name: 'books', appliesTo: ['region'], blurb: 'the clearing books',
-  render: ({ world, ref, nav }) => {
-    const ids = inRegion('book', world, ref.id);
-    if (ids.length === 0) return <Card style={{ padding: 14, color: T.muted }}>no book in {ref.id} hit its damper this week — every print cleared inside the cap.</Card>;
-    return <Screener world={world} nav={nav} type="book" ids={ids} subtitle={ref.id} hide={['region']} />;
-  },
 };
 
 export const banks: FunctionModule = {

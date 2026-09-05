@@ -5,7 +5,7 @@ import { Card, KV, Link, Stat, StatGrid, Table } from '../ui';
 import { pctLevel, count } from '../format';
 import { World } from '../world';
 import { ObjectHeader, FunctionTiles, words } from './common';
-import { instrumentRef, instrumentName } from './book';
+import { instrumentRef, instrumentName } from './instrument-ref';
 
 export interface MarketIndex { id: string; constituents: { instrumentId: string; weight: number }[] }
 
