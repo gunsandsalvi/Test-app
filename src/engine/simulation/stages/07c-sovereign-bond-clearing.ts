@@ -440,16 +440,18 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const p = entityParticipants.find((x) => x.id === leg.entityId);
       if (!p || !ownInstrumentIds.has(leg.instrumentId)) return;
       const current = p.currentHoldingsByInstrumentId.get(leg.instrumentId) ?? 0;
+      // This book holds FACE (its fills are appended as face, its float is principal), so a leg's
+      // face adds to the holding as it is and its money budget is restated in face at its price.
       if (leg.faceLocal < 0) {
-        const keepLocal = Math.max(0, current + leg.faceLocal * leg.reservationPrice);
+        const keepLocal = Math.max(0, current + leg.faceLocal);
         p.demandByInstrumentId.set(leg.instrumentId, { reservationStat: leg.reservationPrice, maxHoldingLocal: keepLocal, fullSizeStatRange: leg.fullSizePriceRange, minHoldingLocal: keepLocal });
         return;
       }
       p.demandByInstrumentId.set(leg.instrumentId, {
         reservationStat: leg.reservationPrice,
-        maxHoldingLocal: current + leg.faceLocal * leg.reservationPrice,
+        maxHoldingLocal: current + leg.faceLocal,
         fullSizeStatRange: leg.fullSizePriceRange,
-        maxNetPurchaseLocal: leg.budgetLocal,
+        maxNetPurchaseLocal: leg.budgetLocal / Math.max(1e-9, leg.reservationPrice),
         minHoldingLocal: current,
       });
     });

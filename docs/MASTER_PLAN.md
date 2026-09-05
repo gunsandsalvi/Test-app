@@ -1619,8 +1619,8 @@ rule 11 they are step 38's to move, not a step's.
   before 07b, reads the region's `bondFuturesBasis` and deliverable, the fund's line rate and
   `primeBrokerageAvailableLocal`, its deliverable face on the register and its short cover in
   the standing book, and states each leg as the delta to target on `ctx.relativeValueLegs`;
-  07c takes a SOVEREIGN_CASH leg as the fund's own demand for that bond (reservation, size, budget,
-  `minHoldingLocal` its current), the futures line takes a BOND_FUTURE leg as a seat
+  07c takes a SOVEREIGN_CASH leg as the fund's own demand for that bond (reservation, size in
+  FACE — that book's holdings are face — budget restated in face, `minHoldingLocal` its current), the futures line takes a BOND_FUTURE leg as a seat
   (`bondFutureHolderQuote` at the leg's price) and drops such a fund from the mandate loop.
   X2 gains the bond basis (a print more than 2 points from carry). Only ADDS this commit: the
   cut is 17e-ii-b, the mirror 17e-iii, both inserted. Atlas: sovereign-credit I3 ⚠️. Gates
