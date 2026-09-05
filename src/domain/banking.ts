@@ -644,3 +644,18 @@ export function overdraftRunIsTold(weeks: number): boolean {
   while (w < weeks) w *= 2;
   return w === weeks;
 }
+
+/**
+ * §3.20c-i — A SOLVENT BANK ANSWERS ITS OWN MARGIN. The margin is the bank's own reading of its
+ * book (`netInterestMarginPct`, last week's evolution): what its assets earn over what its
+ * funding costs. A bank whose book loses money does not add to it — every new loan at the
+ * margins it can quote deepens the loss — so it RUNS THE BOOK OFF: it writes nothing new and
+ * lets amortisation and maturities shrink the assets until the margin is back. That is the one
+ * response the sheet gives it that is not already a decision elsewhere: the deposit rate already
+ * pays only the contested share of its alternative cost (`evolveBankingSector`), and there is no
+ * operating cost line on a bank to cut. Repricing what it writes is the cost-of-funds term the
+ * loan quote lacks (§3 step 37-COSTOFCAPITAL) and the borrower's choice of bank (20c-ii).
+ */
+export function bankRunsOffItsBook(sheet: Pick<BankingSector, 'netInterestMarginPct'>): boolean {
+  return (sheet.netInterestMarginPct ?? 0) < 0;
+}

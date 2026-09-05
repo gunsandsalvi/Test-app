@@ -110,7 +110,7 @@ checked by `scripts/check-atlas.sh`.
 | D1 borrows in the market, secured or unsecured | `src/engine/simulation/stages/repo-clearing.ts:runRegionalRepoSession` · `src/engine/simulation/stages/interbank.ts:runInterbankSession` | ✅ |
 | D2 sells or pledges liquid assets | `src/engine/simulation/stages/repo-clearing.ts:selectCollateral` | ✅ |
 | D3 bids up for deposits | `src/engine/macro/banking.ts:liquidityShortfallShare` | ✅ |
-| **D4 shrinks its assets: it stops lending** | `src/engine/simulation/stages/bank-lending.ts:runBankWeeklyLending` | ❌ |
+| **D4 shrinks its assets: it stops lending** | `src/domain/banking.ts:bankRunsOffItsBook` · `src/engine/simulation/stages/bank-lending.ts:runBankWeeklyLending` | ⚠️ |
 | D4.a which transmits into the credit book | — | ❌ |
 | D5 draws the facility, collateralised, at a penalty | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ⚠️ |
 | **D6 it can FAIL TO FUND ITSELF** | `src/domain/bank-resolution.ts:isBankUnderPca` | ❌ |
@@ -200,7 +200,12 @@ own borrower sizing uses the bare `MIN_CASH_BUFFER_RATIO` with no management wei
 (`repo-clearing.ts:300`) — a third answer to one question. Step 30b names the same shape on the
 lending side of this market; this is its borrower-side twin.
 
-### ❌ D4 / D4.a — A FUNDING PROBLEM CANNOT REACH THE LOAN BOOK
+### ⚠️ D4 / ❌ D4.a — A LOSING BOOK STOPS GROWING; A FUNDING PROBLEM STILL CANNOT REACH IT
+
+*2026-09-05 (§9.20c-i):* a bank whose own measured margin is negative (`bankRunsOffItsBook`, read
+off last week's `netInterestMarginPct`) originates nothing — SME, mortgage or consumer — and lets
+the book amortise: D4's "stops lending", from the EARNINGS side. The funding side below is still
+not wired, which is why the row is ⚠️ and D4.a stays ❌.
 
 Origination is gated by capital and by nothing else: `headroomLocal = equityLocal /
 BANK_MIN_CAPITAL_RATIO - currentRwaLocal` (`bank-lending.ts:275`, and `:661` for the household books).

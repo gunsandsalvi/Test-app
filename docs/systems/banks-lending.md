@@ -106,7 +106,7 @@ checked by `scripts/check-atlas.sh`.
 | B2 the bank is constrained, and the constraints are separate | `src/domain/bank-pricing.ts:bankRwaLocal` | ⚠️ |
 | B2.a capital: the loan consumes it | `src/domain/bank-pricing.ts:BANK_MIN_CAPITAL_RATIO` | ✅ |
 | **B2.b liquidity: it must fund the deposit it created** | — | ❌ |
-| B2.c its own risk appetite | `src/engine/simulation/stages/bank-lending.ts:bankRequiredReturnAnnual` | ⚠️ |
+| B2.c its own risk appetite | `src/engine/simulation/stages/bank-lending.ts:bankRequiredReturnAnnual` · `src/domain/banking.ts:bankRunsOffItsBook` | ⚠️ |
 | B2.d VERIFY which constraint binds is an outcome | — | ❌ |
 | C1 it quotes a rate built from its own economics | `src/domain/bank-pricing.ts:quoteLoanMarginBps` | ⚠️ |
 | **C1.a its cost of funds** | `src/engine/simulation/stages/bank-lending.ts:allInRateAnnual` | ⚠️ |
@@ -232,8 +232,8 @@ hike moved origination 0.5%. What is missing is "elsewhere": the pool's demand i
 by `bankShare ≈ its share of the pool's existing loans`, so a bank that quotes wide loses no volume
 to a bank that quotes tight. Housing is the exception and shows what the rest should look like —
 `currentMortgageRateAnnual` takes `bestMortgageRateAnnual`, the KEENEST quote in the region, because
-a household shops. The business book should shop the same way. Small; is **§3 step 20c**, or
-folds into 20c's "reprice" branch.
+a household shops. The business book should shop the same way. Small; **§3 step 20c-ii** (the
+run-off branch of 20c landed as §9.20c-i).
 
 ### ⚠️ A4 / A5 / E3 / E4 — PRESENT AS PARAMETERS, ABSENT AS EVENTS
 

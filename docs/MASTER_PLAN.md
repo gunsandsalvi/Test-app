@@ -549,11 +549,14 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-20c. **A solvent bank answers its own margin.** X1 reports a solvent bank running a negative
-    margin (UK: ORDO, 6 of 16 weeks at HEAD) and the bank does nothing about it. Run off the book,
-    reprice deposits, cut costs — the bank profile's response to its own margin. Step 30b owns the
-    likeliest CAUSE of the compression; this is the bank's reaction to it, which is missing
-    whatever the cause. Measure on the reference before building (rule 11).
+20c-ii. **The borrower shops.** (20c's run-off branch is §9.20c-i.) The SME pool's demand is split
+    across banks by each bank's share of the pool's EXISTING loans (`bank-lending.ts`,
+    `bankShare`), so a bank that quotes wide loses no volume to one that quotes tight, and a
+    bank running its book off hands its share to nobody. Housing already shops
+    (`currentMortgageRateAnnual` takes the region's keenest quote). The business book shops the
+    same way: the pool's week of demand goes to the banks in order of their all-in quote, each
+    taking what its headroom allows, so a wide quote is a lost loan and the price of credit is the
+    keenest bank's. Closes `banks-lending.md` C2/C2.a.
 20d. **Management is a state that decides.** `management-review` reviews; it does not decide.
     Capital-allocation policy (target leverage, payout versus reinvestment), growth-versus-margin
     orientation, risk appetite, product-line entry and exit, acquisition intent, guidance — each a
@@ -1513,6 +1516,18 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20c-i — A SOLVENT BANK ANSWERS ITS OWN MARGIN BY RUNNING THE BOOK OFF.** Of the three responses
+  the step named, one was missing and two were not: the deposit rate already pays only the
+  contested share of the bank's alternative cost (`evolveBankingSector`), and a bank has no
+  operating-cost line to cut (an absence, recorded on the tree). The missing one is built:
+  `banking.ts:bankRunsOffItsBook` reads the bank's own last measured `netInterestMarginPct`, and
+  a bank whose book loses money originates nothing — SME (`runBankWeeklyLending`), mortgage and
+  consumer (`runBankHouseholdLending`) — the declined demand counted where it always was, so the
+  book amortises until the margin is back. Repricing what it writes is 37-COSTOFCAPITAL's
+  cost-of-funds term and 20c-ii's shopping borrower (inserted). No measurement was taken (rule
+  11 overrides the step's own parenthetical). `banks-funding-and-liquidity.md` D4 ⚠️,
+  `banks-lending.md` B2.c re-cited. Gates green; no run.
 
 **20b — THE INTERBANK UNSECURED MARKET, AT THE CLOSE.** The boundary's named successor, built:
   `stages/interbank.ts:runInterbankSession` runs inside the funding close (after the day's flows,

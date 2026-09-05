@@ -47,7 +47,7 @@ import { BankingSector, BankLoan, HouseholdLoanPool, HouseholdLoanKind,
   MORTGAGE_SEED_SPREAD_OVER_10Y_BPS, MORTGAGE_OPERATING_COST_BPS, CARD_POOL_PAYMENT_RATE_WEEKLY, CARD_MIN_PRINCIPAL_RATE_WEEKLY,
   CARD_OPERATING_COST_BPS,
   CONSUMER_TERM_OPERATING_COST_BPS, HOUSING_TURNOVER_SEED_RATE_ANNUAL, housingTurnoverAnnual, MORTGAGE_LTV_AT_ORIGINATION,
-  MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER } from '../../../domain/banking';
+  MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER, bankRunsOffItsBook } from '../../../domain/banking';
 import { AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
 import { SmePool } from '../../../domain/region-macro';
 import { bookPnL } from '../../ledger/bank-book';
@@ -275,7 +275,8 @@ export function runBankWeeklyLending(
 
     const currentRwaLocal = loans.reduce((a, l) => a + l.principalLocal, 0) + householdBookRwaLocal(sheet.householdLoans);
     const headroomLocal = Math.max(0, equityLocal / BANK_MIN_CAPITAL_RATIO - currentRwaLocal);
-    const grantedLocal = Math.min(demandLocal, headroomLocal);
+    // §3.20c-i: a bank whose book loses money writes nothing new — it runs the book off.
+    const grantedLocal = bankRunsOffItsBook(sheet) ? 0 : Math.min(demandLocal, headroomLocal);
     declinedOriginationLocal += demandLocal - grantedLocal;
     if (grantedLocal <= 0) return;
 
@@ -649,7 +650,8 @@ export function runBankHouseholdLending(
 
   const equityLocal = sheet.bankEquityLocal;
   const otherRwaLocal = (sheet.businessLoans || []).reduce((a, l) => a + l.principalLocal, 0);
-  const headroomLocal = () => Math.max(0, equityLocal / 0.08 - (otherRwaLocal + householdBookRwaLocal(pools)));
+  // §3.20c-i: a bank whose book loses money writes nothing new — it runs the book off.
+  const headroomLocal = () => bankRunsOffItsBook(sheet) ? 0 : Math.max(0, equityLocal / 0.08 - (otherRwaLocal + householdBookRwaLocal(pools)));
 
   // This bank's share of the region's household demand ≈ its share of the existing books.
   const regionBookLocal = Math.max(1,
