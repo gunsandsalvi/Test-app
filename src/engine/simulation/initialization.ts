@@ -1747,7 +1747,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // §5-CLOSE C2: the seed closes — depositors fund the banks (wholesale is nobody's and is
   // zero), the central bank's book backs reserves and the treasury's account to the dollar, and
   // every sovereign bond has a holder. Runs after every book exists and before the projection.
-  closeSeedMoney(regions, companies, institutionalEntities, seedV2);
+  closeSeedMoney(regions, companies, institutionalEntities, seedV2, 1);
 
   // §3.37-SEED / D2: the accruals open at what the aged ladders have actually accrued — on the
   // rows themselves (§3.13-BOOK f4a/f4b), written by `seedOpeningAccruals` in

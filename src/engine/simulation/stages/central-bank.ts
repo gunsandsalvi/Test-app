@@ -12,7 +12,7 @@
  */
 
 import { waysAndMeansOf } from '../../ledger/accounts';
-import { centralBankPositions, centralBankBookLocal } from '../../sovereign-register';
+import { centralBankSovereignAssetsLocal } from '../../sovereign-register';
 import { currencyOf } from '../../../domain/geography';
 import { GameState, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
@@ -20,8 +20,6 @@ import { pay } from './settlement';
 import {
   centralBankAssetsLocal, remittanceLocal,
 } from '../../../domain/central-bank';
-import { sovereignCouponByBond } from '../../../domain/government';
-import { materializeGovLadder } from '../../../engine2/tranches';
 
 export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
@@ -32,22 +30,18 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // ---- 1. The CB earns its own coupons and pays interest on reserves; the difference is
     // remitted to the treasury. Negative when policy exceeds the portfolio yield — a central bank
     // remitting nothing after a hiking cycle, reproduced rather than modelled separately. ----
-    // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
-    const couponByBond = sovereignCouponByBond(materializeGovLadder(ctx.v2, regionId));
-    // §3.13-BOOK d3a: on the FACE its register rows hold.
-    const couponIncomeLocal = centralBankPositions(ctx.v2, regionId)
-      .reduce((a, p) => a + (p.faceLocal * (couponByBond[p.bondId] ?? 0)) / 52, 0);
+    // §3.13e-ii: its coupon income is what ACCRUED on its book this week, recorded by the
+    // sovereign calendar the way 02b records the interest on reserves it paid. It used to be
+    // paid here, `face × coupon / 52` weekly and straight from the treasury, on the argument that
+    // the one holder that can never be short of cash has no date — a second convention for one
+    // thing. Now its rows accrue like every holder's and the date pays them like every holder's;
+    // between the two the accrual sits on its rows as a receivable, on its sheet's asset side
+    // (`centralBankSovereignAssetsLocal`), and the treasury's payable already counts it.
+    const couponIncomeLocal = cb.lastCouponIncomeLocal ?? 0;
     // What 02b actually PAID, recorded by 02b at the moment it paid it. Re-summing the banks'
     // own fields here read a set resolution had already changed, so a bank that was paid its
     // interest and then resolved dropped out of the expense the remittance is meant to net.
     const interestOnReservesPaidLocal = cb.lastInterestOnReservesLocal ?? 0;
-    // The treasury PAYS the central bank its coupon — the calendar names every other
-    // holder and this is the one holder whose date does not matter (it can never be short of
-    // cash), so it is paid on the accrual, weekly. Without this leg the remittance below handed
-    // the treasury coupon income it had never paid out: money from nobody, one coupon a week.
-    if (couponIncomeLocal > 0) {
-      pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amount: couponIncomeLocal, currency: currencyOf(regionId), reason: 'sovereign coupon to the central bank' });
-    }
     // The ways-and-means advance costs the policy rate, paid like any interest.
     const waysAndMeansInterestLocal = (waysAndMeansOf(ctx.v2, regionId) * reg.policyRate) / 52;
     if (waysAndMeansInterestLocal > 0) {
@@ -79,21 +73,21 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     } else if (remitLocal < 0) {
       pay(ctx, { payer: { kind: 'GOVERNMENT', region: regionId }, payee: { kind: 'CENTRAL_BANK', region: regionId }, amount: -remitLocal, currency: currencyOf(regionId), reason: 'treasury covers the central bank\'s loss' });
     }
-    cb.lastCouponIncomeLocal = Math.round(couponIncomeLocal);
     cb.lastRemittanceLocal = Math.round(remitLocal);
 
     // ---- 3. The reserve leg is the settlement pass's, and posting it here as well is the trap
     // recorded: it broke the per-bank balance-sheet identity by exactly the coupon, on every
     // bank. Under CAL the coupon is a real payment from the treasury to a named holder, so its
     // reserve leg is struck where every other payment's is, and what is reported here is what the
-    // treasury's account did — which is what a reserve drain means. ----
-    cb.lastReserveDrainLocal = Math.round((-(reg.sovereignCouponPaidLocal ?? 0)));
+    // treasury's account did — which is what a reserve drain means. §3.13e-ii: less the coupon the
+    // date paid the central bank itself, the one leg of it that moves no bank's reserves. ----
+    cb.lastReserveDrainLocal = Math.round((-((reg.sovereignCouponPaidLocal ?? 0) - (cb.lastCouponPaidLocal ?? 0))));
 
     // ---- 4.: nothing closes the balance sheet here. Currency is a stored liability
     // the central bank issues on purpose; the identity holds when every reserve was bought, and
     // the audit's M1 prints the residual until it does. ----
 
     // Statistic, not a driver: the old `centralBankBalanceSheet` scalar's replacement.
-    reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(centralBankBookLocal(ctx.v2, regionId), cb, waysAndMeansOf(ctx.v2, regionId), currencyOf(regionId), ctx.fx));
+    reg.centralBankBalanceSheet = Math.round(centralBankAssetsLocal(centralBankSovereignAssetsLocal(ctx.v2, regionId), cb, waysAndMeansOf(ctx.v2, regionId), currencyOf(regionId), ctx.fx));
   });
 }

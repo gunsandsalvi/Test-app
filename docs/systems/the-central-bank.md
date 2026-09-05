@@ -157,8 +157,9 @@ escape hatch from the disciplined one. **Already §3 step 20-LLR.**
 Recorded in full as `the-treasury.md` D3, and this is the central bank's side of the same row: the
 advance is an ASSET of this institution. `waysAndMeansOf(v2, region)` is `max(0, -treasuryNetOf)` —
 the treasury's account is one signed row and its negative side is carried into
-`centralBankAssetsLocal` as the last term (`central-bank.ts:136`), charged the policy rate every week
-by `central-bank.ts:49` and remitted straight back to the treasury at `:60`. `ui/objects/centralbank.tsx`
+`centralBankAssetsLocal` as the last term, charged the policy rate every week by
+`stages/central-bank.ts:runCentralBankStage` and remitted straight back to the treasury in the same
+stage. `ui/objects/centralbank.tsx`
 labels it for the player as "the treasury's overdraft here".
 
 Two things belong to this tree rather than the treasury's:
@@ -173,6 +174,16 @@ Two things belong to this tree rather than the treasury's:
 
 The mechanism belongs to `the-treasury.md` D3 and is that tree's finding. **Already a §3 step-to-be
 named there;** attach the "no facility without an approval and a cap" half to it.
+
+**2026-09-05 (§9.13e-ii) — the coupon on A2.b's paper is on the calendar.** `runCentralBankStage`
+used to pay the central bank `face × coupon / 52` weekly, straight from the treasury and outside
+the sovereign holder walk. Now its rows accrue in `sovereign-calendar.ts:accrueSovereignHolders`
+like every holder's, the coupon date pays its book like every holder's, its income is what accrued
+(`lastCouponIncomeLocal`, written by the calendar, netted by E3's remittance the same week), and
+between the two the accrued is a receivable on the asset side —
+`sovereign-register.ts:centralBankSovereignAssetsLocal`, the paper at its mark plus the coupon
+owed on it, which A2.c's identity now counts. The seed opens the book aged (`close-seed.ts`), so
+what backs reserves and the treasury's account there is the book plus its accrued.
 
 ### ⚠️ B3 / B3.a / B4 — THE CORRIDOR IS REAL AND ALMOST NOTHING RIDES ON IT
 

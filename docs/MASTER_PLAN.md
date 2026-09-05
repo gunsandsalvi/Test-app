@@ -547,13 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-13e. **A HOLDER OF RECORD IS EVERY HOLDER** — split 2026-09-05; 13e-i (a bank's govvie DESK
-    accrues and is paid on the date, the bank's income the week it is earned) is in §9. What is
-    left:
-13e-ii. **THE CENTRAL BANK JOINS THE CALENDAR.** `central-bank.ts` pays the central bank its
-    coupon WEEKLY, `face × coupon / 52` straight from the treasury, outside the holder walk — a
-    second convention for one thing. Its book accrues on its rows like every holder's, the date
-    pays it, its income is what accrued, and its receivable is a read of its book.
 13f. **An accrued coupon is an ASSET, and only the banks carry it.** The ledger holds the balance;
     a bank shows it as `sovereignAccruedCouponLocal`, an institution shows nothing. So an
     institution that pays a seller's accrued at settlement (13b) has the cash gone and no
@@ -1689,6 +1682,23 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13e-ii — THE CENTRAL BANK JOINS THE CALENDAR.** `central-bank.ts` paid the central bank its
+coupon WEEKLY, `face × coupon / 52` straight from the treasury and outside the holder walk — a
+second convention for one thing, kept on the argument that the one holder that can never be short
+of cash has no date. Deleted. Its rows accrue in `accrueSovereignHolders` like every holder's on
+FACE; the date pays its book like every holder's (it was already in `registerBooks`); its coupon
+income IS the accrual, written to `lastCouponIncomeLocal` by the calendar the way 02b writes the
+interest on reserves it paid, and the remittance nets it unchanged; the accrued between the two is
+a receivable on its asset side (`centralBankSovereignAssetsLocal` = the book at its mark + its
+accrued), counted by M1, the snapshot, the FX revaluation and the trace. The treasury's payable
+(`sovereignAccruedPayableLocal`) walks every row, so it counted the central bank's the moment the
+rows accrued. The reserve drain nets out the leg paid to the central bank itself
+(`lastCouponPaidLocal`), the one coupon cash that moves no bank's reserves. The seed opens the
+book AGED: with no retained earnings the remittance has already paid the treasury the seeded
+accrual's income, so what backs reserves and the treasury's account at the close is the book plus
+its accrued, and `closeSeedMoney` sizes the book as the target over one plus the accrued per unit
+of book. `test/sovereign-calendar.test.ts`. Gates green; no run.
 
 **13e-i — THE DESK IS A HOLDER OF RECORD.** A bank's govvie desk inventory earned no coupon:
 `accrueSovereignHolders` walked the institutions and the banks' own books and nothing else, so

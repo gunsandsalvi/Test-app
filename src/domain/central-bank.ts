@@ -77,8 +77,13 @@ export interface CentralBank {
   lastBillAccretionLocal?: number;
   /** This week's coupon income on the sovereign book, and the interest paid on reserves — the
    *  two largest lines of the remittance, reported like the four smaller ones beside them so the
-   *  whole income statement can be read off the sheet instead of recomputed. */
+   *  whole income statement can be read off the sheet instead of recomputed. §3.13e-ii: the
+   *  income is what ACCRUED on its register rows this week, written by the sovereign calendar
+   *  (the one holder walk) and netted by the remittance the same week. */
   lastCouponIncomeLocal?: number;
+  /** §3.13e-ii: what the coupon DATES paid it this week — its receivable becoming the treasury's
+   *  account, the one leg of the treasury's coupon cash that moves no bank's reserves. */
+  lastCouponPaidLocal?: number;
   lastInterestOnReservesLocal?: number;
   /** Last week's remittance to the treasury: every income line above less every expense line. */
   lastRemittanceLocal: number;
@@ -125,8 +130,10 @@ export function centralBankFxReservesLocal(cb: CentralBank): number {
  * peg ever breaks.
  */
 export function centralBankAssetsLocal(sovereignBookLocal: number, cb: CentralBank, waysAndMeansLocal: number, money: CurrencyCode = NUMERAIRE, fx: FxTable = PARITY_FX): number {
-  // §3.13-BOOK d3a: the sovereign book is REGISTER ROWS (`sovereign-register.ts:centralBankBookLocal`),
-  // handed in — this file is domain and does not read the store.
+  // §3.13-BOOK d3a: the sovereign book is REGISTER ROWS, handed in — this file is domain and does
+  // not read the store. §3.13e-ii: the paper at its mark PLUS the coupon accrued on it and not yet
+  // paid (`sovereign-register.ts:centralBankSovereignAssetsLocal`) — a receivable is an asset, and
+  // the remittance has already paid the treasury the income it stands for.
   return sovereignBookLocal + centralBankFxReservesLocal(cb) + (cb.loansToBanksLocal ?? 0)
     // §3.13c: the one line on this sheet held in the numéraire, brought to the book's own money.
     + fromNumeraire(cb.foreignOfficialClaimsUSD ?? 0, money, fx) + (cb.standingFacilityLentLocal ?? 0) + waysAndMeansLocal;

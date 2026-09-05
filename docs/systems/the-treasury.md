@@ -131,7 +131,7 @@ The one node in this tree the user stated in their own words, and the code has i
 `accounts.ts:waysAndMeansOf` is `max(0, −treasuryNetOf(region))`: the treasury's account at the
 central bank is **one signed row**, and when it goes negative that negative IS a ways-and-means
 advance — an asset of the central bank, carried in `centralBankAssetsLocal`, charged policy-rate
-interest every week by `central-bank.ts:49`. `ui/objects/centralbank.tsx:67` labels it for the
+interest every week by `stages/central-bank.ts:runCentralBankStage`. `ui/objects/centralbank.tsx` labels it for the
 player: *"the treasury's overdraft here"*.
 
 **It is not a leftover; it is load-bearing.** `11-fiscal:647` sizes the quarterly issue as

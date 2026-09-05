@@ -10,7 +10,7 @@ import { GameState, RegionId } from '../../types';
 import { loanBooksOf, spendableDepositsOf } from '../../domain/banking';
 import { REGION_IDS, currencyOf } from '../../domain/geography';
 import { centralBankAssetsLocal } from '../../domain/central-bank';
-import { centralBankBookLocal } from '../sovereign-register';
+import { centralBankSovereignAssetsLocal } from '../sovereign-register';
 import { banksOf } from '../../domain/company';
 import { V2World, ensureV2 } from '../../engine2/world';
 import { goodsHeldBy } from '../../engine2/lots';
@@ -46,7 +46,7 @@ export function snapshotOf(state: GameState): AuditSnapshot {
     out[r] = {
       treasuryAccountLocal: treasuryAccountOf(ensureV2(state), r),
       waysAndMeansLocal: waysAndMeansOf(ensureV2(state), r),
-      centralBankAssetsLocal: centralBankAssetsLocal(centralBankBookLocal(ensureV2(state), r), cb, waysAndMeansOf(ensureV2(state), r), currencyOf(r), ensureV2(state).fx),
+      centralBankAssetsLocal: centralBankAssetsLocal(centralBankSovereignAssetsLocal(ensureV2(state), r), cb, waysAndMeansOf(ensureV2(state), r), currencyOf(r), ensureV2(state).fx),
       // §3.13-SOV row 2: read from the ONE store, not the array beside it. The audit runs after
       // the whole week, so the reconcile in 11-fiscal has already run and the two agree.
       sovereignOutstandingLocal: materializeGovLadder(ensureV2(state), r).reduce((a, t) => a + t.principalLocal, 0),

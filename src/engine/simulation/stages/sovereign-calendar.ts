@@ -30,17 +30,18 @@
  *     redemption, which PUB3d already settles in the redemption leg. `sovereignCouponByBond`
  *     excludes them, so a bill simply never accrues here. This is also why the corporate
  *     treasuries are absent: short paper is all they hold.
- *   - **The central bank.** It earns its coupons and remits the profit to the treasury in the
- *     same week, on the same two accounts (the TGA and its own liability). Putting that round
- *     trip on a date moves a number out of one side of the central bank's sheet and back into it
- *     — no participant's behaviour depends on the timing, because the one holder in this model
- *     that can never be short of cash is the issuer of the cash.
+ *   - Nobody else. §3.13e-ii: the **central bank** used to be — paid `face × coupon / 52` weekly
+ *     by `central-bank.ts`, straight from the treasury, on the argument that a holder that can
+ *     never be short of cash has no date. That was a second convention for one thing. Its book
+ *     accrues on its rows like every holder's, the date pays it like every holder's, its income
+ *     is what accrued (`lastCouponIncomeLocal`, which the remittance nets), and its receivable is
+ *     a read of its book (`sovereign-register.ts:centralBankSovereignAssetsLocal`).
  *   - There are no holders this model does not name (§5-CLOSE): every tranche is held, and a
  *     coupon reaches a holder of record on its date or is not paid.
  */
 
 import { RegionId } from '../../../types';
-import { bankSovereignPositions } from '../../sovereign-register';
+import { bankSovereignPositions, centralBankPositions } from '../../sovereign-register';
 import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { accrueInterestOnRow, settleAccruedOnRow, closeEmptyPositions, registerBooks, bookIdOfParty, deskBookId } from '../../ledger/holdings-ledger';
@@ -61,14 +62,15 @@ import { materializeGovLadder } from '../../../engine2/tranches';
  * THE HOLDER WALK, shared by the week and the seed. Every holder of record of a region's
  * sovereigns accrues `notional × coupon × weeks / 52` on the bond it actually holds: the
  * institutions off the register, the banks off their own books (the leg that could not be keyed
- * by institution id, and the reason this ledger is party-keyed at all). The central bank is
- * deliberately absent — see the header — and the corporate treasuries hold only short paper.
+ * by institution id, and the reason this ledger is party-keyed at all), the central bank off its
+ * own book (§3.13e-ii) — and the corporate treasuries hold only short paper.
  *
  * `weeksOf` is what separates the two callers: the weekly stage passes 1, and the seed passes the
  * weeks each bond has run since its own last coupon date, so an aged ladder opens at what it has
  * genuinely accrued rather than at zero (§3.37-SEED / atlas the-seed D2).
  *
- * Returns what each BANK earned, for the caller to post as its equity leg.
+ * Returns what each BANK earned, for the caller to post as its equity leg, and what the CENTRAL
+ * BANK earned, which is its coupon income for the remittance.
  */
 export function accrueSovereignHolders(
   ctx: {
@@ -79,7 +81,7 @@ export function accrueSovereignHolders(
   regionId: RegionId,
   couponByBond: Record<string, number>,
   weeksOf: (bondId: string) => number,
-): Map<string, number> {
+): { bankEarnedLocal: Map<string, number>; centralBankEarnedLocal: number } {
   const bankEarnedLocal = new Map<string, number>();
   // §3.13-BOOK f4b: onto the ROW that holds the bond.
   const accrue = (bondId: string, row: number, notional: number): number => {
@@ -122,7 +124,14 @@ export function accrueSovereignHolders(
     });
     if (earnedLocal > 0) bankEarnedLocal.set(c.ticker, earnedLocal);
   });
-  return bankEarnedLocal;
+  // §3.13e-ii — THE CENTRAL BANK IS A HOLDER OF RECORD. Its book accrues on FACE like a bank's
+  // own; its income is what accrued, and it keeps none of it (the remittance nets it the same
+  // week, `central-bank.ts`), so what it is owed sits on its rows as a receivable until the date.
+  let centralBankEarnedLocal = 0;
+  centralBankPositions(ctx.v2, regionId).forEach((p) => {
+    centralBankEarnedLocal += accrue(p.bondId, p.row, p.faceLocal);
+  });
+  return { bankEarnedLocal, centralBankEarnedLocal };
 }
 
 /**
@@ -169,10 +178,14 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
     const ladder = materializeGovLadder(ctx.v2, regionId);
     const couponByBond = sovereignCouponByBond(ladder);
     // ---- 1 and 2. The holders of record — institutions on the register, banks on their own
-    // books — accrue this week. One week each; the seed calls the same walk with the weeks each
-    // bond has actually run since its last coupon date. ----
-    accrueSovereignHolders(ctx, regionId, couponByBond, () => 1)
-      .forEach((usd, ticker) => bankEarnedLocal.set(ticker, (bankEarnedLocal.get(ticker) ?? 0) + usd));
+    // books and their desks, the central bank on its — accrue this week. One week each; the seed
+    // calls the same walk with the weeks each bond has actually run since its last coupon date. ----
+    const earned = accrueSovereignHolders(ctx, regionId, couponByBond, () => 1);
+    earned.bankEarnedLocal.forEach((usd, ticker) => bankEarnedLocal.set(ticker, (bankEarnedLocal.get(ticker) ?? 0) + usd));
+    // §3.13e-ii: the central bank's coupon income IS its accrual — recorded here the way 02b
+    // records the interest on reserves it paid, and read by the remittance at the week's end.
+    const cb = reg.centralBankSheet;
+    if (cb) cb.lastCouponIncomeLocal = Math.round(earned.centralBankEarnedLocal);
 
     // ---- 3. THE COUPON DATES. A bond whose date falls this week turns every holder's accrued
     // balance into cash — including a holder that has since sold out, because it earned it while
@@ -182,6 +195,8 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
         .map((b) => b.id)
     );
     let paidLocal = 0;
+    /** §3.13e-ii: the part of it paid to the central bank — a TGA flow with no reserve leg. */
+    let centralBankPaidLocal = 0;
     if (dueBonds.size > 0 && govBondRef >= 0) {
       // §3.13-BOOK f4b: every register book's rows of a due bond are paid what they are owed, to
       // the book's own party, and cleared. A BANK's own book is paid as BANK: the coupon is not
@@ -204,6 +219,7 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
             reason: 'sovereign coupon',
           });
           paidLocal += amountLocal;
+          if (book.payee.kind === 'CENTRAL_BANK') centralBankPaidLocal += amountLocal;
           settleAccruedOnRow(ctx.v2, r, amountLocal);
           touched.add(book.id);
         }
@@ -215,6 +231,7 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
     // its account moves on the dates (stages/central-bank.ts reads the change in this level). ----
     reg.sovereignCouponPayableLocal = Math.round(sovereignAccruedPayableLocal(ctx.v2, regionId));
     reg.sovereignCouponPaidLocal = Math.round(paidLocal);
+    if (cb) cb.lastCouponPaidLocal = Math.round(centralBankPaidLocal);
   });
 
   // ---- 5. The banks' books. The receivable is SET to the ledger — one writer, so the holder's

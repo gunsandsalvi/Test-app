@@ -25,7 +25,7 @@
 
 import { GameState, RegionId } from '../types';
 import { V2World, typeRefOf, regionRefOf, regionOf } from '../engine2/world';
-import { bookHeadOf, instrumentIdAt, rowUnits } from '../engine2/holdings';
+import { bookHeadOf, instrumentIdAt, rowUnits, bookAccruedLocal } from '../engine2/holdings';
 import { isActiveCompany } from '../domain/company';
 import { registerBooks, centralBankBookId } from './ledger/holdings-ledger';
 import type { InstrumentId } from '../domain/ids';
@@ -141,6 +141,11 @@ export function sovereignBookLocalOf(v2: V2World, bookId: string): number {
 /** The central bank's book, by region. */
 export const centralBankPositions = (v2: V2World, regionId: RegionId): SovereignRow[] => sovereignRowsOf(v2, centralBankBookId(regionId));
 export const centralBankBookLocal = (v2: V2World, regionId: RegionId): number => sovereignBookLocalOf(v2, centralBankBookId(regionId));
+/** §3.13e-ii: the sovereign line of the central bank's ASSET side — the paper at its mark plus the
+ *  coupon accrued on its rows and not yet paid by a date. A bank carries the same second term as
+ *  `sovereignAccruedCouponLocal`; here it is read where it is needed and stored nowhere. */
+export const centralBankSovereignAssetsLocal = (v2: V2World, regionId: RegionId): number =>
+  sovereignBookLocalOf(v2, centralBankBookId(regionId)) + bookAccruedLocal(v2, centralBankBookId(regionId));
 /** A bank's OWN book (§3.13-BOOK d3b), by its entity id — its liquidity buffer, not its desk. */
 export const bankSovereignPositions = (v2: V2World, bankId: string): SovereignRow[] => sovereignRowsOf(v2, bankId);
 export const bankSovereignBookLocal = (v2: V2World, bankId: string): number => sovereignBookLocalOf(v2, bankId);

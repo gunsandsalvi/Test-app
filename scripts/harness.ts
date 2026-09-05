@@ -146,7 +146,7 @@ import { mortgageSeverityAtLtv, vintageCurrentLtv, householdBookRwaLocal } from 
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS } from '../src/engine/macro/banking';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../src/domain/market-microstructure';
 import { centralBankAssetsLocal, centralBankFxReservesLocal } from '../src/domain/central-bank';
-import { centralBankBookLocal, centralBankPositions, bankSovereignBookLocal, bankSovereignPositions, bankSovereignFaceByBond, lienFaceLocal } from '../src/engine/sovereign-register';
+import { centralBankBookLocal, centralBankSovereignAssetsLocal, centralBankPositions, bankSovereignBookLocal, bankSovereignPositions, bankSovereignFaceByBond, lienFaceLocal } from '../src/engine/sovereign-register';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
 import { unclassifiedReasons } from '../src/engine/simulation/stages/settlement';
 import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
@@ -1159,7 +1159,7 @@ const pubModule: HarnessModule = (() => {
       series.unspentProc.push(reg.unspentProcurementBudgetLocal ?? 0);
       series.stance.push(reg.fiscalStanceScore);
       series.tga.push(treasuryAccountOf(ensureV2(s), 'USA'));
-      series.cbBook.push((cb ? centralBankAssetsLocal(centralBankBookLocal(ensureV2(s), 'USA'), cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0));
+      series.cbBook.push((cb ? centralBankAssetsLocal(centralBankSovereignAssetsLocal(ensureV2(s), 'USA'), cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0));
       series.reinvest.push(cb?.reinvestmentShare ?? 1);
       series.remit.push(cb?.lastRemittanceLocal ?? 0);
       series.policy.push(reg.policyRate);
@@ -1168,7 +1168,7 @@ const pubModule: HarnessModule = (() => {
       series.cmb.push(reg.cashBridgeBillIssuanceLocal ?? 0);
       series.debtGdp.push(reg.debtToGdpPctBottomUp ?? 0);
       const cbCoupon = couponReceipts(s, 'USA').central * 52;
-      const cbAssetsLocal = cb ? centralBankAssetsLocal(centralBankBookLocal(ensureV2(s), 'USA'), cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0;
+      const cbAssetsLocal = cb ? centralBankAssetsLocal(centralBankSovereignAssetsLocal(ensureV2(s), 'USA'), cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0;
       series.portYield.push(cbAssetsLocal > 0 ? cbCoupon / cbAssetsLocal : 0);
       REGIONS.forEach(r => {
         const rr = s.regions[r];
@@ -1221,7 +1221,7 @@ const pubModule: HarnessModule = (() => {
         const chk = (n: string, v: number | undefined) => { if (v === undefined || !isFinite(v)) bad.push(n); };
         chk('revenue', reg.governmentRevenueLocal); chk('outlays', reg.governmentOutlaysLocal);
         chk('interest', reg.governmentInterestWeeklyLocal); chk('tga', treasuryAccountOf(ensureV2(s), r));
-        chk('cbBook', (cb ? centralBankAssetsLocal(centralBankBookLocal(ensureV2(s), r), cb, waysAndMeansOf(ensureV2(s), r)) : 0)); chk('2Y', reg.zeroRates.tenor2Y); chk('10Y', reg.zeroRates.tenor10Y);
+        chk('cbBook', (cb ? centralBankAssetsLocal(centralBankSovereignAssetsLocal(ensureV2(s), r), cb, waysAndMeansOf(ensureV2(s), r)) : 0)); chk('2Y', reg.zeroRates.tenor2Y); chk('10Y', reg.zeroRates.tenor10Y);
         out.push(`  ${r}: rev ${B(reg.governmentRevenueLocal)} outlays ${B(reg.governmentOutlaysLocal ?? 0)} interest ${B(reg.governmentInterestWeeklyLocal ?? 0)} tga ${B(treasuryAccountOf(ensureV2(s), r))} 2Y ${pct(reg.zeroRates.tenor2Y)} 10Y ${pct(reg.zeroRates.tenor10Y)} ${bad.length ? 'NON-FINITE: ' + bad.join(',') : 'all finite'}`);
       });
       return out;

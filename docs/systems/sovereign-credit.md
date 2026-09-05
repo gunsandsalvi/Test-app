@@ -135,6 +135,8 @@ exactly as a corporate bond does, and they are not repeated here. Where it answe
 - **H1** REASON — the central bank buys sovereign paper as policy, in a size **it** chooses
 - **H2** REASON — the purchase **creates reserves**; the base grows
 - **H3** REASON — the coupon on its holding returns to the treasury as remittance
+  - H3.a the coupon accrues on its book and is paid on the date like every holder's — one
+    calendar; its income is what accrued, and the accrued is a receivable on its sheet
 - **H4** REASON — monetary financing vs open-market operations is a **policy** constraint, not a
   mechanical one — and A3.b is where this model draws it
 - **H5** VERIFY — debt held by the central bank is economically consolidated away and
@@ -215,6 +217,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | H1 the central bank buys as policy, in a size it chooses | `src/engine/simulation/stages/central-bank-demand.ts:plannedPurchasesByBond` | ✅ |
 | H2 the purchase CREATES reserves; the base grows | `src/engine/simulation/stages/central-bank-demand.ts:bookCentralBankFills` | ✅ |
 | H3 the coupon on its holding returns as remittance | `src/engine/simulation/stages/central-bank.ts:runCentralBankStage` | ✅ |
+| H3.a the coupon accrues and is paid on the calendar, like every holder's | `src/engine/simulation/stages/sovereign-calendar.ts:accrueSovereignHolders` | ✅ |
 | **H4 monetary financing vs OMO is a POLICY constraint** | `src/engine/ledger/accounts.ts:waysAndMeansOf` | ❌ |
 | H5 VERIFY consolidated economically, not accounting-wise | — | ❌ |
 
@@ -222,7 +225,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 
 ## 3. THE DIFF
 
-**68 rows: 32 ✅, 11 ⚠️, 25 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
+**69 rows: 33 ✅, 11 ⚠️, 25 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
 drifted three times by hand (25/15/27 against 28/12/27, then 30/13/25 against 31/12/25 in the very
 paragraph that lectured about drift): `check-atlas.sh` proves a citation RESOLVES and can say
 nothing about whether a mark is TRUE, which is §5's lesson, and the test is the answer to it.

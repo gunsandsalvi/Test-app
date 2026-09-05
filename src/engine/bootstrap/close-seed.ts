@@ -50,7 +50,9 @@ export function closeSeedMoney(
   companies: Company[],
   institutionalEntities: InstitutionalEntity[],
   /** §5-WIRES A3.4: the world the seed is opening — the household sector's row at each bank opens at the line struck here. */
-  v2: V2World
+  v2: V2World,
+  /** §3.13e-ii: the week the seed opens at — `seedOpeningAccruals` ages every book to it. */
+  currentWeek: number,
 ): void {
   (Object.keys(regions) as RegionId[]).forEach((regionId) => {
     const reg = regions[regionId];
@@ -93,7 +95,7 @@ export function closeSeedMoney(
     // ---- 2. The central bank's book backs reserves and the treasury's account exactly. ----
     const reservesLocal = banks.reduce((a, b) => a + openingCashOf(b.bankBalanceSheet!), 0);
     cb.currencyInCirculationLocal = 0;
-    const targetBookLocal = Math.max(0, reservesLocal + treasuryAccountOf(v2, regionId) - centralBankFxReservesLocal(cb));
+    const targetAssetsLocal = Math.max(0, reservesLocal + treasuryAccountOf(v2, regionId) - centralBankFxReservesLocal(cb));
     // §3.13-BOOK d3a: the book is the seed's stash until `openSeededBooks` issues its rows.
     const seededBook = seedCentralBankBookOf(cb);
     const currentBookLocal = sumByTenor(seededBook);
@@ -102,12 +104,28 @@ export function closeSeedMoney(
     // other holder's does.
     materializeGovLadder(v2, regionId).forEach((t) => { weights.set(t.id, (weights.get(t.id) ?? 0) + t.principalLocal); });
     const weightTotal = [...weights.values()].reduce((a, v) => a + v, 0) || 1;
-    const scaled: Record<string, number> = {};
+    // The book's SHAPE — a unit of book, spread by bond as the stash is (or as the ladder is when
+    // there is no stash to scale).
+    const shape = new Map<string, number>();
     if (currentBookLocal > 0) {
-      Object.entries(seededBook).forEach(([k, v]) => { scaled[k] = Math.round((Number(v) || 0) * (targetBookLocal / currentBookLocal)); });
+      Object.entries(seededBook).forEach(([k, v]) => { shape.set(k, (Number(v) || 0) / currentBookLocal); });
     } else {
-      weights.forEach((w, k) => { scaled[k] = Math.round(targetBookLocal * (w / weightTotal)); });
+      weights.forEach((w, k) => { shape.set(k, w / weightTotal); });
     }
+    // §3.13e-ii: the book opens AGED. `seedOpeningAccruals` accrues every holder's rows the weeks
+    // each bond has run since its last coupon date, the central bank's included, and that accrued
+    // is an asset of this sheet (`centralBankSovereignAssetsLocal`) whose income the remittance
+    // has — by the model's own rule of no retained earnings — already paid the treasury. So what
+    // backs reserves and the treasury's account is the book PLUS its accrued: a unit of book
+    // carries `accruedPerUnit` of receivable, and the book is the target over one plus that.
+    const ladder = seedGovLadderOf(reg).map(govTrancheView);
+    const couponByBond = sovereignCouponByBond(ladder);
+    const weeksByBond = new Map<string, number>(ladder.map((b) => [b.id, weeksAccrued(b, currentWeek)]));
+    let accruedPerUnit = 0;
+    shape.forEach((share, id) => { accruedPerUnit += share * (couponByBond[id] ?? 0) * (weeksByBond.get(id) ?? 0) / 52; });
+    const targetBookLocal = targetAssetsLocal / (1 + accruedPerUnit);
+    const scaled: Record<string, number> = {};
+    shape.forEach((share, k) => { scaled[k] = Math.round(targetBookLocal * share); });
     stashSeedCentralBankBook(cb, scaled);
 
     // ---- 3. The stock outstanding is what the named holders hold, BOND BY BOND. ----
