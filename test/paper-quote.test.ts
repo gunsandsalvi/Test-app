@@ -30,7 +30,7 @@ test('a corporate bond quotes its price and the OAS the price implies; unprinted
     const q = paperQuoteOf(v2, bond, rates, 10);
     assert.ok(q && Math.abs(q.pricePerFace - px) < 1e-12);
     assert.ok(q.spreadBps !== undefined && Math.abs(q.spreadBps - 250) < 0.01, 'the spread comes back off the price');
-    assert.equal(q?.yieldAnnual, undefined);
+    assert.equal(q.yieldAnnual, undefined);
   } finally {
     setActiveWireJournal(undefined);
     setActiveWireWorld(undefined);
@@ -51,7 +51,7 @@ test('a sovereign quotes its price and the yield it implies — a bond off its s
     setClearedPrice(v2, bill, 1 / (1 + 0.05 * (13 / 52)));
     const qb = paperQuoteOf(v2, bond, rates, 10);
     assert.ok(qb && qb.yieldAnnual !== undefined && Math.abs(qb.yieldAnnual - 0.045) < 1e-6, 'the yield comes back off the price');
-    assert.equal(qb?.spreadBps, undefined, 'a sovereign has no credit spread here');
+    assert.equal(qb.spreadBps, undefined, 'a sovereign has no credit spread here');
     const ql = paperQuoteOf(v2, bill, rates, 0);
     assert.ok(ql && ql.yieldAnnual !== undefined && Math.abs(ql.yieldAnnual - 0.05) < 1e-9, 'a bill yields its discount over its life');
   } finally {

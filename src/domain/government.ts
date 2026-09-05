@@ -30,7 +30,7 @@ export function sovereignCouponByBond(tranches: readonly GovDebtTrancheView[] | 
   (tranches ?? []).forEach((t) => {
     // PUB3d: bills pay no coupon — their holders earn accretion instead (see accreteDiscountBills).
     if (isDiscountBill(t.tenorAtIssuanceYears)) return;
-    out[t.id] = t.couponRate ?? 0;
+    out[t.id] = t.couponRate;
   });
   return out;
 }
@@ -45,7 +45,7 @@ export function sovereignCouponByBond(tranches: readonly GovDebtTrancheView[] | 
 export function weeklyInterestExpenseLocal(tranches: readonly GovDebtTrancheView[] | undefined): number {
   return (tranches ?? [])
     .filter((t) => !isDiscountBill(t.tenorAtIssuanceYears))
-    .reduce((a, t) => a + (t.principalLocal * (t.couponRate ?? 0)) / 52, 0);
+    .reduce((a, t) => a + (t.principalLocal * t.couponRate) / 52, 0);
 }
 
 /**
@@ -151,7 +151,7 @@ export function billYieldFromPrice(priceFraction: number, tenorYears: number): n
 export function weeklyBillDiscountAccrualLocal(tranches: readonly GovDebtTrancheView[] | undefined): number {
   return (tranches ?? [])
     .filter((t) => isDiscountBill(t.tenorAtIssuanceYears))
-    .reduce((a, t) => a + (t.principalLocal * (t.couponRate ?? 0)) / 52, 0);
+    .reduce((a, t) => a + (t.principalLocal * t.couponRate) / 52, 0);
 }
 
 /**

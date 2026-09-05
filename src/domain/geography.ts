@@ -90,7 +90,7 @@ const LANE_DISTANCE_NM: Record<RegionId, Record<RegionId, number>> = {
 };
 
 export function laneDistanceNm(from: RegionId, to: RegionId): number {
-  return LANE_DISTANCE_NM[from]?.[to] ?? 0;
+  return LANE_DISTANCE_NM[from][to];
 }
 
 /** Conventional pair label, e.g. EUR/USD, GBP/USD, USD/JPY. */

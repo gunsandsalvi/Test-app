@@ -702,8 +702,8 @@ export function banksOf(companies: readonly Company[], region?: RegionId): Compa
  * capex raises the ceiling and depreciation lowers it, symmetrically.
  */
 export function fullStaffingCapHeads(c: Company, week: number): number {
-  const baselineHeads = c.baselineEmployeeCount ?? 0;
-  if (!(baselineHeads > 0)) return Math.max(1, c.employeeCount ?? 1);
+  const baselineHeads = c.baselineEmployeeCount;
+  if (!(baselineHeads > 0)) return Math.max(1, c.employeeCount);
   const netPpeLocal = plantNetLocal(c.plant, week);
   // §5-PROD: a firm that has LEARNED runs the same plant with fewer people — the ceiling is
   // heads-per-plant at the firm's own current unit-labour productivity, not its baseline's.

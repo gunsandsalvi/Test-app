@@ -28,7 +28,7 @@ export const CDS_TENOR_YEARS: Record<CdsTenorKey, number> = { c1: 1, c3: 3, c5: 
 export const CDS_TENORS: CdsTenorKey[] = ['c1', 'c3', 'c5', 'c10'];
 export const CDS_BENCHMARK_TENOR: CdsTenorKey = 'c5';
 const cdsTenorYearsOf = (termKey: string): number =>
-  CDS_TENOR_YEARS[termKey as CdsTenorKey] ?? defect(`'${termKey}' is no CDS tenor`);
+  Object.hasOwn(CDS_TENOR_YEARS, termKey) ? CDS_TENOR_YEARS[termKey as CdsTenorKey] : defect(`'${termKey}' is no CDS tenor`);
 export const cdsTenorWeeksOf = (termKey: string): number => cdsTenorYearsOf(termKey) * 52;
 /** The tenor a hedger matches its exposure's remaining life to: the nearest, the shorter on a tie. */
 export function nearestCdsTenor(weeksRemaining: number): CdsTenorKey {

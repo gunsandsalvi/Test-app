@@ -151,9 +151,9 @@ export function centralBankAssetsLocal(sovereignBookLocal: number, cb: CentralBa
   // not read the store. §3.13e-ii: the paper at its mark PLUS the coupon accrued on it and not yet
   // paid (`sovereign-register.ts:centralBankSovereignAssetsLocal`) — a receivable is an asset, and
   // the remittance has already paid the treasury the income it stands for.
-  return sovereignBookLocal + centralBankFxReservesLocal(cb) + (cb.loansToBanksLocal ?? 0)
+  return sovereignBookLocal + centralBankFxReservesLocal(cb) + cb.loansToBanksLocal
     // §3.13c: the one line on this sheet held in the numéraire, brought to the book's own money.
-    + fromNumeraire(cb.foreignOfficialClaimsUSD ?? 0, money, fx) + (cb.standingFacilityLentLocal ?? 0) + waysAndMeansLocal
+    + fromNumeraire(cb.foreignOfficialClaimsUSD, money, fx) + cb.standingFacilityLentLocal + waysAndMeansLocal
     // §3.17b-v: the foreign money on-lent from the swap lines, at today's rates.
     + swapLineLentLocal(cb, money, fx);
 }
@@ -161,7 +161,7 @@ export function centralBankAssetsLocal(sovereignBookLocal: number, cb: CentralBa
 /** Reserves, the treasury's account, the currency it has issued, and what the non-banks have
  *  parked at the reverse repo window. */
 export function centralBankLiabilitiesLocal(cb: CentralBank, bankReservesLocal: number, treasuryAccountLocal: number): number {
-  return bankReservesLocal + treasuryAccountLocal + cb.currencyInCirculationLocal + (cb.reverseRepoBorrowedLocal ?? 0)
+  return bankReservesLocal + treasuryAccountLocal + cb.currencyInCirculationLocal + cb.reverseRepoBorrowedLocal
     + (cb.fxRevaluationLocal ?? 0)
     // §3.17b-v: the home money given to the lending central banks for the swap-line draws.
     + (cb.swapLineDepositsLocal ?? 0);

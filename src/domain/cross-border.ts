@@ -64,7 +64,7 @@ export function mandateWeightForIssuer(
   issuerRegion: RegionId,
   marketSizeByRegionLocal: Record<string, number>
 ): number {
-  const homeBias = HOME_BIAS_BY_ENTITY_TYPE[entityType] ?? 1;
+  const homeBias = HOME_BIAS_BY_ENTITY_TYPE[entityType];
   if (issuerRegion === holderRegion) return homeBias;
   if (homeBias >= 1) return 0;
   const foreignTotal = Object.entries(marketSizeByRegionLocal)

@@ -39,8 +39,8 @@ let engagedLogged = false;
 let receiveMessageOnPortFn: ((port: unknown) => { message: unknown } | undefined) | null = null;
 
 export function backWorkerCount(): number {
-  if (typeof process === 'undefined' || !process.versions?.node) return 0;
-  const n = Number(process.env?.BACK_WORKERS ?? 0);
+  if (typeof process === 'undefined' || !process.versions.node) return 0;
+  const n = Number(process.env.BACK_WORKERS ?? 0);
   return Number.isFinite(n) && n >= 2 ? Math.min(16, Math.floor(n)) : 0;
 }
 
@@ -55,7 +55,7 @@ function ensurePool(): PoolWorker[] | null {
   if (pool) return pool;
   if (poolUnavailable) return null;
   const count = backWorkerCount();
-  if (!count || typeof process === 'undefined' || !process.versions?.node) {
+  if (!count || typeof process === 'undefined' || !process.versions.node) {
     poolUnavailable = true;
     return null;
   }
@@ -77,7 +77,7 @@ function ensurePool(): PoolWorker[] | null {
       const entry: PoolWorker = { worker, port: channel.port1, doorbell, failed: false, sentParties: 0, sentReasons: 0 };
       worker.on('error', (err) => {
         entry.failed = true;
-        if (!poolUnavailable) console.error(`[back-pool] worker error, falling back to serial: ${err?.message ?? err}`);
+        if (!poolUnavailable) console.error(`[back-pool] worker error, falling back to serial: ${err.message}`);
         poolUnavailable = true;
       });
       worker.on('exit', (code) => { if (code !== 0) { entry.failed = true; poolUnavailable = true; } });

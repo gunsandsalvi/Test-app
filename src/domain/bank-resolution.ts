@@ -54,7 +54,7 @@ export function bankSheetAssetsLocal(sheet: BankingSector, cashLocal: number, fa
   // §3.13-BOOK d3b/d3d: the register books — the sovereign book at the mark plus the desks'
   // gross (`bankBookAssetsLocal`) — are handed in like the facility book.
   return loanBooksOf(sheet, facilityBookLocal) + bookAssetsLocal + cashLocal
-    + (sheet.repoLentLocal ?? 0) + (sheet.onRrpLendingLocal ?? 0)
+    + sheet.repoLentLocal + sheet.onRrpLendingLocal
     + (sheet.sovereignAccruedCouponLocal ?? 0)
     + (sheet.primeBrokerageLoansLocal ?? 0);
 }
@@ -64,7 +64,7 @@ export function bankSheetAssetsLocal(sheet: BankingSector, cashLocal: number, fa
 export function bankAssumedLiabilitiesLocal(sheet: BankingSector, lines: DepositLines, /** §3.17b-v: the swap-line draws, in the bank's money (`banking.ts:swapLineDrawnLocal`). */ swapLineLocal = 0): number {
   return lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
     + lines.smeLocal + lines.ccpLocal
-    + (sheet.repoBorrowedLocal ?? 0) + (sheet.srfBorrowingLocal ?? 0) + swapLineLocal;
+    + sheet.repoBorrowedLocal + sheet.srfBorrowingLocal + swapLineLocal;
 }
 
 export interface BankResolutionPlan {

@@ -119,7 +119,7 @@ export default function App() {
   // Default to every available thread; the dropdown stays for A/B against fewer (the main
   // thread spin-waits during shards, so max is not guaranteed to beat max-1 — measure it).
   useEffect(() => {
-    if (webWorkersAvailable()) onWorkers(navigator.hardwareConcurrency ?? 2);
+    if (webWorkersAvailable()) onWorkers(navigator.hardwareConcurrency);
   }, []);
 
   const fail = (e: unknown) => {
@@ -136,7 +136,7 @@ export default function App() {
       const r = advanceWeeklyStepProfiled(stateRef.current, { profile: true });
       const ms = performance.now() - t0;
       stateRef.current = r.state;
-      samplesRef.current.push({ week: r.state.currentWeek, ms, stages: r.timings ?? [] });
+      samplesRef.current.push({ week: r.state.currentWeek, ms, stages: r.timings });
       if (DIGEST_WEEKS.includes(samplesRef.current.length)) {
         digestsRef.current.set(samplesRef.current.length, worldDigest(r.state));
       }
@@ -222,8 +222,8 @@ export default function App() {
               style={{ fontSize: 14, padding: '6px 8px' }}
             >
               {[...new Set([0, 2, 4,
-                Math.max(2, (navigator.hardwareConcurrency ?? 2) - 1),
-                Math.max(2, navigator.hardwareConcurrency ?? 2)])]
+                Math.max(2, navigator.hardwareConcurrency - 1),
+                Math.max(2, navigator.hardwareConcurrency)])]
                 .sort((a, b) => a - b)
                 .map((n) => <option key={n} value={n}>{n === 0 ? 'off' : n}</option>)}
             </select>

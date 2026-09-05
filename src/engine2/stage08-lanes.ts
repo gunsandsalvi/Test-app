@@ -196,17 +196,17 @@ export function buildBackLanes(
     const lines = c.productLines || [];
     let addr = 0;
     for (const l of lines) {
-      const catDemand = reg?.categoryDemand[l.subUnitId];
+      const catDemand = reg.categoryDemand[l.subUnitId];
       addr += Math.max(0, catDemand?.demandGrowthAnnual ?? 0) * l.revenueShare;
     }
     L.addressableGrowthAnnual[i] = addr;
     let shortfall = 0;
     for (const l of lines) {
-      const cd = reg?.categoryDemand[l.subUnitId] as { totalUnitsSuppliedThisWeek?: number; totalUnitsDemandedThisWeek?: number } | undefined;
+      const cd = reg.categoryDemand[l.subUnitId];
       const supplied = cd?.totalUnitsSuppliedThisWeek ?? 0;
       const demanded = cd?.totalUnitsDemandedThisWeek ?? 0;
       if (!(supplied > 0) || !(demanded > 0)) continue;
-      shortfall += Math.max(0, demanded / supplied - 1) * (l.revenueShare ?? 1);
+      shortfall += Math.max(0, demanded / supplied - 1) * l.revenueShare;
     }
     L.categoryShortfall[i] = shortfall;
     let compet = 0;
@@ -237,7 +237,7 @@ export function buildBackLanes(
     L.mgmtRiskAversion[i] = riskAversionOf(c.management);
     L.carrierFreightRevenueLocal[i] = carrierFreightRevenue[c.ticker] ?? 0;
     L.channelMarginRevenueLocal[i] = channelMarginRevenue[c.ticker] ?? 0;
-    L.boundaryTraceKey[i] = `${c.region}:${c.financialStatementProfile ?? c.sector ?? '?'}:${c.ticker}`;
+    L.boundaryTraceKey[i] = `${c.region}:${c.financialStatementProfile ?? c.sector}:${c.ticker}`;
     L.wasDefaulted[i] = c.isDefaulted ? 1 : 0;
     L.wasMergerAcquired[i] = c.mergerAcquired ? 1 : 0;
     L.publiclyListed[i] = isPubliclyListed(c) ? 1 : 0;

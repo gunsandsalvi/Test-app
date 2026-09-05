@@ -351,7 +351,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
       if (cd) {
         S.mktExists[at] = 1;
         S.mktUnitPrice[at] = cd.unitPriceLocal ?? 1;
-        S.mktCrowding[at] = cd.crowdingIntensity ?? 0;
+        S.mktCrowding[at] = cd.crowdingIntensity;
       } else {
         S.mktUnitPrice[at] = 1;
       }
@@ -374,8 +374,8 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
       for (const occ of Object.keys(mix) as (keyof typeof mix)[]) {
         const share = mix[occ] ?? 0;
         if (share <= 0) continue;
-        now += share * (baseWage[occ] ?? 0) * (pools[occ]?.wageIndex ?? 1);
-        base += share * (baseWage[occ] ?? 0) * 1;
+        now += share * baseWage[occ] * pools[occ].wageIndex;
+        base += share * baseWage[occ] * 1;
       }
       v = { now, base };
       perWorkerBySectorRegion.set(key, v);
@@ -803,7 +803,7 @@ export function applyFrontPost(
     F.stillUnderConstruction[row] = keep;
 
     // carrying-decayed output record, in the entry order the seam read
-    const outRec: Record<string, { unitsHeld: number; valueLocal: number }> = {};
+    const outRec: Partial<Record<string, { unitsHeld: number; valueLocal: number }>> = {};
     for (let o = S.outStart[row]; o < S.outStart[row + 1]; o++) {
       outRec[SUBUNITS[S.outSub[o]]] = { unitsHeld: S.outUnits[o], valueLocal: O.outNewValue[o] };
     }

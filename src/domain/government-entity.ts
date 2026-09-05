@@ -128,7 +128,7 @@ export class Government {
 
   /** Total debt outstanding — the stack, not a stated level. */
   debtOutstandingLocal(): number {
-    return this.ladder.reduce((a, t) => a + Math.max(0, t.principalLocal ?? 0), 0);
+    return this.ladder.reduce((a, t) => a + Math.max(0, t.principalLocal), 0);
   }
 }
 

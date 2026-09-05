@@ -629,7 +629,7 @@ export function rollOverdraftStreaks(
       drawnLocal,
       drawnRunLocal: (continues ? p.drawnRunLocal : 0) + drawnLocal,
       refusedLocal,
-      refusedRunLocal: (continues ? (p.refusedRunLocal ?? 0) : 0) + refusedLocal,
+      refusedRunLocal: (continues ? p.refusedRunLocal : 0) + refusedLocal,
     };
   });
   return out;
@@ -656,5 +656,5 @@ export function overdraftRunIsTold(weeks: number): boolean {
  * loan quote lacks (§3 step 37-COSTOFCAPITAL) and the borrower's choice of bank (20c-ii).
  */
 export function bankRunsOffItsBook(sheet: Pick<BankingSector, 'netInterestMarginPct'>): boolean {
-  return (sheet.netInterestMarginPct ?? 0) < 0;
+  return sheet.netInterestMarginPct < 0;
 }

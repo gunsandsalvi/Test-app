@@ -556,9 +556,9 @@ written from here):
 29-iv. **The defensive reads.** The 997 `??` (649) and `?.` (348) on values the types say are never
     nullish are the same choice per site: a fallback that cannot run (delete it — a `?? 0` that
     never fires is a stated number with no owner, rule 2) or a type that lies (fix it, as 29-iii
-    fixed sixteen sparse stores). By directory: the simulation 376, the engine outside it 235, the
-    UI 182, the harness 143, engine2 33, domain 20. One directory at a time (rule 10), the budget
-    falling with each.
+    fixed sixteen sparse stores). **a** domain, engine2, test and `App.tsx` (61) is DONE; by
+    directory what stands: the simulation 376, the engine outside it 235, the UI 182, the harness
+    143. One directory at a time (rule 10), the budget falling with each.
 
 28b. **The units sweep, once, at the source.** Rule 9 is a rule with no sweep behind it. Walk
     every rate, flow and index at the point it is WRITTEN, establish its periodicity and unit, and
@@ -1199,7 +1199,7 @@ none of them steps a week of the simulation. Green before every commit.
 | Command | Note |
 |---|---|
 | `npx tsc --noEmit` | |
-| `npx eslint src scripts test --no-warn-ignored --max-warnings 997` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
+| `npx eslint src scripts test --no-warn-ignored --max-warnings 936` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
 | `npm test` | the unit suite: contracts and arithmetic, never a run |
 | `bash scripts/check-hygiene.sh` | carries `check-atlas.sh` and the stated-literal ratchets |
 | `npm run build` | |
@@ -1326,6 +1326,17 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**29-iv-a — THE DEFENSIVE READS IN DOMAIN, ENGINE2 AND TEST.** Sixty-one `??` and `?.` on values
+  that cannot be nullish. Most were `?? 0` on a number the sheet always carries — the bank's repo
+  and RRP lines, the central bank's loans, claims and facility, a tranche's coupon and principal,
+  a holding's value, a firm's headcount — and each fallback was a stated number nobody owned that
+  could never run (rule 2): deleted. `FIXED_SHARE_BY_RATING[rating] ?? 0.5` and
+  `HOME_BIAS[type] ?? 1` indexed total tables; `LANE_DISTANCE_NM[from]?.[to] ?? 0` a total matrix;
+  `process.versions?.node` and `err?.message ?? err` types that are never absent. A CDS tenor
+  typed as a string is `Object.hasOwn` before it indexes. The one sparse thing among them — the
+  front table's output record per sub-unit — is `Partial`, with the column it lands in. 997 → 936.
+  Gates green; no run (rule 11).
 
 **29-iii-d — THE DEAD CONDITIONS IN THE UI AND THE HARNESS, AND 29-iii IS DONE.** Ninety-one.
   The harness: `(s.institutionalEntities || [])` five times, the region and household guards, a

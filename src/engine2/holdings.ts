@@ -408,7 +408,7 @@ export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding, w
   H.typeRef[r] = internType(v2, h.instrumentType);
   H.instrRef[r] = internInstrument(v2, h.instrumentId);
   H.regionRef[r] = internRegion(v2, h.issuerRegion);
-  H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
+  H.qtyLocal[r] = h.quantityOrNotionalLocal;
   H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
   H.units[r] = h.units;
   H.next[r] = -1;
@@ -422,7 +422,7 @@ export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding, w
 function openingLot(v2: V2World, r: number, h: ItemizedHolding, week: number): void {
   const units = rowUnits(mutableHoldings(v2), r);
   if (!(Math.abs(units) > 0)) return;
-  appendLot(v2, r, units, (h.quantityOrNotionalLocal ?? 0) / units, week);
+  appendLot(v2, r, units, h.quantityOrNotionalLocal / units, week);
 }
 
 /**
@@ -465,7 +465,7 @@ export function newBookRow(v2: V2World, h: ItemizedHolding, week = 0, withLot = 
   H.typeRef[r] = internType(v2, h.instrumentType);
   H.instrRef[r] = internInstrument(v2, h.instrumentId);
   H.regionRef[r] = internRegion(v2, h.issuerRegion);
-  H.qtyLocal[r] = h.quantityOrNotionalLocal ?? 0;
+  H.qtyLocal[r] = h.quantityOrNotionalLocal;
   H.shares[r] = h.quantityShares === undefined ? Number.NaN : h.quantityShares;
   // §9.13-CREDIT row 5 — THE QUANTITY, WHICH THIS DID NOT COPY. `pushBookRow` carries `units`
   // across; this one dropped it, and it is the row builder THE CLEARING

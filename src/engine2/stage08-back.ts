@@ -80,7 +80,7 @@ const round4 = (v: number) => Math.round(v * 10000) / 10000;
 
 /** IND4 — a firm's payout discipline is its INDUSTRY's, from the registry. */
 function fixedShareOf(comp: Company): number {
-  const base = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5;
+  const base = FIXED_SHARE_BY_RATING[comp.creditRating];
   const primary = (comp.productLines ?? []).at(0);
   const industry = primary ? industryOfSubUnit(primary.subUnitId) : undefined;
   return industry ? base * financingProfileOf(industry).fixedRateTilt : base;
@@ -132,7 +132,7 @@ export interface BackKernelDeps {
 
 /** The back half of one company's week — same statements the stage's kernel ran, same order. */
 // §7.315's method — a coarse per-firm split of the kernel's ~150 ms/wk. Free when off.
-const S08K_PROF = typeof process !== 'undefined' && process.env?.S08K_PROF === '1';
+const S08K_PROF = typeof process !== 'undefined' && process.env.S08K_PROF === '1';
 export const s08k = { capital: 0, cash: 0, debt: 0, tail: 0 };
 
 /**
@@ -615,7 +615,7 @@ function runCashWalk(args: {
       if (carryingCostLocal > 0) {
         const holders = ctx.channelShareByRegion[region];
         let paidLocal = 0;
-        holders?.forEach((share, holderId) => {
+        holders.forEach((share, holderId) => {
           if (holderId === companyId) return; // a distributor warehouses its own stock
           const amountLocal = carryingCostLocal * share;
           if (!(amountLocal > 0)) return;
@@ -1299,7 +1299,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // pro-rata action, paid to the issuer as a placement — paper minted onto the register that
     // the lead already held (measured: USA desks 34B → 93B over the ladders in two weeks).
     const primaryPlacedLocal = settlement && !settlement.withdrawn
-      ? Math.max(0, Math.min(settlement.offering.sizeLocal, settlement.issuedLocal ?? settlement.offering.sizeLocal)) : 0;
+      ? Math.max(0, Math.min(settlement.offering.sizeLocal, settlement.issuedLocal)) : 0;
     const primaryFixedAdjLocal = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FIXED' ? primaryPlacedLocal : 0;
     const primaryFloatingAdjLocal = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FLOATING' ? primaryPlacedLocal : 0;
     // SCALE — the two filtered reduces as one walk; each accumulator sums its subset in array
@@ -1968,9 +1968,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // branch was right to skip, now guarded where it happens instead of forking the whole model.
     if (isReportingThisWeek && isPubliclyListed(comp)) {
       // Mean of Dealer Alpha, Beta, and Gamma estimates
-      const alphaEps = comp.dealerConsensus?.alpha?.eps ?? L8.eps[row];
-      const betaEps = comp.dealerConsensus?.beta?.eps ?? L8.eps[row];
-      const gammaEps = comp.dealerConsensus?.gamma?.eps ?? L8.eps[row];
+      const alphaEps = comp.dealerConsensus?.alpha.eps ?? L8.eps[row];
+      const betaEps = comp.dealerConsensus?.beta.eps ?? L8.eps[row];
+      const gammaEps = comp.dealerConsensus?.gamma.eps ?? L8.eps[row];
       const consensusEps = round2((alphaEps + betaEps + gammaEps) / 3);
       const actualEps = newEps;
       const epsDiff = actualEps - consensusEps;
@@ -2095,7 +2095,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // two valuations of one company again.
       const boardFairValuePerShare = companyFairValuePerShare(
         { ...comp, netIncome: newNetIncome }, cash.usd,
-        reg.zeroRates?.tenor10Y ?? reg.policyRate,
+        reg.zeroRates.tenor10Y,
         REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
         newTotalDebt,
         L8.sharesOutstanding[row], nextWeek
@@ -2179,7 +2179,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         cash.usd,
         newTotalDebt,
         currentTreasuryHoldingsLocal,
-        Object.values(newOutputInventoryBySubUnit).reduce((s, inv) => s + inv.valueLocal, 0),
+        Object.values(newOutputInventoryBySubUnit).reduce((s, inv) => s + (inv?.valueLocal ?? 0), 0),
         newMaintenanceCapex,
         newGrowthCapex,
         filedFiveYearSpreadBps,
@@ -2206,7 +2206,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // justified it — recovery is what selling real assets against real claims produces, and if
     // that is near zero for an issuer with nothing to sell, that is the answer (rule 6).
     const regionRecovery = creditRecoveryRate(reg);
-    const newBaselineRecoveryRate = round4((comp.baselineRecoveryRate ?? regionRecovery) * 0.998 + regionRecovery * 0.002);
+    const newBaselineRecoveryRate = round4(comp.baselineRecoveryRate * 0.998 + regionRecovery * 0.002);
     const effectiveRecoveryRate = Math.max(0, newBaselineRecoveryRate * (1 - systemicStressFactor));
     const trendWeeklyGrowth = (reg.potentialGdpGrowth + reg.targetInflation) / 52;
     const newBaselineAnnualRevenue = isDefaulted

@@ -52,7 +52,7 @@ export interface FrontPass {
   stillUnderConstruction: (ConstructionLot[])[];
   newExecutionQuality: Float64Array;
   carryingCostLocal: Float64Array;
-  outputInv: Record<string, { unitsHeld: number; valueLocal: number }>[];
+  outputInv: Partial<Record<string, { unitsHeld: number; valueLocal: number }>>[];
   updatedProductLines: ProductLines[];
   newRevenue: Float64Array;
   measuredInputConsumptionWeeklyLocal: Float64Array;

@@ -17,7 +17,7 @@ test('a region keeps the latest week only, and the summary names the shortfalls 
   assert.ok(a.coverage !== undefined && Math.abs(a.coverage - 15 / 22) < 1e-12);
   assert.deepEqual(a.shortfalls.map((o) => o.bondId), ['USA-GOV-3M-1', 'USA-GOV-10Y-1']);
   recordPrimaryOffering(reg, 11, { bondId: 'USA-GOV-2Y-1', kind: 'BOND', offeredLocal: 1e9, placedLocal: 1e9, withdrawnLocal: 0 });
-  assert.equal(reg.lastAuction?.week, 11);
-  assert.equal(reg.lastAuction?.offerings.length, 1, 'the week turned and the record opened fresh');
+  assert.equal(reg.lastAuction.week, 11);
+  assert.equal(reg.lastAuction.offerings.length, 1, 'the week turned and the record opened fresh');
   assert.equal(auctionSummaryOf([]).coverage, undefined);
 });
