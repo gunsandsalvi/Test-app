@@ -536,7 +536,6 @@ export function generateInitialCompanies(
       }).toFixed(2));
       
       const oasSpreadBps = RATING_OAS_SPREADS[tmpl.initialRating].baseBps;
-      const cdsSpreadBps = oasSpreadBps + Math.floor(random() * 10 - 5);
       
       const historicalPrices: number[] = [stockPrice];
       const marketCap = tmpl.shares * stockPrice;
@@ -698,7 +697,7 @@ export function generateInitialCompanies(
         // filing behind it, so it opens at the rating table its own coupons were struck from —
         // and from week 1 it is a read of the borrower's own printed paper.
         seniorBondYield: 0.05 + oasSpreadBps / 10000,
-        cdsSpreadBps,
+        // §3.26-c: no protection has printed on a seeded name; its CDS spread is undefined.
         inputSupplyConstraintFactor: 1.0,
         outputInventoryBySubUnit: {},
         recentFulfillmentEMA: 1.0,
@@ -1296,10 +1295,8 @@ export function generatePrivateCompanies(
       occupationMixDrift: {},
       creditRating: rating,
       isDefaulted: false,
-      // Seeded from the same rating-keyed primitive the public bootstrap uses, so the name's
-      // first real clearing week (HC2) starts from a defensible level instead of zero.
-      // §3.13: its BONDS open with prices (`seedOpeningCreditPrices`), not the firm with a spread.
-      cdsSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
+      // §3.13: its BONDS open with prices (`seedOpeningCreditPrices`), not the firm with a spread;
+      // §3.26-c: and its protection has printed nothing, so it has no CDS spread.
       seniorBondYield: 0,
       dividendYield: 0, baselineDividendYield: 0,
       beta: 1.0,

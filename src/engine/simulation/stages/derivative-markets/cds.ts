@@ -300,7 +300,7 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
         // curve, not a number the issuer carries; a name with no printed bonds has no cash leg
         // to price against and the contract opens on the structural hazard its sellers reserve
         // against instead.
-        currentStat: Math.max(1, last ?? (cashSpreadBpsOf(c, tenor) ?? (c.cdsSpreadBps > 0 ? c.cdsSpreadBps : 1))),
+        currentStat: Math.max(1, last ?? (cashSpreadBpsOf(c, tenor) ?? (c.cdsSpreadBps !== undefined && c.cdsSpreadBps > 0 ? c.cdsSpreadBps : 1))),
         statKind: 'YIELD_LIKE',
         durationYears: CDS_TENOR_YEARS[tenor],
       };

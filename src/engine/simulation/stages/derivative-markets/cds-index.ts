@@ -107,7 +107,7 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
         capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, CDS_INDEX_TENOR_WEEKS / 52),
         creditConditionsIndex,
       }), 0) / names.length;
-    const singleNamePrints = names.map((c) => c.cdsSpreadBps).filter((b) => b > 0);
+    const singleNamePrints = names.map((c) => c.cdsSpreadBps).filter((b): b is number => b !== undefined && b > 0);
     const history = reg.creditIndexSpreadHistoryBySeries ?? (reg.creditIndexSpreadHistoryBySeries = {});
     const lastPrint = history[live.seriesId]?.[history[live.seriesId].length - 1];
 

@@ -551,11 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-c. **A name with no protection book has no CDS spread.** `stage08-back.ts:1910` falls back to
-    the five-year cash spread, destroying the basis by construction; `companyGenerator.ts:539`
-    seeds the CDS as `oas ± random`. `Company.cdsSpreadBps` is undefined until the protection
-    book prints, and every reader (the CDS book's anchor, the index, relative value, the audit,
-    the company view) says so. derivative.md N3.
 26-d. **One cost of capital per firm.** `05-unit-bidding.ts:1209` prices the seller's floor off
     `0.05 + pd × 0.60` — a stated hurdle and a stated LGD beside the cost of capital the labour
     stage already computes for the same firm (its own beta against its region's own rate, at its
@@ -1382,6 +1377,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-c — A NAME WITH NO PROTECTION BOOK HAS NO CDS SPREAD.** `stage08-back.ts` carried a name's
+  five-year cash spread as its CDS spread whenever the protection book had not printed it — the
+  derivative standing in for its underlying (derivative N3), and a basis of exactly zero by
+  construction for every such name; the seed opened every firm at `oas ± random` and every bank
+  and carrier at its rating's table. `Company.cdsSpreadBps` is optional now: the benchmark tenor's
+  last print of the name's protection book (`cds.ts`), NaN on the lane and undefined on the
+  object until there is one, never derived from the cash spread. Every reader asks — the book's
+  anchor (last print → the cash leg at that tenor → the structural hazard), the index
+  (`cds-index.ts`), the basis trade (`relative-value.ts`), the audit's basis test, the rating
+  news and the company view ("no protection has printed"). derivative.md N3 ⚠️→✅;
+  corporate-credit H4's diff updated (H4 stays ⚠️ for the mirror's borrow, 17f-v). Gates green; no
+  run (rule 11).
 
 **26-b — THE CARRY IS READ, NOT CALCULATED.** `carryCalculator.ts` (138 lines, deleted) was an
   invented spread/yield world beside the cleared one: policy + 50bp "repo" for equity, + 40bp for

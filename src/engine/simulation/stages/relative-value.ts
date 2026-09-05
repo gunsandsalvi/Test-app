@@ -205,7 +205,9 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
     const repoRateAnnual = view.overnightRateAnnual(regionId);
     const tenorYears = CDS_TENOR_YEARS[CDS_BENCHMARK_TENOR];
     ctx.updatedCompanies.forEach((issuer) => {
-      if (issuer.region !== regionId || !isActiveCompany(issuer) || issuer.isBankEntity || !(issuer.cdsSpreadBps > 0)) return;
+      // §3.26-c: a name whose protection has never printed has no CDS leg to read a basis on.
+      const issuerCdsBps = issuer.cdsSpreadBps;
+      if (issuer.region !== regionId || !isActiveCompany(issuer) || issuer.isBankEntity || issuerCdsBps === undefined || !(issuerCdsBps > 0)) return;
       // THE RUNG: the issuer's own bond nearest the benchmark tenor, with a print and a spread.
       let rung: number | undefined; let gap = Number.POSITIVE_INFINITY;
       ladderRowsOf(ctx.v2, issuer.id).forEach((r) => {
@@ -226,7 +228,7 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
       regionFunds.forEach((fund) => {
         const line = pbBook.find((l) => l.fundId === fund.id);
         const requiredReturnAnnual = entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund));
-        const read = cdsBasisRead({ cashSpreadBps, cdsSpreadBps: issuer.cdsSpreadBps, financingRateAnnual: line?.rateAnnual ?? repoRateAnnual, repoRateAnnual, marginRate, requiredReturnAnnual });
+        const read = cdsBasisRead({ cashSpreadBps, cdsSpreadBps: issuerCdsBps, financingRateAnnual: line?.rateAnnual ?? repoRateAnnual, repoRateAnnual, marginRate, requiredReturnAnnual });
         // §3.17f-v: the mirror — a rich rung against cheap cover — sells the rung (borrowed
         // through the lending book) and writes the cover, carrying the borrow fee and the margin.
         const mirror = { deviationBps: -read.deviationBps, carryBps: (reg.borrowFeeBpsByCompanyId?.[bondId] ?? 0) + Math.max(0, marginRate) * Math.max(0, requiredReturnAnnual) * 10000 };
@@ -256,7 +258,7 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
         const cashDelta = targetFace - netFace;
         const coverDelta = targetFace - coverFace;
         const legs = cdsBasisLegs({
-          regionId, bondId, cdsInstrumentId: cdsId, faceLocal: targetFace, cashSpreadBps, cdsSpreadBps: issuer.cdsSpreadBps,
+          regionId, bondId, cdsInstrumentId: cdsId, faceLocal: targetFace, cashSpreadBps, cdsSpreadBps: issuerCdsBps,
           carryBps: (targetFace >= 0 ? read : mirror).carryBps, weeklyMoveBps, priceAtSpread, budgetLocal: Math.min(Math.max(0, cashDelta) * cashPrice, capacityLocal),
         });
         if (cashDelta > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: cashDelta, forced });

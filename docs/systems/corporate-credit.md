@@ -400,11 +400,12 @@ negative-basis trade, cut like the bond basis. A basis that survives it is a fin
 for H4.a below, and because the mirror (a rich bond against cheap cover) needs a corporate bond
 borrow, §3 step 17f-v.*
 
-`stage08-back.ts:1872`: `newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row] :
-newOasBps`. When the protection book has not cleared a name this week, its CDS spread IS its bond
-spread and the basis is exactly zero — a restatement, which H4.a forbids by name. The book itself
-(`derivative-markets/cds.ts:CDS_MARKET`) is real and clears against real hedging demand, so H4 is ⚠️
-rather than ❌. **Already §3 step 26.**
+*2026-09-05 (§9.26-c): the restatement is gone. `stage08-back.ts` carried the bond's cash spread
+as the CDS spread of a name whose protection had not printed, so that name's basis was exactly
+zero — which H4.a forbids by name. `Company.cdsSpreadBps` is now the protection book's own last
+print or nothing, and the basis trade, the index and the audit take only names with a print.* The
+book itself (`derivative-markets/cds.ts:CDS_MARKET`) is real and clears against real hedging
+demand; H4 stays ⚠️ for H4.a's mirror, which needs the corporate bond borrow of §3 step 17f-v.
 
 ### ⚠️ E5.d — THE CLEARED LEVEL CAN BE THE SEARCH BRACKET
 

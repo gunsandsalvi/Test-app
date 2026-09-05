@@ -33,7 +33,6 @@ import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
 import { determineCreditRating } from '../simulation/credit';
 import { generateDebtTranches } from '../companyGenerator';
 import { crewAnnualWageLocal, fuelPriceUsdPerTonne, runFreightClearing } from '../simulation/stages/freight-clearing';
-import { RATING_OAS_SPREADS } from '../pricing';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../equity-valuation';
 import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financing';
 import { generateUniqueTicker, generateUniqueName } from './firms';
@@ -357,7 +356,6 @@ function buildCarrierCompany(
     occupationMixDrift: {},
     creditRating: rating,
     isDefaulted: false,
-    cdsSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
     seniorBondYield: 0,
     dividendYield: 0, baselineDividendYield: 0,
     beta: 1.0,

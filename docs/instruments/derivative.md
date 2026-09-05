@@ -99,7 +99,7 @@ checked by `scripts/check-atlas.sh`. The three FORBIDs of **WHAT A DERIVATIVE IS
 | D12 an identity: counterparties + underlying + term + strike | `src/domain/derivatives/classes/option.ts:OPTION_PROFILE` · `src/engine/simulation/stages/derivative-lifecycle.ts:strikeDerivatives` | ✅ |
 | N1 FORBID it is not a holding; it goes in the zero-sum check | `src/engine/audit/ownership.ts:o5` | ⚠️ |
 | N2 FORBID it is not a free exposure — the cash is real | `src/engine/simulation/stages/settlement.ts:pay` | ⚠️ |
-| N3 FORBID it is not a substitute for the underlying market | `src/engine2/stage08-back.ts:newCdsSpreadBps` | ⚠️ |
+| N3 FORBID it is not a substitute for the underlying market | `src/engine2/stage08-back.ts:newCdsSpreadBps` | ✅ |
 
 ---
 
@@ -226,14 +226,18 @@ conflated — but only because one of them (current exposure) does not exist: wh
 charges is notional × a stated number, which is Basel's own CEM shape and is admitted by rule 2.
 Recorded as diverging rather than absent; it closes with step 17's risk-based margin.
 
-### ⚠️ N3 — WHERE THE DERIVATIVE AND THE CASH MARKET PRICE EACH OTHER
+### ✅ N3 (closed) — THE DERIVATIVE NO LONGER STANDS IN FOR ITS UNDERLYING
 
-`stage08-back.ts:1872`: `newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row] :
-newOasBps` — a reference with no protection book this week carries the **bond's OAS as its CDS
-spread**, and the basis for that name is zero by construction. (`pricing.ts:priceCreditDefaultSwap`
-did it unconditionally for every player CDS, with a `recoveryRate = 0.40` default parameter, and
-went with the legacy layer, §9.17b-ii.) **Already §3 step 26**, which names
-`stage08-back.ts:1861` by line.
+*2026-09-05 (§9.26-c).* It was `newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row]
+: fiveYearSpreadBps` — a reference with no protection book carried the **bond's cash spread as
+its CDS spread**, and the basis for that name was zero by construction; the seed opened every name
+at `oas ± random` and every bank at its rating's table. `Company.cdsSpreadBps` is now the
+benchmark tenor's last print of the name's protection book and nothing else — undefined until it
+has printed — and every reader asks: the book's own anchor falls through to the cash leg at that
+tenor and then to the structural hazard, the index and the basis trade take only names with a
+print, the audit tests only names that printed this week, and the news and the company view say
+"no protection has printed". (`pricing.ts:priceCreditDefaultSwap` did the same unconditionally
+for every player CDS and went with the legacy layer, §9.17b-ii.)
 
 *2026-09-05 (§9.22). D3.a is closed: the commodity futures book cash-settles to the goods
 auction's gate price (`domain/commodity-spot.ts:markCommodityToAuction`), a price named producers

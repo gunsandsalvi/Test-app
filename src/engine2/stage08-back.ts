@@ -1905,9 +1905,11 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     // credit concentration at all — the only way to reduce one was to stop lending. The
     // protection book prices it against real hedging demand and real sellers, and the difference
     // between it and the cash OAS is the BASIS, which is an outcome worth having.
-    // §3.13: a name whose protection has never cleared opens at what its own five-year cash
-    // paper costs — the one place a CDS and a bond are the same risk, and the basis's zero.
-    const newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row] : fiveYearSpreadBps;
+    // §3.26-c: a name whose protection has never printed HAS NO CDS SPREAD. It used to open at
+    // its own five-year cash spread, which made the basis zero by construction — the derivative
+    // standing in for its underlying (derivative.md N3). The lane carries the book's last print,
+    // NaN until there is one; every reader asks.
+    const newCdsSpreadBps = L8.cdsSpreadBps[row];
 
     // Real, already-cleared this week by 07d-leveraged-loan-clearing.ts — not recomputed here.
 
@@ -2442,7 +2444,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     v2.priceRing = ringPush(v2.priceRing, rowOf(v2, L8.companyId[row]), newStockPrice);
 
 
-    comp.cdsSpreadBps = newCdsSpreadBps;
+    comp.cdsSpreadBps = Number.isFinite(newCdsSpreadBps) ? newCdsSpreadBps : undefined;
 
     comp.seniorBondYield = newSeniorBondYield;
 

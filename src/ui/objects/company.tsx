@@ -143,7 +143,7 @@ export const company = defineObject<Company>({
           <StatGrid>
             <Stat label="price" value={c.stockPrice > 0 ? num(c.stockPrice) : 'private'} sub={c.stockPrice > 0 ? <ChangeSub series={prices} /> : `${count(c.employeeCount)} people`} />
             <Stat label="market cap" value={marketCapAt(ensureV2(world.state), c) > 0 ? money(marketCapAt(ensureV2(world.state), c)) : '—'} sub={floatShare !== undefined ? `${pctLevel(floatShare, 0)} held by funds` : 'unlisted'} />
-            <Stat label="rating" value={c.creditRating} sub={`cds ${bps(c.cdsSpreadBps)}bp`} neg={c.creditRating === 'CCC' || c.creditRating === 'D'} />
+            <Stat label="rating" value={c.creditRating} sub={c.cdsSpreadBps !== undefined ? `cds ${bps(c.cdsSpreadBps)}bp` : 'no cds print'} neg={c.creditRating === 'CCC' || c.creditRating === 'D'} />
           </StatGrid>
         )}
         {sheet ? (

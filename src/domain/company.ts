@@ -528,7 +528,11 @@ export interface Company {
    * end — and it is now what the protection book actually cleared at (07h). It is the ONE spread
    * a borrower legitimately carries, because a CDS is one contract on one name at one tenor.
    */
-  cdsSpreadBps: number;
+  /** §3.26-c — the benchmark tenor's last print of this name's protection book
+   *  (`derivative-markets/cds.ts`), and NOTHING else: undefined (NaN on the lane) until the book
+   *  has printed. It was the bond's OAS when no protection cleared, which made the basis zero by
+   *  construction, and `oas ± random` at the seed. Never derived from the cash spread. */
+  cdsSpreadBps?: number;
   /** §5-CLOSE P2 — the week the protection book last cleared this name (undefined: never). */
   cdsClearedWeek?: number;
   /**

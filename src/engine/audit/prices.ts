@@ -84,7 +84,7 @@ function p2(state: GameState, week: number): AuditFinding[] {
   const v2 = ensureV2(state);
   state.companies.forEach((c) => {
     const reg = state.regions[c.region];
-    if (!isActiveCompany(c) || !reg || !(c.cdsSpreadBps > 0) || c.cdsClearedWeek !== state.currentWeek) return;
+    if (!isActiveCompany(c) || !reg || c.cdsSpreadBps === undefined || !(c.cdsSpreadBps > 0) || c.cdsClearedWeek !== state.currentWeek) return;
     // §3.13: the cash leg of a basis is that issuer's own bond at the SAME point on its curve,
     // read off the price it cleared at — §3.17d-iii: at every tenor the protection book printed.
     // A name with no printed bond has no basis to test.
