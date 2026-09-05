@@ -547,13 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-16b. **Insurance is a market, not three price-takers** — split 2026-09-05; 16b-i (the book and
-    the price) and 16b-ii (the market: a policy moves to the insurer that prices lower) are in
-    §9. What is left:
-16b-iii. **VERIFY, in §6 and the harness:** premium shares move week to week (the harness
-    prints each region's insurers' cover shares and their weekly change), and an insurer under a
-    capital action loses book first (the measure: cover share against surplus share, by insurer).
-    Measure, do not fix (§6).
 17. **Derivatives are centrally cleared, and margin is risk-based** (user). Today a contract is
     bilateral (`contract.ts:39-41`, parties `a`/`b`) and `initialMarginRate` is a flat stated
     number per class — **0 for CDS, IRS and commodity futures, 0.02 for FX forwards**
@@ -1614,6 +1607,7 @@ move into registries; lookups stay (rule 15).
 | The state-growth drift (§7.335, §7.380) | Weekly cost +45% over weeks 5→80 on two independent device runs, all stages inflating proportionally. First suspect: the contract book's row growth. |
 | TGA over a quarter; occupational mismatch; top-down vs bottom-up household income; the private tier that sells nothing; loan-book Spearman noise | Watch the TGA's LEVEL not its shape; mismatch is composition outrunning retraining; `estimatedHouseholdIncomeUSD` is still the anchor; ~300 seeded private firms per region carry `productLines: []`; Spearman 0.26–0.76 at 23–32 names — re-measure as the universe grows. |
 | Sovereign price elasticity to a size-only bidder | The books ARE thin, which is consistent with the equity tail the parked SCALE project owns. Measure; do not tune the depth. |
+| The insurance market (§9.16b) — `INS_TRACE=1` | Two things 16b asked to see and rule 11 forbids running for: each region's insurers' COVER shares move week to week (a share that never moves is a market that is not one), and an insurer whose surplus is gone loses book before it loses its licence (its cover share falls below its surplus share, toward zero, as its renewals go elsewhere). The trace prints each insurer's cover share and its weekly move, its surplus share, its quote in bp, and the cover nobody could write. Measure; do not tune the quote. |
 | The two credit-ETF dust singles | 0.01B, standing since well before the wires campaign. Likeliest an in-kind slice edge, or pending-settlement timing at a boundary. May already be closed by the wires and no-caps work — re-measure before treating it as open. |
 
 ## 8. THE APPENDICES — the two records that are not the plan
@@ -1634,6 +1628,13 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**16b-iii — THE INSURANCE MARKET, MEASURED.** `scripts/harness.ts:printInsuranceMarket`
+(`INS_TRACE=1`): per region and week, each insurer's share of the cover written and its
+week-on-week move, its share of the sector's surplus, its quote in bp, and the cover nobody could
+write — the two things 16b asked to verify (shares move; an insurer whose surplus is gone loses
+book first, its cover share falling below its surplus share) as a measure §6 watches, not a
+check that fires (rule 11: no run, no number here). With this 16b is done. Gates green; no run.
 
 **16b-ii — A POLICY MOVES TO THE INSURER THAT PRICES LOWER.** `institutions.ts:
 placeInsuranceRenewals`: each week every book's renewing slice (a year's policies, one week's

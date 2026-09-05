@@ -236,6 +236,34 @@ const clone = (s: GameState): GameState => structuredClone(s);
  * to make. What is left is the two instruments §8 names, now reading the audit's own measurement
  * (`ownershipCoverage`) instead of a private walk that disagreed with it.
  */
+/**
+ * §3.16b-iii — INS_TRACE=1: the insurance market, measured. Per region, each insurer's share of
+ * the cover written this week against its share of the sector's surplus, its quote, and the
+ * week-on-week move of its share; and the cover nobody could write. The two things 16b asks to
+ * see: shares MOVE week to week, and an insurer whose surplus is gone loses book first (its
+ * cover share falling below its surplus share, to zero). Measure, do not fix (§6).
+ */
+const prevInsuranceShareByEntity = new Map<string, number>();
+function printInsuranceMarket(state: GameState, week: number): void {
+  if (process.env.INS_TRACE !== '1') return;
+  REGION_IDS.forEach((r) => {
+    const insurers = (state.institutionalEntities ?? []).filter((e) => e.region === r && e.entityType === 'INSURER' && !e.isDefaulted && e.insurance);
+    if (insurers.length === 0) return;
+    const coverTotal = insurers.reduce((a, e) => a + e.insurance!.coverLocal, 0);
+    const surplusTotal = insurers.reduce((a, e) => a + Math.max(0, e.equityCapitalLocal), 0);
+    const parts = insurers.map((e) => {
+      const share = coverTotal > 0 ? e.insurance!.coverLocal / coverTotal : 0;
+      const prev = prevInsuranceShareByEntity.get(e.id);
+      prevInsuranceShareByEntity.set(e.id, share);
+      const surplusShare = surplusTotal > 0 ? Math.max(0, e.equityCapitalLocal) / surplusTotal : 0;
+      const move = prev === undefined ? '' : ` (${share - prev >= 0 ? '+' : ''}${((share - prev) * 100).toFixed(2)}pp)`;
+      return `${e.ticker} cover ${(share * 100).toFixed(1)}%${move} surplus ${(surplusShare * 100).toFixed(1)}% quote ${(e.insurance!.rateAnnual * 10000).toFixed(0)}bp`;
+    });
+    const unplaced = state.regions[r]?.insuranceUnplacedCoverLocal ?? 0;
+    console.log(`  [ins-trace] w${week} ${r}: ${parts.join(' | ')}${unplaced > 0 ? ` | unplaced ${(unplaced / 1e9).toFixed(2)}B` : ''}`);
+  });
+}
+
 function printOwnershipTraces(state: GameState, week: number): void {
   const regionIds = REGION_IDS;
 
@@ -2324,6 +2352,7 @@ function runHarness() {
     checkLaborMarketIdentity(state, w);
     checkCentralBankIdentity(state, w);
     printOwnershipTraces(state, w); // the CHECK is the audit's O1, run below
+    printInsuranceMarket(state, w); // §3.16b-iii: a measure, never a check
     checkBeneficiaryClaimsHaveHolders(state, w);
     checkSettlementClosed(state, w);
     checkGuards(state, w);
