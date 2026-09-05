@@ -41,8 +41,20 @@ export function initialMarginLocal(c: Pick<DerivativeContract, 'initialMarginLoc
  * number. A reference with no move to measure yet posts nothing, and that is the stated reason.
  */
 export function initialMarginAtStrike(c: Omit<DerivativeContract, 'initialMarginLocal'>, m: DerivativeMarketView): number {
-  const move = derivativeProfile(c.classId).closeOutMoveOf(c as DerivativeContract, m);
-  return move !== undefined && move > 0 ? c.notional * move : 0;
+  return c.notional * initialMarginRateOf(c, m);
+}
+
+/**
+ * §3.17-v-iii — THE MARGIN RATE OF A STRIKE'S SHAPE, before there is a contract: the reference's
+ * move per unit of notional (`profile.closeOutMoveOf`, which reads only the class, its reference,
+ * its tenor and its remaining life). What a market sizes a party's demand and a desk's supply
+ * against the clearing-member limit with, so the house's cut at the strike is the exception.
+ * Zero where the strike would post nothing.
+ */
+export type StrikeShape = Pick<DerivativeContract, 'classId' | 'regionId' | 'reference' | 'termKey' | 'maturityWeek'>;
+export function initialMarginRateOf(shape: StrikeShape, m: DerivativeMarketView): number {
+  const move = derivativeProfile(shape.classId).closeOutMoveOf({ ...shape, notional: 1 } as DerivativeContract, m);
+  return move !== undefined && move > 0 ? move : 0;
 }
 
 /** The contract as the market wrote it, with the margin its strike posts. */

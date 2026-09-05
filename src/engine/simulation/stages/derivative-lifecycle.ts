@@ -457,6 +457,26 @@ export function admitContract(ctx: WeeklyStepContext, cap: MemberCapacity, c: De
   return share < 1 ? scaledContract(c, share) : c;
 }
 
+/**
+ * §3.17-v-iii — WHAT A MEMBER CAN STILL CARRY of a strike at this margin rate, in the contract's
+ * money: its remaining capacity through the rate (`registry.ts:initialMarginRateOf`). Unbounded
+ * where the strike posts nothing. A market sizes a party's demand and a desk's supply with it
+ * BEFORE the print, and reserves what it sized (`reserveMemberCapacity`) so a party's second
+ * hedge this week is sized against what its first will post; the strike's own admission then
+ * finds the contract fits, and the house's cut is the exception.
+ */
+export function memberNotionalCapacityLocal(ctx: WeeklyStepContext, cap: MemberCapacity, party: DerivativeParty, currency: CurrencyCode, marginRate: number): number {
+  if (!(marginRate > 0)) return Number.POSITIVE_INFINITY;
+  const home = obligationCurrencyOf(ctx.v2, party);
+  return convert(remainingCapacityOf(ctx, cap, party, home), home, currency, ctx.v2.fx) / marginRate;
+}
+export function reserveMemberCapacity(ctx: WeeklyStepContext, cap: MemberCapacity, party: DerivativeParty, currency: CurrencyCode, marginLocal: number): void {
+  if (!(marginLocal > 0)) return;
+  const home = obligationCurrencyOf(ctx.v2, party);
+  const key = derivativePartyKey(party);
+  cap.remainingByKey.set(key, Math.max(0, remainingCapacityOf(ctx, cap, party, home) - convert(marginLocal, currency, home, ctx.v2.fx)));
+}
+
 /** A market's whole strike, admitted contract by contract against one capacity read. */
 export function admitToHouse(ctx: WeeklyStepContext, struck: readonly DerivativeContract[]): DerivativeContract[] {
   const cap = openMemberCapacity();

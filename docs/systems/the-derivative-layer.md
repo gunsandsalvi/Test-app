@@ -208,8 +208,11 @@ Rule 5 puts the limit at the strike: `derivative-lifecycle.ts:admitContract` cut
 the smaller of its two members' remaining capacity, or refuses it, before it stands and posts —
 every market strikes through `admitToHouse` (the FX market per holder, where its weaker
 per-holder budget stood) — and what was cut is `Region.ccpRefusedNotionalLocal`, a §6 measure.
-What the markets do not yet do is SIZE their demand to the limit, so a cut is the house's
-correction after the print rather than the desk's own restraint before it (17-v-iii).*
+Since §9.17-v-iii the markets SIZE to the limit before the print: each caps a party's demand and
+a desk's supply at the member's remaining capacity through the strike's margin rate
+(`registry.ts:initialMarginRateOf`, `derivative-lifecycle.ts:memberNotionalCapacityLocal`),
+reserving what it sized, so the cut at the strike is the exception and the refused notional
+measures it.*
 
 *2026-09-05 (§9.17-v-ii). The market view: `contract-ledger.ts:houseViewOf` reads one house's open
 interest by class, its sheet, and every member with the margin and fund it has at the house and

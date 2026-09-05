@@ -36,7 +36,8 @@ import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
 import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { postInitialMargin, withInitialMargin, admitToHouse } from '../derivative-lifecycle';
+import { postInitialMargin, withInitialMargin, admitToHouse, openMemberCapacity, memberNotionalCapacityLocal, reserveMemberCapacity } from '../derivative-lifecycle';
+import { initialMarginRateOf } from '../../../../domain/derivatives/registry';
 import { institutionTotalAssetsLocal, institutionBookLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
@@ -84,6 +85,16 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
     // it is already paying on (§7.241, off the one book). ----
     const payDemandByTenor = new Map<SwapTenorKey, { party: DerivativeParty; usd: number }[]>();
     SWAP_TENORS.forEach((k) => payDemandByTenor.set(k, []));
+    // §3.17-v-iii: every member sized to its limit at the house, at the tenor's margin rate.
+    const capacity = openMemberCapacity();
+    const money = currencyOf(regionId);
+    const marginRateOf = (k: SwapTenorKey) => initialMarginRateOf({ classId: 'IRS', regionId, reference: { kind: 'RATE' }, termKey: k, maturityWeek: week + Math.round(SWAP_TENOR_YEARS[k] * 52) }, view);
+    const sizedToLimit = (party: DerivativeParty, k: SwapTenorKey, wantLocal: number): number => {
+      const rate = marginRateOf(k);
+      const usd = Math.min(wantLocal, memberNotionalCapacityLocal(ctx, capacity, party, money, rate));
+      if (usd > 0) reserveMemberCapacity(ctx, capacity, party, money, usd * rate);
+      return usd;
+    };
 
     // A bank's fixed-rate sovereign book is funded by liabilities that reprice with policy. Its
     // capital can absorb a repricing only down to the ratio it must keep; what it cannot absorb
@@ -118,7 +129,7 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
         // Hedge the notional whose repricing loss is the excess — the rest it can carry.
         const wantedLocal = ((lossLocal - absorbableLocal) / Math.max(1e-9, lossLocal)) * bookLocal;
         const alreadyPayingLocal = standing.coverLocal('IRS', 'a', bankPartyKey(bank.id), undefined, k);
-        const hedgeLocal = Math.max(0, wantedLocal - alreadyPayingLocal);
+        const hedgeLocal = sizedToLimit(bankParty(bank), k, Math.max(0, wantedLocal - alreadyPayingLocal));
         if (!(hedgeLocal > 0)) return;
         payDemandByTenor.get(k)!.push({ party: bankParty(bank), usd: hedgeLocal });
       });
@@ -148,7 +159,7 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
       const wantedLocal = Math.min(floatingLocal, ((shockCostLocal - headroomLocal) / Math.max(1e-9, shockCostLocal)) * floatingLocal);
       // Floating corporate debt is short-dated relative to the curve; it hedges at the 5-year.
       const alreadyPayingLocal = standing.coverLocal('IRS', 'a', companyPartyKey(comp.id), undefined, 's5');
-      const hedgeLocal = Math.max(0, wantedLocal - alreadyPayingLocal);
+      const hedgeLocal = sizedToLimit(companyParty(comp), 's5', Math.max(0, wantedLocal - alreadyPayingLocal));
       if (!(hedgeLocal > 0)) return;
       payDemandByTenor.get('s5')!.push({ party: companyParty(comp), usd: hedgeLocal });
     });
@@ -195,7 +206,8 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
         demandByInstrumentId.set(swapInstrumentId(regionId, k), {
           // It will not receive less fixed than the bond of the same tenor already pays it.
           reservationStat: zeroBps,
-          maxHoldingLocal: durationGapLocal,
+          // §3.17-v-iii: and no more than it can margin at the house.
+          maxHoldingLocal: Math.min(durationGapLocal, memberNotionalCapacityLocal(ctx, capacity, { kind: 'INSTITUTION', id: entity.id }, money, marginRateOf(k))),
           // And scales in over the move the market itself can make in a week: past that, the
           // swap is plainly better than the bond and it takes all it is allowed.
           fullSizeStatRange: moveBps,

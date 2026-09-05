@@ -27,7 +27,7 @@ import { ensureV2 } from '../../../../engine2/world';
 import { institutionProfile } from '../../../../domain/institution-profiles';
 import { CDS_TENOR_WEEKS, protectionNeedLocal } from '../../../../domain/derivatives/classes/cds';
 import { DerivativeContract, DerivativeParty, bankPartyKey } from '../../../../domain/derivatives/contract';
-import { deskNotionalCapacityLocal } from '../../../../domain/derivatives/registry';
+import { deskNotionalCapacityLocal, initialMarginRateOf } from '../../../../domain/derivatives/registry';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { isActiveCompany } from '../../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from '../shared-helpers';
@@ -36,7 +36,7 @@ import { bankRequiredReturnAnnual } from '../bank-lending';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { postInitialMargin, withInitialMargin, admitToHouse } from '../derivative-lifecycle';
+import { postInitialMargin, withInitialMargin, admitToHouse, openMemberCapacity, memberNotionalCapacityLocal, reserveMemberCapacity } from '../derivative-lifecycle';
 import { MEASURE_WINDOW_WEEKS } from '../../../../domain/volatility';
 import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
@@ -57,10 +57,15 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
   const cdsIndex = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   const companyById = cdsIndex.companyById;
   const bankIdOfTicker = (t: Ticker) => cdsIndex.companyByTicker.get(t)?.id;
+  // §3.17-v-iii: one capacity read for the market — every member sized to its limit at the house.
+  const capacity = openMemberCapacity();
 
   REGION_IDS.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     const recoveryRate = creditRecoveryRate(reg);
+    const money = currencyOf(regionId);
+    /** What protection on this name posts per unit of notional, at this week's strike shape. */
+    const marginRateOf = (issuerId: EntityId) => initialMarginRateOf({ classId: 'CDS', regionId, reference: { kind: 'ISSUER', issuerId }, termKey: '', maturityWeek: week + CDS_TENOR_WEEKS }, view);
     /**
      * §3.13 — THE CASH LEG OF THE BASIS. Protection on a name at five years is comparable to that
      * name's own five-year CASH paper and to nothing else, so the leg is a point on the issuer's
@@ -91,12 +96,16 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
       exposureByIssuer.forEach((exposureLocal, issuerId) => {
         const issuer = companyById.get(issuerId);
         if (!issuer || issuer.region !== regionId || !isActiveCompany(issuer)) return;
-        const needLocal = protectionNeedLocal({
+        const wantLocal = protectionNeedLocal({
           exposureLocal,
           bankEquityLocal: sheet.bankEquityLocal,
           alreadyHedgedLocal: standing.coverLocal('CDS', 'a', bankPartyKey(bank.id), issuerId),
         });
+        // §3.17-v-iii: no more than the member can margin at the house, reserved as it is sized.
+        const rate = marginRateOf(issuerId);
+        const needLocal = Math.min(wantLocal, memberNotionalCapacityLocal(ctx, capacity, party, money, rate));
         if (needLocal <= 1) return;
+        reserveMemberCapacity(ctx, capacity, party, money, needLocal * rate);
         const list = hedgeDemandByIssuer.get(issuerId) ?? [];
         list.push({ party, usd: needLocal });
         hedgeDemandByIssuer.set(issuerId, list);
@@ -163,7 +172,8 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
         // selling protection is the same concentration as making the loan.
         demandByInstrumentId.set(cdsInstrumentId(regionId, c.id), {
           reservationStat: reservationBps,
-          maxHoldingLocal: capacityLocal / Math.max(1, referenceIssuers.length),
+          // §3.17-v-iii: and no more of the name than the desk can margin at the house.
+          maxHoldingLocal: Math.min(capacityLocal, memberNotionalCapacityLocal(ctx, capacity, bankParty(bank), money, marginRateOf(c.id))) / Math.max(1, referenceIssuers.length),
           fullSizeStatRange: fullSizeSpreadRangeBpsOf(bank),
         });
       });
@@ -196,7 +206,7 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
             capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, CDS_TENOR_WEEKS / 52),
             creditConditionsIndex,
           }),
-          maxHoldingLocal: capacityLocal / Math.max(1, referenceIssuers.length),
+          maxHoldingLocal: Math.min(capacityLocal, memberNotionalCapacityLocal(ctx, capacity, { kind: 'INSTITUTION', id: entity.id }, money, marginRateOf(c.id))) / Math.max(1, referenceIssuers.length),
           fullSizeStatRange: fullSizeSpreadRangeBpsOf(entity),
         });
       });

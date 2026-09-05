@@ -11,7 +11,9 @@ import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { partyKey, partyFromKey } from '../src/engine/ledger/party';
 import { ccpParty, samePartyRef } from '../src/domain/party';
 import { ccpOfContract, ccpOfMoney, ccpSheetOf, ccpOwnCapitalLocal, coverOneFundLocal, fundContributionsOf, CCP_CLOSE_OUT_SESSIONS, runWaterfall, writeDownSurvivors, memberMarginLimitLocal, memberMarginCapacityLocal, admittedShareOf, scaledContract } from '../src/domain/clearing-house';
-import { admitToHouse } from '../src/engine/simulation/stages/derivative-lifecycle';
+import { admitToHouse, openMemberCapacity, memberNotionalCapacityLocal, reserveMemberCapacity } from '../src/engine/simulation/stages/derivative-lifecycle';
+import { initialMarginRateOf } from '../src/domain/derivatives/registry';
+import type { DerivativeMarketView } from '../src/domain/derivatives/profile';
 import { openAccount, reserveRowOf, setHomeCurrency } from '../src/engine/ledger/accounts';
 import { trueUpDefaultFunds } from '../src/engine/simulation/stages/derivatives';
 import { openSectorRow, ccpCashOf, ccpDepositsAt, depositLinesAt } from '../src/engine/ledger/accounts';
@@ -284,6 +286,31 @@ test('§3.17-v-ii: the market view — open interest by class, and each member\'
     assert.deepEqual(view.members[1].byClass.FX_FORWARD, { contracts: 2, grossLocal: 400, netLocal: -200 }, 'the dealer is short what the fund is long');
     assert.deepEqual(houseViewOf(v2, 'EUR').members, []);
   } finally {
+    setActiveWireWorld(undefined);
+  }
+});
+
+test('§3.17-v-iii: a market sizes a member to its limit through the strike\'s margin rate, and reserves what it sized', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const a = { kind: 'INSTITUTION' as const, id: asEntityId('INST-A') };
+  setActiveWireWorld(wireWorldOf(v2, [], [{ id: a.id }]));
+  setActiveWireJournal(newWireJournal(1, 0));
+  try {
+    const k = Math.sqrt(CCP_CLOSE_OUT_SESSIONS) - 1;
+    setHomeCurrency(v2, a, 'USD'); openAccount(v2, a, 'USD', 1000);
+    const ctx = { v2, nextWeek: 5, pendingNetById: [], pendingTouchedIds: [], fx: PARITY_FX, updatedRegions: {} } as unknown as WeeklyStepContext;
+    const view = { fxWeeklyMove: (r: string) => (r === 'EUR' ? 0.02 : undefined) } as unknown as DerivativeMarketView;
+    const shape = { classId: 'FX_FORWARD' as const, regionId: 'USA' as const, reference: { kind: 'REGION' as const, regionId: 'EUR' as const }, termKey: '', maturityWeek: 18 };
+    assert.equal(initialMarginRateOf(shape, view), 0.02, 'the pair\'s move per unit of notional');
+    assert.equal(initialMarginRateOf({ ...shape, reference: { kind: 'REGION', regionId: 'JPN' } }, view), 0, 'no move measured: nothing posts');
+    const cap = openMemberCapacity();
+    const limit = 1000 / k;
+    assert.ok(Math.abs(memberNotionalCapacityLocal(ctx, cap, a, 'USD', 0.02) - limit / 0.02) < 1e-9, 'its limit through the rate');
+    assert.equal(memberNotionalCapacityLocal(ctx, cap, a, 'USD', 0), Number.POSITIVE_INFINITY, 'a strike that posts nothing is not limited by the house');
+    reserveMemberCapacity(ctx, cap, a, 'USD', limit / 2);
+    assert.ok(Math.abs(memberNotionalCapacityLocal(ctx, cap, a, 'USD', 0.02) - (limit / 2) / 0.02) < 1e-9, 'the second hedge is sized against what the first will post');
+  } finally {
+    setActiveWireJournal(undefined);
     setActiveWireWorld(undefined);
   }
 });

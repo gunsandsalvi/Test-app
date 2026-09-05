@@ -551,13 +551,6 @@ written from here):
     one commit each; 17-i (the margin a contract carries is the amount posted), 17-ii (initial
     margin is the reference's own move) and 17-iii (variation margin is the mark, for every
     class) are in §9. What is left, in order:
-17-v. **CAPACITY IS A CLEARING-MEMBER LIMIT (rule 5), and the market view** — split 2026-09-05,
-    one commit each; 17-v-i (the limit, at the strike) and 17-v-ii (the market view) are in §9.
-    What is left:
-17-v-iii. **THE MARKETS SIZE TO THE LIMIT.** Each of the four markets caps a party's demand and
-    a desk's supply at the member's remaining capacity through the class's margin rate BEFORE
-    the print, so the house's cut at the strike (17-v-i) is the exception it should be rather
-    than the rule; the refused notional is the measure of it.
 17-vi. **A credit event pays a REGIONAL AVERAGE recovery** (`cds.ts` `eventTermination` +
     `derivative-lifecycle.ts`) instead of the estate's own workout on that issuer. Settle the
     credit event off the estate's realised recovery when it closes (the undiscounted close-outs
@@ -1628,6 +1621,26 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17-v-iii — THE MARKETS SIZE TO THE LIMIT.** Step 17-v is closed. A strike's margin rate
+exists before the contract does: `registry.ts:initialMarginRateOf(shape, view)` is the
+reference's move per unit of notional off the class, reference, tenor and remaining life
+(`initialMarginAtStrike` is notional × it), and
+`derivative-lifecycle.ts:memberNotionalCapacityLocal` is a member's remaining capacity through
+that rate, in the contract's money — unbounded where the strike posts nothing —, with
+`reserveMemberCapacity` drawing the market's one capacity read down by what it sized, so a
+party's second hedge this week is sized against what its first will post. Every side of every
+market: CDS caps a bank's protection need per name and reserves it, and a desk's and a credit
+fund's writing per name; IRS caps a bank's and a firm's pay-fixed hedge per tenor
+(`sizedToLimit`) and a receiver's duration gap; the commodity future caps a producer's units,
+the desks' arbitrage, a consumer's and a macro fund's longs (`unitsToLimit`, at spot); the FX
+forward caps each holder's gap per pair (`gapToLimit`) and the desks' float per pair
+(`deskFloatLocal`, the PFE budget and the house limit at the pair's rate, the smaller). The FX
+strike admits against a FRESH read (`admission`): the sizing reserved what each holder asked,
+the print fills less, and what is struck is what posts. The cut at the strike (17-v-i) is now
+the exception; `ccpRefusedNotionalLocal` measures how often it is not. `test/ccp.test.ts`: the
+rate off a view, none where no move is measured; the capacity through the rate, unbounded at
+zero, and a reservation sizing the next hedge. Gates green; no run.
 
 **17-v-ii — THE MARKET VIEW.** The "stats on the derivative markets overall": one read,
 `contract-ledger.ts:houseViewOf(v2, region)` — the house's open interest per class (contracts,

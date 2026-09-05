@@ -35,13 +35,13 @@ import { TradeInvoice } from '../../../../domain/trade-invoice';
 import { HEDGE_RATIO_FIXED_INCOME, equityHedgeRatioFor, FX_FORWARD_TENOR_WEEKS } from '../../../../domain/derivatives/classes/fx-forward';
 import { hedgeToleranceBps } from '../../../../domain/derivatives/hedging';
 import { DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../../domain/derivatives/contract';
-import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal } from '../../../../domain/derivatives/registry';
+import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, initialMarginRateOf } from '../../../../domain/derivatives/registry';
 import { FxDealerBook, emptyFxDealerBook } from '../../../../domain/dealer-derivatives';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { fxWeeklySigma } from '../../../../domain/fx-market';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
-import { initialMarginLocal, withInitialMargin, postInitialMargin, openMemberCapacity, admitContract } from '../derivative-lifecycle';
+import { initialMarginLocal, withInitialMargin, postInitialMargin, openMemberCapacity, admitContract, memberNotionalCapacityLocal, reserveMemberCapacity } from '../derivative-lifecycle';
 import { derivativesBookOf, strikeDerivatives, tradeInvoicesOf } from '../../../ledger/contract-ledger';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { bankReservesOf } from '../../../ledger/accounts';
@@ -181,13 +181,26 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
   const coveredLocal = (party: DerivativeParty, issuer: RegionId) =>
     standing.coverLocal('FX_FORWARD', 'a', derivativePartyKey(party), issuer);
 
+  // §3.17-v-iii: one capacity read for the market — every holder sized to its limit at the house,
+  // at the pair's margin rate, and the desks' float per pair to theirs.
+  const capacity = openMemberCapacity();
+  const marginRateOf = (holderRegion: RegionId, issuer: RegionId) =>
+    initialMarginRateOf({ classId: 'FX_FORWARD', regionId: holderRegion, reference: { kind: 'REGION', regionId: issuer }, termKey: '', maturityWeek: week + FX_FORWARD_TENOR_WEEKS }, view);
+  const gapToLimit = (party: DerivativeParty, holderRegion: RegionId, issuer: RegionId, wantLocal: number): number => {
+    const rate = marginRateOf(holderRegion, issuer);
+    const money = currencyOf(holderRegion);
+    const gapLocal = Math.min(wantLocal, memberNotionalCapacityLocal(ctx, capacity, party, money, rate));
+    if (gapLocal > 0) reserveMemberCapacity(ctx, capacity, party, money, gapLocal * rate);
+    return gapLocal;
+  };
+
   /** This week's unhedged gap for one holder in one foreign currency. */
   const gapByEntityRegion = new Map<string, Map<RegionId, number>>();
   ctx.updatedInstitutionalEntities.forEach((entity) => {
     if (entity.isDefaulted) return;
     const gaps = new Map<RegionId, number>();
     hedgeableExposureByRegion(ctx.v2, entity).forEach((wantLocal, issuer) => {
-      const gapLocal = wantLocal - coveredLocal({ kind: 'INSTITUTION', id: entity.id }, issuer);
+      const gapLocal = gapToLimit({ kind: 'INSTITUTION', id: entity.id }, entity.region, issuer, wantLocal - coveredLocal({ kind: 'INSTITUTION', id: entity.id }, issuer));
       if (gapLocal > 1e6) gaps.set(issuer, gapLocal);
     });
     if (gaps.size > 0) gapByEntityRegion.set(entity.id, gaps);
@@ -221,7 +234,7 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
         riskAversion: riskAversionOf(c.management),
       });
       if (!(mustHedgeLocal > 0)) return;
-      const gapLocal = mustHedgeLocal - coveredLocal(companyParty(c), foreign);
+      const gapLocal = gapToLimit(companyParty(c), c.region, foreign, mustHedgeLocal - coveredLocal(companyParty(c), foreign));
       if (gapLocal <= 1e6) return;
       gaps.set(foreign, gapLocal);
       tolerances.set(foreign, hedgeToleranceBps(annualSigmaFor(foreign), mustHedgeLocal / exposureLocal));
@@ -240,12 +253,17 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
   ctx.updatedInstitutionalEntities.forEach((e) => holderRegions.add(e.region));
   ctx.updatedCompanies.forEach((c) => { if (corpGapByTicker.has(c.id)) holderRegions.add(c.region); });
   holderRegions.forEach((holderRegion) => {
-    let capacityLocal = 0;
-    ctx.updatedCompanies.forEach((c) => {
-      if (c.region !== holderRegion || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
-      const desk = desks.get(c.id);
-      if (desk) capacityLocal += deskCapacityLocal(desk);
-    });
+    /** The desks' float for one pair: each desk's PFE budget, and no more than it can margin at
+     *  the house at the pair's rate (§3.17-v-iii). */
+    const deskFloatLocal = (issuer: RegionId): number => {
+      let capacityLocal = 0;
+      ctx.updatedCompanies.forEach((c) => {
+        if (c.region !== holderRegion || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
+        const desk = desks.get(c.id);
+        if (desk) capacityLocal += Math.min(deskCapacityLocal(desk), memberNotionalCapacityLocal(ctx, capacity, bankPartyOf(c.id), currencyOf(holderRegion), marginRateOf(holderRegion, issuer)));
+      });
+      return capacityLocal;
+    };
     const issuers = new Set<RegionId>();
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.region !== holderRegion) return;
@@ -257,6 +275,7 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
     });
     issuers.forEach((issuer) => {
       const key = bookKey(holderRegion, issuer);
+      const capacityLocal = deskFloatLocal(issuer);
       const instrumentId = fxBasisInstrumentId(key);
       // §3.13-BOOK dII: the basis book is declared on the instrument index where it is built; its
       // money is the FOREIGN one — the currency the holder is funding an asset in.
@@ -330,7 +349,9 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
   // budget that stood here — margin ≤ spendable cash net of the week's commitments — is that
   // rule's weaker form and is gone into it). ----
   const struck: DerivativeContract[] = [];
-  const capacity = openMemberCapacity();
+  // The strike admits against a FRESH read: the sizing above reserved what each holder ASKED for,
+  // and what the print filled is what it posts.
+  const admission = openMemberCapacity();
   const strikeFor = (
     holder: DerivativeParty, holderRegion: RegionId, participantId: string, gaps: Map<RegionId, number>
   ): void => {
@@ -365,7 +386,7 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
       }, view);
       // §3.17-v-i: the house admits what both members can margin — the contract as written, cut,
       // or not at all.
-      const contract = admitContract(ctx, capacity, offered);
+      const contract = admitContract(ctx, admission, offered);
       if (!contract) return;
       const writtenLocal = contract.notional;
       const marginLocal = initialMarginLocal(contract);

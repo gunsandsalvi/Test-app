@@ -30,7 +30,7 @@ import {
 } from '../../../../domain/derivatives/classes/commodity-future';
 import { hedgeConcessionPerUnit } from '../../../../domain/derivatives/hedging';
 import { DerivativeContract, DerivativeParty, bankPartyKey, companyPartyKey } from '../../../../domain/derivatives/contract';
-import { deskNotionalCapacityLocal } from '../../../../domain/derivatives/registry';
+import { deskNotionalCapacityLocal, initialMarginRateOf } from '../../../../domain/derivatives/registry';
 import { COMMODITY_CATEGORY_LINKAGE } from '../../../../domain/instruments';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../../domain/market-microstructure';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
@@ -39,7 +39,7 @@ import { exposureToHedgeLocal } from '../corporate-financing';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { postInitialMargin, withInitialMargin, admitToHouse } from '../derivative-lifecycle';
+import { postInitialMargin, withInitialMargin, admitToHouse, openMemberCapacity, memberNotionalCapacityLocal, reserveMemberCapacity } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
@@ -58,6 +58,8 @@ function annualInterestOf(c: Company): number {
 }
 
 function runCommodityFuturesMarket({ state, ctx, week, standing, view }: DerivativeMarketRun): void {
+  // §3.17-v-iii: one capacity read for the market — every member sized to its limit at the house.
+  const capacity = openMemberCapacity();
   const firms = ctx.prevActiveFirms.filter(isActiveCompany);
   // §3.13-BOOK (c-then-3b): a `CONS-` seat embeds the consumer's TICKER; a party is its entity id.
   const consumerIdOfTicker = (t: Ticker) => buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities).companyByTicker.get(t)?.id;
@@ -102,6 +104,10 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
       // §3.13-BOOK dII: the contract is declared on the instrument index where it is built; a
       // commodity is quoted in the numéraire (`contract.ts:currency`).
       registerBook(ctx.v2, id, 'COMMODITY_FUTURE', NUMERAIRE);
+      // §3.17-v-iii: every member sized to its limit at the house, at this contract's margin rate.
+      const marginRate = initialMarginRateOf({ classId: 'COMMODITY_FUTURE', regionId: 'USA', reference: { kind: 'COMMODITY', commodityId: comm.id }, termKey, maturityWeek: week + Math.round(tenorMonths * (52 / 12)) }, view);
+      const unitsToLimit = (party: DerivativeParty, wantUnits: number): number =>
+        Math.min(wantUnits, memberNotionalCapacityLocal(ctx, capacity, party, NUMERAIRE, marginRate) / Math.max(0.01, spot));
 
       // How much the producers between them need to lay off, in UNITS: the revenue exposure their
       // covenant headroom cannot absorb, less what they have already sold forward.
@@ -115,9 +121,9 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
           oneSigma,
           riskAversion: riskAversionOf(c.management),
         });
-        const units = hedgeLocal / spot
-          - standing.coverUnits('COMMODITY_FUTURE', 'b', companyPartyKey(c.id), comm.id, termKey);
-        if (units > 0.0001) sellers.push({ party: companyParty(c), units });
+        const units = unitsToLimit(companyParty(c), hedgeLocal / spot
+          - standing.coverUnits('COMMODITY_FUTURE', 'b', companyPartyKey(c.id), comm.id, termKey));
+        if (units > 0.0001) { reserveMemberCapacity(ctx, capacity, companyParty(c), NUMERAIRE, units * spot * marginRate); sellers.push({ party: companyParty(c), units }); }
       });
       const hedgeFloatUnits = sellers.reduce((a, s) => a + s.units, 0);
 
@@ -137,7 +143,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
           const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
           const capacityLocal = deskNotionalCapacityLocal(
             leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankBookAssetsLocal(ctx.v2, bank.id)), standing.pfeChargeLocal(bankPartyKey(bank.id)), 'COMMODITY_FUTURE');
-          const units = capacityLocal / Math.max(0.01, spot) / FUTURES_TENOR_MONTHS.length;
+          const units = unitsToLimit(bankParty(bank), capacityLocal / Math.max(0.01, spot)) / FUTURES_TENOR_MONTHS.length;
           if (units > 0.0001) {
             sellers.push({ party: bankParty(bank), units });
             arbUnits += units;
@@ -179,7 +185,8 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
         });
         const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>([[id, {
           reservationStat: reservation,
-          maxHoldingLocal: hedgeLocal / spot,
+          // §3.17-v-iii: no more than it can margin at the house.
+          maxHoldingLocal: unitsToLimit(companyParty(c), hedgeLocal / spot),
           // Full size once the price is a whole concession below what it would pay — the same
           // distance that sets the reservation, so the schedule has one scale, not two.
           fullSizeStatRange: Math.max(0.01, reservation - spot),
@@ -206,7 +213,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
           currentHoldingsByInstrumentId: new Map(),
           demandByInstrumentId: new Map([[id, {
             reservationStat: carryBound,
-            maxHoldingLocal: capacityLocal / Math.max(0.01, spot),
+            maxHoldingLocal: unitsToLimit({ kind: 'INSTITUTION', id: fund.id }, capacityLocal / Math.max(0.01, spot)),
             fullSizeStatRange: Math.max(0.01, carryBound - spot),
           }]]),
         });
