@@ -10,6 +10,7 @@ import { InstitutionalSector } from './institutions';
 import { CategoryDemandState, SupplyRelationship } from './market-microstructure';
 import type { DebtTranche } from './company';
 import type { EntityId } from './ids';
+import type { CdsTenorKey } from './derivatives/classes/cds';
 
 export type WealthTier = 'BOTTOM_50' | 'NEXT_40' | 'TOP_9' | 'TOP_1';
 
@@ -743,11 +744,12 @@ export interface Region {
    *  A measured number (`bond-future.ts:bondFuturesNetBasis`). */
   bondFuturesDeliverableId?: string;
   bondFuturesBasis?: number;
-  /** §3.27-iii-a — what the relative-value book read this week as the CHEAPEST carry any fund
-   *  faced to take the benchmark CDS–cash basis on this name, each way (`relative-value.ts:
-   *  readCdsBasis`: `readBps` long the rung and the cover, `mirrorBps` its reverse). A basis
-   *  wider than that carry is free money nobody took — the bound P2 holds the print to. */
-  cdsBasisCarryBpsByIssuer?: Record<string, { week: number; readBps: number; mirrorBps: number }>;
+  /** §3.27-iii-a / §3.27-iv — what the relative-value book read this week as the CHEAPEST carry
+   *  any fund faced to take the CDS–cash basis on this name, at each tenor the protection book has
+   *  printed, each way (`relative-value.ts:readCdsBasis`: `readBps` long the rung and the cover,
+   *  `mirrorBps` its reverse). A basis wider than that carry is free money nobody took — the bound
+   *  P2 holds the print to. */
+  cdsBasisCarryBpsByIssuer?: Record<string, Partial<Record<CdsTenorKey, { week: number; readBps: number; mirrorBps: number }>>>;
   /** §3.27-iii-c-i — the same for the bond basis: the cheapest carry any fund faced this week to
    *  take it, each way (`relative-value.ts:readBondBasis`), in bps a year as the book annualises
    *  the basis. A basis wider than it is free money nobody took — X2's bound. */

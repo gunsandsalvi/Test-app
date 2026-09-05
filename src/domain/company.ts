@@ -6,6 +6,7 @@
 import { plantNetLocal } from './plant';
 import { InstrumentId, type EntityId, type Ticker } from './ids';
 import { RegionId } from './geography';
+import type { CdsTenorKey } from './derivatives/classes/cds';
 import { defect } from './defect';
 import { Industry } from './industry';
 import { BankingSector } from './banking';
@@ -541,8 +542,10 @@ export interface Company {
    *  has printed. It was the bond's OAS when no protection cleared, which made the basis zero by
    *  construction, and `oas ± random` at the seed. Never derived from the cash spread. */
   cdsSpreadBps?: number;
-  /** §5-CLOSE P2 — the week the protection book last cleared this name (undefined: never). */
-  cdsClearedWeek?: number;
+  /** §5-CLOSE P2 / §3.27-iv — the week each tenor's protection book last STRUCK a print
+   *  (`derivative-markets/cds.ts`; absent: never). A tenor with no book this week carries its
+   *  last print, which is a quote, not a price, and the basis test reads only prices. */
+  cdsClearedWeekByTenor?: Partial<Record<CdsTenorKey, number>>;
   /**
    * CRD/DER2 — the CDS BASIS: the cleared protection spread less this issuer's cleared cash OAS.
    * An OUTCOME, and the second cross-market agreement test this model can run after DER1's swap

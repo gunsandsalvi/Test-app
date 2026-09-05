@@ -553,12 +553,6 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-27-iv. **The basis is arbitraged at every tenor the protection book prints.** The relative-value
-    book reads the CDS–cash basis at the BENCHMARK tenor only (`readCdsBasis`,
-    `CDS_BENCHMARK_TENOR`); the 1y/3y/10y books open at the issuer's cash spread at that tenor and
-    then move on their own supply and demand with nothing tying them to the bond there, so P2
-    measures only the benchmark (27-iii-a) and rule 4 has no keeper at the others. `readCdsBasis`
-    reads every tenor with a print against the rung nearest it and records each carry; P2 follows.
 28. **The harness's own defects.** *(The first — the NaN per-bank identity — is DONE, with the
     over-pledge and SME-cash reads that were dead the same way; §9's lint entry.)*
     `:2600` reads book-weighted regional averages for the capital and NIM bands, so a minority of
@@ -1341,6 +1335,17 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**27-iv — THE BASIS IS ARBITRAGED AT EVERY TENOR THE PROTECTION BOOK PRINTS.** `readCdsBasis` read
+  the CDS–cash basis at the benchmark tenor only; the 1y/3y/10y books opened at the issuer's cash
+  spread at that tenor and then moved on their own supply and demand with nothing tying them to the
+  bond there. It now reads every tenor with a print against the rung nearest it — its own
+  instrument, margin, weekly move and standing cover per tenor, the cash leg merged where two
+  tenors share a rung (`mergeLegs`) — and records each tenor's cheapest carry
+  (`Region.cdsBasisCarryBpsByIssuer`, keyed by tenor). The protection book stamps the week each
+  tenor struck (`Company.cdsClearedWeekByTenor`, replacing the benchmark-only `cdsClearedWeek`),
+  and P2 holds every struck tenor's basis to its carry — one finding per name and tenor. Gates
+  green; no run (rule 11).
 
 **27-iii-c-ii — X2 READS THE WEDGE THE SOURCING INTENT SAW.** X2 compared four landed prices with
   no lane between them, forgave 2.5× and fired only past a 25% quota. The wedge is the sourcing

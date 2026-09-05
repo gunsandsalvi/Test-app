@@ -410,7 +410,8 @@ demand; H4 stays ⚠️ for H4.a's mirror, which needs the corporate bond borrow
 
 *2026-09-05 (§9.27-iii-a): the audit holds the print to the trader's own bound. `readCdsBasis`
 records, per name, the cheapest carry any fund faced each way (`Region.cdsBasisCarryBpsByIssuer`),
-and `audit/prices.ts:p2` fires on every benchmark basis wider than it — no band, no quota.*
+and `audit/prices.ts:p2` fires on every basis wider than it — at every tenor the protection book
+prints (§9.27-iv), no band, no quota.*
 
 ### ⚠️ E5.d — THE CLEARED LEVEL CAN BE THE SEARCH BRACKET
 

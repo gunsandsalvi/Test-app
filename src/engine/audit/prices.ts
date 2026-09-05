@@ -17,7 +17,7 @@ import { trancheClearedPricePerFace, issuerSpreadAtOnCurve, IS_LOAN_ROW, rowSpre
 import { materializeGovLadder, ladderRowsOf, TR_SUBORDINATED, TR_CP, TR_FACILITY } from '../../engine2/tranches';
 
 import { STANDARD_CORP_TENOR_YEARS } from '../../domain/primary-market';
-import { CDS_BENCHMARK_TENOR, CDS_TENOR_YEARS } from '../../domain/derivatives/classes/cds';
+import { CDS_TENORS, CDS_TENOR_YEARS } from '../../domain/derivatives/classes/cds';
 import { spreadBpsFromPrice, SPREAD_SOLVE_RESOLUTION_BPS } from '../../domain/pricing/bond';
 import { creditRecoveryRate, BANK_MIN_CAPITAL_RATIO } from '../../domain/bank-pricing';
 import { repoCorridorBps } from '../macro/banking';
@@ -104,12 +104,12 @@ function p1(state: GameState, week: number): AuditFinding[] {
  * §3.27-iii-a. The mechanism that ties protection to the name's own cash paper is the
  * relative-value book (§3.17f-i): long the rung on the line and long the cover when the bond
  * pays more than the cover costs, the mirror when it pays less, each carrying the financing
- * above repo (or the borrow fee) and the return its margin needs. It trades the BENCHMARK tenor,
- * and what it read this week as the cheapest carry any fund faced, each way, is on the region
- * (`cdsBasisCarryBpsByIssuer`). A basis wider than that carry is free money nobody took — the
- * finding, one per name; the 150bp-or-75% band and the 10% quota that stood here were stated
- * widths. The other tenors have no arbitrageur (§3.27-iv), so nothing bounds them and this check
- * does not pretend to.
+ * above repo (or the borrow fee) and the return its margin needs. §3.27-iv: it reads every tenor
+ * the protection book has printed against the rung nearest it, and what it read this week as the
+ * cheapest carry any fund faced, each way, is on the region (`cdsBasisCarryBpsByIssuer`). A
+ * basis wider than that carry is free money nobody took — the finding, one per name and tenor;
+ * the 150bp-or-75% band and the 10% quota that stood here were stated widths. A tenor whose book
+ * did not strike this week carries a quote, not a price, and is not read.
  *
  * The recovery: the pricer's `creditRecoveryRate` is the region's own realised history shrunk to
  * the prior; what the workouts delivered is that history unshrunk. The sample's own standard
@@ -119,27 +119,32 @@ function p1(state: GameState, week: number): AuditFinding[] {
 function p2(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
-  const tenorYears = CDS_TENOR_YEARS[CDS_BENCHMARK_TENOR];
   let survived = 0, n = 0; const examples: string[] = [];
   state.companies.forEach((c) => {
     const reg = state.regions[c.region];
-    // Only names whose protection book CLEARED this week: a stale print is a quote, not a price.
-    if (!isActiveCompany(c) || !reg?.zeroRates || c.cdsSpreadBps === undefined || !(c.cdsSpreadBps > 0) || c.cdsClearedWeek !== state.currentWeek) return;
-    const carry = reg.cdsBasisCarryBpsByIssuer?.[c.id];
-    if (!carry || carry.week !== state.currentWeek) return;
-    // The rung the book read the basis against: the issuer's own bond nearest the benchmark.
-    const rung = nearestBondRowOf(v2, c.id, week, tenorYears);
-    const cash = rung === undefined ? undefined : rowSpreadBps(v2, reg, rung, week);
-    if (cash === undefined || !(cash > 0)) return;
-    n++;
-    const deviationBps = cash - c.cdsSpreadBps;
-    const dust = floatDust(Math.abs(cash) + Math.abs(c.cdsSpreadBps), 2) + SPREAD_SOLVE_RESOLUTION_BPS;
-    if (deviationBps > carry.readBps + dust || -deviationBps > carry.mirrorBps + dust) {
-      survived++;
-      if (examples.length < 3) examples.push(`${c.ticker} bond ${cash.toFixed(0)}bp vs CDS ${c.cdsSpreadBps.toFixed(0)}bp against ${(deviationBps > 0 ? carry.readBps : carry.mirrorBps).toFixed(0)}bp of carry`);
-    }
+    if (!isActiveCompany(c) || !reg?.zeroRates) return;
+    const carries = reg.cdsBasisCarryBpsByIssuer?.[c.id];
+    if (!carries) return;
+    CDS_TENORS.forEach((tenor) => {
+      // Only tenors whose protection book STRUCK this week: a stale print is a quote, not a price.
+      const carry = carries[tenor];
+      const prints = reg.cdsSpreadHistoryByIssuer?.[c.id]?.[tenor];
+      const cds = prints?.[prints.length - 1];
+      if (!carry || carry.week !== state.currentWeek || c.cdsClearedWeekByTenor?.[tenor] !== state.currentWeek || cds === undefined || !(cds > 0)) return;
+      // The rung the book read the basis against: the issuer's own bond nearest this tenor.
+      const rung = nearestBondRowOf(v2, c.id, week, CDS_TENOR_YEARS[tenor]);
+      const cash = rung === undefined ? undefined : rowSpreadBps(v2, reg, rung, week);
+      if (cash === undefined || !(cash > 0)) return;
+      n++;
+      const deviationBps = cash - cds;
+      const dust = floatDust(Math.abs(cash) + Math.abs(cds), 2) + SPREAD_SOLVE_RESOLUTION_BPS;
+      if (deviationBps > carry.readBps + dust || -deviationBps > carry.mirrorBps + dust) {
+        survived++;
+        if (examples.length < 3) examples.push(`${c.ticker} ${CDS_TENOR_YEARS[tenor]}y bond ${cash.toFixed(0)}bp vs CDS ${cds.toFixed(0)}bp against ${(deviationBps > 0 ? carry.readBps : carry.mirrorBps).toFixed(0)}bp of carry`);
+      }
+    });
   });
-  if (survived) out.push({ family: 'P', check: 'P2 the CDS basis is inside the arbitrage\'s carry', week, usd: survived, message: `${survived} of ${n} names' ${tenorYears}y basis is wider than the cheapest carry any fund faced to take it (${examples.join(' | ')})` });
+  if (survived) out.push({ family: 'P', check: 'P2 the CDS basis is inside the arbitrage\'s carry', week, usd: survived, message: `${survived} of ${n} name-tenors' basis is wider than the cheapest carry any fund faced to take it (${examples.join(' | ')})` });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
     const realised = reg?.realisedRecoveryRates ?? [];

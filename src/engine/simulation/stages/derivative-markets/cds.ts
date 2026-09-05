@@ -332,14 +332,14 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
       const hist = reg.cdsSpreadHistoryByIssuer ?? (reg.cdsSpreadHistoryByIssuer = {});
       const curve = hist[issuer.id] ?? (hist[issuer.id] = {});
       curve[tenor] = [...(curve[tenor] ?? []).slice(-(MEASURE_WINDOW_WEEKS - 1)), print];
+      // §5-CLOSE P2 / §3.27-iv: the week this tenor's print was struck — a tenor with no book this
+      // week carries its last print, which is a quote, not a price, and the basis test reads only prices.
+      (issuer.cdsClearedWeekByTenor ??= {})[tenor] = ctx.nextWeek;
       if (tenor === CDS_BENCHMARK_TENOR) {
         // THE PRICE the name is quoted by. `comp.cdsSpreadBps` was `oas + a random draw`, clamped
         // to [10, 5000]; it is what this book cleared at the benchmark tenor, with no bound on
         // either end (rule 6).
         issuer.cdsSpreadBps = print;
-        // §5-CLOSE P2: the week this print was struck — a name with no protection book this week
-        // carries last print, which is a quote, not a price, and the basis test reads only prices.
-        issuer.cdsClearedWeek = ctx.nextWeek;
         // ...and the BASIS, the second cross-market agreement test this model can run: protection
         // against the SAME issuer's cash paper at the SAME maturity, which is the only comparison
         // the two prices are of. A name with no cash bond printed has no basis, and saying so is

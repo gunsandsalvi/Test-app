@@ -36,7 +36,7 @@ import { trancheClearedPricePerFace, trancheTerms, rowSpreadBps, priceAtSpreadOn
 import { TR_SUBORDINATED } from '../../../engine2/tranches';
 import { ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
 import { bookRowsOf, instrumentIdAt, rowUnits, rowBasisLocal as rowBasisOf } from '../../../engine2/holdings';
-import { CDS_BENCHMARK_TENOR, CDS_TENOR_YEARS, cdsTenorWeeksOf } from '../../../domain/derivatives/classes/cds';
+import { CDS_BENCHMARK_TENOR, CDS_TENORS, CDS_TENOR_YEARS, cdsTenorWeeksOf } from '../../../domain/derivatives/classes/cds';
 import { cdsInstrumentId, creditIndexInstrumentId, swapInstrumentId } from '../../../domain/instrument-keys';
 import { SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD } from '../../../domain/derivatives/classes/irs';
 import { materializeGovLadder } from '../../../engine2/tranches';
@@ -203,72 +203,78 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
     const pbBook = primeBrokerageBookOf(ctx.v2, regionId);
     const loanBook = securityLoanBookOf(ctx.v2, regionId);
     const repoRateAnnual = view.overnightRateAnnual(regionId);
-    const tenorYears = CDS_TENOR_YEARS[CDS_BENCHMARK_TENOR];
     ctx.updatedCompanies.forEach((issuer) => {
-      // §3.26-c: a name whose protection has never printed has no CDS leg to read a basis on.
-      const issuerCdsBps = issuer.cdsSpreadBps;
-      if (issuer.region !== regionId || !isActiveCompany(issuer) || issuer.isBankEntity || issuerCdsBps === undefined || !(issuerCdsBps > 0)) return;
-      // THE RUNG: the issuer's own bond nearest the benchmark tenor, with a print and a spread.
-      const rung = nearestBondRowOf(ctx.v2, issuer.id, week, tenorYears);
-      if (rung === undefined) return;
-      const bondId = trancheIdOf(ctx.v2, rung);
-      const cashPrice = trancheClearedPricePerFace(ctx.v2, bondId);
-      const cashSpreadBps = rowSpreadBps(ctx.v2, reg, rung, week);
-      if (!(cashPrice !== undefined && cashPrice > 0) || cashSpreadBps === undefined) return;
-      const terms = trancheTerms(ctx.v2, rung, week, reg.policyRate);
-      const priceAtSpread = (bps: number) => priceAtSpreadOnTranche(terms, reg.zeroRates, bps);
-      const cdsId = cdsInstrumentId(regionId, issuer.id, CDS_BENCHMARK_TENOR);
-      const marginRate = initialMarginRateOf({ classId: 'CDS', regionId, reference: { kind: 'ISSUER', issuerId: issuer.id }, termKey: CDS_BENCHMARK_TENOR, maturityWeek: week + cdsTenorWeeksOf(CDS_BENCHMARK_TENOR) }, view);
-      const weeklyMoveBps = Math.max(1, view.cdsSpreadWeeklyMoveBps(issuer.id, CDS_BENCHMARK_TENOR) ?? 1);
-      let cheapestReadBps = Number.POSITIVE_INFINITY, cheapestMirrorBps = Number.POSITIVE_INFINITY;
-      regionFunds.forEach((fund) => {
-        const line = pbBook.find((l) => l.fundId === fund.id);
-        const requiredReturnAnnual = entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund));
-        const read = cdsBasisRead({ cashSpreadBps, cdsSpreadBps: issuerCdsBps, financingRateAnnual: line?.rateAnnual ?? repoRateAnnual, repoRateAnnual, marginRate, requiredReturnAnnual });
-        // §3.17f-v: the mirror — a rich rung against cheap cover — sells the rung (borrowed
-        // through the lending book) and writes the cover, carrying the borrow fee and the margin.
-        const mirror = { deviationBps: -read.deviationBps, carryBps: (reg.borrowFeeBpsByCompanyId?.[bondId] ?? 0) + Math.max(0, marginRate) * Math.max(0, requiredReturnAnnual) * 10000 };
-        cheapestReadBps = Math.min(cheapestReadBps, read.carryBps); cheapestMirrorBps = Math.min(cheapestMirrorBps, mirror.carryBps);
-        const share = arbTargetShare(edgeBps(read), edgeBps(mirror), weeklyMoveBps);
-        // The position: the rung on its register less what it has borrowed of it, and the
-        // protection it holds on the name.
-        const rows = bookRowsOf(ctx.v2, fund.id).filter((r) => instrumentIdAt(ctx.v2, r) === bondId);
-        const rungLoans = loanBook.filter((l) => l.instrumentId === bondId);
-        const heldFace = rows.reduce((a, r) => a + rowUnits(ctx.v2.holdings, r), 0);
-        const netFace = heldFace - sharesOnLoan(rungLoans, 'borrower', fund.id, bondId);
-        const key = institutionPartyKey(fund.id);
-        const coverFace = standing.coverLocal('CDS', 'a', key, issuer.id) - standing.coverLocal('CDS', 'b', key, issuer.id);
-        if (share === 0 && Math.abs(netFace) <= 1 && Math.abs(coverFace) <= 1 && heldFace <= 1) return;
-        const capacityLocal = arbCapacityLocal(entityCashOf(ctx.v2, fund), fund.primeBrokerageAvailableLocal);
-        const lines = book.filter((c) => c.classId === 'CDS' && c.reference.kind === 'ISSUER' && c.reference.issuerId === issuer.id
-          && ((c.a.kind === 'INSTITUTION' && c.a.id === fund.id) || (c.b.kind === 'INSTITUTION' && c.b.id === fund.id)));
-        const pnlLocal = pairPnLLocal({
-          cashValueLocal: rows.reduce((a, r) => a + ctx.v2.holdings.qtyLocal[r], 0) + stockLoanNetLocal(rungLoans, fund.id, () => cashPrice),
-          cashBasisLocal: rows.reduce((a, r) => a + rowBasisOf(ctx.v2, r), 0),
-          futuresSettledToFundLocal: lines.reduce((a, c) => a + (c.a.kind === 'INSTITUTION' && c.a.id === fund.id ? 1 : -1) * (c.settledMarkLocal ?? 0), 0),
+      if (issuer.region !== regionId || !isActiveCompany(issuer) || issuer.isBankEntity) return;
+      // §3.27-iv: EVERY tenor the protection book has printed, each against the rung nearest it —
+      // rule 4's keeper at the 1y, 3y and 10y books as at the benchmark. §3.26-c: a tenor whose
+      // protection has never printed has no CDS leg to read a basis on.
+      CDS_TENORS.forEach((tenor) => {
+        const prints = reg.cdsSpreadHistoryByIssuer?.[issuer.id]?.[tenor];
+        const cdsBps = prints?.[prints.length - 1];
+        if (cdsBps === undefined || !(cdsBps > 0)) return;
+        const tenorYears = CDS_TENOR_YEARS[tenor];
+        // THE RUNG: the issuer's own bond nearest this tenor, with a print and a spread.
+        const rung = nearestBondRowOf(ctx.v2, issuer.id, week, tenorYears);
+        if (rung === undefined) return;
+        const bondId = trancheIdOf(ctx.v2, rung);
+        const cashPrice = trancheClearedPricePerFace(ctx.v2, bondId);
+        const cashSpreadBps = rowSpreadBps(ctx.v2, reg, rung, week);
+        if (!(cashPrice !== undefined && cashPrice > 0) || cashSpreadBps === undefined) return;
+        const terms = trancheTerms(ctx.v2, rung, week, reg.policyRate);
+        const priceAtSpread = (bps: number) => priceAtSpreadOnTranche(terms, reg.zeroRates, bps);
+        const cdsId = cdsInstrumentId(regionId, issuer.id, tenor);
+        const marginRate = initialMarginRateOf({ classId: 'CDS', regionId, reference: { kind: 'ISSUER', issuerId: issuer.id }, termKey: tenor, maturityWeek: week + cdsTenorWeeksOf(tenor) }, view);
+        const weeklyMoveBps = Math.max(1, view.cdsSpreadWeeklyMoveBps(issuer.id, tenor) ?? 1);
+        let cheapestReadBps = Number.POSITIVE_INFINITY, cheapestMirrorBps = Number.POSITIVE_INFINITY;
+        regionFunds.forEach((fund) => {
+          const line = pbBook.find((l) => l.fundId === fund.id);
+          const requiredReturnAnnual = entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund));
+          const read = cdsBasisRead({ cashSpreadBps, cdsSpreadBps: cdsBps, financingRateAnnual: line?.rateAnnual ?? repoRateAnnual, repoRateAnnual, marginRate, requiredReturnAnnual });
+          // §3.17f-v: the mirror — a rich rung against cheap cover — sells the rung (borrowed
+          // through the lending book) and writes the cover, carrying the borrow fee and the margin.
+          const mirror = { deviationBps: -read.deviationBps, carryBps: (reg.borrowFeeBpsByCompanyId?.[bondId] ?? 0) + Math.max(0, marginRate) * Math.max(0, requiredReturnAnnual) * 10000 };
+          cheapestReadBps = Math.min(cheapestReadBps, read.carryBps); cheapestMirrorBps = Math.min(cheapestMirrorBps, mirror.carryBps);
+          const share = arbTargetShare(edgeBps(read), edgeBps(mirror), weeklyMoveBps);
+          // The position: the rung on its register less what it has borrowed of it, and the
+          // protection it holds on the name at this tenor.
+          const rows = bookRowsOf(ctx.v2, fund.id).filter((r) => instrumentIdAt(ctx.v2, r) === bondId);
+          const rungLoans = loanBook.filter((l) => l.instrumentId === bondId);
+          const heldFace = rows.reduce((a, r) => a + rowUnits(ctx.v2.holdings, r), 0);
+          const netFace = heldFace - sharesOnLoan(rungLoans, 'borrower', fund.id, bondId);
+          const key = institutionPartyKey(fund.id);
+          const coverFace = standing.coverLocal('CDS', 'a', key, issuer.id, tenor) - standing.coverLocal('CDS', 'b', key, issuer.id, tenor);
+          if (share === 0 && Math.abs(netFace) <= 1 && Math.abs(coverFace) <= 1 && heldFace <= 1) return;
+          const capacityLocal = arbCapacityLocal(entityCashOf(ctx.v2, fund), fund.primeBrokerageAvailableLocal);
+          const lines = book.filter((c) => c.classId === 'CDS' && c.reference.kind === 'ISSUER' && c.reference.issuerId === issuer.id && c.termKey === tenor
+            && ((c.a.kind === 'INSTITUTION' && c.a.id === fund.id) || (c.b.kind === 'INSTITUTION' && c.b.id === fund.id)));
+          const pnlLocal = pairPnLLocal({
+            cashValueLocal: rows.reduce((a, r) => a + ctx.v2.holdings.qtyLocal[r], 0) + stockLoanNetLocal(rungLoans, fund.id, () => cashPrice),
+            cashBasisLocal: rows.reduce((a, r) => a + rowBasisOf(ctx.v2, r), 0),
+            futuresSettledToFundLocal: lines.reduce((a, c) => a + (c.a.kind === 'INSTITUTION' && c.a.id === fund.id ? 1 : -1) * (c.settledMarkLocal ?? 0), 0),
+          });
+          const stopped = stoppedOut(pnlLocal, lines.reduce((a, c) => a + c.initialMarginLocal, 0));
+          const carriedFace = capacityLocal / cashPrice;
+          const exposureFace = Math.max(Math.abs(netFace), Math.abs(coverFace));
+          const targetFace = stopped ? 0 : exposureFace > carriedFace ? Math.sign(share || netFace) * carriedFace : share * carriedFace;
+          const forced = stopped || exposureFace > carriedFace;
+          const cashDelta = targetFace - netFace;
+          const coverDelta = targetFace - coverFace;
+          const legs = cdsBasisLegs({
+            regionId, bondId, cdsInstrumentId: cdsId, faceLocal: targetFace, cashSpreadBps, cdsSpreadBps: cdsBps,
+            carryBps: (targetFace >= 0 ? read : mirror).carryBps, weeklyMoveBps, priceAtSpread, budgetLocal: Math.min(Math.max(0, cashDelta) * cashPrice, capacityLocal),
+          });
+          if (cashDelta > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: cashDelta, forced });
+          else if (cashDelta < -1) {
+            const sellFace = Math.min(-cashDelta, heldFace);
+            if (sellFace > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: -sellFace, forced });
+            const borrowFace = -cashDelta - sellFace;
+            if (borrowFace > 1) ctx.borrowNeeds.push({ entityId: fund.id, regionId, instrumentId: bondId, units: borrowFace });
+          }
+          if (Math.abs(coverDelta) > 1) ctx.relativeValueLegs.push({ ...legs.protection, entityId: fund.id, faceLocal: -coverDelta, forced });
         });
-        const stopped = stoppedOut(pnlLocal, lines.reduce((a, c) => a + c.initialMarginLocal, 0));
-        const carriedFace = capacityLocal / cashPrice;
-        const exposureFace = Math.max(Math.abs(netFace), Math.abs(coverFace));
-        const targetFace = stopped ? 0 : exposureFace > carriedFace ? Math.sign(share || netFace) * carriedFace : share * carriedFace;
-        const forced = stopped || exposureFace > carriedFace;
-        const cashDelta = targetFace - netFace;
-        const coverDelta = targetFace - coverFace;
-        const legs = cdsBasisLegs({
-          regionId, bondId, cdsInstrumentId: cdsId, faceLocal: targetFace, cashSpreadBps, cdsSpreadBps: issuerCdsBps,
-          carryBps: (targetFace >= 0 ? read : mirror).carryBps, weeklyMoveBps, priceAtSpread, budgetLocal: Math.min(Math.max(0, cashDelta) * cashPrice, capacityLocal),
-        });
-        if (cashDelta > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: cashDelta, forced });
-        else if (cashDelta < -1) {
-          const sellFace = Math.min(-cashDelta, heldFace);
-          if (sellFace > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: -sellFace, forced });
-          const borrowFace = -cashDelta - sellFace;
-          if (borrowFace > 1) ctx.borrowNeeds.push({ entityId: fund.id, regionId, instrumentId: bondId, units: borrowFace });
-        }
-        if (Math.abs(coverDelta) > 1) ctx.relativeValueLegs.push({ ...legs.protection, entityId: fund.id, faceLocal: -coverDelta, forced });
+        // §3.27-iii-a: what the cheapest arbitrageur faced, each way — the bound P2 holds the basis to.
+        if (Number.isFinite(cheapestReadBps)) ((reg.cdsBasisCarryBpsByIssuer ??= {})[issuer.id] ??= {})[tenor] = { week, readBps: cheapestReadBps, mirrorBps: cheapestMirrorBps };
       });
-      // §3.27-iii-a: what the cheapest arbitrageur faced, each way — the bound P2 holds the basis to.
-      if (Number.isFinite(cheapestReadBps)) (reg.cdsBasisCarryBpsByIssuer ??= {})[issuer.id] = { week, readBps: cheapestReadBps, mirrorBps: cheapestMirrorBps };
     });
   });
 }
