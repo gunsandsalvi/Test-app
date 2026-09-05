@@ -319,13 +319,14 @@ static inline double jround3(double v){ return jround(v * 1000) / 1000; }
 #define DUE_LOAN 4
 
 typedef struct { double ebitda, ebit, net, taxPaid, carry, basis, deferred; } PnL;
-/* domain/company-week/income-statement.ts industrialIncome + corporateTax, verbatim order. */
-static PnL industrialIncome(double revenueUSD, double ebitdaMargin, double annualInterestUSD,
+/* domain/company-week/income-statement.ts industrialIncome + corporateTax, verbatim order.
+   daUSD is the one depreciation schedule's year-rate (capital-programme.ts annualDepreciationLocal:
+   the opening gross plant over its life), computed by the caller as the JS front core does. */
+static PnL industrialIncome(double revenueUSD, double ebitdaMargin, double daUSD, double annualInterestUSD,
     double taxRate, double taxBasisPpeUSD, double usefulLifeYears, double capexDeliveredAnnualUSD,
     double carryforwardUSD, double bookNetPpeUSD){
   PnL R;
   R.ebitda = revenueUSD * ebitdaMargin;
-  double daUSD = revenueUSD * 0.05;
   R.ebit = R.ebitda - daUSD;
   double preTax = R.ebit - annualInterestUSD;
   double decliningRate = 2 / jmax(1, usefulLifeYears);
@@ -379,7 +380,7 @@ static napi_value FrontCore(napi_env env, napi_callback_info info){
   NEXT_F64(annualRevenueA); NEXT_F64(baseRevA); NEXT_F64(ebitdaA); NEXT_F64(cashA); NEXT_F64(curLiab);
   NEXT_F64(marketCap); NEXT_F64(sharesOut); NEXT_F64(growthCapexA); NEXT_F64(maintStreak);
   NEXT_F64(execQ0); NEXT_F64(inputC0); NEXT_F64(fulfillEMA0); NEXT_F64(recurringBase0);
-  NEXT_F64(baseGrowthRatio); NEXT_F64(baseMarginA); NEXT_F64(openNetPpe); NEXT_F64(taxBasisOpen);
+  NEXT_F64(baseGrowthRatio); NEXT_F64(baseMarginA); NEXT_F64(openGrossPpe); NEXT_F64(openNetPpe); NEXT_F64(taxBasisOpen);
   NEXT_F64(carryOpen); NEXT_F64(usefulLife); NEXT_F64(baseInputRateSum); NEXT_F64(perWorker); NEXT_F64(perWorkerBase);
   NEXT_F64(mktUnitPrice); NEXT_F64(mktCrowding); NEXT_U8(mktExists); NEXT_U8(suppliedMask);
   NEXT_F64(policyRate); NEXT_F64(effTaxRate);
@@ -599,8 +600,8 @@ static napi_value FrontCore(napi_env env, napi_callback_info info){
     } else { OhasRecurring[row] = isnan(base0) ? 0 : 1; newRecurringBaseUSD = base0; }
     double newRevenue = jmax(10, (recurringShare > 0 ? newRecurringBaseUSD : 0) + unitRevenueUSD);
     Frevenue[row] = newRevenue;
-    PnL pnl = industrialIncome(newRevenue, newEbitdaMargin, annualInterest, effTaxRate[ri],
-      taxBasisOpen[row], usefulLife[row], commissionedUSD * 52, carryOpen[row], openNetPpe[row]);
+    PnL pnl = industrialIncome(newRevenue, newEbitdaMargin, openGrossPpe[row] / jmax(1, usefulLife[row]),
+      annualInterest, effTaxRate[ri], taxBasisOpen[row], usefulLife[row], commissionedUSD * 52, carryOpen[row], openNetPpe[row]);
     Febitda[row] = pnl.ebitda; Febit[row] = pnl.ebit; Fnet[row] = pnl.net;
     Feps[row] = sharesOut[row] > 0 ? jround2(pnl.net / sharesOut[row]) : 0;
     FtaxPaid[row] = pnl.taxPaid;

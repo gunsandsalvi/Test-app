@@ -37,6 +37,7 @@ import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../equ
 import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financing';
 import { generateUniqueTicker, generateUniqueName } from './firms';
 import { carrierEntityId } from '../../domain/entity-keys';
+import { annualDepreciationLocal, usefulLifeYearsOf } from '../../domain/company-week/capital-programme';
 import type { Ticker } from '../../domain/ids';
 
 /**
@@ -271,8 +272,9 @@ function buildCarrierCompany(
   const employeeCount = Math.max(1, crewCount);
 
   const ebitda = annualRevenue - annualFuelCost - annualCrewCost;
-  const usefulLife = assets.length > 0 ? FREIGHT_ASSET_SPEC[assets[0].mode].usefulLifeYears : 20;
-  const depreciation = grossPPELocal / usefulLife;
+  // §3.26-f-i — the one schedule at the fleet's own life (`usefulLifeYearsOf`): the same
+  // number the engine will charge this carrier every week, so it opens in the shape it runs.
+  const depreciation = annualDepreciationLocal(grossPPELocal, usefulLifeYearsOf({ sector: 'Industrials', carrierFleet: { assets } }));
   const ebit = ebitda - depreciation;
 
   const policyRate = regions[region].policyRate ?? 0.045;

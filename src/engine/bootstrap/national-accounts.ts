@@ -1,5 +1,6 @@
 import { derivedLabourShareOfValueAdded } from '../../domain/industry-registry';
-import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from '../simulation/constants';
+import { SECTOR_PPE_INTENSITY } from '../simulation/constants';
+import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../../domain/company-week/capital-programme';
 
 /**
  * The cost of capital the IDENTITY's reference share is struck at — the productivity-growth

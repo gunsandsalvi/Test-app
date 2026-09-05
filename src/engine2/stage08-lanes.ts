@@ -16,7 +16,8 @@
 import { profileKeyOf } from '../engine/simulation/stages/profiles/types';
 import { Company } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
-import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
+import { SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
+import { usefulLifeYearsOf } from '../domain/company-week/capital-programme';
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
 import { isPubliclyListed, managedEntityIdsOf } from '../domain/company';
 import { industryOfSubUnit, financingProfileOf } from '../domain/industry-registry';
@@ -175,7 +176,7 @@ export function buildBackLanes(
     const reg = updatedRegions[c.region];
     const wu = companyUpdates[c.ticker];
     L.ppeDefaultLocal[i] = c.annualRevenue * (SECTOR_PPE_INTENSITY[c.sector] ?? 0.5);
-    L.usefulLifeYears[i] = SECTOR_PPE_USEFUL_LIFE_YEARS[c.sector] ?? 12;
+    L.usefulLifeYears[i] = usefulLifeYearsOf(c);
     L.producedUnitsThisWeek[i] = wu?.producedUnitsThisWeek ?? 0;
     L.plantCapacityUnitsThisWeek[i] = wu?.plantCapacityUnitsThisWeek ?? 0;
     L.idleLineRevenueShare[i] = wu?.idleLineRevenueShare ?? 0;

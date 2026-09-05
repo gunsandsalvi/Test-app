@@ -551,16 +551,32 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-f. **WHAT PLANT IS, decided once — and one depreciation schedule.** *(11e's last slice, folded
-    in here deliberately: the seed and every birth assign `grossPPELocal` with no wire and there
-    is no asset kind for plant — `ASSET_KINDS` carries `HOUSE`, not plant. You cannot wire a thing
-    before deciding what it is, and the shape is exactly what the two disagreeing depreciation
-    schedules are a symptom of: `capexUnderConstruction` already carries plant as a stack of DATED
-    vintages while the sheet carries it as one number. Decide it once, and the wire follows;
-    deciding it twice guarantees they diverge again.)* `front-core.ts:418` opens the net plant
-    off the sheet's accumulated depreciation while `capital-programme.ts:190` reduces it by
-    `grossPPELocal / (usefulLifeYears × 52)`: two schedules that cannot reconcile
-    (the-capital-programme A3, A4/A5).
+26-f-ii. **PLANT IS DATED VINTAGES, and the sheet reads them.** *(26-f's decision.)*
+    `assetsUnderConstruction` already carries capital as `{valueLocal, entersServiceWeek}[]`, and
+    what enters service keeps that shape: `Company.plant: {costLocal, enteredServiceWeek,
+    usefulLifeYears}[]` — one vintage per commissioning, each wearing straight-line from its own
+    service week over its own life (a ship's 25 years and a truck's 10, `FREIGHT_ASSET_SPEC`;
+    a machine's, its sector's), retired from the register when fully worn. `grossPPELocal` and
+    `accumulatedDepreciationLocal` become READS of the register (`plantGrossLocal`,
+    `plantNetLocal`) and leave the company and the row store; the `× 0.45` / `× 0.35`
+    accumulated-depreciation defaults (`front-core.ts:418`, `stage08-back.ts` ×4,
+    `05-unit-bidding.ts:981`, `companyGenerator.ts:33/1293`, `carriers.ts:354`) die into the
+    seed's own age structure — a stationary plant replaced at a constant rate is vintages spread
+    evenly over the life, which IS half worn: a derivation, not a fraction. Every writer becomes
+    a vintage move: commissioning appends; scrap (`capacityRetirement`) retires the oldest first;
+    a spin-off slices every vintage pro rata; a merger and a bank resolution concatenate; the
+    estate offers vintages and the bidders take them at the cleared price of book. Rule §5's
+    row-5 lesson applies: the company rebuild's fixed field list must name `plant` in the same
+    commit, or the register is dropped weekly and every reader sees an empty plant.
+    the-capital-programme A4/A5 ⚠️→✅, D1 re-cited.
+26-f-iii. **THE PLANT WIRE, and W6.** *(the wire follows the decision.)* A `PLANT` asset kind in
+    `ASSET_KINDS` (`wire.ts:22` carries `HOUSE` and no plant); every move of a vintage between
+    parties — the estate's sale, a merger, a spin-off, a resolution — is a wire of that kind at
+    the price it was struck, and commissioning, wear-out and scrap are TRANSFORMATIONS recorded
+    on the journal the way `goods-ledger.ts` records production and scrappage. `W6 wires
+    reproduce the plant` (`audit/wires.ts`): per firm, Δ(gross plant) = commissioned − retired −
+    scrapped + wires in − wires out, at W4's dust rule (a share of the gross flow, never of the
+    stock). Closes 11e's "the seed and every birth assign `grossPPELocal` with no wire".
 26b. **Housing clears.** `housingStockUSD`, a median price and an ownership rate are an
     aggregate marked by formula — dwellings have no owners and no price anyone struck, which
     rule 3 does not allow and no step currently covers. Households, builders and estates clear
@@ -1362,6 +1378,28 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-f-i — ONE DEPRECIATION SCHEDULE: THE P&L CHARGES WHAT THE PLANT WEARS.** (26-f's first
+  slice; rule 10 split into 26-f-i/ii/iii, the other two in §3.) Depreciation was six derivations
+  of one fact: the P&L charged `daShareOfRevenue: 0.05` — five percent of REVENUE, so a firm that
+  doubled its plant took no extra charge against its earnings and capacity was free on the income
+  statement and on the tax base built from it (the-capital-programme A3) — while the capital
+  programme reduced the stock by the plant over its life; a profile firm was charged a stated
+  twenty years whatever its sector; the seed struck EBIT off 5% and 4.5% of revenue and its filed
+  quarters off 80% of capex; a carrier was seeded at its fleet's life and run at its sector's. One
+  owner: `capital-programme.ts:annualDepreciationLocal(gross, life)`, straight-line, a year-rate,
+  with `usefulLifeYearsOf(firm)` beside it (the sector life table moved there from
+  `simulation/constants.ts`; a carrier's plant is its fleet, so its life is `FREIGHT_ASSET_SPEC`'s
+  own — a ship's 25 years, a truck's 10). Both statement paths take `depreciationAnnualLocal`
+  (`income-statement.ts`; `daShareOfRevenue`, `grossPPELocal` and `ppeDepreciationYears` gone
+  from their inputs); the C front core takes the opening gross lane and charges the same
+  quotient (`native/kernels.c`, rebuilt); the stock rolls forward by its 52nd; the upkeep target
+  is it (`maintenanceTargetLocal` deleted — it was this number under a second name);
+  `companyNetInvestmentRate` and the seed's valuation read it; the filed quarter takes the
+  schedule's number or defects (the `(maintenance + growth) / 4 × 0.8` fallback gone).
+  the-capital-programme A3 ⚠️→✅. `test/capital-programme.test.ts` (the charge and the reduction
+  are one schedule; the life read once), `test/income-statement.test.ts` (twice the plant is twice
+  the charge on the same revenue). Gates green; no run (rule 11).
 
 **26-e-iii — THE FX PIP AND THE ETF ASSEMBLY COST ARE DESKS' WIDTHS, AND THE TABLE IS GONE.** A
   client converting currency — a firm short of a foreign money at settlement (`fx-funding.ts`), a

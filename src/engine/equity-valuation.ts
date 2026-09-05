@@ -21,7 +21,7 @@
  */
 
 import { Company } from '../types';
-import { SECTOR_PPE_USEFUL_LIFE_YEARS } from './simulation/constants';
+import { annualDepreciationLocal, usefulLifeYearsOf } from '../domain/company-week/capital-programme';
 
 /** §3.26-d: the premium is stated once, with the firm's cost of capital (`domain/company-week/
  *  cost-of-capital.ts`); re-exported here for the valuation's own readers. */
@@ -94,8 +94,9 @@ export function fairValuePerShare(inputs: EquityValuationInputs): number {
 export function companyNetInvestmentRate(comp: Company): number {
   const grossPPE = comp.grossPPELocal ?? 0;
   const netPPE = Math.max(1, grossPPE - (comp.accumulatedDepreciationLocal ?? 0));
-  const annualDepreciationLocal = grossPPE / (SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12);
-  return ((comp.growthCapex ?? 0) - annualDepreciationLocal) / netPPE;
+  // §3.26-f-i: the one schedule, at the firm's own life.
+  const depreciationAnnualLocal = annualDepreciationLocal(grossPPE, usefulLifeYearsOf(comp));
+  return ((comp.growthCapex ?? 0) - depreciationAnnualLocal) / netPPE;
 }
 
 /** Real book equity: the balance sheet's own shareholders' equity where a filing exists. */

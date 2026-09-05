@@ -10,7 +10,8 @@ import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS } from './pricing';
 import { getInitialRegions, CORPORATE_TAX_RATE_BY_REGION } from './macro/initialization';
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
 import { getRegionProductivityPerCapitaLocal } from './bootstrap/population';
-import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from './simulation/constants';
+import { SECTOR_PPE_INTENSITY } from './simulation/constants';
+import { annualDepreciationLocal, usefulLifeYearsOf } from '../domain/company-week/capital-programme';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from './equity-valuation';
 import { UNIVERSE_SCALE, PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
@@ -144,7 +145,8 @@ export function buildQuarterlyFundamentalSnapshot(
   // actually produces), never debt-scaled (an unrelated financing decision).
   grossPPELocal?: number,
   accumulatedDepreciationLocal?: number,
-  daQuarterlyOverride?: number,
+  // §3.26-f-i: the quarter's depreciation is the one schedule's (annual ÷ 4, or the week's × 13).
+  daQuarterlyLocal?: number,
   costDrivers?: CogsCostDrivers,
   // Real current-portion-of-debt split from this company's own debt tranche maturities, when
   // the caller has them (it always does once tranches exist) — replaces a flat 15/85 guess.
@@ -165,7 +167,7 @@ export function buildQuarterlyFundamentalSnapshot(
   const cogs = revQ * (1 - ebitdaMargin - 0.12);
   const sgaExpense = revQ * 0.12;
   const grossProfit = revQ - cogs;
-  const daQuarterly = daQuarterlyOverride ?? Math.max(1, (maintenanceCapex + growthCapex) / 4 * 0.8);
+  const daQuarterly = daQuarterlyLocal ?? defect('a filed quarter with no depreciation — the schedule\'s number is required');
   const interestExpense = annualInterestOverride !== undefined ? annualInterestOverride / 4 : totalDebt * (oasSpreadBps / 10000 + 0.03) / 4;
   const pretaxIncome = ebitdaQ - daQuarterly - interestExpense;
   const taxExpense = Math.max(0, pretaxIncome * 0.21);
@@ -471,7 +473,16 @@ export function generateInitialCompanies(
       };
 
       const ebitda = tmpl.revBase * tmpl.ebitdaMargin;
-      const da = tmpl.revBase * 0.05; // 5% depreciation & amortization
+      // Real PP&E seed: sized off this company's own production scale (sector capital
+      // intensity x revenue), not off its debt — debt is a financing choice, unrelated to what
+      // the asset side of the balance sheet actually is.
+      const ppeIntensity = SECTOR_PPE_INTENSITY[tmpl.sector] ?? DEFAULT_PPE_INTENSITY;
+      const initialGrossPPELocal = tmpl.revBase * ppeIntensity / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
+      const initialAccumulatedDepreciationLocal = initialGrossPPELocal * INITIAL_ACCUM_DEPRECIATION_FRACTION;
+      const initialNetPPELocal = initialGrossPPELocal - initialAccumulatedDepreciationLocal;
+      // §3.26-f-i — EBIT is struck off the one schedule on the plant just seeded, the number the
+      // engine charges from week 1. It was `revBase × 0.05`, a second schedule.
+      const da = annualDepreciationLocal(initialGrossPPELocal, usefulLifeYearsOf({ sector: tmpl.sector }));
       const ebit = Math.max(10, ebitda - da);
 
       // Revenue-per-employee scales off the region's own generated productivity-per-worker
@@ -522,14 +533,13 @@ export function generateInitialCompanies(
       // shape). The old `eps x sector basePE` capitalised earnings at ~1.5% net of growth while
       // every holder in 07e's auction capitalises them at 4-10%, so week 1 opened ~4x above any
       // real bid and the whole market spent ten weeks falling at its damping limit to get back.
-      const seedGrossPPELocal = tmpl.revBase * (SECTOR_PPE_INTENSITY[tmpl.sector] ?? DEFAULT_PPE_INTENSITY) / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
-      const seedNetPPELocal = seedGrossPPELocal * (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
       const stockPrice = Number(fairValuePerShare({
         annualEarningsLocal: netIncome,
         sharesOutstanding: tmpl.shares,
         // Book equity at the seed is the same identity the first filed balance sheet computes.
-        bookEquityLocal: derivedCashBase + tmpl.revBase * 0.08 * 0.6 + seedNetPPELocal - (tmpl.revBase * 0.08 * 0.4 + derivedDebtBase),
-        netInvestmentRate: (growthCapex - seedGrossPPELocal / (SECTOR_PPE_USEFUL_LIFE_YEARS[tmpl.sector] ?? 12)) / Math.max(1, seedNetPPELocal),
+        bookEquityLocal: derivedCashBase + tmpl.revBase * 0.08 * 0.6 + initialNetPPELocal - (tmpl.revBase * 0.08 * 0.4 + derivedDebtBase),
+        // The same plant and the same schedule `companyNetInvestmentRate` reads in the week.
+        netInvestmentRate: (growthCapex - da) / Math.max(1, initialNetPPELocal),
         riskFreeRate: regionPolicyRate,
         beta: tmpl.beta,
         holderRequiredReturn: REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
@@ -539,13 +549,6 @@ export function generateInitialCompanies(
       
       const historicalPrices: number[] = [stockPrice];
       const marketCap = tmpl.shares * stockPrice;
-
-      // Real PP&E seed: sized off this company's own production scale (sector capital
-      // intensity x revenue), not off its debt — debt is a financing choice, unrelated to what
-      // the asset side of the balance sheet actually is.
-      const ppeIntensity = SECTOR_PPE_INTENSITY[tmpl.sector] ?? DEFAULT_PPE_INTENSITY;
-      const initialGrossPPELocal = tmpl.revBase * ppeIntensity / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
-      const initialAccumulatedDepreciationLocal = initialGrossPPELocal * INITIAL_ACCUM_DEPRECIATION_FRACTION;
 
       // Real debt tranches (with genuine maturities) generated once and reused for both the
       // seed snapshots' short/long-term split and the company's own capital structure — so a
@@ -558,10 +561,10 @@ export function generateInitialCompanies(
         ? t.principalLocal * (t.couponRate ?? 0.05)
         : t.principalLocal * (regionPolicyRate + (t.floatingMarginBps ?? 200) / 10000)), 0);
 
-      const snapQ1 = buildQuarterlyFundamentalSnapshot(-3, "Q1 '25", 'Mar 31, 2025', tmpl.revBase * 0.94, ebitda * 0.93, netIncome * 0.91, eps * 0.92, tmpl.cashBase * 0.95, tmpl.debtBase * 1.02, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, undefined, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, undefined, undefined, initialShortTermDebtLocal, initialAnnualInterest);
-      const snapQ2 = buildQuarterlyFundamentalSnapshot(-2, "Q2 '25", 'Jun 30, 2025', tmpl.revBase * 0.96, ebitda * 0.95, netIncome * 0.94, eps * 0.95, tmpl.cashBase * 0.97, tmpl.debtBase * 1.01, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ1, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, undefined, undefined, initialShortTermDebtLocal, initialAnnualInterest);
-      const snapQ3 = buildQuarterlyFundamentalSnapshot(-1, "Q3 '25", 'Sep 30, 2025', tmpl.revBase * 0.98, ebitda * 0.97, netIncome * 0.97, eps * 0.98, tmpl.cashBase * 0.99, tmpl.debtBase * 1.00, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ2, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, undefined, undefined, initialShortTermDebtLocal, initialAnnualInterest);
-      const snapQ4 = buildQuarterlyFundamentalSnapshot(1, "Q4 '25", 'Dec 31, 2025', tmpl.revBase, ebitda, netIncome, eps, tmpl.cashBase, tmpl.debtBase, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ3, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, undefined, undefined, initialShortTermDebtLocal, initialAnnualInterest);
+      const snapQ1 = buildQuarterlyFundamentalSnapshot(-3, "Q1 '25", 'Mar 31, 2025', tmpl.revBase * 0.94, ebitda * 0.93, netIncome * 0.91, eps * 0.92, tmpl.cashBase * 0.95, tmpl.debtBase * 1.02, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, undefined, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, da / 4, undefined, initialShortTermDebtLocal, initialAnnualInterest);
+      const snapQ2 = buildQuarterlyFundamentalSnapshot(-2, "Q2 '25", 'Jun 30, 2025', tmpl.revBase * 0.96, ebitda * 0.95, netIncome * 0.94, eps * 0.95, tmpl.cashBase * 0.97, tmpl.debtBase * 1.01, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ1, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, da / 4, undefined, initialShortTermDebtLocal, initialAnnualInterest);
+      const snapQ3 = buildQuarterlyFundamentalSnapshot(-1, "Q3 '25", 'Sep 30, 2025', tmpl.revBase * 0.98, ebitda * 0.97, netIncome * 0.97, eps * 0.98, tmpl.cashBase * 0.99, tmpl.debtBase * 1.00, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ2, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, da / 4, undefined, initialShortTermDebtLocal, initialAnnualInterest);
+      const snapQ4 = buildQuarterlyFundamentalSnapshot(1, "Q4 '25", 'Dec 31, 2025', tmpl.revBase, ebitda, netIncome, eps, tmpl.cashBase, tmpl.debtBase, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ3, 0, 0, 0, initialGrossPPELocal, initialAccumulatedDepreciationLocal, da / 4, undefined, initialShortTermDebtLocal, initialAnnualInterest);
 
       const historicalFundamentals = [snapQ1, snapQ2, snapQ3, snapQ4];
 
@@ -1248,7 +1251,10 @@ export function generatePrivateCompanies(
     const annualInterest = debtTranches.reduce((a, t) => a + (t.rateType === 'FIXED'
       ? t.principalLocal * (t.couponRate ?? 0.05)
       : t.principalLocal * (regionPolicyRate + (t.floatingMarginBps ?? 200) / 10000)), 0);
-    const da = revBase * 0.045;
+    const ppeIntensity = SECTOR_PPE_INTENSITY[sector] ?? 0.5;
+    const grossPPELocal = Math.round(revBase * ppeIntensity / 0.65);
+    // §3.26-f-i — EBIT off the one schedule on the plant just seeded (it was `revBase × 0.045`).
+    const da = annualDepreciationLocal(grossPPELocal, usefulLifeYearsOf({ sector }));
     const ebit = Math.max(1, ebitda - da);
     const coverage = ebit / Math.max(0.5, annualInterest);
     // CRD/: the seed rater sees the same facts the weekly one does, so a firm born without
@@ -1256,8 +1262,6 @@ export function generatePrivateCompanies(
     const rating = determineCreditRating(debtBase / Math.max(1, ebitda), coverage, { ebitdaLocal: ebitda });
     const capex = Math.round(revBase * 0.05);
     const maintenanceCapex = Math.round(capex * 0.6);
-    const ppeIntensity = SECTOR_PPE_INTENSITY[sector] ?? 0.5;
-    const grossPPELocal = Math.round(revBase * ppeIntensity / 0.65);
 
     const pc = {
       id: privateCompanyEntityId(region, ticker),

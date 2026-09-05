@@ -29,7 +29,6 @@ import { SECTOR_BENCHMARKS } from '../engine/pricing';
 import { annuityFactor, zeroRateAt } from '../domain/pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../engine/formatters';
 import { determineCreditRating } from '../engine/simulation/credit';
-import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../engine/simulation/constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../engine/companyGenerator';
 import { getRatingBucket, settleCorporateActionOnHolders, payHoldersCash, DEFAULT_COVERAGE_FLOOR, creditRecoveryRate, accrueHoldersInterest, payHoldersAccruedInterest } from '../engine/simulation/stages/shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, findRegionMmf } from '../engine/simulation/stages/money-market-fund';
@@ -43,7 +42,7 @@ import { defect } from '../domain/defect';
 import { setClearedPrice, clearedPriceOf } from './prices';
 import { rowSpreadBps, issuerSpreadAtOnCurve } from '../engine/credit-price';
 import { partyId } from '../engine/ledger/party';
-import { planCapitalProgramme, capacityRetirement } from '../domain/company-week/capital-programme';
+import { planCapitalProgramme, capacityRetirement, annualDepreciationLocal } from '../domain/company-week/capital-programme';
 import { learningUpdate, seedCumulativeUnits } from '../domain/company-week/learning';
 import { creditMetrics, revolverDrawLocal, isInDefault } from '../domain/company-week/credit-standing';
 import { callEconomics, callableAmountLocal } from '../domain/company-week/debt-ladder';
@@ -894,7 +893,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
         openingGrossPpeLocal - (Number.isNaN(L8.accumulatedDepreciationLocal[row]) ? openingGrossPpeLocal * 0.45 : L8.accumulatedDepreciationLocal[row]));
       const taxAttrs = {
         taxBasisPpeLocal: comp.taxBasisPpeLocal ?? openingNetPpeLocal,
-        usefulLifeYears: SECTOR_PPE_USEFUL_LIFE_YEARS[L8.sector[row]] ?? 12,
+        usefulLifeYears: L8.usefulLifeYears[row],
         capexDeliveredAnnualLocal: capexCommissionedThisWeekLocal * 52,
         carryforwardLocal: comp.taxLossCarryforwardLocal ?? 0,
         bookNetPpeLocal: openingNetPpeLocal,
@@ -922,8 +921,9 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
         inputCostAnnualLocal: profileInputCostLocal,
         payrollAnnualLocal: weeklyPayrollLocal * 52,
         profileCostsAnnualLocal: pnl.profileCostsAnnualLocal,
-        grossPPELocal: Number.isNaN(L8.grossPPELocal[row]) ? 0 : L8.grossPPELocal[row],
-        ppeDepreciationYears: 20,
+        // §3.26-f-i — the one schedule, on the same opening plant and life the capital core
+        // rolls the stock forward with. It was a stated twenty years, whatever the sector.
+        depreciationAnnualLocal: annualDepreciationLocal(openingGrossPpeLocal, L8.usefulLifeYears[row]),
         annualInterestLocal: annualInterest,
         taxRate,
         sharesOutstanding: L8.sharesOutstanding[row],

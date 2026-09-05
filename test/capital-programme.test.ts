@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planCapitalProgramme, maintenanceTargetLocal, commissionCapital, CapitalProgrammeInputs }
+import { planCapitalProgramme, annualDepreciationLocal, usefulLifeYearsOf, commissionCapital, CapitalProgrammeInputs }
   from '../src/domain/company-week/capital-programme';
 
 const healthy = (over: Partial<CapitalProgrammeInputs> = {}): CapitalProgrammeInputs => ({
@@ -25,13 +25,31 @@ const healthy = (over: Partial<CapitalProgrammeInputs> = {}): CapitalProgrammeIn
 
 test('maintenance is anchored to the plant, not to its own last value', () => {
   // THE DEFECT: the target must move with gross PP&E and useful life and with nothing else.
-  assert.equal(maintenanceTargetLocal(1_200_000_000, 12), 100_000_000);
+  assert.equal(annualDepreciationLocal(1_200_000_000, 12), 100_000_000);
   const doubled = planCapitalProgramme(healthy({ grossPPELocal: 2_400_000_000 }));
   assert.equal(doubled.targetMaintenanceCapexLocal, 200_000_000);
   // And it does NOT move when only the prior value moves.
   const a = planCapitalProgramme(healthy({ priorMaintenanceCapexLocal: 1 }));
   const b = planCapitalProgramme(healthy({ priorMaintenanceCapexLocal: 999_000_000 }));
   assert.equal(a.targetMaintenanceCapexLocal, b.targetMaintenanceCapexLocal);
+});
+
+test('§3.26-f-i: the P&L charge and the stock\'s reduction are one schedule', () => {
+  // A3: depreciation is a real cost against profit AND a real reduction in the stock — the SAME
+  // number. The programme's weekly reduction is the schedule's year-rate sliced by 52, and the
+  // upkeep target is the year-rate itself; the P&L takes the year-rate (income-statement.test).
+  const schedule = annualDepreciationLocal(1_200_000_000, 12);
+  const programme = planCapitalProgramme(healthy());
+  assert.equal(programme.weeklyDepreciationLocal, schedule / 52);
+  assert.equal(programme.targetMaintenanceCapexLocal, schedule);
+});
+
+test('§3.26-f-i: the life is read once — a carrier\'s is its fleet\'s, every other firm\'s its sector\'s', () => {
+  assert.equal(usefulLifeYearsOf({ sector: 'Tech' }), 7);
+  assert.equal(usefulLifeYearsOf({ sector: 'Industrials' }), 18);
+  assert.equal(usefulLifeYearsOf({ sector: 'Industrials', carrierFleet: { assets: [{ mode: 'SEA' }] } }), 25,
+    'a ship is worn over its own 25 years, not the sector\'s 18');
+  assert.equal(usefulLifeYearsOf({ sector: 'Industrials', carrierFleet: { assets: [{ mode: 'ROAD' }] } }), 10);
 });
 
 test('a firm that cannot fund upkeep defers it, and the deferral compounds', () => {

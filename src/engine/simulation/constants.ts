@@ -1,13 +1,6 @@
-// Straight-line useful life assumption for the PP&E roll-forward — years until a fully-loaded
-// asset base (fabs/servers vs. heavy plant/refineries) is fully depreciated.
-export const SECTOR_PPE_USEFUL_LIFE_YEARS: Record<string, number> = {
-  Tech: 7,
-  Financials: 10,
-  Industrials: 18,
-  Energy: 22,
-  Consumer: 12,
-  Banks: 10,
-};
+// §3.26-f-i: the plant's useful life lives with the one depreciation schedule that runs it —
+// `domain/company-week/capital-programme.ts:SECTOR_PPE_USEFUL_LIFE_YEARS`, read through
+// `usefulLifeYearsOf`.
 
 // PP&E-to-revenue capital intensity — what a company in this sector's asset base actually looks
 // like relative to its own production scale, used to seed the initial PP&E stock. Deliberately

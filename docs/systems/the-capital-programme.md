@@ -79,7 +79,7 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 a stock of productive assets held by a named firm | `src/engine2/stage08-back.ts:newGrossPPELocal` | ✅ |
 | A2 capacity is a function of the stock | `src/engine/simulation/stages/05-unit-bidding.ts:unitsPerNetPpeDollar` | ✅ |
-| **A3 it depreciates — a cost and a reduction** | `src/domain/company-week/capital-programme.ts:weeklyDepreciationLocal` | ⚠️ |
+| A3 it depreciates — a cost and a reduction | `src/domain/company-week/capital-programme.ts:annualDepreciationLocal` · `src/domain/company-week/income-statement.ts:industrialIncome` | ✅ |
 | A4 capital is specific | `src/engine/simulation/stages/estate-resolution.ts:peersOf` | ⚠️ |
 | A5 its value is what it can produce; it can be written down | `src/domain/company-week/capital-programme.ts:capacityRetirement` | ⚠️ |
 | **B1 invests when the return beats the cost of capital** | `src/domain/company-week/capital-programme.ts:desiredGrowthCapex` · `src/domain/company-week/cost-of-capital.ts:costOfCapitalOf` | ❌ |
@@ -161,20 +161,24 @@ changes real investment, and that is the transmission channel this whole atlas e
 
 **§3 step 37-COSTOFCAPITAL**, and it should be the same one as B5: they are one decision.
 
-### ⚠️ A3 — TWO DEPRECIATION SCHEDULES, AND THE P&L ONE IGNORES THE PLANT
+### ✅ A3 — ONE DEPRECIATION SCHEDULE (closed 2026-09-05, §9.26-f-i)
 
-`front-core.ts:757` charges D&A against profit as `daShareOfRevenue: 0.05` — five percent of
-REVENUE. `capital-programme.ts:190` reduces the plant by `grossPPELocal / (usefulLifeYears × 52)`.
-They are different numbers for one fact, and the direction matters: a firm that doubles its plant
-takes **no extra depreciation charge against its earnings**, so building capacity is free in the
-income statement and the tax base built on it. A3 requires depreciation to be both a real cost
-against profit and a real reduction in the stock; here it is each of those, separately, at two
-different sizes.
+It was two schedules for one fact, and then six: `front-core.ts` charged D&A against profit as
+`daShareOfRevenue: 0.05` — five percent of REVENUE, so a firm that doubled its plant took **no
+extra charge against its earnings** and building capacity was free on the income statement and on
+the tax base built from it — while `capital-programme.ts` reduced the stock by the plant over its
+life; a profile firm was charged a stated twenty years whatever its sector; the seed struck EBIT off
+5% and 4.5% of revenue and the filed quarters off 80% of capex; and a carrier was seeded at its
+fleet's life and run at its sector's.
 
-**Already §3 step 26** — named there exactly (`front-core.ts:750` vs `capital-programme.ts:190`,
-"two depreciation schedules that cannot reconcile"), folded in with "what plant IS, decided once".
-This tree is a second witness and adds the consequence: it is not only an inconsistency, it removes
-the cost of capital deepening from the P&L.
+One owner now: `annualDepreciationLocal(gross, life)` — straight-line, a year-rate — and
+`usefulLifeYearsOf(firm)` beside it (a carrier's plant is its fleet, so its life is the fleet's:
+a ship's 25 years, a truck's 10). The P&L takes it on both statement paths (`industrialIncome`,
+`profileIncome`, and the C front core through the opening gross lane), the stock rolls forward by
+its 52nd (`weeklyDepreciationLocal`), the upkeep target is it, `companyNetInvestmentRate` reads it,
+and every seed strikes EBIT off it. The cost against profit and the reduction in the stock are one
+number by construction, which is what A3 asks. What is still one dollar number is the plant itself
+— A4 / A5 below, §3 step 26-f-ii.
 
 ### ❌ B4 — NO OPTION TO WAIT
 
@@ -212,8 +216,9 @@ plant to same-region, same-sector peers, and a buyer converts those dollars into
 own** `unitsPerNetPpeDollar` — a steel mill's plant becomes whatever the buyer makes. A5 is the same
 shape: plant is carried at cost less straight-line depreciation and is never revalued against what it
 can produce; the only write-down is `capacityRetirement`'s scrap of a share mothballed for a year.
-**Already §3 step 26**, whose folded-in half is precisely "what plant IS, decided once… there is no
-asset kind for plant".
+**§3 step 26-f-ii** (the decision: plant is dated vintages, each with its own life, and the sheet
+reads them) and **26-f-iii** (the plant wire and W6). 26-f-i closed the schedule half — A3 above —
+and left the shape: the charge is right, but it is still charged on one number.
 
 ### ❌ D4 / E4 — THE TWO VERIFY NODES ARE NEVER MEASURED
 

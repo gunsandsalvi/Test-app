@@ -35,7 +35,8 @@ import { SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
 import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
 import { industryOfSubUnit, firmInputIntensities, annualCarryingCostRateOf, INDUSTRY_REGISTRY } from '../domain/industry-registry';
 import { SECTOR_OCCUPATION_MIX } from '../domain/region-macro';
-import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
+import { SECTOR_PPE_INTENSITY } from '../engine/simulation/constants';
+import { annualDepreciationLocal, usefulLifeYearsOf } from '../domain/company-week/capital-programme';
 import { CogsCostDrivers } from '../engine/companyGenerator';
 import { industrialIncome } from '../domain/company-week/income-statement';
 import { fulfillmentRatio } from '../domain/company-week/inventory';
@@ -144,7 +145,7 @@ export interface FrontSeam {
   openingNetPpeLocal: Float64Array;
   taxBasisOpenLocal: Float64Array;               // ?? openingNet
   carryforwardLocal: Float64Array;               // ?? 0
-  usefulLifeYears: Float64Array;               // sector table ?? 12
+  usefulLifeYears: Float64Array;               // usefulLifeYearsOf (the one schedule's life)
   baselineInputRateSum: Float64Array;          // Σ firmInputIntensities values
   /** Per (sector-region pair resolved at seam): the wage-bill per-worker annual terms. */
   perWorkerAnnualLocal: Float64Array;            // at this week's pools, per firm
@@ -419,7 +420,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     S.openingNetPpeLocal[row] = openingNet;
     S.taxBasisOpenLocal[row] = nn(CN.taxBasisPpeLocal[row], openingNet);
     S.carryforwardLocal[row] = nn(CN.taxLossCarryforwardLocal[row], 0);
-    S.usefulLifeYears[row] = SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12;
+    S.usefulLifeYears[row] = usefulLifeYearsOf(comp);
     S.baselineInputRateSum[row] = Object.values(firmInputIntensities(comp.productLines, profileKeyOf(comp)))
       .reduce((a, b) => a + b, 0);
     const pw = perWorkerOf(comp.sector, comp.region as RegionId);
@@ -741,7 +742,9 @@ export function runFrontCore(
     const industrialPnl = industrialIncome({
       revenueLocal: newRevenue,
       ebitdaMargin: newEbitdaMargin,
-      daShareOfRevenue: 0.05,
+      // §3.26-f-i — the one schedule: the opening gross plant over its life, the same number the
+      // capital core rolls the stock forward by (÷52). It was `revenue × 0.05`.
+      depreciationAnnualLocal: annualDepreciationLocal(S.openingGrossPpeLocal[row], S.usefulLifeYears[row]),
       annualInterestLocal: annualInterest,
       taxRate: S.effectiveTaxRate[ri],
       sharesOutstanding: S.sharesOutstanding[row],

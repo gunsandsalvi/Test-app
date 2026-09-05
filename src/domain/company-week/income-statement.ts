@@ -122,14 +122,18 @@ export function netIncomeLocal(
 }
 
 /**
- * The industrial path: EBITDA is revenue at the firm's own margin, D&A comes off it, and interest
- * and tax come off that. EBIT is unfloored — an operating loss exists and reaches coverage, the
- * default trigger, the rating and the tax rule above, which is the whole point of measuring it.
+ * The industrial path: EBITDA is revenue at the firm's own margin, the plant's own straight-line
+ * charge comes off it, and interest and tax come off that. EBIT is unfloored — an operating loss
+ * exists and reaches coverage, the default trigger, the rating and the tax rule above, which is
+ * the whole point of measuring it.
  */
 export function industrialIncome(i: {
   revenueLocal: number;
   ebitdaMargin: number;
-  daShareOfRevenue: number;
+  /** §3.26-f-i — the one schedule's year-rate on the firm's opening gross plant
+   *  (`capital-programme.ts:annualDepreciationLocal`). It was `revenue × 0.05`, so a firm that
+   *  doubled its plant took no extra charge against its earnings. */
+  depreciationAnnualLocal: number;
   annualInterestLocal: number;
   taxRate: number;
   sharesOutstanding: number;
@@ -137,7 +141,7 @@ export function industrialIncome(i: {
   tax?: Omit<TaxInputs, 'bookDepreciationAnnualLocal'>;
 }): IncomeStatement {
   const ebitdaLocal = i.revenueLocal * i.ebitdaMargin;
-  const daLocal = i.revenueLocal * i.daShareOfRevenue;
+  const daLocal = i.depreciationAnnualLocal;
   const ebitLocal = ebitdaLocal - daLocal;
   const r = netIncomeLocal(ebitLocal, i.annualInterestLocal, i.taxRate,
     i.tax ? { ...i.tax, bookDepreciationAnnualLocal: daLocal } : undefined);
@@ -155,9 +159,10 @@ export function industrialIncome(i: {
 
 /**
  * The profile path: revenue plus whatever the profile module says the firm's other income is,
- * less its three cost lines, less straight-line depreciation on gross PP&E — a bank's or an
- * insurer's shape, where the margin is not a stated ratio and the firm knows exactly what
- * to do with its interest income.
+ * less its three cost lines, less the plant's own straight-line charge (the same one schedule
+ * the industrial path charges — it was a stated twenty years here, whatever the sector) — a
+ * bank's or an insurer's shape, where the margin is not a stated ratio and the firm knows
+ * exactly what to do with its interest income.
  */
 export function profileIncome(i: {
   revenueLocal: number;
@@ -169,8 +174,8 @@ export function profileIncome(i: {
   inputCostAnnualLocal: number;
   payrollAnnualLocal: number;
   profileCostsAnnualLocal: number;
-  grossPPELocal: number;
-  ppeDepreciationYears: number;
+  /** §3.26-f-i — the one schedule's year-rate (`capital-programme.ts:annualDepreciationLocal`). */
+  depreciationAnnualLocal: number;
   annualInterestLocal: number;
   taxRate: number;
   sharesOutstanding: number;
@@ -179,7 +184,7 @@ export function profileIncome(i: {
 }): IncomeStatement {
   const ebitdaLocal = i.revenueLocal + i.otherIncomeAnnualLocal
     - i.inputCostAnnualLocal - i.payrollAnnualLocal - i.profileCostsAnnualLocal;
-  const bookDaLocal = i.grossPPELocal / Math.max(1, i.ppeDepreciationYears);
+  const bookDaLocal = i.depreciationAnnualLocal;
   const ebitLocal = ebitdaLocal - bookDaLocal;
   const r = netIncomeLocal(ebitLocal, i.annualInterestLocal, i.taxRate,
     i.tax ? { ...i.tax, bookDepreciationAnnualLocal: bookDaLocal } : undefined);

@@ -27,7 +27,7 @@ import { RegionId } from './geography';
  * for roughly an order of magnitude more fuel and, decisively, for thousands of times more crew.
  * That gap is why ocean trade is cheap and inland haulage is not.
  */
-type FreightMode = 'SEA' | 'ROAD';
+export type FreightMode = 'SEA' | 'ROAD';
 
 /**
  * One physical freight asset — a ship or a truck fleet unit. Everything here is a measured

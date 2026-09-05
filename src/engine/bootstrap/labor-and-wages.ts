@@ -10,7 +10,8 @@
 import { RegionId, OccupationType } from '../../types';
 import { getRegionProductivityPerCapitaLocal } from './population';
 import { derivedLabourShareOfValueAdded } from '../../domain/industry-registry';
-import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from '../simulation/constants';
+import { SECTOR_PPE_INTENSITY } from '../simulation/constants';
+import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../../domain/company-week/capital-programme';
 import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
 import { getRegionNeutralRate } from './yield-curves';
 
