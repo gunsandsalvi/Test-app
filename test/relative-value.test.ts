@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, edgeBps, arbSizeShare, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
+import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, edgeBps, arbSizeShare, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
 import { bondFuturesCarryPrice } from '../src/domain/derivatives/classes/bond-future';
 import { asInstrumentId } from '../src/domain/ids';
 
@@ -66,4 +66,20 @@ test('the mirror read turns the disagreement and charges the borrow fee; the tar
   assert.equal(arbTargetShare(-300, 150, 40), -1);
   assert.equal(arbTargetShare(-300, 20, 40), -0.5);
   assert.equal(arbTargetShare(-10, -10, 40), 0);
+});
+
+// §3.17f-i — the second comparable: protection on a name against the name's own rung.
+test('CDS basis: the read is the rung\'s spread less the protection\'s, and the legs buy the rung down to cover-plus-carry and cover up to the rung less carry', () => {
+  const r = cdsBasisRead({ cashSpreadBps: 250, cdsSpreadBps: 180, financingRateAnnual: 0.06, repoRateAnnual: 0.05, marginRate: 0.03, requiredReturnAnnual: 0.10 });
+  assert.equal(r.deviationBps, 70);
+  assert.ok(Math.abs(r.carryBps - 130) < 1e-9);
+  assert.ok(Math.abs(edgeBps(r) + 60) < 1e-9, 'the bond pays 70 more than the cover costs, and carrying the pair costs 130: no trade');
+  const priceAtSpread = (bps: number) => 1 - bps / 10000;
+  const legs = cdsBasisLegs({ regionId: 'USA', bondId: asInstrumentId('B'), cdsInstrumentId: asInstrumentId('USA-CDS-X-c5'), faceLocal: 500, cashSpreadBps: 250, cdsSpreadBps: 180, carryBps: 30, weeklyMoveBps: 12, priceAtSpread, budgetLocal: 400 });
+  assert.equal(legs.cash.market, 'CORP_BOND_CASH');
+  assert.ok(Math.abs(legs.cash.reservationPrice - priceAtSpread(210)) < 1e-12, 'buys the rung while it pays the cover plus the carry');
+  assert.ok(Math.abs(legs.cash.fullSizePriceRange - 12 / 10000) < 1e-12);
+  assert.equal(legs.protection.market, 'CDS_PROTECTION');
+  assert.equal(legs.protection.faceLocal, -500, 'cover bought is the credit sold');
+  assert.equal(legs.protection.reservationPrice, 220, 'buys cover while the rung pays it plus the carry');
 });

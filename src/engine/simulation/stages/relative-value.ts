@@ -13,21 +13,31 @@
  * price. That is the limit to arbitrage, and why a basis can persist. The first comparable is
  * the bond basis, in BOTH directions (§3.17e-iii-a): a cheap future is long the line and short
  * the cash, and a cash leg below what the book holds sells what it has and states the rest as a
- * borrow need for the lending book.
+ * borrow need for the lending book. The second comparable (§3.17f-i) is the CDS–cash basis: the
+ * name's own rung against protection on it, the bond long on the line and the cover bought.
  *
  * Runs after prime-brokerage (the line the cash leg is financed on is struck) and before 07b.
  */
 
 import { GameState, RegionId } from '../../../types';
+import type { InstitutionalEntity } from '../../../domain/institutions';
+import type { DerivativeContract } from '../../../domain/derivatives/contract';
+import type { StandingBook } from '../../../domain/derivatives/standing-book';
+import type { DerivativeLifecycleView } from './derivative-lifecycle';
 import { WeeklyStepContext } from './context';
 import { REGION_IDS } from '../../../domain/geography';
 import { institutionPartyKey } from '../../../domain/derivatives/contract';
 import { initialMarginRateOf } from '../../../domain/derivatives/registry';
 import { BOND_FUTURE_TERM_KEY, nextDeliveryWeek, bondDurationYears, bondFutureWeeklyMoveOf } from '../../../domain/derivatives/classes/bond-future';
 import { bondFutureInstrumentId } from '../../../domain/instrument-keys';
-import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, edgeBps, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
+import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, edgeBps, arbTargetShare, arbSizeShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
 import { asInstrumentId } from '../../../domain/ids';
-import { trancheClearedPricePerFace } from '../../credit-price';
+import { trancheClearedPricePerFace, trancheTerms, rowSpreadBps, priceAtSpreadOnTranche, IS_BOND_ROW } from '../../credit-price';
+import { ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
+import { bookRowsOf, instrumentIdAt, rowUnits, rowBasisLocal as rowBasisOf } from '../../../engine2/holdings';
+import { CDS_BENCHMARK_TENOR, CDS_TENOR_YEARS, cdsTenorWeeksOf } from '../../../domain/derivatives/classes/cds';
+import { cdsInstrumentId } from '../../../domain/instrument-keys';
+import { isActiveCompany } from '../../../domain/company';
 import { sovereignRowsOf } from '../../sovereign-register';
 import { primeBrokerageBookOf, derivativesBookOf, securityLoanBookOf } from '../../ledger/contract-ledger';
 import { sharesOnLoan, stockLoanNetLocal } from '../../../domain/securities-lending';
@@ -46,6 +56,79 @@ export function runRelativeValueStage(state: GameState, ctx: WeeklyStepContext):
   const standing = standingBookOf(ctx, state);
   const book = derivativesBookOf(ctx);
   const week = ctx.nextWeek;
+  readBondBasis(ctx, funds, view, standing, book, week);
+  readCdsBasis(ctx, funds, view, standing, book, week);
+}
+
+/** §3.17f-i — THE CDS–CASH BASIS: every name in the fund's region with a protection print and a
+ *  cash rung near the benchmark tenor. Future-rich only in its cash direction: the bond long is
+ *  financed on the line; the mirror needs a corporate bond borrow (§3 step 17f-v). */
+function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view: DerivativeLifecycleView, standing: StandingBook, book: DerivativeContract[], week: number): void {
+  REGION_IDS.forEach((regionId: RegionId) => {
+    const reg = ctx.updatedRegions[regionId];
+    if (!reg) return;
+    const regionFunds = funds.filter((f) => f.region === regionId);
+    if (regionFunds.length === 0) return;
+    const pbBook = primeBrokerageBookOf(ctx.v2, regionId);
+    const repoRateAnnual = view.overnightRateAnnual(regionId);
+    const tenorYears = CDS_TENOR_YEARS[CDS_BENCHMARK_TENOR];
+    ctx.updatedCompanies.forEach((issuer) => {
+      if (issuer.region !== regionId || !isActiveCompany(issuer) || issuer.isBankEntity || !(issuer.cdsSpreadBps > 0)) return;
+      // THE RUNG: the issuer's own bond nearest the benchmark tenor, with a print and a spread.
+      let rung: number | undefined; let gap = Number.POSITIVE_INFINITY;
+      ladderRowsOf(ctx.v2, issuer.id).forEach((r) => {
+        if (!IS_BOND_ROW(ctx.v2.tranches.flags[r]) || !(ctx.v2.tranches.principalLocal[r] > 0)) return;
+        const g = Math.abs((ctx.v2.tranches.maturityWeek[r] - week) / 52 - tenorYears);
+        if (g < gap) { gap = g; rung = r; }
+      });
+      if (rung === undefined) return;
+      const bondId = trancheIdOf(ctx.v2, rung);
+      const cashPrice = trancheClearedPricePerFace(ctx.v2, bondId);
+      const cashSpreadBps = rowSpreadBps(ctx.v2, reg, rung, week);
+      if (!(cashPrice !== undefined && cashPrice > 0) || cashSpreadBps === undefined) return;
+      const terms = trancheTerms(ctx.v2, rung, week, reg.policyRate);
+      const priceAtSpread = (bps: number) => priceAtSpreadOnTranche(terms, reg.zeroRates, bps);
+      const cdsId = cdsInstrumentId(regionId, issuer.id, CDS_BENCHMARK_TENOR);
+      const marginRate = initialMarginRateOf({ classId: 'CDS', regionId, reference: { kind: 'ISSUER', issuerId: issuer.id }, termKey: CDS_BENCHMARK_TENOR, maturityWeek: week + cdsTenorWeeksOf(CDS_BENCHMARK_TENOR) }, view);
+      const weeklyMoveBps = Math.max(1, view.cdsSpreadWeeklyMoveBps(issuer.id, CDS_BENCHMARK_TENOR) ?? 1);
+      regionFunds.forEach((fund) => {
+        const line = pbBook.find((l) => l.fundId === fund.id);
+        const read = cdsBasisRead({ cashSpreadBps, cdsSpreadBps: issuer.cdsSpreadBps, financingRateAnnual: line?.rateAnnual ?? repoRateAnnual, repoRateAnnual, marginRate, requiredReturnAnnual: entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund)) });
+        const share = arbSizeShare(edgeBps(read), weeklyMoveBps);
+        // The position: the rung on its register, the protection it holds on the name.
+        const rows = bookRowsOf(ctx.v2, fund.id).filter((r) => instrumentIdAt(ctx.v2, r) === bondId);
+        const heldFace = rows.reduce((a, r) => a + rowUnits(ctx.v2.holdings, r), 0);
+        const key = institutionPartyKey(fund.id);
+        const coverFace = standing.coverLocal('CDS', 'a', key, issuer.id) - standing.coverLocal('CDS', 'b', key, issuer.id);
+        if (!(share > 0) && heldFace <= 1 && Math.abs(coverFace) <= 1) return;
+        const capacityLocal = arbCapacityLocal(entityCashOf(ctx.v2, fund), fund.primeBrokerageAvailableLocal);
+        const lines = book.filter((c) => c.classId === 'CDS' && c.reference.kind === 'ISSUER' && c.reference.issuerId === issuer.id
+          && ((c.a.kind === 'INSTITUTION' && c.a.id === fund.id) || (c.b.kind === 'INSTITUTION' && c.b.id === fund.id)));
+        const pnlLocal = pairPnLLocal({
+          cashValueLocal: rows.reduce((a, r) => a + ctx.v2.holdings.qtyLocal[r], 0),
+          cashBasisLocal: rows.reduce((a, r) => a + rowBasisOf(ctx.v2, r), 0),
+          futuresSettledToFundLocal: lines.reduce((a, c) => a + (c.a.kind === 'INSTITUTION' && c.a.id === fund.id ? 1 : -1) * (c.settledMarkLocal ?? 0), 0),
+        });
+        const stopped = stoppedOut(pnlLocal, lines.reduce((a, c) => a + c.initialMarginLocal, 0));
+        const carriedFace = capacityLocal / cashPrice;
+        const exposureFace = Math.max(heldFace, Math.abs(coverFace));
+        const targetFace = stopped ? 0 : exposureFace > carriedFace ? carriedFace : share * carriedFace;
+        const forced = stopped || exposureFace > carriedFace;
+        const cashDelta = targetFace - heldFace;
+        const coverDelta = targetFace - coverFace;
+        const legs = cdsBasisLegs({
+          regionId, bondId, cdsInstrumentId: cdsId, faceLocal: Math.max(cashDelta, coverDelta), cashSpreadBps, cdsSpreadBps: issuer.cdsSpreadBps,
+          carryBps: read.carryBps, weeklyMoveBps, priceAtSpread, budgetLocal: Math.min(Math.max(0, cashDelta) * cashPrice, capacityLocal),
+        });
+        if (Math.abs(cashDelta) > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: cashDelta, forced });
+        if (Math.abs(coverDelta) > 1) ctx.relativeValueLegs.push({ ...legs.protection, entityId: fund.id, faceLocal: -coverDelta, forced });
+      });
+    });
+  });
+}
+
+/** §3.17e-ii — THE BOND BASIS, in both directions. */
+function readBondBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view: DerivativeLifecycleView, standing: StandingBook, book: DerivativeContract[], week: number): void {
   REGION_IDS.forEach((regionId: RegionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg || reg.bondFuturesBasis === undefined || reg.bondFuturesDeliverableId === undefined) return;

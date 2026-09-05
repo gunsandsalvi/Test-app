@@ -31,6 +31,7 @@ import { RegionId } from '../../../../types';
 import { ensureV2 } from '../../../../engine2/world';
 import { institutionProfile } from '../../../../domain/institution-profiles';
 import { CDS_TENORS, CDS_TENOR_YEARS, CDS_BENCHMARK_TENOR, cdsTenorWeeksOf, nearestCdsTenor, protectionNeedLocal, twoWayProtectionQuote, type CdsTenorKey } from '../../../../domain/derivatives/classes/cds';
+import { indexHolderQuote } from '../../../../domain/derivatives/classes/cds-index';
 import { DerivativeContract, DerivativeParty, bankPartyKey, derivativePartyKey } from '../../../../domain/derivatives/contract';
 import { deskNotionalCapacityLocal, initialMarginRateOf } from '../../../../domain/derivatives/registry';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
@@ -259,6 +260,19 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
       }));
     });
 
+    // §3.17f-i: a relative-value book's PROTECTION leg — cover bought on a name against the rung
+    // it is long, or written back when the pair comes off — is a one-sided seat at the level
+    // the pair pays: a buyer opens holding its size and sells the credit below its reservation,
+    // a writer takes above it (`indexHolderQuote`'s two shapes).
+    ctx.relativeValueLegs.filter((l) => l.market === 'CDS_PROTECTION' && l.regionId === regionId).forEach((leg) => {
+      const id = leg.instrumentId;
+      if (!referenceIssuers.some((c) => CDS_TENORS.some((tenor) => cdsInstrumentId(regionId, c.id, tenor) === id))) return;
+      const q = indexHolderQuote({ reservationBps: leg.reservationPrice, rangeBps: leg.fullSizePriceRange, gapLocal: leg.faceLocal });
+      if (!(q.maxHoldingLocal > 0)) return;
+      openingByParticipant.set(leg.entityId, new Map([[id, q.currentHoldingLocal]]));
+      shortByInstrument.set(id, (shortByInstrument.get(id) ?? 0) + q.currentHoldingLocal);
+      participants.push({ id: leg.entityId, currentHoldingsByInstrumentId: new Map([[id, q.currentHoldingLocal]]), demandByInstrumentId: new Map([[id, { reservationStat: q.reservationStat, maxHoldingLocal: q.maxHoldingLocal, fullSizeStatRange: q.fullSizeStatRange }]]) });
+    });
     if (participants.length === 0) return;
 
     const histOf = (issuerId: EntityId, tenor: CdsTenorKey): number[] | undefined => reg.cdsSpreadHistoryByIssuer?.[issuerId]?.[tenor];

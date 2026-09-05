@@ -547,36 +547,33 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17f. **The relative-value book, and it need not be written strategy by strategy** (user: "is there
-    a programmatic way to do that across asset classes?"). *(17e-ii-a built the mechanism — the
-    registry `domain/relative-value.ts`, the `RELATIVE_VALUE` strategy, the legs the markets read
-    — and its first entry, the bond basis (§9). What is left here is each OTHER comparable joining
-    the registry as a declaration: a read and two legs, and the market of each leg reading
-    `ctx.relativeValueLegs` the way 07c and the futures line do.)* **There is, and the model
-    already holds the list.** Today a hedge fund's strategy is a row of hand-written boolean flags in
-    `HEDGE_FUND_STRATEGY_PROFILES` (`institution-profiles.ts:117`) — `shortsEquity`,
-    `tradesCommodityFutures`, `runsFxDirectional` — one flag per market somebody remembered to
-    add. An arbitrage is not a flag. It is **two prices for the same risk**, and every such pair
-    in this world is ALREADY DECLARED, because the audit measures them:
-    - CDS spread against the cash bond's OAS — the basis, `P2`, failing 7 weeks of 16 at HEAD;
-    - a future against spot plus carry — `X2`, failing 2 of 16;
-    - one good's price across regions in one currency — `X2`'s wedge, 1 of 16;
-    - an ETF's price against its own NAV — the premium, named in step 38's unmeasured reads;
-    - the swap spread (IRS against the govie curve) and the cross-currency basis (`fx-forward`'s
-      CIP basis), both already computed;
-    - seniority across one issuer's capital structure — `P1`, failing 16 of 16.
-    So the mechanism is ONE mechanism: a **registry of comparables** — two priced things and the
-    relationship that should hold between them — and a book that reads the registry, sizes by the
-    deviation, and trades BOTH legs (rule 5). A new asset class joins by declaring its comparable,
-    not by growing a flag. `RELATIVE_VALUE` becomes a fifth strategy, and the four existing ones
-    keep their directional books.
-    **The design constraint that decides whether this is a mechanism or a plug:** the arb book
-    must be CAPITAL-CONSTRAINED and able to LOSE — funded in repo or prime brokerage, posting real
-    margin, forced to cut when it draws down. Limits to arbitrage are why real bases persist. A
-    fund that always closes the gap is a clamp wearing a fund's clothes, which rules 3 and 6
-    forbid, and it would mask exactly the defects P2 and X2 exist to report. **The audit keeps
-    measuring after the funds exist:** a basis that survives a well-capitalised arb book is a
-    finding; one that only survives because nobody could trade it was never a price.
+17f. **The relative-value book: every OTHER comparable joins the registry** (user: "is there a
+    programmatic way to do that across asset classes?" — there is, and 17e-ii-a built it:
+    `domain/relative-value.ts`, the `RELATIVE_VALUE` strategy, the legs the markets read; §9).
+    An arbitrage is not a flag but **two prices for the same risk**, and every pair here is
+    already declared because the audit measures it. Each joins as a declaration — a read and two
+    legs — and the market of each leg reads `ctx.relativeValueLegs` the way 07c, 07b, the CDS
+    book and the futures line do. The book stays CAPITAL-CONSTRAINED and able to LOSE (the stop
+    and the line, 17e-ii-b), which is what makes it a mechanism and not a clamp; **the audit keeps
+    measuring after the funds exist** — a basis that survives a well-capitalised book is a
+    finding. Three pairs are their own arbitrageurs already and join for the measure only: the
+    ETF premium (the authorised participants, `etf-flows.ts`), the cross-currency basis (the
+    desks, 17b-iv-b, and the swap lines, 17b-v), and a good's price across regions (sourcing,
+    05). What is left, in order:
+17f-ii. **The index against its names** (`Region.creditIndexBasisBps`, 17d-ii). A rich index
+    is sold and its names bought as protection — one index leg against a basket of single-name
+    legs at the benchmark tenor, sized equal-weighted; the mirror the other way. Both legs are
+    protection, so both clear in the CDS books already reading the legs; the carry is the margin
+    on both.
+17f-iii. **The swap spread** (`Region.swapSpreadBpsByTenor`, `irs.ts:300`). A swap paying more
+    than the sovereign at the same tenor is received against the bond sold short — needs the
+    sovereign borrow (17e-iii-b, done) and the swap book reading a leg; the mirror pays fixed
+    against the bond bought on the line. The comparable's tenor is the swap's.
+17f-v. **Seniority across one issuer's capital structure** (`P1`, failing 16 of 16 at HEAD). A
+    junior tranche paying less than the senior of the same issuer is sold against the senior
+    bought — which needs a CORPORATE bond borrow: the lending pass generalised from the sovereign
+    rung to any `lendable` kind (`ASSET_REGISTRY`: CORP_BOND is), the same delivery in face. The
+    mirror of 17f-i's basis (a rich bond against cheap cover) arrives with the same borrow.
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
@@ -1587,7 +1584,26 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17e-iv — OFFSETTING LINES NET AT THE HOUSE.** A LINE is a contract's identity — class,
+**17f-i — THE CDS–CASH BASIS JOINS THE REGISTRY.** The second comparable: for every active
+  non-bank issuer in the fund's region with a protection print, the issuer's own rung nearest
+  the benchmark tenor (`ladderRowsOf` through `IS_BOND_ROW`, with a cleared price and
+  `rowSpreadBps`) against `cdsSpreadBps` at c5. `cdsBasisRead`: deviation = rung spread − cds
+  (the negative-basis trade), carry = the line's financing above repo + the required return on
+  the cover's margin; `cdsBasisLegs`: the cash leg buys the rung down to the spread that still
+  pays cover + carry (`priceAtSpreadOnTranche` on the rung's own `trancheTerms`), the
+  protection leg buys cover up to the rung less carry (a negative face: the credit sold).
+  `stages/relative-value.ts` reads both comparables (`readBondBasis`, `readCdsBasis`); the
+  position is the rung's face on the register and the fund's net cover (a − b) on the name;
+  stop and line as before; a reduction sells the rung to target and WRITES the cover back
+  (gross with the standing cover — two CDS lines of different maturity do not net, 17e-iv).
+  07b takes a `CORP_BOND_CASH` leg as staged demand on the rung (`setDemand` on the fund's
+  row: reservation price, size in face, budget in face, its current as the floor; a reduction
+  a fixed target); the CDS book takes a `CDS_PROTECTION` leg as a one-sided seat
+  (`indexHolderQuote`: a buyer opens holding its size and sells the credit below the level, a
+  writer takes above it). Three pairs join for the measure only (ETF premium, cross-currency
+  basis, the goods wedge — each already has its arbitrageur); 17f-ii/iii/v inserted for the
+  index, the swap spread and seniority. Atlas: corporate-credit H4 cited. Gates green; no run.
+- **17e-iv — OFFSETTING LINES NET AT THE HOUSE.** A LINE is a contract's identity — class,
   region, money, reference, tenor and maturity (`netting.ts:lineKeyOf`); a member striking the
   opposite seat on a line it holds nets against its standing slices, oldest first
   (`planOffsets`, pure, tested). `admitToHouse` now takes the view and nets before admitting

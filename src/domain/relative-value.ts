@@ -24,7 +24,7 @@ import type { EntityId, InstrumentId } from './ids';
 import { bondFuturesCarryPrice } from './derivatives/classes/bond-future';
 
 /** The markets a leg can clear in. A comparable joins by naming the two its legs need. */
-export type ComparableMarket = 'SOVEREIGN_CASH' | 'BOND_FUTURE';
+export type ComparableMarket = 'SOVEREIGN_CASH' | 'BOND_FUTURE' | 'CORP_BOND_CASH' | 'CDS_PROTECTION';
 
 /** One leg of a pair, as the market that clears it reads it: a size (+ long / − short, in face),
  *  the price it is worth doing at (a long buys below it, a short sells above it), how far past
@@ -144,5 +144,49 @@ export function bondBasisLegs(args: {
   return {
     cash: { market: 'SOVEREIGN_CASH', regionId: args.regionId, instrumentId: args.bondId, faceLocal: args.faceLocal, reservationPrice: cashMax, fullSizePriceRange: range, budgetLocal: args.budgetLocal },
     future: { market: 'BOND_FUTURE', regionId: args.regionId, instrumentId: args.futureId, faceLocal: -args.faceLocal, reservationPrice: futureMin, fullSizePriceRange: range, budgetLocal: 0 },
+  };
+}
+
+/**
+ * §3.17f-i — THE CDS–CASH BASIS, READ. Protection on a name against the name's own cash paper at
+ * the same point: a bond that pays more than its protection costs is the negative-basis trade —
+ * long the bond, financed on the line, and long protection on it — earning the difference for
+ * no credit risk. The disagreement is the rung's spread less the protection's, annualised as
+ * both are; the carry is the financing above repo and the return the protection's margin needs.
+ */
+export function cdsBasisRead(args: {
+  cashSpreadBps: number; cdsSpreadBps: number;
+  financingRateAnnual: number; repoRateAnnual: number; marginRate: number; requiredReturnAnnual: number;
+}): ComparableRead {
+  const deviationBps = args.cashSpreadBps - args.cdsSpreadBps;
+  const carryBps = Math.max(0, args.financingRateAnnual - args.repoRateAnnual) * 10000
+    + Math.max(0, args.marginRate) * Math.max(0, args.requiredReturnAnnual) * 10000;
+  return { deviationBps, carryBps };
+}
+
+/**
+ * §3.17f-i — THE CDS–CASH BASIS, AS TWO LEGS. The cash leg buys the rung down to the spread at
+ * which it still pays the protection plus the carry (stated as the price that spread implies on
+ * the rung); the protection leg buys cover up to the rung's spread less the carry (stated in
+ * bps, the level that book clears). A negative face on the protection leg is protection BOUGHT
+ * — the credit sold — as a negative face on a line is a short.
+ */
+export function cdsBasisLegs(args: {
+  regionId: RegionId; bondId: InstrumentId; cdsInstrumentId: InstrumentId; faceLocal: number;
+  cashSpreadBps: number; cdsSpreadBps: number; carryBps: number; weeklyMoveBps: number;
+  priceAtSpread: (spreadBps: number) => number; budgetLocal: number;
+}): { cash: RelativeValueLeg; protection: RelativeValueLeg } {
+  const cashMaxSpread = args.cdsSpreadBps + args.carryBps;
+  const range = Math.max(1e-6, args.weeklyMoveBps);
+  const cashReservation = args.priceAtSpread(cashMaxSpread);
+  return {
+    cash: {
+      market: 'CORP_BOND_CASH', regionId: args.regionId, instrumentId: args.bondId, faceLocal: args.faceLocal,
+      reservationPrice: cashReservation, fullSizePriceRange: Math.max(1e-6, Math.abs(cashReservation - args.priceAtSpread(cashMaxSpread + range))), budgetLocal: args.budgetLocal,
+    },
+    protection: {
+      market: 'CDS_PROTECTION', regionId: args.regionId, instrumentId: args.cdsInstrumentId, faceLocal: -args.faceLocal,
+      reservationPrice: args.cashSpreadBps - args.carryBps, fullSizePriceRange: range, budgetLocal: 0,
+    },
   };
 }

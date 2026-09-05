@@ -220,7 +220,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | H1 the market has a level, from real prices and weights | `src/engine/simulation/stages/index-calculation.ts:runIndexCalculationStage` | ✅ |
 | H2 VERIFY worse assessment trades wider | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
 | H3 VERIFY junior trades wider than senior in one issuer | `src/domain/credit-curve.ts:spreadAtTenor` | ⚠️ |
-| H4 cash and synthetic separately cleared; the BASIS is real | `src/engine/simulation/stages/derivative-markets/cds.ts:CDS_MARKET` | ⚠️ |
+| H4 cash and synthetic separately cleared; the BASIS is real | `src/engine/simulation/stages/derivative-markets/cds.ts:CDS_MARKET` · `src/domain/relative-value.ts:cdsBasisRead` | ⚠️ |
 | **H4.a FORBID neither derived from the other** | `src/engine2/stage08-back.ts:newCdsSpreadBps` | ❌ |
 
 ---
@@ -385,6 +385,14 @@ from the one place in the model where plant is definitely being sold. **Already 
 (which own "what a unit of plant IS"); recorded here as the second witness.
 
 ### ⚠️ H4 / ❌ H4.a — THE CDS FALLS BACK TO THE OAS, WHICH DELETES THE BASIS
+
+*2026-09-05 (§9.17f-i). The basis has a trader: the relative-value book reads each name's rung
+nearest the benchmark tenor against its protection (`relative-value.ts:cdsBasisRead`) and, where
+the rung pays more than the cover plus the carry, buys the rung on its line (07b takes the leg as
+staged demand) and buys the cover (the protection book takes it as a one-sided seat) — the
+negative-basis trade, cut like the bond basis. A basis that survives it is a finding. H4 stays ⚠️
+for H4.a below, and because the mirror (a rich bond against cheap cover) needs a corporate bond
+borrow, §3 step 17f-v.*
 
 `stage08-back.ts:1872`: `newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row] :
 newOasBps`. When the protection book has not cleared a name this week, its CDS spread IS its bond

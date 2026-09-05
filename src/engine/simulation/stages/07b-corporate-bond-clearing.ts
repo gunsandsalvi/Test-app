@@ -89,7 +89,7 @@ import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, par
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
-import { openDemandStaging, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
+import { openDemandStaging, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat, setDemand } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 import { settlePricedOfferings } from './primary-settlement';
@@ -547,6 +547,22 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const deskHeldLocal = positionsByInstrument(deskParticipants.map((d) => d.currentHoldingsByInstrumentId));
     setTradableFloat(instruments, heldByInstitutionsLocal, deskHeldLocal);
 
+    // §3.17f-i: a relative-value book's CASH leg on one rung — the bond it is long against the
+    // protection it buys — is its own staged demand for that rung: up to the price at which the
+    // rung still pays the cover plus the carry, in the pair's size, on what its line carries;
+    // a reduction is a target sold at what this book clears.
+    ctx.relativeValueLegs.filter((l) => l.market === 'CORP_BOND_CASH' && l.regionId === regionId).forEach((leg) => {
+      const p = participants.find((x) => x.id === leg.entityId);
+      const i = bondsByInstrumentId.get(leg.instrumentId);
+      if (!p || p.demandRow === undefined || i === undefined) return;
+      const current = claimedByEntity.get(leg.entityId)?.get(leg.instrumentId) ?? 0;
+      if (leg.faceLocal < 0) {
+        const keep = Math.max(0, current + leg.faceLocal);
+        setDemand(DS, p.demandRow, i, leg.reservationPrice, leg.fullSizePriceRange, keep, Number.NaN, keep);
+        return;
+      }
+      setDemand(DS, p.demandRow, i, leg.reservationPrice, leg.fullSizePriceRange, current + leg.faceLocal, leg.budgetLocal / Math.max(1e-9, leg.reservationPrice), current);
+    });
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
     const result = clearFinancialAsset(instruments, allParticipants, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
