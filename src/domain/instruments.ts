@@ -15,8 +15,10 @@ import type { InstrumentKind } from './assets';
 /** §3.13-BOOK (e): the classes the player can trade — a view of the one kind list. A government
  *  bond is `GOV_BOND` here as it is on the register, and a commodity position is the future the
  *  engine clears (`COMMODITY_FUTURE`); `OPTION` and `TRS` have no engine market yet. */
-export type AssetType = Extract<InstrumentKind,
-  'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'CDS' | 'IRS' | 'TRS' | 'XCS' | 'COMMODITY_FUTURE' | 'OPTION' | 'FX_SPOT'>;
+/** §3.17b-ii — the CASH kinds a position can be. The six derivative kinds the player's legacy layer
+ *  carried (IRS, CDS, TRS, XCS, COMMODITY_FUTURE, OPTION) are gone: a derivative is a contract on
+ *  the one book with a counterparty, never a position marked by formula against nobody. */
+export type AssetType = Extract<InstrumentKind, 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'FX_SPOT'>;
 
 export interface Position {
   id: string;
@@ -26,7 +28,7 @@ export interface Position {
   region: RegionId;
   dealerId: string;
   
-  direction: 'LONG' | 'SHORT' | 'PAY_FIXED' | 'RECEIVE_FIXED' | 'BUY_PROTECTION' | 'SELL_PROTECTION';
+  direction: 'LONG' | 'SHORT';
   quantity: number;
   entryPrice: number;
   currentPrice: number;
@@ -39,16 +41,11 @@ export interface Position {
   entryBenchmarkYield?: number;
   isClosed?: boolean;
 
-  // Derivative specifics
+  // A bond position's own terms (the sovereign case reads them to reprice the tranche).
   tenorYears?: number;
   maturityWeek?: number;
   fixedRate?: number;
-  strike?: number;
-  optionType?: 'CALL' | 'PUT';
-  expiryWeek?: number;
-  underlyingPrice?: number;
-  impliedVol?: number;
-  
+
   // Margining & MTM
   marginRequirement: number;
   maintenanceMargin: number;
@@ -57,11 +54,8 @@ export interface Position {
   weeklyFinancingCost: number;
   expectedWeeklyCarryLocal?: number;
   
-  // Greeks / DV01
+  // Delta / DV01
   delta?: number;
-  gamma?: number;
-  vega?: number;
-  theta?: number;
   dv01?: number;
   
   openedWeek: number;
@@ -161,14 +155,6 @@ export interface TradeableInstrument {
     quotedMarginBps?: number;
     discountMarginBps?: number;
     referenceBenchmark?: string;
-    impliedVol?: number;
-    /** OPTION only: the contract's own expiry week; absent = the dealer's standard listed tenor. */
-    expiryWeek?: number;
-    delta?: number;
-    gamma?: number;
-    vega?: number;
-    strike?: number;
-    optionType?: 'CALL' | 'PUT';
     baseCurrency?: string;
     quoteCurrency?: string;
     convenienceYield?: number;

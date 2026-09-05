@@ -26,19 +26,14 @@ import { BASEL_MIN_LEVERAGE_RATIO, leverageHeadroomLocal } from './macro/banking
 import { banksOf } from '../domain/company';
 
 /** The desk book each tradable asset class lands in — the same names the clearing adapters use.
- *  A derivative consumes the desk through a PFE add-on rather than at notional, exactly as the
- *  FX forward book does, so all eight classes move a real balance sheet. */
+ *  FX spot consumes the desk through a PFE add-on rather than at notional, as the FX forward book
+ *  does. §3.17b-ii: the six derivative kinds are gone from the position layer — a derivative is a
+ *  contract on the one book. */
 export const DESK_BOOK_BY_ASSET_TYPE: Record<AssetType, string> = {
   EQUITY: 'equity',
   CORP_BOND: 'corporate bond',
   LEVERAGED_LOAN: 'leveraged loan',
   GOV_BOND: 'sovereign bond',
-  COMMODITY_FUTURE: 'commodity',
-  CDS: 'derivatives',
-  IRS: 'derivatives',
-  TRS: 'derivatives',
-  XCS: 'derivatives',
-  OPTION: 'derivatives',
   FX_SPOT: 'derivatives',
 };
 
@@ -137,24 +132,13 @@ export function getUnifiedInitialMarginRate(assetType: AssetType): number {
   switch (assetType) {
     case 'GOV_BOND':
       return 0.05; // 20x sovereign bond leverage
-    case 'IRS':
-      return 0.03; // 33x IRS duration leverage
     case 'CORP_BOND':
     case 'LEVERAGED_LOAN':
       return 0.10; // 10x IG/HY corporate debt leverage
-    case 'CDS':
-      return 0.05; // 20x CDS notional leverage
-    case 'XCS':
-      return 0.04; // 25x basis swap leverage
-    case 'COMMODITY_FUTURE':
-      return 0.10; // 10x futures margin
     case 'FX_SPOT':
       return 0.05; // 20x FX spot margin
     case 'EQUITY':
-    case 'TRS':
       return 0.15; // ~6.6x equity margin
-    case 'OPTION':
-      return 0.20; // Short option margin (Long options pay 100% premium upfront)
     default:
       // §7.241: the old `return 0.15` handed a new asset type an invented margin silently.
       // A new AssetType member now fails to COMPILE here until a real margin is set.

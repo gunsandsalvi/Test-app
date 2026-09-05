@@ -549,13 +549,6 @@ written from here):
 
 17b. **An options class, and the FX swap lines** — split 2026-09-05, one commit each; 17b-i
     (the option class on the one book) is in §9. What is left, in order:
-17b-ii. **THE PLAYER IS A PARTY, AND ITS DERIVATIVES ARE ON THE ONE BOOK.** `derivative.md`
-    D1.a: stage 12 runs six position kinds — IRS, CDS, TRS, COMMODITY, OPTION, XCS — priced by
-    formula, with no `b` side, their gain added to the player's cash from nobody. The player
-    becomes a `PartyRef` with an account, each kind that has a class strikes through
-    `strikeDerivatives` against a desk (the swap at the cleared par, protection at the cleared
-    spread, the future at the print, the option at the class's premium), and the legacy layer
-    is deleted with the two kinds that have no class yet (TRS, XCS) until 17b-iv gives XCS one.
 17b-iii. **THE OPTIONS MARKET.** Index puts per region: the equity holders' need for downside
     cover sized by the hedging arithmetic every other market uses (`hedging.ts`), written by the
     desks and the volatility sellers at a CLEARED implied volatility (the stat), struck through
@@ -1326,7 +1319,7 @@ step that owns its node; where it does not yet, the step below is the owner.
     C1–C4, E1/A5.a, B4, A4.) `executeTrade` has **zero callers**, and if wired it would break C2.a
     three ways: `updatedCash = cash − spreadCostUSD` so the notional never leaves the account while
     the desk IS charged it (money created at the ticket), the fill price arrives from the caller,
-    and `PartyRef` has ten kinds and no PLAYER. The read surface is a full god-view — correct for
+    and `PartyRef` has no PLAYER. The read surface is a full god-view — correct for
     an inspector, disqualifying for a player — and that is **a decision this step must take first,
     not a bug**. Also here: `newsGenerator.ts` still asserts a stated 40% recovery on every default
     while the estate computes a real one, and two display-only numbers are shown that no code
@@ -1629,6 +1622,25 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17b-ii — THE LEGACY DERIVATIVE LAYER IS DELETED.** `derivative.md` D1.a: stage 12 marked six
+position kinds — IRS, CDS, TRS, XCS, COMMODITY_FUTURE, OPTION — by formula, against nobody, and
+paid their gain into the player's cash from nobody; `executeTrade`, the only thing that could
+open one, has no caller (37-SURFACE), so the layer was dead and wrong at once. The step as
+inserted said "the player becomes a party and its derivatives move onto the one book"; read
+against 37-SURFACE that is the ACTOR step — an actor is a party with an account whose orders
+are ordinary participants in the books that clear — and building a party for a layer nobody can
+open would have been building on the vestige. So: deleted. `AssetType` is the five cash kinds
+(`EQUITY`, `CORP_BOND`, `LEVERAGED_LOAN`, `GOV_BOND`, `FX_SPOT`); `Position` loses the six
+directions and the option fields (its bond terms stay); stage 12's six cases, `pricing.ts`'s
+`calculateParSwapRate`, `priceInterestRateSwap`, `priceCreditDefaultSwap` and
+`priceCrossCurrencyBasisSwap`, the carry calculator's six branches, the dealer book and margin
+tables' six rows, the portfolio's gamma and vega aggregates, the harness's scripted swap and
+protection positions and the news feed's swap, protection and futures trade shortcuts go with
+them. Every derivative in the model is a contract on the one book with a `b` side. Atlas
+derivative D1.a ✅, layer F1 ✅, swaps E2 ✅ (the only par rate is the cleared one), fx C1.a
+re-cited absent, cds prose. No new test: a deletion of what nothing exercised. Gates green; no
+run.
 
 **17b-i — THE OPTION CLASS ON THE ONE BOOK.** `DerivativeClassId` gains `OPTION`
 (`classes/option.ts:OPTION_PROFILE`, roles HOLDER and WRITER, the CEM equity add-on): the

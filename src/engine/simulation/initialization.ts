@@ -1508,8 +1508,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     marginCallWarning: null,
     totalLeverage: 0,
     netDeltaLocal: 0,
-    netGammaLocal: 0,
-    netVegaLocal: 0,
     netDV01Local: 0,
   };
 

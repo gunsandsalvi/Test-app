@@ -103,7 +103,7 @@ checked by `scripts/check-atlas.sh`.
 | B3.a it widens when funding in one currency is scarce | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:entityHedgeToleranceBps` | ✅ |
 | B4 VERIFY a region with a foreign-currency funding deficit pays the basis | — | ❌ |
 | **C1 XCS: two legs, two currencies, notionals exchanged at start and end** | — | ❌ |
-| C1.a it is an IRS with an FX leg, inheriting both curves | `src/engine/pricing.ts:priceCrossCurrencyBasisSwap` | ❌ |
+| C1.a it is an IRS with an FX leg, inheriting both curves | — | ❌ |
 | C2 its economic use is funding, for years, without an open FX position | `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ⚠️ |
 | C3 the notional exchange at the end is at the original rate | — | ❌ |
 | C4 its price includes the basis in B3 | `src/engine/carryCalculator.ts:calculateExpectedCarry` | ⚠️ |
@@ -151,9 +151,9 @@ things are wrong with it and they compound.
    `reg.crossCurrencyBasisBps`. `fx.basisSpreadBps` is a different number on a different object,
    and **no code reconciles them.** They are read by different consumers:
    `crossCurrencyBasisBps` by `fx-clearing.ts:314` (the spot desks' quote width) and by the
-   forward book's own opening level; `basisSpreadBps` by `12-portfolio-and-positions.ts:475-489`
-   (the player's XCS mark and its carry), `carryCalculator.ts:198`, and `ui/objects/fx.tsx:28,39`,
-   which labels it *"basis — cross-currency"* to the player.
+   forward book's own opening level; `basisSpreadBps` by `ui/objects/fx.tsx:28,39`, which labels
+   it *"basis — cross-currency"* to the player (its two other readers — the player's XCS mark
+   and its carry — went with the legacy layer, §9.17b-ii).
 
 **Consequence.** The number the player sees under the name "cross-currency basis", trades against,
 and books P&L on is not the price this world clears — and it drifts away from it monotonically.
@@ -202,10 +202,10 @@ the basis should be read out of it against parity — which is B2.a's direction 
 
 Section C is a third of this tree and has no code. `DerivativeClassId` is
 `'IRS' | 'CDS' | 'COMMODITY_FUTURE' | 'FX_FORWARD'` — there is no XCS class, no two-currency
-contract, and no notional exchange at start or end anywhere in `derivativesBook`. The only thing
-in `src` bearing the name is `pricing.ts:priceCrossCurrencyBasisSwap`, a formula NPV
-(`notional × Δbasis × 0.9 × tenor`) marking the **player's** legacy `XCS` positions
-(`12-portfolio-and-positions.ts:466`) off the wrong basis (above), against no counterparty.
+contract, and no notional exchange at start or end anywhere in `derivativesBook`. Nothing in
+`src` bears the name any more: the formula NPV that marked the **player's** legacy `XCS`
+positions off the wrong basis, against no counterparty, went with that layer (§9.17b-ii); the
+class is 17b-iv's.
 
 **Consequence.** The instrument this tree exists to describe — *"how a bank funds a foreign
 asset"*, the joint between `fx-spot.md`, `banks-funding-and-liquidity.md` and `cross-border.md` —

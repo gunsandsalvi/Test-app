@@ -89,19 +89,7 @@ export function generateWeeklyNews(
       impactBadge = isHike ? `[RATES +${rc.deltaBps}bps]` : `[RATES ${rc.deltaBps}bps]`;
     }
 
-    const tradeShortcut: TradeableInstrument = {
-      assetType: 'IRS',
-      id: `${rc.region}_IRS_5Y`,
-      symbol: `${rc.region} 5Y IRS`,
-      name: `${reg.name} 5Y Fixed-for-Floating Swap`,
-      region: rc.region,
-      price: reg.zeroRates.tenor5Y,
-      quoteUnit: '% Par',
-      details: {
-        tenorYears: 5,
-        couponRate: reg.zeroRates.tenor5Y,
-      },
-    };
+    // §3.17b-ii: the swap shortcut this story carried went with the legacy position layer.
 
     news.push({
       id: `cb_${week}_${rc.region}`,
@@ -112,7 +100,6 @@ export function generateWeeklyNews(
       impactBadge,
       impactRegion: rc.region,
       urgent: true,
-      tradeShortcut,
     });
 
     // §7.235: an `if (isHike) {} else if (isCut) {}` with two empty bodies stood here. It did
@@ -149,21 +136,6 @@ export function generateWeeklyNews(
       ? `Agency cites balance sheet deleveraging, robust cash flow expansion, and improving debt service coverage ratios.`
       : `Downgrade triggered by rising leverage metrics, higher debt refinancing costs, and weakening operational EBITDA margins.`;
 
-    const comp = companies.find((c) => c.ticker === rc.ticker);
-    const tradeShortcut: TradeableInstrument | undefined = comp ? {
-      assetType: 'CDS',
-      id: `${comp.id}_CDS`,
-      symbol: comp.ticker,
-      name: `${comp.name} 5Y CDS`,
-      region: comp.region,
-      price: comp.cdsSpreadBps,
-      quoteUnit: 'bps',
-      details: {
-        tenorYears: 5,
-        cdsSpreadBps: comp.cdsSpreadBps,
-        rating: rc.to,
-      },
-    } : undefined;
 
     news.push({
       id: `rating_${week}_${rc.ticker}`,
@@ -174,7 +146,6 @@ export function generateWeeklyNews(
       impactBadge: isUpgrade ? '[CREDIT UPGRADE]' : '[CREDIT DOWNGRADE]',
       affectedTicker: rc.ticker,
       urgent: !isUpgrade,
-      tradeShortcut,
     });
   });
 
@@ -185,17 +156,6 @@ export function generateWeeklyNews(
       // The shortcut quotes the REAL affected commodity at its REAL current spot — the old
       // version hardcoded two prices (2.85/78.50) that were fabrications the moment week 1
       // moved the market (rule 2).
-      const affected = commodities.find((c) => c.id === w.affectedCommodityId);
-      const tradeShortcut: TradeableInstrument | undefined = affected ? {
-        assetType: 'COMMODITY_FUTURE',
-        id: affected.id,
-        symbol: affected.symbol,
-        name: affected.name,
-        region: r.id,
-        price: affected.spotPrice,
-        quoteUnit: affected.unit,
-        details: {},
-      } : undefined;
 
       news.push({
         id: `weather_${week}_${r.id}`,
@@ -206,7 +166,6 @@ export function generateWeeklyNews(
         impactBadge: '[WEATHER ALERT]',
         impactRegion: r.id,
         urgent: w.severity === 'Severe',
-        tradeShortcut,
       });
     }
   });

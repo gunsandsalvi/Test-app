@@ -2229,48 +2229,9 @@ function runHarness() {
 
   for (let w = 1; w <= WEEKS; w++) {
     const violBefore = violations.length;
-    // Inject scripted trades at week 5 to test NAV with IRS, CDS, and leveraged positions
+    // Inject a scripted leveraged equity position at week 5 to test the NAV. (§3.17b-ii: the
+    // scripted swap and protection positions went with the legacy derivative layer.)
     if (w === 5) {
-      const testIrs: Position = {
-        id: 'test-irs-1',
-        symbol: 'USD_5Y_IRS',
-        name: 'USD 5Y IRS',
-        assetType: 'IRS',
-        direction: 'PAY_FIXED',
-        region: 'USA',
-        dealerId: 'USA_BANK',
-        quantity: 1,
-        entryPrice: 0.04,
-        currentPrice: 0.04,
-        notional: 10_000_000,
-        unrealizedPnL: 0,
-        realizedPnL: 0,
-        marginRequirement: 100_000,
-        maintenanceMargin: 80_000,
-        weeklyFinancingCost: 0,
-        openedWeek: 5,
-        isClosed: false,
-      };
-      const testCds: Position = {
-        id: 'test-cds-1',
-        symbol: 'US_IG_CDS',
-        name: 'US IG CDS',
-        assetType: 'CDS',
-        direction: 'BUY_PROTECTION',
-        region: 'USA',
-        dealerId: 'USA_BANK',
-        quantity: 1,
-        entryPrice: 100,
-        currentPrice: 100,
-        notional: 5_000_000,
-        unrealizedPnL: 0,
-        realizedPnL: 0,
-        marginRequirement: 50_000,
-        maintenanceMargin: 40_000,
-        weeklyFinancingCost: 0,
-        openedWeek: 5,
-        isClosed: false,
-      };
       const testLeveraged: Position = {
         id: 'test-lev-1',
         symbol: state.companies[0].ticker,
@@ -2295,7 +2256,7 @@ function runHarness() {
         ...state,
         portfolio: {
           ...state.portfolio,
-          positions: [...state.portfolio.positions, testIrs, testCds, testLeveraged],
+          positions: [...state.portfolio.positions, testLeveraged],
         },
       };
     }

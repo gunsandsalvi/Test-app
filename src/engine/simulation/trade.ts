@@ -11,15 +11,12 @@ import { bookPnL } from '../ledger/bank-book';
 import { adjustBankReserves } from '../ledger/accounts';
 import { ensureV2 } from '../../engine2/world';
 import { DERIVATIVE_CLASSES } from '../../domain/derivatives/registry';
-import { DerivativeClassId } from '../../domain/derivatives/contract';
 import { equityInstrumentId } from '../../domain/instrument-keys';
 import { asInstrumentId, type InstrumentId } from '../../domain/ids';
 
-/** The player's legacy position types onto the registry's classes; anything the registry does
- *  not know is charged at the FX forward's add-on, which is what every derivative paid before. */
-const PLAYER_ASSET_TYPE_CLASS: Record<string, DerivativeClassId> = { IRS: 'IRS', CDS: 'CDS', COMMODITY_FUTURE: 'COMMODITY_FUTURE', FX: 'FX_FORWARD' };
-const playerPfeAddOnRate = (assetType: string): number =>
-  DERIVATIVE_CLASSES[PLAYER_ASSET_TYPE_CLASS[assetType] ?? 'FX_FORWARD'].pfeAddOnRate;
+/** §3.17b-ii: the one position kind that consumes a desk through an add-on is FX spot, at the FX
+ *  forward's — the derivative kinds the legacy layer carried are contracts on the one book now. */
+const FX_SPOT_PFE_ADD_ON_RATE = DERIVATIVE_CLASSES.FX_FORWARD.pfeAddOnRate;
 
 export function executeTrade(
   state: GameState,
@@ -72,7 +69,7 @@ export function executeTrade(
         ? asInstrumentId(posData.trancheId)
         : equityInstrumentId(posData.symbol);
       const balanceSheetUseLocal = book === 'derivatives'
-        ? posData.notional * playerPfeAddOnRate(posData.assetType)
+        ? posData.notional * FX_SPOT_PFE_ADD_ON_RATE
         : posData.notional;
       // Buying takes paper OFF the desk; selling puts it on. A short sale is the desk taking the
       // other side, which leaves it long, exactly as a real client short does. A derivative

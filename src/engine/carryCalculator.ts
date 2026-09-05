@@ -17,24 +17,19 @@ export interface CarryEstimate {
  */
 export function calculateExpectedCarry(
   assetType: AssetType,
-  direction: 'LONG' | 'SHORT' | 'BUY' | 'SELL' | 'PAY_FIXED' | 'RECEIVE_FIXED' | 'BUY_PROTECTION' | 'SELL_PROTECTION',
+  direction: 'LONG' | 'SHORT' | 'BUY' | 'SELL',
   notional: number,
   params: {
     policyRate: number; // e.g. 0.0475
     couponRate?: number; // e.g. 0.05
     dividendYield?: number; // e.g. 0.022
     convenienceYield?: number; // e.g. 0.035
-    cdsSpreadBps?: number; // e.g. 120 bps
-    fixedRate?: number; // e.g. 0.045
-    floatingRate?: number; // e.g. 0.0475
-    thetaPerContractLocal?: number; // Black Scholes theta per week
-    quantity?: number;
-    basisSpreadBps?: number; // e.g. -20 bps
+    cdsSpreadBps?: number; // e.g. 120 bps — a corporate bond's protection cost, netted from its carry
     baseRate?: number;
     quoteRate?: number;
   }
 ): CarryEstimate {
-  const isBuyOrLong = direction === 'LONG' || direction === 'BUY' || direction === 'PAY_FIXED' || direction === 'BUY_PROTECTION';
+  const isBuyOrLong = direction === 'LONG' || direction === 'BUY';
   const rf = params.policyRate || 0.045;
   let weeklyCarryLocal = 0;
   let incomeOrYieldLocal = 0;
@@ -107,101 +102,6 @@ export function calculateExpectedCarry(
         financingCostLocal = (notional * (coupon + 0.005)) / 52;
         weeklyCarryLocal = -financingCostLocal;
         description = `Short Sovereign Coupon Drag`;
-      }
-      break;
-    }
-
-    case 'IRS': {
-      const fix = params.fixedRate ?? rf;
-      const flt = params.floatingRate ?? rf;
-      if (direction === 'PAY_FIXED' || direction === 'BUY') {
-        // Pay Fixed, Receive Floating
-        weeklyCarryLocal = (notional * (flt - fix)) / 52;
-        incomeOrYieldLocal = Math.max(0, weeklyCarryLocal);
-        financingCostLocal = Math.max(0, -weeklyCarryLocal);
-        description = `Rec Floating (${(flt * 100).toFixed(2)}%) - Pay Fixed (${(fix * 100).toFixed(2)}%)`;
-      } else {
-        // Receive Fixed, Pay Floating
-        weeklyCarryLocal = (notional * (fix - flt)) / 52;
-        incomeOrYieldLocal = Math.max(0, weeklyCarryLocal);
-        financingCostLocal = Math.max(0, -weeklyCarryLocal);
-        description = `Rec Fixed (${(fix * 100).toFixed(2)}%) - Pay Floating (${(flt * 100).toFixed(2)}%)`;
-      }
-      break;
-    }
-
-    case 'CDS': {
-      const cdsSpread = (params.cdsSpreadBps ?? 100) / 10000;
-      if (direction === 'BUY_PROTECTION' || direction === 'BUY') {
-        // Buyer pays premium
-        weeklyCarryLocal = -(notional * cdsSpread) / 52;
-        financingCostLocal = (notional * cdsSpread) / 52;
-        description = `Pays ${(params.cdsSpreadBps ?? 100)} bps/yr Protection Premium`;
-      } else {
-        // Seller earns premium
-        weeklyCarryLocal = (notional * cdsSpread) / 52;
-        incomeOrYieldLocal = (notional * cdsSpread) / 52;
-        description = `Collects ${(params.cdsSpreadBps ?? 100)} bps/yr Protection Premium`;
-      }
-      break;
-    }
-
-    case 'COMMODITY_FUTURE': {
-      const cy = params.convenienceYield ?? 0.03;
-      // Net roll yield = Convenience Yield - Risk-Free USD Cost
-      const netRollYield = cy - rf;
-      if (isBuyOrLong) {
-        weeklyCarryLocal = (notional * netRollYield) / 52;
-        incomeOrYieldLocal = (notional * Math.max(0, cy)) / 52;
-        financingCostLocal = (notional * rf) / 52;
-        description = `+${(cy * 100).toFixed(1)}% Convenience Yield vs ${(rf * 100).toFixed(1)}% USD Funding`;
-      } else {
-        weeklyCarryLocal = -(notional * netRollYield) / 52;
-        financingCostLocal = (notional * Math.max(0, cy)) / 52;
-        description = `Short Commodity Roll Spread`;
-      }
-      break;
-    }
-
-    case 'OPTION': {
-      // Theta decay per week
-      const weeklyTheta = (params.thetaPerContractLocal ?? 0) * (params.quantity || notional / 100);
-      if (isBuyOrLong) {
-        weeklyCarryLocal = -Math.abs(weeklyTheta || notional * 0.02);
-        financingCostLocal = Math.abs(weeklyCarryLocal);
-        description = `Option Theta Time Decay (-1W Roll)`;
-      } else {
-        weeklyCarryLocal = Math.abs(weeklyTheta || notional * 0.02);
-        incomeOrYieldLocal = weeklyCarryLocal;
-        description = `Short Premium Theta Time Decay Harvest (+1W)`;
-      }
-      break;
-    }
-
-    case 'TRS': {
-      const divYield = params.dividendYield ?? 0.02;
-      const financingRate = rf + 0.0075;
-      if (isBuyOrLong) {
-        weeklyCarryLocal = (notional * (divYield - financingRate)) / 52;
-        incomeOrYieldLocal = (notional * divYield) / 52;
-        financingCostLocal = (notional * financingRate) / 52;
-        description = `TRS Dividend Pass-through - ${(financingRate * 100).toFixed(2)}% Financing Leg`;
-      } else {
-        weeklyCarryLocal = -(notional * (divYield + financingRate)) / 52;
-        financingCostLocal = Math.abs(weeklyCarryLocal);
-        description = `Short TRS Financing & Dividend Drag`;
-      }
-      break;
-    }
-
-    case 'XCS': {
-      const basis = (params.basisSpreadBps ?? -20) / 10000;
-      if (isBuyOrLong) {
-        weeklyCarryLocal = (notional * basis) / 52;
-        description = `Cross Currency Basis Spread (${(params.basisSpreadBps ?? -20)} bps)`;
-      } else {
-        weeklyCarryLocal = -(notional * basis) / 52;
-        description = `Cross Currency Basis Spread (${-(params.basisSpreadBps ?? -20)} bps)`;
       }
       break;
     }

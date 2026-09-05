@@ -144,9 +144,8 @@ firm accounts → PD → reservation spread → cleared spread
 and the node requires the last arrow reversed: **the cleared spread is the observable, and PD and
 recovery are what you read out of it.** Nothing anywhere inverts the spread. `cdsSpreadBps` is
 written at `:196` and read only as a level, a basis and a mark; no hazard rate, no survival curve,
-no implied PD exists outside `engine/pricing.ts:priceCreditDefaultSwap` — which is the *player's*
-legacy pricer, computes `hazardRate = currentOasDecimal / (1 - recoveryRate)` from the **bond's**
-OAS rather than from any cleared CDS spread, and defaults `recoveryRate = 0.40`.
+no implied PD exists anywhere (the player's legacy pricer, which inverted the **bond's** OAS at a
+default `recoveryRate = 0.40`, went with that layer — §9.17b-ii).
 
 **Consequence.** The CDS market cannot disagree with the accounting model. Two names with the same
 PD and rating clear at the same spread whatever the protection demand, and the whole content of
@@ -214,8 +213,7 @@ issuer."* Recorded here as the tree's second witness, and with the note that the
 satisfied — a reviewer scanning for "is there a recovery constant?" should find `0.40` and read
 past it.
 
-Two smaller things sit in the same place. `pricing.ts:priceCreditDefaultSwap` still carries
-`recoveryRate: number = 0.40` as a **default parameter** and `bootstrap/carriers.ts:362` seeds
+One smaller thing sits in the same place. `bootstrap/carriers.ts:362` seeds
 `recoveryRate: 0.40, baselineRecoveryRate: 0.40` per company — a per-firm field that the CDS
 payoff does not read. And the audit's own P2 hard-codes the prior: `prices.ts:59` reports when
 realised recovery is more than 0.2 away from `0.4` with the message *"every spread is priced at

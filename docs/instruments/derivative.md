@@ -75,7 +75,7 @@ checked by `scripts/check-atlas.sh`. The three FORBIDs of **WHAT A DERIVATIVE IS
 | Node | Code | |
 |---|---|---|
 | D1 two named counterparties, asset to one and liability to the other | `src/domain/derivatives/contract.ts:DerivativeContract` | ✅ |
-| **D1.a FORBID no derivative with one side** | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` | ❌ |
+| **D1.a FORBID no derivative with one side** | `src/engine/simulation/stages/12-portfolio-and-positions.ts:runPortfolioAndPositionsStage` · `src/engine/ledger/contract-ledger.ts:strikeDerivatives` | ✅ |
 | **D1.b VERIFY Σ mark-to-market = 0, exactly** | — | ❌ |
 | D2 a notional, in a unit, generally not exchanged | `src/domain/derivatives/contract.ts:notional` | ✅ |
 | D2.a the notional is not the exposure | `src/domain/derivatives/registry.ts:standingPfeChargeLocal` | ⚠️ |
@@ -105,7 +105,18 @@ checked by `scripts/check-atlas.sh`. The three FORBIDs of **WHAT A DERIVATIVE IS
 
 ## 3. THE DIFF
 
-### ❌ D1.a — THE PLAYER'S DERIVATIVES HAVE NO COUNTERPARTY, AND THEIR P&L IS INVENTED MONEY
+### ✅ D1.a — CLOSED: THE LEGACY DERIVATIVE LAYER IS DELETED
+
+*2026-09-05 (§9.17b-ii). The six position kinds below are gone from the player's layer —
+`AssetType` is the five cash kinds, stage 12 marks equities, bonds, loans and FX spot and
+nothing else, `pricing.ts` no longer prices a swap, protection or a basis swap by formula, the
+dealer tables and the carry calculator carry no derivative kind, and the harness's scripted swap
+and protection positions and the news feed's swap, protection and futures trade shortcuts went
+with them. Every derivative in the model is a contract on the one book with a `b` side, struck
+through `strikeDerivatives`; nothing marks against nobody. The player's own book is
+37-SURFACE's — an actor is a party with an account whose orders are ordinary participants in
+the books that clear — and its derivatives, when it has them, will be contracts like anyone's.
+The paragraphs below are the state before it.*
 
 *2026-09-05 (§9.17b-i). The one book can carry an option now: `classes/option.ts:OPTION_PROFILE`
 — premium a periodic leg that fires once, in the strike week; the mark the option's value at the
@@ -129,10 +140,7 @@ while these positions exist, because their other half is not a party. It is also
 the model where a derivative is a way to get an exposure for free (N2): no margin leaves an
 account, no counterparty carries the mirror.
 
-**Already §3 step 17b** — but 17b understates it. Its words are *"stage 12's player options stay
-on the legacy layer instead of the one book, which is the last thing outside it"*: options are
-**one of six**. IRS, CDS, TRS, COMMODITY and XCS are all still on the legacy layer, and three of
-them have a live class in the registry that could carry them today.
+(§3 step 17b named the options only; the deletion took all six.)
 
 ### ❌ D1.b — NOTHING CHECKS THE ZERO-SUM, AND TWO OF FOUR CLASSES HAVE NO MARK TO SUM
 
@@ -211,10 +219,10 @@ Recorded as diverging rather than absent; it closes with step 17's risk-based ma
 
 `stage08-back.ts:1872`: `newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row] :
 newOasBps` — a reference with no protection book this week carries the **bond's OAS as its CDS
-spread**, and the basis for that name is zero by construction. `pricing.ts:priceCreditDefaultSwap`
-does it unconditionally (`const currentCdsSpreadBps = currentOasBps`) for every player CDS, with a
-`recoveryRate = 0.40` default parameter. Both are **Already §3 step 26**, which names
-`stage08-back.ts:1861` and `carryCalculator.ts` by line.
+spread**, and the basis for that name is zero by construction. (`pricing.ts:priceCreditDefaultSwap`
+did it unconditionally for every player CDS, with a `recoveryRate = 0.40` default parameter, and
+went with the legacy layer, §9.17b-ii.) **Already §3 step 26**, which names
+`stage08-back.ts:1861` by line.
 
 Separately, D3.a's underlying: the commodity futures book cash-settles to
 `evolution.ts:evolveCommodity`'s spot, which is `spotPrice × exp(drift)` with a 0.5 floor — a

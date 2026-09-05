@@ -366,8 +366,6 @@ export interface WeeklyStepContext {
   totalRequiredMarginLocal: number;
   maintenanceMarginLocal: number;
   netDeltaLocal: number;
-  netGammaLocal: number;
-  netVegaLocal: number;
   netDV01Local: number;
   attributionCarry: number;
   attributionMacroRates: number;
@@ -497,8 +495,6 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     totalRequiredMarginLocal: 0,
     maintenanceMarginLocal: 0,
     netDeltaLocal: 0,
-    netGammaLocal: 0,
-    netVegaLocal: 0,
     netDV01Local: 0,
     attributionCarry: 0,
     attributionMacroRates: 0,

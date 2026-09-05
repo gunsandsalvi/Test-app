@@ -109,7 +109,7 @@ checked by `scripts/check-atlas.sh`.
 | D3.a a winning hedge is receiving cash while the hedged item shows a loss | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ⚠️ |
 | D4 VERIFY Σ marks = 0 and Σ net payments = 0, every period | `src/engine/audit/ownership.ts:o9` | ⚠️ |
 | E1 FORBID no notional exchange | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ✅ |
-| **E2 FORBID no fixed rate solved from the discount curve alone** | `src/engine/pricing.ts:calculateParSwapRate` | ⚠️ |
+| **E2 FORBID no fixed rate solved from the discount curve alone** | `src/engine/simulation/stages/derivative-markets/irs.ts:runSwapMarket` | ✅ |
 | E3 FORBID no floating leg on a rate this world does not produce | `src/domain/derivatives/profile.ts:DerivativeMarketView` | ⚠️ |
 
 ---
@@ -153,7 +153,11 @@ disagree about.
 Nothing to re-derive here — step 25 owns it. The node is `⚠️` and not `❌` because the swap curve
 is a read; it is the sovereign curve underneath it that is fitted.
 
-### ⚠️ E2 — THE PAR RATE IS SOLVED FROM THE DISCOUNT CURVE, FOR THE PLAYER
+### ✅ E2 — CLOSED: THE ONLY PAR RATE IS THE CLEARED ONE
+
+*2026-09-05 (§9.17b-ii). `pricing.ts:calculateParSwapRate` and `priceInterestRateSwap` are
+deleted with the player's legacy derivative layer; the one book's `runSwapMarket` clears the
+only par rate the model has. The paragraph below is the state before it.*
 
 The FORBID is honoured in the one book: `runSwapMarket` clears a par rate from real pay-fixed
 demand against real receive-fixed schedules and writes it to `reg.swapParRateByTenor`.

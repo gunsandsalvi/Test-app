@@ -123,7 +123,7 @@ checked by `scripts/check-atlas.sh`.
 | E2 closed out at a stated value; a claim on the estate | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` · `src/domain/estate.ts:ClaimHolder` | ✅ |
 | E3 the loss is the mark less collateral, on named survivors | `src/domain/clearing-house.ts:runWaterfall` | ✅ |
 | E4 VERIFY the loss chain is traceable party by party | `src/domain/clearing-house.ts:WaterfallRound` | ⚠️ |
-| F1 FORBID no position without a counterparty | `src/engine/audit/ownership.ts:o5` | ⚠️ |
+| F1 FORBID no position without a counterparty | `src/engine/audit/ownership.ts:o5` | ✅ |
 | F2 FORBID no exposure without margin or a stated reason | `src/domain/derivatives/profile.ts:closeOutMoveOf` | ⚠️ |
 | **F3 FORBID no netting across counterparties** | `src/domain/derivatives/registry.ts:standingPfeChargeLocal` | ✅ |
 | F4 FORBID nothing settles against a price this world does not clear | `src/engine/macro/evolution.ts:evolveCommodity` | ⚠️ |
@@ -372,5 +372,5 @@ does with that claim is `hedge-funds.md`'s B5 (gross, net and equity as three re
 ### Also marked, briefly
 
 - **D2 ✅** — variation margin flows for every class (§9.17-iii gave IRS and CDS their marks) — A4/D2.b.
-- **F1 ⚠️** — `O5` checks both parties are alive for the one book (§9.13-BOOK d4a: it read a firm party by a `ticker` it no longer carried, so every firm party counted dead — it reads the entity id now); the player's legacy positions have no `b` at all — `../instruments/derivative.md` D1.a.
+- **F1 ✅** (2026-09-05, §9.17b-ii) — `O5` checks both parties are alive for the one book, and the one book is the only derivative layer: the player's legacy positions, which had no `b` at all, are deleted — `../instruments/derivative.md` D1.a.
 - **F4 ⚠️** — the commodity future cash-settles to `evolveCommodity`'s formula spot — 37-COMMODITY.

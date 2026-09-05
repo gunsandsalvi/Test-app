@@ -1,4 +1,4 @@
-import { NelsonSiegelParams, calculateDiscountFactor, calculateNelsonSiegelZeroRate } from './nelsonSiegel';
+import { NelsonSiegelParams, calculateNelsonSiegelZeroRate } from './nelsonSiegel';
 import { CreditRating, Sector } from '../types';
 import { INFLATION_TARGET } from './bootstrap/yield-curves';
 import { EQUITY_RISK_PREMIUM } from './equity-valuation';
@@ -108,120 +108,6 @@ export function priceCorporateBond(
 }
 
 /**
- * Par Swap Rate for an Interest Rate Swap (IRS)
- * S_par = (1 - P(0, T)) / sum(tau_i * P(0, t_i))
- */
-export function calculateParSwapRate(
-  tenorYears: number,
-  sovCurveParams: NelsonSiegelParams,
-  frequency: number = 1 // annual payments tau = 1
-): { parRate: number; annuity: number; dv01PerMillion: number } {
-  let annuity = 0;
-  const tau = 1 / frequency;
-  const numPeriods = Math.round(tenorYears * frequency);
-
-  for (let i = 1; i <= numPeriods; i++) {
-    const t = i * tau;
-    const df = calculateDiscountFactor(t, sovCurveParams);
-    annuity += tau * df;
-  }
-
-  const p0T = calculateDiscountFactor(tenorYears, sovCurveParams);
-  const parRate = annuity > 0 ? (1 - p0T) / annuity : calculateNelsonSiegelZeroRate(tenorYears, sovCurveParams);
-  // DV01 for $1,000,000 notional = Notional * Annuity * 0.0001
-  const dv01PerMillion = 1000000 * annuity * 0.0001;
-
-  return { parRate, annuity, dv01PerMillion };
-}
-
-/**
- * Closed-form Mark-to-Market NPV of an Interest Rate Swap (Fixed vs. Floating)
- * Pay Fixed NPV = Notional * sum( (F_i - S_fixed) * tau_i * P(0, t_i) )
- *               = Notional * (S_par - S_fixed) * Annuity
- */
-export function priceInterestRateSwap(
-  notional: number,
-  fixedRate: number,
-  tenorYears: number,
-  direction: 'PAY_FIXED' | 'RECEIVE_FIXED',
-  sovCurveParams: NelsonSiegelParams
-): { npv: number; currentParRate: number; dv01: number; annuity: number } {
-  const { parRate, annuity, dv01PerMillion } = calculateParSwapRate(tenorYears, sovCurveParams);
-  
-  // Spread difference (Current Par Rate - Fixed Contracted Rate)
-  const rateDiff = parRate - fixedRate;
-  const multiplier = direction === 'PAY_FIXED' ? 1 : -1;
-  const npv = notional * rateDiff * annuity * multiplier;
-  const dv01 = (notional / 1000000) * dv01PerMillion * (direction === 'PAY_FIXED' ? 1 : -1);
-
-  return {
-    npv,
-    currentParRate: parRate,
-    dv01,
-    annuity,
-  };
-}
-
-/**
- * Closed-form Single-Name CDS Pricing
- * Hazard rate lambda = OAS / (1 - R), R = 0.40
- * RPV01 = sum(tau_i * P(0, t_i) * exp(-lambda * t_i))
- * NPV_CDS = Notional * (S_current - S_contracted) * RPV01
- */
-export function priceCreditDefaultSwap(
-  notional: number,
-  contractedSpreadBps: number,
-  currentOasBps: number,
-  tenorYears: number,
-  direction: 'BUY_PROTECTION' | 'SELL_PROTECTION',
-  sovCurveParams: NelsonSiegelParams,
-  recoveryRate: number = 0.40,
-  isDefaulted: boolean = false
-): { npv: number; rpv01: number; hazardRate: number; currentCdsSpreadBps: number; defaultPayoff: number } {
-  const currentOasDecimal = currentOasBps / 10000;
-  const hazardRate = isDefaulted ? 10.0 : currentOasDecimal / (1 - recoveryRate);
-  
-  if (isDefaulted) {
-    // Immediate default settlement: Buy Protection receives (1 - R) * Notional
-    const defaultPayoff = direction === 'BUY_PROTECTION' 
-      ? notional * (1 - recoveryRate) 
-      : -notional * (1 - recoveryRate);
-    return {
-      npv: defaultPayoff,
-      rpv01: 0,
-      hazardRate,
-      currentCdsSpreadBps: 10000,
-      defaultPayoff,
-    };
-  }
-
-  let rpv01 = 0;
-  const numPeriods = Math.round(tenorYears * 4); // Quarterly CDS premium payments
-  const tau = 0.25;
-
-  for (let i = 1; i <= numPeriods; i++) {
-    const t = i * tau;
-    const df = calculateDiscountFactor(t, sovCurveParams);
-    const survivalProb = Math.exp(-hazardRate * t);
-    rpv01 += tau * df * survivalProb;
-  }
-
-  // Model CDS spread approx equal to OAS spread with standard market liquidity adjustment
-  const currentCdsSpreadBps = currentOasBps;
-  const spreadDeltaDecimal = (currentCdsSpreadBps - contractedSpreadBps) / 10000;
-  const multiplier = direction === 'BUY_PROTECTION' ? 1 : -1;
-  const npv = notional * spreadDeltaDecimal * rpv01 * multiplier;
-
-  return {
-    npv,
-    rpv01,
-    hazardRate,
-    currentCdsSpreadBps,
-    defaultPayoff: 0,
-  };
-}
-
-/**
  * Commodity Futures Cost-of-Carry Pricing
  * F = S * exp((r - q) * T)
  */
@@ -245,25 +131,3 @@ export function priceCommodityFutures(
  * 100`: a price linearised out of a cleared discount margin, which is `bond.md` N7.b's forbidden
  * direction. 07d clears the price itself now and every reader takes it from the price store.
  */
-
-/**
- * Cross-Currency Basis Swap (XCS) Pricing & MTM
- */
-export function priceCrossCurrencyBasisSwap(
-  notionalBase: number, // e.g. EUR 10M
-  fxSpot: number, // USD per EUR
-  contractedBasisBps: number,
-  currentBasisBps: number,
-  tenorYears: number,
-  direction: 'LONG' | 'SHORT' // Pay EUR / Receive USD or vice versa
-): { npvLocal: number; dv01Local: number } {
-  const basisDiffBps = currentBasisBps - contractedBasisBps;
-  // Approximate duration = tenorYears * 0.9
-  const duration = tenorYears * 0.9;
-  const notional = notionalBase * fxSpot;
-  const multiplier = direction === 'LONG' ? 1 : -1;
-  const npvLocal = notional * (basisDiffBps / 10000) * duration * multiplier;
-  const dv01Local = notional * duration * 0.0001 * multiplier;
-
-  return { npvLocal, dv01Local };
-}

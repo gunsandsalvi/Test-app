@@ -43,7 +43,5 @@ export interface Portfolio {
   
   // Aggregate Portfolio Greeks
   netDeltaLocal: number;
-  netGammaLocal: number;
-  netVegaLocal: number;
   netDV01Local: number;
 }

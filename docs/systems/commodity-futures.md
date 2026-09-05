@@ -95,7 +95,7 @@ checked by `scripts/check-atlas.sh`.
 | B4 an arbitrageur who can actually store and finance | `src/domain/derivatives/classes/commodity-future.ts:costOfCarryPrice` | ⚠️ |
 | B5 a dealer | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ⚠️ |
 | C1 the futures/spot relation is a consequence of storage, financing, scarcity | `src/domain/derivatives/classes/commodity-future.ts:PHYSICAL_STORAGE_COST_ANNUAL` | ✅ |
-| C1.a contango bounded above by cost of carry, because B4 arbitrages it | `src/domain/instrument-keys.ts:commodityFutureInstrumentId` | ⚠️ |
+| C1.a contango bounded above by cost of carry, because B4 arbitrages it | `src/domain/instrument-keys.ts:commodityFutureInstrumentId` · `src/engine/pricing.ts:priceCommodityFutures` | ⚠️ |
 | C1.b backwardation unbounded below — the asymmetry is real | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | **C2 the curve carries physical tightness; inventory is the state variable** | `src/engine/macro/evolution.ts:evolveCommodity` | ❌ |
 | C3 VERIFY inventories low ⇒ backwardation | — | ❌ |

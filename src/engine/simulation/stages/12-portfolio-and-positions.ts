@@ -2,31 +2,27 @@
  * Stage 12: Composite Indices & Portfolio Mark-to-Market
  *
  * Recomputes composite benchmark indices, then marks every open position to
- * market (equities, corp/sov bonds, leveraged loans, IRS/CDS/TRS/XCS/options/FX/
- * commodities), accruing carry, financing cost, realized cash from maturities and
- * defaults, margin requirements, greeks, and P&L attribution.
+ * market (equities, corp/sov bonds, leveraged loans, FX spot), accruing carry, financing cost,
+ * realized cash from maturities and defaults, margin requirements, delta and DV01, and P&L
+ * attribution. §3.17b-ii: the six derivative kinds that were marked here by formula against
+ * nobody are gone — a derivative is a contract on the one book (derivative-lifecycle.ts).
  */
 
 import { GameState, Position } from '../../../types';
 import { marketCapAt } from '../../../engine2/instruments';
-import { ringFill, rowOf, ensureV2 } from '../../../engine2/world';
+import { ensureV2 } from '../../../engine2/world';
 import { trancheIdOf, ladderRowsOf, TR_FLOATING } from '../../../engine2/tranches';
-import { isActiveCompany } from '../../../domain/company';
 import { assertNever } from '../../../domain/defect';
-import { calculateBlackScholesGreeks } from '../../blackScholes';
 import { calculateExpectedCarry } from '../../carryCalculator';
 import { priceSovereignBond } from '../../nelsonSiegel';
-import { priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceCrossCurrencyBasisSwap } from '../../pricing';
+import { priceCorporateBond } from '../../pricing';
 import { getUnifiedInitialMarginRate } from '../../dealers';
 import { calculateCompositeIndices } from '../../macro/indices';
 import { WeeklyStepContext } from './context';
 import { rowSpreadBps } from '../../credit-price';
 import { clearedPriceOf } from '../../../engine2/prices';
 import { zeroRateAt } from '../../../domain/pricing';
-import { realizedAnnualVol } from '../../../domain/volatility';
-import { regionIndexOf } from '../../macro/indices';
 
-const priceScratch12: number[] = [];
 
 export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2 = ensureV2(state);
@@ -53,9 +49,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
     let currentPrice = pos.currentPrice;
     let unrealizedPnL = 0;
     let delta = 0;
-    let gamma = 0;
-    let vega = 0;
-    let theta = 0;
     let dv01 = 0;
     let weeklyFinancing = 0;
 
@@ -251,271 +244,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         break;
       }
 
-      case 'IRS': {
-        const maturityWeek = pos.maturityWeek || (pos.openedWeek ? pos.openedWeek + Math.round((pos.tenorYears || 5) * 52) : (pos.tenorYears ? nextWeek + Math.round(pos.tenorYears * 52) : nextWeek + 260));
-        const remainingTenorYears = Math.max(0.01, (maturityWeek - nextWeek) / 52);
-        const sovParams = updatedRegions[pos.region].yieldCurveParams;
-        const irsPricing = priceInterestRateSwap(
-          pos.notional,
-          pos.fixedRate || 0.04,
-          remainingTenorYears,
-          pos.direction as 'PAY_FIXED' | 'RECEIVE_FIXED',
-          sovParams
-        );
-        currentPrice = irsPricing.currentParRate;
-        unrealizedPnL = irsPricing.npv * fxRateToUsd;
-        dv01 = irsPricing.dv01 * fxRateToUsd;
-
-        const carryEst = calculateExpectedCarry('IRS', pos.direction, pos.notional * fxRateToUsd, {
-          policyRate: updatedRegions[pos.region].policyRate,
-          fixedRate: pos.fixedRate || 0.04,
-          floatingRate: updatedRegions[pos.region].policyRate
-        });
-        weeklyFinancing = carryEst.components.financingCostLocal;
-        ctx.attributionCarry += carryEst.weeklyCarryLocal;
-
-        const pnlMove = unrealizedPnL - prevPnL;
-        ctx.attributionMacroRates += pnlMove;
-
-        // Check IRS maturity
-        if (nextWeek >= maturityWeek) {
-          pos.isClosed = true;
-          ctx.weeklyRealizedPnL += unrealizedPnL;
-          ctx.newsItems.push({
-            id: `irs-matured-${pos.id}-${nextWeek}`,
-            week: nextWeek,
-            title: `IRS Expired at Maturity: ${pos.name}`,
-            description: `Your interest rate swap terminated at its scheduled maturity date.`,
-            category: 'MACRO',
-            impactBadge: '[EXPIRY]',
-            impactRegion: pos.region,
-            urgent: false,
-          });
-        } else {
-          marginReq = pos.notional * fxRateToUsd * marginRate;
-          maintMargin = marginReq * 0.6;
-        }
-        break;
-      }
-
-      case 'CDS': {
-        const comp = updatedCompanies.find((c) => c.ticker === pos.symbol);
-        const sovParams = updatedRegions[pos.region].yieldCurveParams;
-        if (comp) {
-          const maturityWeek = pos.maturityWeek || (pos.openedWeek ? pos.openedWeek + Math.round((pos.tenorYears || 5) * 52) : (pos.tenorYears ? nextWeek + Math.round(pos.tenorYears * 52) : nextWeek + 260));
-          const remainingTenorYears = Math.max(0.01, (maturityWeek - nextWeek) / 52);
-          const cdsPricing = priceCreditDefaultSwap(
-            pos.notional,
-            pos.entryPrice,
-            comp.cdsSpreadBps,
-            remainingTenorYears,
-            pos.direction as 'BUY_PROTECTION' | 'SELL_PROTECTION',
-            sovParams,
-            comp.recoveryRate,
-            comp.isDefaulted
-          );
-          currentPrice = cdsPricing.currentCdsSpreadBps;
-          unrealizedPnL = cdsPricing.npv * fxRateToUsd;
-
-          const carryEst = calculateExpectedCarry('CDS', pos.direction, pos.notional * fxRateToUsd, {
-            policyRate: updatedRegions[pos.region].policyRate,
-            cdsSpreadBps: pos.entryPrice
-          });
-          weeklyFinancing = carryEst.components.financingCostLocal;
-          ctx.attributionCarry += carryEst.weeklyCarryLocal;
-
-          const pnlMove = unrealizedPnL - prevPnL;
-          ctx.attributionCreditSpread += pnlMove;
-
-          // Check CDS maturity or default settlement
-          if (!isActiveCompany(comp)) {
-            pos.isClosed = true;
-            ctx.weeklyRealizedPnL += unrealizedPnL;
-          } else if (nextWeek >= maturityWeek) {
-            pos.isClosed = true;
-            ctx.weeklyRealizedPnL += unrealizedPnL;
-            ctx.newsItems.push({
-              id: `cds-expired-${pos.id}-${nextWeek}`,
-              week: nextWeek,
-              title: `CDS Protection Expired: ${pos.name}`,
-              description: `Credit Default Swap contract expired with no default credit trigger.`,
-              category: 'CREDIT',
-              impactBadge: '[EXPIRY]',
-              impactRegion: pos.region,
-              urgent: false,
-            });
-          } else {
-            marginReq = pos.notional * fxRateToUsd * marginRate;
-            maintMargin = marginReq * 0.6;
-          }
-        }
-        break;
-      }
-
-      case 'TRS': {
-        const comp = updatedCompanies.find((c) => c.ticker === pos.symbol);
-        if (comp) {
-          const assetReturn = (comp.stockPrice - pos.entryPrice) / pos.entryPrice;
-          const regPolicyRate = updatedRegions[pos.region].policyRate;
-
-          const notional = pos.notional * fxRateToUsd;
-          const priceReturnLocal = notional * assetReturn;
-
-          const carryEst = calculateExpectedCarry('TRS', pos.direction, notional, {
-            policyRate: regPolicyRate,
-            dividendYield: comp.dividendYield || 0.02
-          });
-          weeklyFinancing = carryEst.components.financingCostLocal;
-          ctx.attributionCarry += carryEst.weeklyCarryLocal;
-
-          unrealizedPnL = pos.direction === 'LONG' ? priceReturnLocal : -priceReturnLocal;
-          delta = pos.direction === 'LONG' ? notional : -notional;
-          const pnlMove = unrealizedPnL - prevPnL;
-          ctx.attributionEquityDelta += pnlMove;
-
-          marginReq = notional * marginRate;
-          maintMargin = marginReq * 0.65;
-        }
-        break;
-      }
-
-      case 'COMMODITY_FUTURE': {
-        const comm = updatedCommodities.find((c) => c.symbol === pos.symbol || c.id === pos.symbol);
-        if (comm) {
-          currentPrice = comm.spotPrice;
-          const posValueLocal = pos.quantity * currentPrice;
-          const entryValueLocal = pos.quantity * pos.entryPrice;
-
-          unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
-          delta = pos.direction === 'LONG' ? posValueLocal : -posValueLocal;
-
-          const carryEst = calculateExpectedCarry('COMMODITY_FUTURE', pos.direction, posValueLocal, {
-            policyRate: updatedRegions.USA.policyRate,
-            convenienceYield: comm.convenienceYield
-          });
-          weeklyFinancing = carryEst.components.financingCostLocal;
-          ctx.attributionCarry += carryEst.weeklyCarryLocal;
-
-          const pnlMove = unrealizedPnL - prevPnL;
-          ctx.attributionEquityDelta += pnlMove;
-
-          marginReq = posValueLocal * marginRate;
-          maintMargin = marginReq * 0.65;
-        }
-        break;
-      }
-
-      case 'OPTION': {
-        const comp = updatedCompanies.find((c) => c.ticker === pos.symbol);
-        const underlyingPrice = comp ? comp.stockPrice : pos.underlyingPrice || 100;
-        const strike = pos.strike || underlyingPrice;
-        const remainingWeeks = Math.max(0.1, (pos.expiryWeek || nextWeek + 4) - nextWeek);
-        const tYears = remainingWeeks / 52;
-        // DER — THE OPTION IS REPRICED AT THE NAME'S OWN VOLATILITY. `pos.impliedVol || 0.3` put a
-        // stated 30% on every option whose row did not carry one, so a Black-Scholes price
-        // computed from it was a stated price (rule 3) and no name could be riskier than another.
-        // Until there is an options BOOK to imply a vol from, the honest input is the one the
-        // model measures: this underlying's own realised vol. A name too new to estimate one
-        // falls back to its region's index, which is estimable — no constant anywhere in the
-        // chain. `marketVolComponent` rides on top, as the market-wide premium it always was.
-        const nameVol = comp ? realizedAnnualVol(ringFill(v2.priceRing, rowOf(v2, comp.id), priceScratch12), 26) : undefined;
-        const indexVol = realizedAnnualVol(
-          regionIndexOf(state.compositeIndices, pos.region).historical, 26);
-        const vol = (pos.impliedVol ?? nameVol ?? indexVol ?? 0) + ctx.marketVolComponent;
-        const r = updatedRegions[pos.region].policyRate;
-
-        const greeks = calculateBlackScholesGreeks(
-          underlyingPrice,
-          strike,
-          tYears,
-          r,
-          vol,
-          pos.optionType || 'CALL'
-        );
-
-        currentPrice = greeks.price;
-        const contracts = pos.quantity;
-        const posValueLocal = contracts * currentPrice * fxRateToUsd;
-        const entryValueLocal = contracts * pos.entryPrice * fxRateToUsd;
-
-        unrealizedPnL = pos.direction === 'LONG' ? posValueLocal - entryValueLocal : entryValueLocal - posValueLocal;
-
-        const mult = pos.direction === 'LONG' ? 1 : -1;
-        delta = mult * greeks.delta * contracts * underlyingPrice * fxRateToUsd;
-        gamma = mult * greeks.gamma * contracts * underlyingPrice * fxRateToUsd;
-        vega = mult * greeks.vega * contracts * fxRateToUsd;
-        theta = mult * greeks.theta * contracts * fxRateToUsd;
-
-        const carryEst = calculateExpectedCarry('OPTION', pos.direction, posValueLocal, {
-          policyRate: r,
-          thetaPerContractLocal: greeks.theta * fxRateToUsd,
-          quantity: contracts
-        });
-        weeklyFinancing = carryEst.components.financingCostLocal;
-        ctx.attributionCarry += carryEst.weeklyCarryLocal;
-
-        const pnlMove = unrealizedPnL - prevPnL;
-        ctx.attributionVolTheta += pnlMove * 0.4;
-        ctx.attributionEquityDelta += pnlMove * 0.6;
-
-        if (pos.direction === 'LONG') {
-          marginReq = posValueLocal;
-          maintMargin = posValueLocal * 0.5;
-        } else {
-          marginReq = (pos.notional || contracts * underlyingPrice) * 0.20 * fxRateToUsd;
-          maintMargin = marginReq * 0.75;
-        }
-        break;
-      }
-
-      case 'XCS': {
-        const fxPair = updatedFxPairs.find((p) => p.pair === pos.symbol);
-        if (fxPair) {
-          const maturityWeek = pos.maturityWeek || (pos.openedWeek ? pos.openedWeek + Math.round((pos.tenorYears || 5) * 52) : (pos.tenorYears ? nextWeek + Math.round(pos.tenorYears * 52) : nextWeek + 260));
-          const remainingTenorYears = Math.max(0.01, (maturityWeek - nextWeek) / 52);
-          const xcsPricing = priceCrossCurrencyBasisSwap(
-            pos.notional,
-            fxPair.rate,
-            pos.entryPrice,
-            fxPair.basisSpreadBps,
-            remainingTenorYears,
-            pos.direction as 'LONG' | 'SHORT'
-          );
-          currentPrice = fxPair.basisSpreadBps;
-          unrealizedPnL = xcsPricing.npvLocal;
-          dv01 = xcsPricing.dv01Local;
-
-          const pnlMove = unrealizedPnL - prevPnL;
-          ctx.attributionMacroRates += pnlMove;
-
-          const carryEst = calculateExpectedCarry('XCS', pos.direction, pos.notional * fxPair.rate, {
-            policyRate: updatedRegions[pos.region].policyRate,
-            basisSpreadBps: fxPair.basisSpreadBps
-          });
-          weeklyFinancing = carryEst.components.financingCostLocal;
-          ctx.attributionCarry += carryEst.weeklyCarryLocal;
-
-          if (nextWeek >= maturityWeek) {
-            pos.isClosed = true;
-            ctx.weeklyRealizedPnL += unrealizedPnL;
-            ctx.newsItems.push({
-              id: `xcs-matured-${pos.id}-${nextWeek}`,
-              week: nextWeek,
-              title: `Basis Swap Matured: ${pos.name}`,
-              description: `Cross-currency basis swap terminated at scheduled maturity.`,
-              category: 'MACRO',
-              impactBadge: '[MATURITY]',
-              impactRegion: pos.region,
-              urgent: false,
-            });
-          } else {
-            marginReq = pos.notional * fxPair.rate * marginRate;
-            maintMargin = marginReq * 0.6;
-          }
-        }
-        break;
-      }
-
       case 'FX_SPOT': {
         const fxPair = updatedFxPairs.find((p) => p.pair === pos.symbol);
         if (fxPair) {
@@ -539,8 +267,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
     ctx.totalRequiredMarginLocal += marginReq;
     ctx.maintenanceMarginLocal += maintMargin;
     ctx.netDeltaLocal += delta;
-    ctx.netGammaLocal += gamma;
-    ctx.netVegaLocal += vega;
     ctx.netDV01Local += dv01;
 
     return {
@@ -551,9 +277,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
       maintenanceMargin: maintMargin,
       weeklyFinancingCost: weeklyFinancing,
       delta,
-      gamma,
-      vega,
-      theta,
       dv01
     } as Position;
   });
