@@ -38,7 +38,10 @@ fi
 #    per-kind BEHAVIOUR may still switch, which is why this is a ratchet and not a ban.
 ASSET_MEMBERS="'EQUITY'|'CORP_BOND'|'LEVERAGED_LOAN'|'SOV_BOND'|'GOV_BOND'|'COMMERCIAL_PAPER'|'PE_FUND_INTEREST'|'ETF_SHARE'"
 REGISTRY_OWNED='^src/domain/assets/'
-ASSET_SWITCH=$(grep -rnE "(===|!==|case )[[:space:]]*(${ASSET_MEMBERS})" src --include=*.ts 2>/dev/null \
+# §3.29-i: the literal may stand on EITHER side of the comparison, and `[...].includes(x)` is the
+# same switch in a list's costume — a pattern that matched only `x === 'EQUITY'` let both lower
+# the count without removing a switch.
+ASSET_SWITCH=$(grep -rnE "(===|!==|case )[[:space:]]*(${ASSET_MEMBERS})|(${ASSET_MEMBERS})[[:space:]]*(===|!==)|\[[^]]*(${ASSET_MEMBERS})[^]]*\]\.includes\(" src --include=*.ts 2>/dev/null \
   | grep -vE "$REGISTRY_OWNED" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
 ASSET_SWITCH_COUNT=$(printf '%s' "$ASSET_SWITCH" | grep -c . || true)
 # THE RATCHET: may fall, never rise. §7.279 lowered 64 → 60 (mandatePctOf Record lookup);
@@ -46,8 +49,9 @@ ASSET_SWITCH_COUNT=$(printf '%s' "$ASSET_SWITCH" | grep -c . || true)
 # §7.290 lowered 58 → 56 (hedgedAsFixedIncome / carriesRateDuration registry facts).
 # The dead-file sweep lowered 54 → 49: `ledger/parties.ts` was the kind registry for PARTIES, had
 # no importer left, and went with the dead money facade that re-exported it — so the exemption for
-# it went too, and the count is now what the tree actually holds.
-ASSET_SWITCH_BUDGET=49
+# it went too, and the count is now what the tree actually holds. §3.29-i widened the pattern to
+# both sides and to `.includes(` and struck the budget at the honest count, 44.
+ASSET_SWITCH_BUDGET=44
 if [ "$ASSET_SWITCH_COUNT" -gt "$ASSET_SWITCH_BUDGET" ]; then
   echo "ERROR: $ASSET_SWITCH_COUNT literal comparisons against an instrument type (budget $ASSET_SWITCH_BUDGET)."
   echo "$ASSET_SWITCH" | head -20
@@ -55,11 +59,15 @@ if [ "$ASSET_SWITCH_COUNT" -gt "$ASSET_SWITCH_BUDGET" ]; then
   exit 1
 fi
 
-# 4. §5-STRUCT — the test tree is PURE. Anything that runs a world is a harness module, not a test.
+# 4. §5-STRUCT — the test tree is PURE. Anything that steps a world or runs a STAGE is a harness
+#    module, not a test. A test may build a world by hand (`ensureV2` on a fixture) and call the
+#    ledgers and the domain on it — that is a pure function over its inputs; what it may not do is
+#    advance a week, seed the opening world, or run one of the weekly stages (§3.29-i: the grep
+#    used to name only the first two, and said "over domain/" while enforcing neither).
 if [ -d test ]; then
-  IMPURE=$(grep -rlE "advanceWeeklyStep|createInitialGameState" test --include=*.ts 2>/dev/null || true)
+  IMPURE=$(grep -rlE "advanceWeeklyStep|createInitialGameState|run[A-Z][A-Za-z]*Stage\(|runWeeklyStep|weekly-step'" test --include=*.ts 2>/dev/null || true)
   if [ -n "$IMPURE" ]; then
-    echo "ERROR: test/ may hold only pure-function tests over domain/. These run a world:"
+    echo "ERROR: test/ may hold only pure-function tests: nothing that steps a week, seeds a world or runs a stage. These do:"
     echo "$IMPURE"
     echo "Fold them into scripts/harness.ts as a module."
     exit 1
@@ -169,13 +177,18 @@ fi
 # is where such a number is declared — owner, reason, the measurement that replaces it — and its
 # literals are not counted here because they are owned. THE RATCHET: may fall, never rise; the way
 # to add a fraction is to declare it in the registry. Integers, `toFixed(n)` and comments are not
-# counted (an index, a print width and prose are not stated shapes).
+# counted (an index, a print width and prose are not stated shapes) — but a LINE that prints is
+# still counted for the fractions beside the print: §3.29-i strips the `.toFixed(n)` /
+# `.toPrecision(n)` call and keeps the line, where the ratchet used to drop the whole line and
+# with it every fraction that shared it (the tree's commonest idiom, `x * 0.5).toFixed(2)`).
 FRACTION='(^|[^A-Za-z0-9_.])[0-9]*\.[0-9]+([^0-9A-Za-z_]|$)'
 FRACTIONS=$(grep -rnE "$FRACTION" src/engine src/engine2 src/domain --include=*.ts 2>/dev/null \
-  | grep -vE '^src/domain/stated\.ts:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' | grep -vE 'toFixed\(' || true)
+  | grep -vE '^src/domain/stated\.ts:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' \
+  | sed -E 's/\.toFixed\([0-9]+\)//g; s/\.toPrecision\([0-9]+\)//g' | grep -E "$FRACTION" || true)
 FRACTION_COUNT=$(printf '%s' "$FRACTIONS" | grep -c . || true)
-# §7.401 struck the budget at 1381 with the first eight declarations; §7.404 lowered it to 1377 (the audit's one tolerance declared).
-FRACTION_BUDGET=1377
+# §7.401 struck the budget at 1381 with the first eight declarations; §7.404 lowered it to 1377 (the
+# audit's one tolerance declared). §3.29-i re-counted with the printing lines kept: 1291.
+FRACTION_BUDGET=1291
 if [ "$FRACTION_COUNT" -gt "$FRACTION_BUDGET" ]; then
   echo "ERROR: $FRACTION_COUNT fractional literals in the engine (budget $FRACTION_BUDGET) — a stated number with no owner."
   echo "Declare it in src/domain/stated.ts (owner, reason, the measurement that replaces it) and import the constant."

@@ -553,13 +553,28 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-29. **The gates actually gate.** `check-hygiene.sh:110`'s fraction ratchet drops whole lines
-    containing `toFixed(` — the tree's commonest idiom — so the budget cannot see them; `:36`'s
-    asset-switch pattern matches only a literal on the right, so `'EQUITY' === x` or `.includes(x)`
-    lowers the count without removing a switch; `:56`'s test-purity grep is narrow enough that two
-    tests already import `src/engine/*`. `eslint.config.js:6` names `no-floating-promises` and
-    `no-unnecessary-condition` as paid-for rules and configures neither (no `parserOptions.project`)
-    — the latter is exactly what would have caught step 28's NaN. Turn them on and pay the ratchet.
+29-ii. **The two paid-for lint rules are on, and their backlog is a ratchet.** *(rule 10 split of
+    "the gates actually gate"; 29-i, the three hygiene greps, is done.)* `eslint.config.js:6` names
+    `no-floating-promises` and `no-unnecessary-condition` as the rules this project paid for (§7.234's
+    `if (accExpected > 0)` that had never fired; step 28's NaN) and configures neither — no
+    `parserOptions.project`, so neither can run. Measured with them on: `no-floating-promises` 296,
+    every one a node:test `test()` call — the known-safe call, declared as such, not a defect;
+    `no-unnecessary-condition` 1,565 across 171 files — 688 `??` whose left side cannot be nullish,
+    535 `?.` on a value that cannot be, 173 always-truthy, 126 always-falsy, 32 comparisons of types
+    with no overlap. Turn `projectService` on (the gate goes from 12 s to 25 s); floating promises an
+    ERROR; the conditions a WARNING under the gate's `--max-warnings`, struck at the honest count and
+    allowed only to fall — §4 re-states the gate. 29-iii and 29-iv pay it.
+29-iii. **The dead conditions.** The 331 guards the types say cannot fire (always-truthy,
+    always-falsy, no overlap) are each one of two things: a check that never fires — §7.234's class,
+    a guard against a state the type already excludes, and rule 12 says delete it, not the rule —
+    or a type that LIES, where the guard is the only thing catching a runtime `undefined` the
+    declaration denies, and the fix is the declaration (an optional field, a narrower union), never
+    the guard. One directory at a time (rule 10), the budget falling with each.
+29-iv. **The defensive reads.** The 1,223 `??` and `?.` on values the types say are never nullish
+    are the same choice per site: a fallback that cannot run (delete it — a `?? 0` that never
+    fires is a stated number with no owner, rule 2) or a type that lies (fix it). `scripts/harness.ts`
+    (178), `macro/evolution.ts` (83), `05-unit-bidding.ts` (68) and `labor-market.ts` (47) hold a
+    quarter of them.
 
 28b. **The units sweep, once, at the source.** Rule 9 is a rule with no sweep behind it. Walk
     every rate, flow and index at the point it is WRITTEN, establish its periodicity and unit, and
@@ -1327,6 +1342,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**29-i — THE THREE HYGIENE GREPS SEE WHAT THEY CLAIM TO.** `check-hygiene.sh`'s fraction ratchet
+  dropped every line containing `toFixed(` — the tree's commonest idiom — so a fraction beside a
+  print was never counted; it now strips the `.toFixed(n)`/`.toPrecision(n)` call and keeps the
+  line: 1,263 counted → 1,291 honest, the budget struck there (from 1,377). The asset-switch pattern
+  matched only a literal on the RIGHT of `===`, so `'EQUITY' === x` and `[...].includes(x)` lowered
+  the count without removing a switch; it matches both sides and the list idiom now (no such site
+  existed; the honest count is 44, the budget was 49). The test-purity grep said "over domain/" and
+  enforced only "no `advanceWeeklyStep`/`createInitialGameState`" — ten tests build a world by hand
+  (`ensureV2` on a fixture, 87 uses) and exercise the ledgers on it, which IS a pure function over
+  its inputs; the rule now says what it enforces — nothing steps a week, seeds a world or runs a
+  stage — and catches `run*Stage(` as well. 29-ii/iii/iv (the lint rules) are written from the
+  measurement: 1,565 unnecessary conditions, 296 floating promises all in node:test. Gates green;
+  no run (rule 11).
 
 **28 — THE HARNESS'S OWN DEFECTS.** Six named; two were already gone. The capital and NIM bands
   read each region's book-weighted aggregate, so a minority of banks below the floor could never
