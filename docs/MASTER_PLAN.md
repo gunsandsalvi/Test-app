@@ -547,11 +547,22 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-15. **Search by asset, price and spread together** (rule 9) — split 2026-09-05, one commit each:
-15b. **News slice 2.** The derivation cites the books and ranks by size; what it still cannot
-    tell is a story that develops. Follow-ups through an estate, an auction that failed or came
-    in under-subscribed, and contract-break streaks. (The fourth item on the original list,
-    damper binds, is moot — step 19 deletes the damper machinery.)
+15b. **News slice 2** — split 2026-09-05; 15b-i (a workout that develops: the estate's week and
+    its story) is in §9. What is left, one commit each:
+15b-ii. **An auction that failed or came in under-subscribed.** 07c and 07f withdraw what the
+    primary did not place (`sovereign issuance withdrawn`, `bill issuance withdrawn`) and record
+    nothing a story can read; the treasury's account runs lower in silence. The region records
+    the week's auction — offered, placed, withdrawn, by bond — and the story names the shortfall
+    and what the treasury did about it (the advance it drew, the need that rolled forward). A CP
+    roll that fails already tells its story (`07f`, "CP Roll Fails"); bring it onto the derived
+    feed's shape (refs, materiality, cause) rather than beside it.
+15b-iii. **Contract-break streaks.** No object here is called a contract break. The real thing
+    is a party that does not perform: the settlement pass's `[unresolved]` legs (a leg addressed
+    to a bank with no sheet), a derivative closed out on a counterparty's death
+    (`derivative-lifecycle.ts:closeOutDerivativesOfParty`), a CP roll the market refused. A
+    streak is the same party failing to perform in consecutive weeks. Record the week's
+    non-performances by party (the ledger has them; nothing keeps them), count the run, and tell
+    the run — not the week — as the story.
 
 16. **A tap, not a new facility** (user). An issuer that wants more of the same debt REOPENS an
     existing tranche: face is added at the week's clearing price, the proceeds are the price × the
@@ -1643,6 +1654,18 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**15b-i — A WORKOUT IS A STORY THAT DEVELOPS.** The derived feed told a default (1) and a close
+(7) and nothing between, though a workout runs for weeks paying classes and selling slices. An
+open estate now keeps its week (`domain/estate.ts:EstateWeek`, opened fresh by
+`estate-resolution.ts` each pass: what the waterfall paid secured, unsecured and equity, the
+stock and plant sold, the peers that bought), and `news-derivation.ts` 7b tells each week of it
+above a $100k floor — "KRLN's estate pays 40M: 40M to secured lenders; 12M of plant went to
+PEER; still owed 300M against 80M of assets left" — with the buyers as refs and paid + sold as
+its size; a slice nobody bought says it was scrapped. The estate object shows its latest week.
+`test/estate-week.test.ts`. 15b is split (15b-ii auctions, 15b-iii non-performance streaks —
+the "contract-break" of the original list, which named no object here, is read as a party that
+does not perform). Gates green; no run.
 
 **15-v — NO INTERNING IN RENDER.** `statements.tsx` computed a firm's unpaid taxes by calling
 `partyId(companyParty(c))` and `internReason(CORPORATE_TAX_REASON)` in render — both intern on

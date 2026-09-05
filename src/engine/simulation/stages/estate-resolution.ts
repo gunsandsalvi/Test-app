@@ -30,6 +30,7 @@ import { GameState, RegionId, Company, ItemizedHolding } from '../../../types';
 import {
   Estate, EstateClaim, CLAIM_SENIORITY, estateAssetsLocal, claimsAtSeniority, outstandingLocal,
   realisedDebtRecoveryRate,
+  estateWeekOf,
 } from '../../../domain/estate';
 import { getOutputInventoryLocal, isActiveCompany } from '../../../domain/company';
 import { bumpRegister } from './register-index';
@@ -196,6 +197,9 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // input lots (consignments the receiver took delivery of land here), read each week.
     estate.assets.inventoryLocal = comp ? Math.max(0, getOutputInventoryLocal(comp)) + totalInputValueLocal(ctx.v2, comp.id) : 0;
 
+    // §3.15b-i: the week's record opens here, and everything below writes into it.
+    const thisWeek = estateWeekOf(estate, week);
+
     // A WORKOUT IS A DISPOSAL PROGRAMME, NOT A DECAY. Both schedules below run from the week
     // the estate opened and the last week of each takes whatever is left in one lot. Selling a
     // fixed SHARE of the remainder every week instead halves the tail for ever: the estate's
@@ -228,6 +232,8 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     const invPriceLocal = invSoldLocal * (1 - Math.min(0.9, (hurdle * turnoverWeeks) / 52));
     const ppePriceLocal = ppeSoldLocal * (1 - Math.min(0.9, (hurdle * ppeWeeks) / 52));
     sellAssetsToPeers(ctx, index, estate, comp, invSoldLocal, invPriceLocal, ppeSoldLocal, ppePriceLocal);
+    thisWeek.inventorySoldLocal += invSoldLocal;
+    thisWeek.ppeSoldLocal += ppeSoldLocal;
 
     // The waterfall pays out of the account everything above pays INTO: cash it died with,
     // invoice collections, this week's asset sales (pending until the close, counted here).
@@ -343,6 +349,7 @@ function sellAssetsToPeers(
       currency: currencyOf(estate.regionId),
       reason: 'estate asset sale to peers',
     });
+    estate.lastWeek?.buyerIds.push(peer.id);
     // What the payment buys, at the same share: the plant at its book value (the buyer's
     // bargain is book minus price), and the inventory rows with their real units.
     const ppeShareLocal = ppeSoldLocal * share;
@@ -388,6 +395,8 @@ function distribute(
     const owedLocal = outstandingLocal(claims);
     if (!(owedLocal > 0)) return;
     const payLocal = Math.min(remainingLocal, owedLocal);
+    // §3.15b-i: the week's record, by class.
+    if (estate.lastWeek) estate.lastWeek.paidByClassLocal[seniority - 1] += payLocal;
     claims.forEach((claim) => {
       const stillOwedLocal = Math.max(0, claim.principalLocal - claim.recoveredLocal);
       if (stillOwedLocal <= 0) return;

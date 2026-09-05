@@ -68,7 +68,30 @@ export interface Estate {
   distributedLocal: number;
   /** Set when the assets are exhausted and the residual claims are written off. */
   closedWeek?: number;
+  /** §3.15b-i: what the workout did in its latest week — the record a story that develops is
+   *  told from. Opened fresh by the stage each week it runs the estate. */
+  lastWeek?: EstateWeek;
 }
+
+/** One week of a workout: what the waterfall paid each class, what was sold and to whom. */
+export interface EstateWeek {
+  week: number;
+  /** Paid by class, indexed by `CLAIM_SENIORITY − 1`: secured, unsecured, equity. */
+  paidByClassLocal: [number, number, number];
+  inventorySoldLocal: number;
+  ppeSoldLocal: number;
+  /** The peers that bought the week's stock and plant. */
+  buyerIds: EntityId[];
+}
+
+/** The estate's record of THIS week — fresh if the week has turned, the same object if not. */
+export function estateWeekOf(estate: Estate, week: number): EstateWeek {
+  if (estate.lastWeek?.week === week) return estate.lastWeek;
+  estate.lastWeek = { week, paidByClassLocal: [0, 0, 0], inventorySoldLocal: 0, ppeSoldLocal: 0, buyerIds: [] };
+  return estate.lastWeek;
+}
+
+export const estateWeekPaidLocal = (w: EstateWeek): number => w.paidByClassLocal[0] + w.paidByClassLocal[1] + w.paidByClassLocal[2];
 
 export function estateAssetsLocal(a: EstateAssets): number {
   return Math.max(0, a.cashLocal) + Math.max(0, a.receivablesLocal)

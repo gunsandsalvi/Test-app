@@ -289,7 +289,11 @@ paper, a yield on a sovereign — through one read, `engine/credit-price.ts:pape
 one price store; unprinted paper shows a dash, never par. §9.15-iv: ONE calendar —
 `domain/calendar.ts` holds the epoch (week 0 = 1 January 2027, the user's rule) and both the
 UI's date formats and the engine's news and filing labels read it; the engine's own start date,
-a year earlier, is gone, and with it a dead second bond-name grammar.
+a year earlier, is gone, and with it a dead second bond-name grammar. §9.15b-i: a workout is a
+story that DEVELOPS — an open estate records its week (`domain/estate.ts:EstateWeek`: what the
+waterfall paid each class, what was sold, to which peers) and `news-derivation.ts` tells it each
+week between the default and the close, naming the buyers and what is still owed against what is
+left.
 
 ### Also marked, briefly
 

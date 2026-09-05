@@ -28,6 +28,7 @@ import { isActiveCompany, banksOf } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { ladderTotalLocal } from '../../../engine2/tranches';
 import { cashOf, bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import { estateAssetsLocal, estateWeekPaidLocal, outstandingLocal } from '../../../domain/estate';
 
 type Ref = NonNullable<NewsItem['refs']>[number];
 
@@ -267,6 +268,39 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       description: `The workout of ${e.ticker} (opened ${week - e.openedWeek} weeks ago) distributed ${M(e.distributedLocal)} against ${M(owed)} of claims — ${owed > 0 ? P(e.distributedLocal / owed, 0) : '—'} recovered by ${e.claims.length} claimants.`,
       refs: [...(c ? [company(c)] : []), region(e.regionId)],
       materialityLocal: owed,
+      impactRegion: e.regionId, affectedTicker: e.ticker,
+    });
+  });
+
+  // ---- 7b. §3.15b-i: a workout that DEVELOPS — each week an open estate pays a class or sells a
+  // slice, the story names what was paid to whom, what was sold to which peers, and what is
+  // still owed against what is left. The default (1) and the close (7) are its two ends. ----
+  (ctx.estates ?? []).filter((e) => e.closedWeek === undefined && e.lastWeek?.week === week).forEach((e) => {
+    const w = e.lastWeek!;
+    const paid = estateWeekPaidLocal(w);
+    const sold = w.inventorySoldLocal + w.ppeSoldLocal;
+    if (paid < 1e5 && sold < 1e5) return;
+    const c = byTicker.get(e.ticker) ?? prevByTicker.get(e.ticker);
+    const buyers = [...new Set(w.buyerIds)].map((id) => companyById.get(id)).filter((b): b is Company => !!b);
+    const owed = outstandingLocal(e.claims);
+    const left = estateAssetsLocal(e.assets);
+    const classes = [['secured lenders', w.paidByClassLocal[0]], ['unsecured creditors', w.paidByClassLocal[1]], ['equity', w.paidByClassLocal[2]]] as const;
+    const paidText = classes.filter(([, usd]) => usd >= 1e5).map(([who, usd]) => `${M(usd)} to ${who}`).join(', ');
+    const soldText = sold >= 1e5
+      ? `${w.inventorySoldLocal >= 1e5 ? `${M(w.inventorySoldLocal)} of stock` : ''}${w.inventorySoldLocal >= 1e5 && w.ppeSoldLocal >= 1e5 ? ' and ' : ''}${w.ppeSoldLocal >= 1e5 ? `${M(w.ppeSoldLocal)} of plant` : ''}`
+        + (buyers.length ? ` went to ${buyers.map((b) => b.ticker).join(', ')}` : ' found no buyer and was scrapped')
+      : '';
+    push({
+      id: `estate-week-${e.ticker}-${week}`,
+      kind: paid >= 1e5 ? 'estate pays' : 'estate sells',
+      category: 'CREDIT',
+      title: paid >= 1e5 ? `${c?.name ?? e.ticker}'s estate pays ${M(paid)}` : `${c?.name ?? e.ticker}'s estate sells ${M(sold)} of assets`,
+      description: `Week ${week - e.openedWeek} of the workout of ${e.ticker}. `
+        + (paidText ? `Paid ${paidText}. ` : '')
+        + (soldText ? `${soldText.charAt(0).toUpperCase()}${soldText.slice(1)}. ` : '')
+        + `Still owed ${M(owed)} against ${M(left)} of assets left (cash ${M(e.assets.cashLocal)}, receivables ${M(e.assets.receivablesLocal)}, stock ${M(e.assets.inventoryLocal)}, plant ${M(e.assets.ppeLocal)}); ${M(e.distributedLocal)} distributed so far.`,
+      refs: [...(c ? [company(c)] : []), region(e.regionId), ...buyers.map(company)],
+      materialityLocal: paid + sold,
       impactRegion: e.regionId, affectedTicker: e.ticker,
     });
   });

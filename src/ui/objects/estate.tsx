@@ -1,6 +1,6 @@
 /** AU · object: estate — a defaulted firm's workout: what it had, who is owed, what has been paid. */
 
-import { Estate, estateAssetsLocal } from '../../domain/estate';
+import { Estate, estateAssetsLocal, estateWeekPaidLocal } from '../../domain/estate';
 import { defineObject } from './registry';
 import { Card, KV, Link, Stat, StatGrid, Table } from '../ui';
 import { money, pctLevel } from '../format';
@@ -46,6 +46,7 @@ export const estate = defineObject<Estate>({
           <KV k="receivables" v={money(e.assets.receivablesLocal)} />
           <KV k="inventory" v={money(e.assets.inventoryLocal)} />
           <KV k="plant" v={money(e.assets.ppeLocal)} />
+          {e.lastWeek ? <KV k="latest week" hint={formatDate(displayWeek(world.state, e.lastWeek.week))} v={`paid ${money(estateWeekPaidLocal(e.lastWeek))} · sold ${money(e.lastWeek.inventorySoldLocal + e.lastWeek.ppeSoldLocal)}`} /> : null}
         </Card>
         <Table rows={[...e.claims].sort((a, b) => b.principalLocal - a.principalLocal)} keyOf={(c) => `${JSON.stringify(c.holder)}:${c.principalLocal}`} columns={[
           { key: 'holder', label: 'claimant', render: (c) => { const h = c.holder as { kind: string; ticker?: string; id?: string; region?: string }; const key = h.ticker ?? h.id ?? h.region ?? h.kind; const ref = h.kind === 'INSTITUTION' && h.id ? { type: 'institution' as const, id: h.id } : world.state.companies.find((x) => x.ticker === h.ticker) ? { type: 'company' as const, id: world.state.companies.find((x) => x.ticker === h.ticker)!.id } : undefined; return ref ? <Link to={ref} nav={nav}>{key}</Link> : `${words(h.kind)} ${key}`; } },
