@@ -77,7 +77,7 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 a stock of productive assets held by a named firm | `src/domain/plant.ts:PlantVintage` · `src/domain/plant.ts:plantGrossLocal` | ✅ |
+| A1 a stock of productive assets held by a named firm | `src/domain/plant.ts:PlantVintage` · `src/domain/plant.ts:plantGrossLocal` · `src/engine/ledger/plant-ledger.ts:writePlantRows` | ✅ |
 | A2 capacity is a function of the stock | `src/engine/simulation/stages/05-unit-bidding.ts:unitsPerNetPpeDollar` · `src/domain/plant.ts:plantEffectiveNetLocal` | ✅ |
 | A3 it depreciates — a cost and a reduction | `src/domain/plant.ts:plantDepreciationAnnualLocal` · `src/domain/company-week/income-statement.ts:industrialIncome` | ✅ |
 | A4 capital is specific | `src/domain/plant.ts:PlantVintage` · `src/domain/plant.ts:plantEffectiveNetLocal` | ✅ |

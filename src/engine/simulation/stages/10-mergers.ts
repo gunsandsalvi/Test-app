@@ -8,6 +8,7 @@
  */
 
 import { movePlant, movePlantQueue } from '../../ledger/plant-ledger';
+import { writePlantRows } from '../../ledger/plant-ledger';
 import { slicePlant, mergePlant } from '../../../domain/plant';
 import { restateBankSheetStatistics } from '../../../domain/bank-resolution';
 import { marketCapAt } from '../../../engine2/instruments';
@@ -159,6 +160,8 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     const split = slicePlant(parent.plant, share);
     spin.plant = split.taken;
     parent.plant = split.kept;
+    writePlantRows(ctx.v2, spin.id, spin.region, spin.plant); // §3.13-BOOK g-ii-b: the rows keep both registers
+    writePlantRows(ctx.v2, parent.id, parent.region, parent.plant);
     const queue = parent.assetsUnderConstruction ?? [];
     spin.assetsUnderConstruction = queue.map((lot) => ({ ...lot, valueLocal: lot.valueLocal * share }));
     parent.assetsUnderConstruction = queue.map((lot) => ({ ...lot, valueLocal: lot.valueLocal * (1 - share) }));
@@ -329,6 +332,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   movePlant(companyParty(target), companyParty(acquirer), target.plant, 0, 'merger: plant to the acquirer');
   movePlantQueue(companyParty(target), companyParty(acquirer), target.assetsUnderConstruction ?? [], 'merger: construction in progress to the acquirer');
   acquirer.plant = mergePlant(acquirer.plant, target.plant);
+  writePlantRows(ctx.v2, acquirer.id, acquirer.region, acquirer.plant); // §3.13-BOOK g-ii-b
   acquirer.assetsUnderConstruction = [...(acquirer.assetsUnderConstruction ?? []), ...(target.assetsUnderConstruction ?? [])];
   target.assetsUnderConstruction = [];
 
@@ -547,6 +551,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   target.maintenanceCapex = 0;
   target.growthCapex = 0;
   target.plant = [];
+  writePlantRows(ctx.v2, target.id, target.region, []); // §3.13-BOOK g-ii-b: the target's rows go with its plant
 
   ctx.recentMergers.push({
     acquirerTicker: acquirer.ticker,

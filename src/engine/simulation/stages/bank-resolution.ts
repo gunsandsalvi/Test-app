@@ -16,6 +16,7 @@
  */
 
 import { movePlant } from '../../ledger/plant-ledger';
+import { writePlantRows } from '../../ledger/plant-ledger';
 import { mergePlant } from '../../../domain/plant';
 import { reseatSwapLines } from './swap-lines';
 import { reseatCentralBankLoans } from './central-bank-loans';
@@ -204,10 +205,12 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     // §3.26-f-ii/iii: vintage by vintage, and the move is a wire (the consideration is the books).
     movePlant(bankParty(bank), bankParty(acquirer), bank.plant, 0, 'resolution: premises to the acquirer');
     acquirer.plant = mergePlant(acquirer.plant, bank.plant);
+    writePlantRows(ctx.v2, acquirer.id, acquirer.region, acquirer.plant); // §3.13-BOOK g-ii-b
     acquirer.employeeCount += bank.employeeCount;
     acquirer.annualRevenue += bank.annualRevenue;
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (bank.bankMarketShare ?? 0)).toFixed(6));
     bank.plant = []; bank.employeeCount = 0;
+    writePlantRows(ctx.v2, bank.id, bank.region, []); // §3.13-BOOK g-ii-b
     bank.annualRevenue = 0; bank.ebitda = 0; bank.ebit = 0; bank.bankMarketShare = 0;
 
     // ---- 3. Settle the reserve legs while both sheets still exist, then verify the shell is empty. ----

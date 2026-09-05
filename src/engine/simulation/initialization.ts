@@ -1,5 +1,6 @@
 
 import { profileKeyOf } from './stages/profiles';
+import { writePlantRows } from '../ledger/plant-ledger';
 import { plantNetLocal } from '../../domain/plant';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
 import type { EntityId } from '../../domain/ids';
@@ -414,6 +415,10 @@ function openSeededBooks(state: GameState): void {
         .map(([id, v]) => ({ instrumentId: asInstrumentId(id), instrumentType: 'GOV_BOND', issuerRegion: c.region, quantityOrNotionalLocal: Number(v), units: Number(v) }));
       seedBook(v2, bankPartyOf(c.id), book, issuerOfHolding);
     });
+    // §3.13-BOOK g-ii-b — EVERY FIRM'S PLANT ROWS, from the vintages the seed built: an opening
+    // stock (the-seed A3), so no wire; the rows are the register from here and every writer
+    // hands them the list it computes.
+    state.companies.forEach((c) => writePlantRows(v2, c.id, c.region, c.plant));
     // §9.13-EQUITY — AND THE HOUSEHOLD SECTOR'S BOOK, opened by wire like every other holder's.
     // Every share of every listed company is either on a named book or held directly by
     // households; the institutions' books have just been opened, so what is left of each issue is

@@ -1,5 +1,5 @@
 import { V2World } from '../../../engine2/world';
-import { movePlant } from '../../ledger/plant-ledger';
+import { movePlant, writePlantRows } from '../../ledger/plant-ledger';
 import { drawCommitment, returnCommitment, lpCommitmentsOf } from '../../ledger/contract-ledger';
 import { registerCompanyEquity, setIssuedUnits } from '../../ledger/instrument-ledger';
 import { issuedSharesOf, marketCapAt } from '../../../engine2/instruments';
@@ -921,6 +921,7 @@ export function runFirmBirthsForRegion(
       // a PLANT wire from the segment, like the opening balance below (11e's "every birth
       // assigns plant with no wire").
       movePlant({ kind: 'SEGMENT', region: regionId, industry: seg.industry }, companyParty(c), c.plant, 0, 'firm birth: plant carved from pool');
+      writePlantRows(ctx.v2, c.id, c.region, c.plant); // §3.13-BOOK g-ii-b: the newborn's rows
       // W6: the home bank's facility (fundNewbornDebt, below) funds the opening balance
       // first; the pool carves out the founders' remainder.
       const loanLocal = ladderTotalLocal(ctx.v2, c.id);

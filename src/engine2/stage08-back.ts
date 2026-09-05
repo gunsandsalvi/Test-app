@@ -10,7 +10,7 @@
  * engine2 columns (tranches first, then lots, then the firm scalars) without touching the stage.
  */
 
-import { commissionPlant, retirePlant, scrapPlant } from '../engine/ledger/plant-ledger';
+import { commissionPlant, retirePlant, scrapPlant, writePlantRows } from '../engine/ledger/plant-ledger';
 import type { PrimarySettlement } from '../engine/simulation/stages/context';
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
 import { equityInstrumentId } from '../domain/instrument-keys';
@@ -697,7 +697,7 @@ function runCashWalk(args: {
 /** §7.325 W1 — core-A's comp writes, returned as data by the capital core and applied here.
  *  Serial/barrier callers apply them inside A (the original write points); a worker A defers
  *  them, and the main thread applies each firm's writes in row order before the redemptions. */
-export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapitalBlock>, L: BackLanes, row: number, nextWeek: number): void {
+export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapitalBlock>, L: BackLanes, row: number, nextWeek: number, v2: V2World): void {
   if (cap.learningWrites) {
     comp.cumulativeOutputUnits = cap.learningWrites.cumulativeUnits;
     comp.learningMultiplier = cap.learningWrites.multiplier;
@@ -715,6 +715,7 @@ export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapi
   if (cap.scrapWrites) {
     const scrapped = scrapPlantShare(comp.plant, cap.scrapWrites.scrappedShare, nextWeek);
     comp.plant = scrapped.plant;
+    writePlantRows(v2, comp.id, comp.region, comp.plant); // §3.13-BOOK g-ii-b: the rows keep the register
     scrapPlant(comp.id, scrapped.scrappedCostLocal); // §3.26-f-iii: a write-off is a recorded transformation
   }
 }
@@ -936,7 +937,7 @@ export function runBackCoreA(comp: Company | null, row: number, d: BackKernelDep
         v2, updatedRegions[L8.region[row]], L8.companyId[row], nextWeek, STANDARD_CORP_TENOR_YEARS
       )?.spreadBps ?? L8.facilityMarginBps[row],
     });
-    if (comp) applyCapCompWrites(comp, cap, L8, row, nextWeek);
+    if (comp) applyCapCompWrites(comp, cap, L8, row, nextWeek, v2);
     const newMaintenanceCapex = cap.maintenanceCapexLocal;
     const newMaintenanceShortfallStreak = cap.maintenanceShortfallStreak;
     const weeklyDebtFundedPortion = cap.debtFundedMaintenanceLocal;
@@ -2312,6 +2313,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     comp.growthCapex = round1(newGrowthCapex);
 
     comp.plant = newPlant;
+    writePlantRows(v2, comp.id, comp.region, newPlant); // §3.13-BOOK g-ii-b: the rows keep the register
 
       // IND1: read by stage 05's capacity growth — real net investment is what arrived.
       // IND13 — the plant grew by what entered service. Both lines are named on the rebuild

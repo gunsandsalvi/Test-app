@@ -451,7 +451,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
               // value, closures on the REAL ctx, pass-throughs from main's own F.
               aRes[i] = rebuildBackCoreA(cross, i, backDeps);
               streamAfterA[i] = F.rngAfter[i]; // non-profile A is draw-free (§7.317)
-              applyCapCompWrites(companyRows[i], aRes[i]!.cap, backLanes, i, nextWeek);
+              applyCapCompWrites(companyRows[i], aRes[i]!.cap, backLanes, i, nextWeek, v2);
             }
           }
         }

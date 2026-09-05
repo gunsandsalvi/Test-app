@@ -15,6 +15,7 @@
  */
 
 import { capitalMixOf } from '../../../domain/industry-registry';
+import { writePlantRows } from '../../ledger/plant-ledger';
 import { profileKeyOf } from './profiles';
 import { plantNetLocal, slicePlant, mergePlant, retireWornPlant, plantEffectiveNetLocal } from '../../../domain/plant';
 import { movePlant, retirePlant, abandonPlant } from '../../ledger/plant-ledger';
@@ -248,6 +249,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
       // what wore out this week leaves it here, on the ledger, so W6 closes for an estate too.
       const worn = retireWornPlant(comp.plant, ctx.nextWeek);
       comp.plant = worn.plant;
+      writePlantRows(ctx.v2, comp.id, comp.region, comp.plant); // §3.13-BOOK g-ii-b
       retirePlant(comp.id, worn.retiredCostLocal);
     }
     estate.assets.ppeLocal = comp ? plantNetLocal(comp.plant, ctx.nextWeek) : 0;
@@ -257,6 +259,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
       // §3.26-f-iii — abandoned, on the ledger: a scrap is not a sale to nobody.
       abandonPlant(comp.id, comp.plant.reduce((a, v) => a + v.costLocal, 0));
       comp.plant = [];
+      writePlantRows(ctx.v2, comp.id, comp.region, []); // §3.13-BOOK g-ii-b
     }
     estate.assets.ppeLocal = comp ? plantNetLocal(comp.plant, ctx.nextWeek) : 0;
     thisWeek.ppeSoldLocal += plant.soldLocal;
@@ -445,6 +448,8 @@ function sellPlantToBidders(
     movePlant(companyPartyOf(estate.companyId), companyParty(peer), split.taken, takenLocal * price, 'estate plant sold at auction');
     peer.plant = mergePlant(peer.plant, split.taken);
     comp.plant = split.kept;
+    writePlantRows(ctx.v2, peer.id, peer.region, peer.plant); // §3.13-BOOK g-ii-b: the buyer's and the estate's rows
+    writePlantRows(ctx.v2, comp.id, comp.region, comp.plant);
     estate.lastWeek?.buyerIds.push(peer.id);
     soldLocal += takenLocal;
   });

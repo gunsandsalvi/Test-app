@@ -509,12 +509,6 @@ written from here):
     g-ii. **PLANT JOINS** — g-ii-a is in §9: the rows exist (`plant-ledger.ts:writePlantRows` /
        `plantVintagesOf`, a row per capital good and life in units of cost, lots at the service
        week, round-trip pinned). Writers first (f1's discipline), what is left:
-    g-ii-b. **THE WRITERS KEEP THE ROWS.** Each of the thirteen writers of `Company.plant` (the
-       rebuild's commissioning and wear-out, the scrap, the estate's abandonment and sale, the
-       spin-off, the merger, the resolution, the seed, a birth's carve-out, the FDI subsidiary's
-       minting, the carriers) hands `writePlantRows` the list it just computed, so the rows equal
-       the field after every write; `O14`'s sum rule already covers the rows, and an O-family
-       check that the two agree per firm is the measurement step 38 takes.
     g-ii-c. **THE READERS TAKE THE ROWS.** ~30 read sites in 20 files call the `domain/plant.ts`
        reads on `comp.plant`; they call them on `plantVintagesOf(v2, comp.id)` instead — the
        domain reads take a vintage list and do not change; sites without a world in reach get
@@ -1338,6 +1332,16 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK g-ii-b — THE WRITERS KEEP THE ROWS.** Every writer of `Company.plant` hands
+  `writePlantRows` the list it just computed, in the same breath: the rebuild's commissioning
+  and wear-out and the scrap (`stage08-back.ts`, which now takes the world it already had), the
+  estate's wear, abandonment and sale, the spin-off's two registers, the merger's and the
+  resolution's acquirer and the emptied target, a birth's carve-out, the FDI subsidiary's minted
+  plant — and the seed opens every firm's rows from the vintages it built (an opening stock, no
+  wire). `O16` (`plantVintageGapLocal`, pure and pinned) names a firm whose rows and field
+  disagree by more than dust, which is the check g-ii-c and g-ii-d stand on. Atlas:
+  capital-programme A1 cites the writer. Gates green; no run (rule 11).
 
 **13-BOOK g-ii-a — THE PLANT ROWS EXIST.** A firm's plant can be rows on its own register book:
   `PLANT` joins the one kind list (class `PLANT`, counted in `COST` — a register kept in cost is a

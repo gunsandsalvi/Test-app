@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
 import { bookRowsOf, rowLotsOf, rowLotUnits, rowUnits, openKindRow } from '../src/engine2/holdings';
 import { writePlantRows, plantVintagesOf, plantInstrumentId } from '../src/engine/ledger/plant-ledger';
-import { seedPlantVintages, commissionVintage, scrapPlantShare, slicePlant, mergePlant, retireWornPlant, plantGrossLocal, type PlantVintage } from '../src/domain/plant';
+import { seedPlantVintages, commissionVintage, scrapPlantShare, slicePlant, mergePlant, retireWornPlant, plantGrossLocal, plantVintageGapLocal, type PlantVintage } from '../src/domain/plant';
 import { asEntityId } from '../src/domain/ids';
 
 const a = asEntityId('CO-A'), b = asEntityId('CO-B');
@@ -50,4 +50,13 @@ test('the rows are the vintages: every writer of a plant round-trips through the
   assert.ok(worn.retiredCostLocal > 0);
   assert.equal(plantGrossLocal(plantVintagesOf(v2, a), 700), plantGrossLocal(plant, 700));
   assert.equal(plantInstrumentId('premises', 25), 'PLANT:premises:25');
+});
+
+test('O16\'s arithmetic: the gap between two registers of the same plant is the cost by which their vintages differ', () => {
+  const a: PlantVintage[] = [{ costLocal: 100, kind: 'k', enteredServiceWeek: 10, usefulLifeYears: 10 }, { costLocal: 50, kind: 'k', enteredServiceWeek: 12, usefulLifeYears: 10 }];
+  assert.equal(plantVintageGapLocal(a, a), 0);
+  assert.equal(plantVintageGapLocal(a, [{ costLocal: 60, kind: 'k', enteredServiceWeek: 10, usefulLifeYears: 10 }, { costLocal: 40, kind: 'k', enteredServiceWeek: 10, usefulLifeYears: 10 }, a[1]]), 0, 'a split vintage folds');
+  assert.equal(plantVintageGapLocal(a, [a[0]]), 50, 'a missing vintage is its whole cost');
+  assert.equal(plantVintageGapLocal(a, [a[0], { ...a[1], usefulLifeYears: 7 }]), 100, 'a vintage with another life is another vintage');
+  assert.equal(plantVintageGapLocal([], []), 0);
 });
