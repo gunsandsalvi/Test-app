@@ -724,10 +724,11 @@ export interface Region {
   borrowFeeBpsByCompanyId?: Record<string, number>;
   /** DER1 — the cleared par swap rate per tenor (annualised decimal). */
   swapParRateByTenor?: Record<string, number>;
-  /** §3.17-ii — each reference issuer's cleared protection spread, the last
-   *  `MEASURE_WINDOW_WEEKS` prints: the history a CDS's initial margin is sized from. Written by
-   *  the CDS book when it clears a name. */
-  cdsSpreadHistoryByIssuer?: Record<string, number[]>;
+  /** §3.17-ii — each reference issuer's cleared protection spread, PER TENOR (§3.17d-iii: the
+   *  curve's store), the last `MEASURE_WINDOW_WEEKS` prints: what a contract marks at and sizes
+   *  its initial margin from. Written by the CDS book when it clears a name; a name's key here is
+   *  what makes it one the market makes. */
+  cdsSpreadHistoryByIssuer?: Record<string, Record<string, number[]>>;
   /** §3.17d-i — the region's credit index SERIES, by id: the basket's names fixed at the roll and
    *  its events settled once for the line. Rolled and written by `derivative-markets/cds-index.ts`;
    *  a series stays while a contract names it. */

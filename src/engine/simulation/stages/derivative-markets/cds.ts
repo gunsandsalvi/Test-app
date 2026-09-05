@@ -30,7 +30,7 @@ import { bankParty, bankPartyOf, companyParty } from '../../../../domain/party';
 import { RegionId } from '../../../../types';
 import { ensureV2 } from '../../../../engine2/world';
 import { institutionProfile } from '../../../../domain/institution-profiles';
-import { CDS_TENOR_WEEKS, protectionNeedLocal, twoWayProtectionQuote } from '../../../../domain/derivatives/classes/cds';
+import { CDS_TENORS, CDS_TENOR_YEARS, CDS_BENCHMARK_TENOR, cdsTenorWeeksOf, nearestCdsTenor, protectionNeedLocal, twoWayProtectionQuote, type CdsTenorKey } from '../../../../domain/derivatives/classes/cds';
 import { DerivativeContract, DerivativeParty, bankPartyKey, derivativePartyKey } from '../../../../domain/derivatives/contract';
 import { deskNotionalCapacityLocal, initialMarginRateOf } from '../../../../domain/derivatives/registry';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
@@ -48,7 +48,7 @@ import { postInitialMargin, withInitialMargin, admitToHouse, openMemberCapacity,
 import { MEASURE_WINDOW_WEEKS } from '../../../../domain/volatility';
 import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
-import { facilityBookOf, facilityRowsOf, isTrancheId, issuerIdOf, ladderTotalLocal } from '../../../../engine2/tranches';
+import { facilityBookOf, facilityRowsOf, isTrancheId, issuerIdOf, ladderTotalLocal, trancheRowOf } from '../../../../engine2/tranches';
 import { issuerSpreadAtOnCurve } from '../../../credit-price';
 
 
@@ -59,8 +59,10 @@ import { asEntityId } from '../../../../domain/ids';
 import { asTicker } from '../../../../domain/ids';
 import type { Ticker } from '../../../../domain/ids';
 
-/** One holder's need on one name, in the name's own money. */
-interface ProtectionNeed { party: DerivativeParty; usd: number }
+/** One holder's need on one name, in the name's own money, at the tenor its exposure's life is nearest. */
+interface ProtectionNeed { party: DerivativeParty; usd: number; termKey: CdsTenorKey }
+/** An exposure to one name: its size, and its size-weighted remaining life (§3.17d-iii). */
+interface Exposure { local: number; weeksLocal: number }
 
 function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun): void {
   const v2cds = ensureV2(state);
@@ -72,7 +74,7 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
   // §3.17-v-iii: one capacity read for the market — every member sized to its limit at the house.
   const capacity = openMemberCapacity();
   /** What protection on this name posts per unit of notional, at this week's strike shape. */
-  const marginRateOf = (regionId: RegionId, issuerId: EntityId) => initialMarginRateOf({ classId: 'CDS', regionId, reference: { kind: 'ISSUER', issuerId }, termKey: '', maturityWeek: week + CDS_TENOR_WEEKS }, view);
+  const marginRateOf = (regionId: RegionId, issuerId: EntityId, termKey: CdsTenorKey) => initialMarginRateOf({ classId: 'CDS', regionId, reference: { kind: 'ISSUER', issuerId }, termKey, maturityWeek: week + cdsTenorWeeksOf(termKey) }, view);
 
   // ---- 1. WHO NEEDS PROTECTION, and how much. Exposure to one name beyond what the holder's
   // own capital lets it carry against a single counterparty. This is the decision
@@ -80,9 +82,9 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
   // the holder is allowed — or can afford — to keep, so the excess is laid off rather than
   // preferred away. Sized here for every holder in the world, routed to the reference's region. ----
   const needByRegion = new Map<RegionId, Map<EntityId, ProtectionNeed[]>>();
-  const addNeeds = (holder: Company, party: DerivativeParty, equityHomeLocal: number, exposureByIssuer: Map<EntityId, number>) => {
+  const addNeeds = (holder: Company, party: DerivativeParty, equityHomeLocal: number, exposureByIssuer: Map<EntityId, Exposure>) => {
     const key = derivativePartyKey(party);
-    exposureByIssuer.forEach((exposureLocal, issuerId) => {
+    exposureByIssuer.forEach(({ local: exposureLocal, weeksLocal }, issuerId) => {
       const issuer = companyById.get(issuerId);
       if (!issuer || issuer.id === holder.id || !isActiveCompany(issuer)) return;
       const regionId = issuer.region as RegionId;
@@ -92,20 +94,25 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
         equityLocal: convert(equityHomeLocal, currencyOf(holder.region as RegionId), money, ctx.fx),
         alreadyHedgedLocal: standing.coverLocal('CDS', 'a', key, issuerId),
       });
+      // §3.17d-iii: the hedge is struck at the tenor nearest the exposure's own remaining life.
+      const termKey = nearestCdsTenor(weeksLocal / Math.max(1e-9, exposureLocal));
       // §3.17-v-iii: no more than the member can margin at the house, reserved as it is sized.
-      const rate = marginRateOf(regionId, issuerId);
+      const rate = marginRateOf(regionId, issuerId, termKey);
       const needLocal = Math.min(wantLocal, memberNotionalCapacityLocal(ctx, capacity, party, money, rate));
       if (needLocal <= 1) return;
       reserveMemberCapacity(ctx, capacity, party, money, needLocal * rate);
       const byIssuer = needByRegion.get(regionId) ?? new Map<EntityId, ProtectionNeed[]>();
       const list = byIssuer.get(issuerId) ?? [];
-      list.push({ party, usd: needLocal });
+      list.push({ party, usd: needLocal, termKey });
       byIssuer.set(issuerId, list);
       needByRegion.set(regionId, byIssuer);
     });
   };
-  const addExposure = (m: Map<EntityId, number>, issuerId: EntityId, local: number) => {
-    if (local > 0) m.set(issuerId, (m.get(issuerId) ?? 0) + local);
+  const addExposure = (m: Map<EntityId, Exposure>, issuerId: EntityId, local: number, weeksRemaining: number) => {
+    if (!(local > 0)) return;
+    const e = m.get(issuerId) ?? { local: 0, weeksLocal: 0 };
+    e.local += local; e.weeksLocal += local * Math.max(0, weeksRemaining);
+    m.set(issuerId, e);
   };
 
   // (a) THE BANKS. A name's exposure is the loan book (step 10: the facility rows on its ladder),
@@ -114,14 +121,16 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
   const banks = ctx.prevActiveFirms.filter((c) => c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c));
   banks.forEach((bank) => {
     const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-    const exposureByIssuer = new Map<EntityId, number>();
-    facilityRowsOf(ctx.v2, bank.id).forEach((l) => addExposure(exposureByIssuer, l.borrowerId, l.principalLocal));
+    const exposureByIssuer = new Map<EntityId, Exposure>();
+    facilityRowsOf(ctx.v2, bank.id).forEach((l) => addExposure(exposureByIssuer, l.borrowerId, l.principalLocal, l.maturityWeek - week));
     deskRowsOf(ctx.v2, bank.id).forEach((row) => {
-      if (isTrancheId(ctx.v2, row.instrumentId)) addExposure(exposureByIssuer, issuerIdOf(ctx.v2, row.instrumentId), row.inventoryLocal);
+      if (!isTrancheId(ctx.v2, row.instrumentId)) return;
+      const r = trancheRowOf(ctx.v2, row.instrumentId);
+      addExposure(exposureByIssuer, issuerIdOf(ctx.v2, row.instrumentId), row.inventoryLocal, r === undefined ? 0 : ctx.v2.tranches.maturityWeek[r] - week);
     });
     const written = standing.coverLocal('CDS', 'b', bankPartyKey(bank.id));
     if (written > 0) {
-      companyById.forEach((c) => addExposure(exposureByIssuer, c.id, standing.coverLocal('CDS', 'b', bankPartyKey(bank.id), c.id)));
+      companyById.forEach((c) => CDS_TENORS.forEach((tenor) => addExposure(exposureByIssuer, c.id, standing.coverLocal('CDS', 'b', bankPartyKey(bank.id), c.id, tenor), cdsTenorWeeksOf(tenor))));
     }
     addNeeds(bank, bankParty(bank), sheet.bankEquityLocal, exposureByIssuer);
   });
@@ -129,11 +138,11 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
   // (b) THE FIRMS. A receivable on a named buyer is credit risk on that buyer; a supply contract is
   // the receivables still to come, and what a customer has paid ahead is its claim on the
   // supplier. The lane already holds every one of these as an object; this is what prices them.
-  const firmExposure = new Map<EntityId, Map<EntityId, number>>();
+  const firmExposure = new Map<EntityId, Map<EntityId, Exposure>>();
   const firmExposureOf = (holderId: EntityId) => { let m = firmExposure.get(holderId); if (!m) { m = new Map(); firmExposure.set(holderId, m); } return m; };
   tradeInvoicesOf(ctx.v2).forEach((inv) => {
     const usd = inv.amountCurrency * inv.bookedUsdPerCurrency;
-    addExposure(firmExposureOf(inv.sellerId), inv.buyerId, convert(usd, 'USD', currencyOf(inv.buyerRegion), ctx.fx));
+    addExposure(firmExposureOf(inv.sellerId), inv.buyerId, convert(usd, 'USD', currencyOf(inv.buyerRegion), ctx.fx), inv.weekDue - week);
   });
   const CT = ctx.v2.contracts;
   REGION_IDS.forEach((customerRegion) => {
@@ -141,9 +150,9 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
       const supplier = partyFromKey(supplierKey);
       const customer = partyFromKey(customerKey);
       if (supplier?.kind !== 'COMPANY' || customer?.kind !== 'COMPANY') return;
-      addExposure(firmExposureOf(supplier.id), customer.id, CT.qtyPerWeek[row] * CT.priceLocal[row] * CT.weeksRemaining[row]);
+      addExposure(firmExposureOf(supplier.id), customer.id, CT.qtyPerWeek[row] * CT.priceLocal[row] * CT.weeksRemaining[row], CT.weeksRemaining[row]);
       const supplierRegion = companyById.get(supplier.id)?.region as RegionId | undefined;
-      if (supplierRegion) addExposure(firmExposureOf(customer.id), supplier.id, convert(CT.prepaidLocal[row], currencyOf(customerRegion), currencyOf(supplierRegion), ctx.fx));
+      if (supplierRegion) addExposure(firmExposureOf(customer.id), supplier.id, convert(CT.prepaidLocal[row], currencyOf(customerRegion), currencyOf(supplierRegion), ctx.fx), CT.weeksRemaining[row]);
     });
   });
   firmExposure.forEach((exposureByIssuer, holderId) => {
@@ -164,16 +173,16 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
      * bond of any maturity, and then there is no basis to speak of rather than a basis against a
      * number nobody traded.
      */
-    const cashSpreadBpsOf = (c: { id: EntityId; region: string }): number | undefined =>
+    const cashSpreadBpsOf = (c: { id: EntityId; region: string }, tenor: CdsTenorKey): number | undefined =>
       issuerSpreadAtOnCurve(ctx.v2, ctx.updatedRegions[c.region as RegionId], c.id,
-        ctx.nextWeek, CDS_TENOR_WEEKS / 52)?.spreadBps;
+        ctx.nextWeek, CDS_TENOR_YEARS[tenor])?.spreadBps;
 
     const hedgeDemandByIssuer = needByRegion.get(regionId) ?? new Map<EntityId, ProtectionNeed[]>();
 
-    // ---- 2. The book. One instrument per reference entity: every name somebody needs protection
-    // on this week, and every name this market has printed before — a made name stays quoted two
-    // ways whether or not anyone has to lay it off this week, which is what makes its spread a
-    // price rather than a hedger's transfer. ----
+    // ---- 2. The book. One instrument per reference entity AND TENOR (§3.17d-iii: the curve):
+    // every name somebody needs protection on this week, and every name this market has printed
+    // before — a made name stays quoted two ways at every tenor whether or not anyone has to lay
+    // it off this week, which is what makes its spread a price rather than a hedger's transfer. ----
     const referenceIds = new Set<EntityId>(hedgeDemandByIssuer.keys());
     Object.keys(reg.cdsSpreadHistoryByIssuer ?? {}).forEach((id) => referenceIds.add(asEntityId(id)));
     const referenceIssuers = Array.from(referenceIds)
@@ -194,20 +203,20 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
     /** Each two-way participant's opening position per name: what it holds if it does nothing. */
     const openingByParticipant = new Map<string, Map<InstrumentId, number>>();
     const shortByInstrument = new Map<InstrumentId, number>();
-    const quoteAll = (participantId: string, party: DerivativeParty, capacityLocal: number, rangeBps: number, reservationOf: (c: Company) => number) => {
+    const quoteAll = (participantId: string, party: DerivativeParty, capacityLocal: number, rangeBps: number, reservationOf: (c: Company, tenorYears: number) => number) => {
       if (!(capacityLocal > 0)) return;
       const demandByInstrumentId = new Map<InstrumentId, ParticipantDemand>();
       const opening = new Map<InstrumentId, number>();
-      referenceIssuers.forEach((c) => {
-        const id = cdsInstrumentId(regionId, c.id);
+      referenceIssuers.forEach((c) => CDS_TENORS.forEach((tenor) => {
+        const id = cdsInstrumentId(regionId, c.id, tenor);
         // A participant will not carry more of ONE name than its own large-exposure limit allows
         // either way, and no more than it can margin at the house.
-        const sizeLocal = Math.min(capacityLocal, memberNotionalCapacityLocal(ctx, capacity, party, money, marginRateOf(regionId, c.id))) / Math.max(1, referenceIssuers.length);
-        const q = twoWayProtectionQuote({ reservationBps: reservationOf(c), rangeBps, sizeLocal });
+        const sizeLocal = Math.min(capacityLocal, memberNotionalCapacityLocal(ctx, capacity, party, money, marginRateOf(regionId, c.id, tenor))) / Math.max(1, referenceIssuers.length);
+        const q = twoWayProtectionQuote({ reservationBps: reservationOf(c, CDS_TENOR_YEARS[tenor]), rangeBps, sizeLocal });
         demandByInstrumentId.set(id, { reservationStat: q.reservationStat, maxHoldingLocal: q.maxHoldingLocal, fullSizeStatRange: q.fullSizeStatRange });
         opening.set(id, q.currentHoldingLocal);
         shortByInstrument.set(id, (shortByInstrument.get(id) ?? 0) + q.currentHoldingLocal);
-      });
+      }));
       openingByParticipant.set(participantId, opening);
       participants.push({ id: participantId, currentHoldingsByInstrumentId: new Map(opening), demandByInstrumentId });
     };
@@ -221,11 +230,12 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
       const requiredReturn = bankRequiredReturnAnnual(bank, reg);
       const capacityLocal = deskNotionalCapacityLocal(
         leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, bank.id), facilityBookOf(ctx.v2, bank.id), bankBookAssetsLocal(ctx.v2, bank.id)), standing.pfeChargeLocal(bankPartyKey(bank.id)), 'CDS');
-      quoteAll(`CDSDESK-${bank.ticker}`, bankParty(bank), capacityLocal, fullSizeSpreadRangeBpsOf(bank), (c) => computeReservationSpreadBps({
+      quoteAll(`CDSDESK-${bank.ticker}`, bankParty(bank), capacityLocal, fullSizeSpreadRangeBpsOf(bank), (c, tenorYears) => computeReservationSpreadBps({
         entityType: 'ASSET_MANAGER',
         requiredReturn,
         expectedLossBps: pdByIssuerId.get(c.id)! * (1 - recoveryRate) * 10000,
-        capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, CDS_TENOR_WEEKS / 52),
+        // The capital a position consumes is its own tenor's: that difference IS the curve.
+        capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, tenorYears),
         creditConditionsIndex,
       }));
     });
@@ -240,39 +250,42 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
     );
     creditFunds.forEach((entity) => {
       const requiredReturn = entityRequiredReturn(entity, institutionTotalAssetsLocal(ctx, entity));
-      quoteAll(entity.id, { kind: 'INSTITUTION', id: entity.id }, Math.max(0, entity.equityCapitalLocal), fullSizeSpreadRangeBpsOf(entity), (c) => computeReservationSpreadBps({
+      quoteAll(entity.id, { kind: 'INSTITUTION', id: entity.id }, Math.max(0, entity.equityCapitalLocal), fullSizeSpreadRangeBpsOf(entity), (c, tenorYears) => computeReservationSpreadBps({
         entityType: entity.entityType,
         requiredReturn,
         expectedLossBps: pdByIssuerId.get(c.id)! * (1 - recoveryRate) * 10000,
-        capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, CDS_TENOR_WEEKS / 52),
+        capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, tenorYears),
         creditConditionsIndex,
       }));
     });
 
     if (participants.length === 0) return;
 
-    const instruments: ClearingInstrument[] = referenceIssuers.map((c) => {
-      const id = cdsInstrumentId(regionId, c.id);
-      // The float is the hedgers' need plus every quoter's opening short: what changes hands is
-      // what the print moves off those openings.
-      const floatLocal = (hedgeDemandByIssuer.get(c.id) ?? []).reduce((a, d) => a + d.usd, 0) + (shortByInstrument.get(id) ?? 0);
+    const histOf = (issuerId: EntityId, tenor: CdsTenorKey): number[] | undefined => reg.cdsSpreadHistoryByIssuer?.[issuerId]?.[tenor];
+    const instruments: ClearingInstrument[] = referenceIssuers.flatMap((c) => CDS_TENORS.map((tenor): ClearingInstrument => {
+      const id = cdsInstrumentId(regionId, c.id, tenor);
+      // The float is the hedgers' need at this tenor plus every quoter's opening short: what
+      // changes hands is what the print moves off those openings.
+      const floatLocal = (hedgeDemandByIssuer.get(c.id) ?? []).filter((d) => d.termKey === tenor).reduce((a, d) => a + d.usd, 0) + (shortByInstrument.get(id) ?? 0);
       // §3.13-BOOK dII: the name's book is declared on the instrument index where it is built.
       registerBook(v2cds, id, 'CDS', money);
+      const last = histOf(c.id, tenor)?.slice(-1)[0];
       return {
         id,
         outstandingLocal: floatLocal,
         tradableFloatLocal: floatLocal,
-        // Opens at the issuer's own cleared cash spread AT THIS CONTRACT'S OWN TENOR — the
-        // alternative a seller is pricing against — and moves from there on this book's own
-        // supply and demand. The BASIS between the two is what the market then produces.
-        // §3.13: that cash leg is a point on the issuer's own credit curve, not a number the
-        // issuer carries; a name with no printed bonds has no cash leg to price against and the
-        // contract opens on the structural hazard its sellers reserve against instead.
-        currentStat: Math.max(1, c.cdsSpreadBps > 0 ? c.cdsSpreadBps : (cashSpreadBpsOf(c) ?? 1)),
+        // Opens at this tenor's own last print; before one, at the issuer's own cleared cash
+        // spread AT THIS TENOR — the alternative a seller is pricing against — and moves from
+        // there on this book's own supply and demand. The BASIS between the two is what the
+        // market then produces. §3.13: that cash leg is a point on the issuer's own credit
+        // curve, not a number the issuer carries; a name with no printed bonds has no cash leg
+        // to price against and the contract opens on the structural hazard its sellers reserve
+        // against instead.
+        currentStat: Math.max(1, last ?? (cashSpreadBpsOf(c, tenor) ?? (c.cdsSpreadBps > 0 ? c.cdsSpreadBps : 1))),
         statKind: 'YIELD_LIKE',
-        durationYears: CDS_TENOR_WEEKS / 52,
+        durationYears: CDS_TENOR_YEARS[tenor],
       };
-    });
+    }));
 
     const result = clearFinancialAsset(instruments, participants, {
       // Bilateral between named desks and funds; the clearing house takes no fee on it yet.
@@ -292,30 +305,35 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
     };
     const struck: DerivativeContract[] = [];
     let seq = 0;
-    referenceIssuers.forEach((issuer) => {
-      const instrumentId = cdsInstrumentId(regionId, issuer.id);
+    referenceIssuers.forEach((issuer) => CDS_TENORS.forEach((tenor) => {
+      const instrumentId = cdsInstrumentId(regionId, issuer.id, tenor);
       const clearedBps = result.newStatById.get(instrumentId);
       if (clearedBps === undefined) return;
-      // THE PRICE. `comp.cdsSpreadBps` was `oas + a random draw`, clamped to [10, 5000]; it is
-      // what this book cleared at, with no bound on either end (rule 6).
-      issuer.cdsSpreadBps = Number(clearedBps.toFixed(1));
-      // §3.17-ii: the name's print joins its history — what a protection contract's initial
-      // margin is sized from (the spread's own measured move).
+      const print = Number(clearedBps.toFixed(1));
+      // §3.17-ii: the print joins the name's history AT ITS TENOR (§3.17d-iii: the curve's store)
+      // — what a protection contract marks at and sizes its initial margin from.
       const hist = reg.cdsSpreadHistoryByIssuer ?? (reg.cdsSpreadHistoryByIssuer = {});
-      hist[issuer.id] = [...(hist[issuer.id] ?? []).slice(-(MEASURE_WINDOW_WEEKS - 1)), issuer.cdsSpreadBps];
-      // §5-CLOSE P2: the week this print was struck — a name with no protection book this week
-      // carries last print, which is a quote, not a price, and the basis test reads only prices.
-      issuer.cdsClearedWeek = ctx.nextWeek;
-      // ...and the BASIS, the second cross-market agreement test this model can run: protection
-      // against the SAME issuer's cash paper at the SAME maturity, which is the only comparison
-      // the two prices are of. A name with no cash bond printed has no basis, and saying so is
-      // the honest answer — the pair `P2` measures has to be two real prices.
-      const cashBps = cashSpreadBpsOf(issuer);
-      issuer.cdsBasisBps = cashBps === undefined ? undefined : Number((clearedBps - cashBps).toFixed(1));
+      const curve = hist[issuer.id] ?? (hist[issuer.id] = {});
+      curve[tenor] = [...(curve[tenor] ?? []).slice(-(MEASURE_WINDOW_WEEKS - 1)), print];
+      if (tenor === CDS_BENCHMARK_TENOR) {
+        // THE PRICE the name is quoted by. `comp.cdsSpreadBps` was `oas + a random draw`, clamped
+        // to [10, 5000]; it is what this book cleared at the benchmark tenor, with no bound on
+        // either end (rule 6).
+        issuer.cdsSpreadBps = print;
+        // §5-CLOSE P2: the week this print was struck — a name with no protection book this week
+        // carries last print, which is a quote, not a price, and the basis test reads only prices.
+        issuer.cdsClearedWeek = ctx.nextWeek;
+        // ...and the BASIS, the second cross-market agreement test this model can run: protection
+        // against the SAME issuer's cash paper at the SAME maturity, which is the only comparison
+        // the two prices are of. A name with no cash bond printed has no basis, and saying so is
+        // the honest answer — the pair `P2` measures has to be two real prices (at every tenor).
+        const cashBps = cashSpreadBpsOf(issuer, tenor);
+        issuer.cdsBasisBps = cashBps === undefined ? undefined : Number((clearedBps - cashBps).toFixed(1));
+      }
 
       const writtenBySeller = new Map<string, number>();
       let totalWrittenLocal = 0;
-      const demands: ProtectionNeed[] = [...(hedgeDemandByIssuer.get(issuer.id) ?? [])];
+      const demands: ProtectionNeed[] = (hedgeDemandByIssuer.get(issuer.id) ?? []).filter((d) => d.termKey === tenor);
       result.newParticipantHoldings.forEach((byInstrument, participantId) => {
         const net = (byInstrument.get(instrumentId) ?? 0) - (openingByParticipant.get(participantId)?.get(instrumentId) ?? 0);
         if (net > 1) {
@@ -323,7 +341,7 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
           totalWrittenLocal += net;
         } else if (net < -1) {
           // §3.17c (c): a view — the print is tighter than this participant's own cost of the risk.
-          demands.push({ party: partyOfSeat(participantId), usd: -net });
+          demands.push({ party: partyOfSeat(participantId), usd: -net, termKey: tenor });
         }
       });
       if (totalWrittenLocal <= 0) return;
@@ -338,25 +356,25 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
           const seller = partyOfSeat(participantId);
           if (derivativePartyKey(seller) === derivativePartyKey(d.party)) return;
           struck.push(withInitialMargin({
-            id: `${regionId}-CDS-${issuer.id}-${week}-${seq++}`,
+            id: `${regionId}-CDS-${issuer.id}-${tenor}-${week}-${seq++}`,
             classId: 'CDS',
             regionId,
             a: d.party,
             b: seller,
             notional: Math.round(notional),
-            strike: Number(clearedBps.toFixed(1)),
+            strike: print,
             reference: { kind: 'ISSUER', issuerId: issuer.id },
-            termKey: '',
+            termKey: tenor,
             // §3.13c: the market it clears in.
             currency: money,
             // §3.17-iii: marked from strike — nothing settled yet.
             settledMarkLocal: 0,
             struckWeek: week,
-            maturityWeek: week + CDS_TENOR_WEEKS,
+            maturityWeek: week + cdsTenorWeeksOf(tenor),
           }, view));
         });
       });
-    });
+    }));
     // §3.17-v-i: the house admits what each member can margin, then the contracts stand and post.
     const admitted = admitToHouse(ctx, struck);
     strikeDerivatives(ctx, admitted);

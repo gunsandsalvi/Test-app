@@ -97,11 +97,11 @@ checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
-| A1 satisfies `../instruments/derivative.md` | `src/domain/derivatives/classes/cds.ts:CDS_PROFILE` | ⚠️ |
+| A1 satisfies `../instruments/derivative.md` | `src/domain/derivatives/classes/cds.ts:CDS_PROFILE` | ✅ |
 | A1.a D3 underlying — a named reference entity and its default event | `src/engine/simulation/stages/derivative-lifecycle.ts:buildDerivativeMarketView` | ✅ |
 | A1.b D4 payoff — par − recovery on the notional | `src/domain/derivatives/classes/cds.ts:eventTermination` | ✅ |
 | A1.c D7 price — the running spread in bps, cleared | `src/engine/simulation/stages/derivative-markets/cds.ts:runCdsMarket` | ✅ |
-| **A1.d D6 term — a stated tenor, and a CURVE of them** | `src/domain/derivatives/classes/cds.ts:CDS_TENOR_WEEKS` | ❌ |
+| A1.d D6 term — a stated tenor, and a CURVE of them | `src/domain/derivatives/classes/cds.ts:CDS_TENORS` · `src/domain/derivatives/classes/cds.ts:nearestCdsTenor` · `src/engine/simulation/stages/derivative-markets/cds.ts:runCdsMarket` | ✅ |
 | A2 the premium leg is a real periodic payment, and it stops on the event | `src/domain/derivatives/classes/cds.ts:periodicLegUSDToB` | ✅ |
 | A3 the protection leg is contingent; its value a read from the cleared spread | `src/domain/derivatives/classes/cds.ts:markToMarketUSDToA` | ✅ |
 | A4 the reference entity exists here and can default | `src/engine/audit/ownership.ts:o8` | ✅ |
@@ -185,7 +185,18 @@ series' events it has settled. The class (`CDS_INDEX_PROFILE`) pays premium on t
 share, marks the spread move on it as a risky annuity plus a failed name's expected payoff, and
 holds past maturity while a failed name's workout is open.
 
-### ❌ A1.d — THERE IS NO CDS CURVE, AND SO NO TERM STRUCTURE OF CREDIT
+### ✅ A1.d — THE CURVE
+
+*2026-09-05 (§9.17d-iii). Four tenors — `CDS_TENORS` 1y/3y/5y/10y, five the benchmark a name is
+quoted by (`Company.cdsSpreadBps`) — and one instrument per (name, tenor)
+(`cdsInstrumentId(region, issuer, tenor)`). A hedger strikes at the tenor nearest its exposure's
+size-weighted remaining life (`nearestCdsTenor`: a loan's maturity, a receivable's due date, a
+contract's weeks remaining); the quoters quote every tenor, each reservation at the capital charge
+of its own tenor, which is what makes the curve a curve. The print history is per name and tenor
+(`Region.cdsSpreadHistoryByIssuer`), the mark and the margin read the contract's own point, and P2
+measures every tenor against the issuer's cash curve at the same point.*
+
+The paragraph below is the state before it.
 
 `classes/cds.ts:CDS_TENOR_WEEKS = 5 * 52` and every contract is struck with
 `termKey: ''` (`derivative-markets/cds.ts:233`). One tenor, and the market clears one instrument
@@ -326,7 +337,7 @@ CDS's `referenceId` is not re-keyed there. **§3 step 34, and 13-BOOK (d) for th
 
 ### Also marked, briefly
 
-- **A1 ⚠️** — the profile satisfies the contract as far as D8/D9 do; §9.17-ii/iii gave it initial margin off the name's own spread move and a weekly mark, §9.17-iv the clearing house, §9.17-vi the issuer's own recovery — what is left is the curve (A1.d).
+- **A1 ✅** (2026-09-05, §9.17d-iii) — the profile satisfies the contract: §9.17-ii/iii gave it initial margin off the name's own spread move and a weekly mark, §9.17-iv the clearing house, §9.17-vi the issuer's own recovery, §9.17d-iii the curve (A1.d).
 - **A1.b ✅** (2026-09-05, §9.17-vi) — the payoff is `par − the ISSUER's own realised unsecured recovery`, settled when its estate closes — D2/D2.a above.
 - **A3 ✅** (2026-09-05, §9.17-iii) — `cds.ts:markToMarketUSDToA` values protection every week as the spread move on a RISKY annuity: discounted at the overnight rate and survival-weighted at the hazard the cleared spread implies; the credit event nets what the mark already paid.
 - **C3.b ⚠️** — `P2` reports the basis and fires only above a quota, so a persistently large one on a minority of names is invisible.

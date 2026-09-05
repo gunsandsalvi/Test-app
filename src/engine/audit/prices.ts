@@ -17,7 +17,7 @@ import { trancheClearedPricePerFace, issuerSpreadAtOnCurve, IS_LOAN_ROW } from '
 import { materializeGovLadder, ladderRowsOf, TR_SUBORDINATED, TR_CP, TR_FACILITY } from '../../engine2/tranches';
 
 import { STANDARD_CORP_TENOR_YEARS } from '../../domain/primary-market';
-import { CDS_TENOR_WEEKS } from '../../domain/derivatives/classes/cds';
+import { CDS_TENORS, CDS_TENOR_YEARS } from '../../domain/derivatives/classes/cds';
 import { clearedPriceOf } from '../../engine2/prices';
 import { asInstrumentId } from '../../domain/ids';
 
@@ -85,14 +85,21 @@ function p2(state: GameState, week: number): AuditFinding[] {
   state.companies.forEach((c) => {
     const reg = state.regions[c.region];
     if (!isActiveCompany(c) || !reg || !(c.cdsSpreadBps > 0) || c.cdsClearedWeek !== state.currentWeek) return;
-    // §3.13: the cash leg of a five-year basis is that issuer's own five-year bond, read off the
-    // price it cleared at. A name with no printed bond has no basis to test.
-    const cash = issuerSpreadAtOnCurve(v2, reg, c.id, week, CDS_TENOR_WEEKS / 52)?.spreadBps;
-    if (cash === undefined || !(cash > 0)) return;
-    n++;
-    if (Math.abs(c.cdsSpreadBps - cash) > Math.max(150, cash * 0.75)) wide++;
+    // §3.13: the cash leg of a basis is that issuer's own bond at the SAME point on its curve,
+    // read off the price it cleared at — §3.17d-iii: at every tenor the protection book printed.
+    // A name with no printed bond has no basis to test.
+    const curve = reg.cdsSpreadHistoryByIssuer?.[c.id];
+    CDS_TENORS.forEach((tenor) => {
+      const hist = curve?.[tenor];
+      const cds = hist?.[hist.length - 1];
+      if (!(cds !== undefined && cds > 0)) return;
+      const cash = issuerSpreadAtOnCurve(v2, reg, c.id, week, CDS_TENOR_YEARS[tenor])?.spreadBps;
+      if (cash === undefined || !(cash > 0)) return;
+      n++;
+      if (Math.abs(cds - cash) > Math.max(150, cash * 0.75)) wide++;
+    });
   });
-  if (wide > n * 0.1) out.push({ family: 'P', check: 'P2 CDS basis bounded', week, usd: wide, message: `${wide} of ${n} names carry a CDS more than 150bp or 75% away from the bond` });
+  if (wide > n * 0.1) out.push({ family: 'P', check: 'P2 CDS basis bounded', week, usd: wide, message: `${wide} of ${n} name-tenors carry a CDS more than 150bp or 75% away from the bond at the same point` });
   const closed = (state.estates ?? []).filter((e) => e.closedWeek !== undefined);
   if (closed.length >= 5) {
     const owed = sum(closed, (e) => sum(e.claims.filter((c) => c.seniority < 99 && c.instrumentType !== 'EQUITY'), (c) => c.principalLocal));

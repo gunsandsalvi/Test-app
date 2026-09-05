@@ -26,7 +26,7 @@ import { derivativesBookOf, strikeDerivatives } from '../../../ledger/contract-l
 import { registerBook } from '../../../ledger/instrument-ledger';
 import { creditIndexInstrumentId } from '../../../../domain/instrument-keys';
 import { creditIndexRollDue, rollCreditIndex, indexHolderQuote, indexBasisBps, CDS_INDEX_TENOR_WEEKS, type CreditIndexSeries } from '../../../../domain/derivatives/classes/cds-index';
-import { CDS_TENOR_WEEKS, twoWayProtectionQuote } from '../../../../domain/derivatives/classes/cds';
+import { twoWayProtectionQuote } from '../../../../domain/derivatives/classes/cds';
 import { DerivativeContract, DerivativeParty, bankPartyKey, derivativePartyKey } from '../../../../domain/derivatives/contract';
 import { deskNotionalCapacityLocal, initialMarginRateOf } from '../../../../domain/derivatives/registry';
 import { bankParty, bankPartyOf } from '../../../../domain/party';
@@ -104,7 +104,7 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
       names.reduce((a, c) => a + computeReservationSpreadBps({
         entityType, requiredReturn,
         expectedLossBps: pdByName.get(c.id)! * (1 - recoveryRate) * 10000,
-        capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, CDS_TENOR_WEEKS / 52),
+        capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, CDS_INDEX_TENOR_WEEKS / 52),
         creditConditionsIndex,
       }), 0) / names.length;
     const singleNamePrints = names.map((c) => c.cdsSpreadBps).filter((b) => b > 0);

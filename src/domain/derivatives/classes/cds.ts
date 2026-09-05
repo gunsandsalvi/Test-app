@@ -5,20 +5,36 @@
  * premium weekly, par-less-recovery on a credit event, terminated.
  *
  * strike: the spread struck, in bps of notional per year (rule 8). reference: the reference
- * COMPANY id — the same key the bond book prices. termKey: ''.
+ * COMPANY id — the same key the bond book prices. termKey: the tenor (§3.17d-iii: 'c1' | 'c3' |
+ * 'c5' | 'c10'), because credit has a term structure and one number is not a curve.
  */
 
 import { DerivativeClassProfile, DerivativeMarketView } from '../profile';
 import type { DerivativeContract } from '../contract';
 import { issuerReferenceOf } from '../contract';
 import { annuityFactor } from '../../pricing';
+import { defect } from '../../defect';
 
 /**
- * The standard tenor. Five years is where single-name CDS liquidity actually sits, and a tenor
- * has to be SOME length for the premium leg to have a horizon; a market-convention primitive of
- * the same kind as the repo book's overnight default.
+ * §3.17d-iii — THE CURVE. Protection is quoted at four tenors, which is a term structure of credit
+ * and not one number: a name whose near-term liquidity is fine and whose ten-year is doubtful
+ * prints it, and an inversion — the most informative thing a credit market says before a
+ * default — can happen. Five years is the BENCHMARK, where single-name liquidity sits and what a
+ * name's one quoted spread (`Company.cdsSpreadBps`) and the basis test read. Market-convention
+ * primitives of the same kind as the swap book's three tenors.
  */
-export const CDS_TENOR_WEEKS = 5 * 52;
+export type CdsTenorKey = 'c1' | 'c3' | 'c5' | 'c10';
+export const CDS_TENOR_YEARS: Record<CdsTenorKey, number> = { c1: 1, c3: 3, c5: 5, c10: 10 };
+export const CDS_TENORS: CdsTenorKey[] = ['c1', 'c3', 'c5', 'c10'];
+export const CDS_BENCHMARK_TENOR: CdsTenorKey = 'c5';
+export const cdsTenorYearsOf = (termKey: string): number =>
+  CDS_TENOR_YEARS[termKey as CdsTenorKey] ?? defect(`'${termKey}' is no CDS tenor`);
+export const cdsTenorWeeksOf = (termKey: string): number => cdsTenorYearsOf(termKey) * 52;
+/** The tenor a hedger matches its exposure's remaining life to: the nearest, the shorter on a tie. */
+export function nearestCdsTenor(weeksRemaining: number): CdsTenorKey {
+  const years = Math.max(0, weeksRemaining) / 52;
+  return CDS_TENORS.reduce((best, k) => (Math.abs(CDS_TENOR_YEARS[k] - years) < Math.abs(CDS_TENOR_YEARS[best] - years) ? k : best), CDS_TENORS[0]);
+}
 
 /**
  * The large-exposure limit: how much of its own capital a bank will carry against ONE name
@@ -74,7 +90,7 @@ export const CDS_PROFILE: DerivativeClassProfile = {
   /** §3.17-ii: the name's own weekly spread move on the protection's remaining life — the
    *  replacement value one session can move by (the same arithmetic as `closeOutUSDToB`). */
   closeOutMoveOf: (c, m) => {
-    const bps = m.cdsSpreadWeeklyMoveBps(issuerReferenceOf(c));
+    const bps = m.cdsSpreadWeeklyMoveBps(issuerReferenceOf(c), c.termKey);
     if (bps === undefined) return undefined;
     return (bps / 10000) * Math.max(0, c.maturityWeek - m.week) / 52;
   },
@@ -89,7 +105,8 @@ export const CDS_PROFILE: DerivativeClassProfile = {
    * the spread the name clears at today, on the notional, over the weeks left — a RISKY annuity:
    * discounted at the overnight rate and survival-weighted at the hazard the cleared spread
    * implies (`spread / (1 − recovery)`), because a premium leg the name does not survive to pay
-   * is worth nothing. The lifecycle settles the change weekly; a name with no print does not mark.
+   * is worth nothing — at the contract's OWN tenor on the curve (§3.17d-iii). The lifecycle
+   * settles the change weekly; a name with no print at that tenor does not mark.
    */
   markToMarketUSDToA: (c, m) => {
     const issuerId = issuerReferenceOf(c);
@@ -97,7 +114,7 @@ export const CDS_PROFILE: DerivativeClassProfile = {
     // recovery once it has closed, the region's average while it is open — so variation margin
     // moves the bulk of the payoff at the event and the settlement is the true-up.
     if (m.isIssuerDefaulted(issuerId)) return c.notional * Math.max(0, 1 - recoveryForEvent(c, m));
-    const current = m.cdsSpreadBps(issuerId);
+    const current = m.cdsSpreadBps(issuerId, c.termKey);
     if (!Number.isFinite(current)) return null;
     const remainingWeeks = Math.max(0, c.maturityWeek - m.week);
     if (remainingWeeks === 0) return 0;

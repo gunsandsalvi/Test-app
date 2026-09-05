@@ -547,15 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17d-iii. **The CDS curve** (atlas cds A1.d: *"a stated tenor, and a CURVE of them — 1y, 3y, 5y,
-    10y, which is a term structure of credit and not one number"*). `classes/cds.ts:
-    CDS_TENOR_WEEKS` is one tenor and every contract is struck with `termKey: ''`;
-    `cdsInstrumentId` carries no tenor. Small mechanically — the contract already carries
-    `termKey`, and the swap book proves the multi-tenor clearing shape (`irs.ts:SWAP_TENORS`) —
-    and it opens the term dimension of credit: a curve inversion before a default, and the tenor
-    half of C2's inversion (a term structure is what hazard rates bootstrap from). One instrument
-    per (name, tenor); the basis test P2 compares each tenor to the issuer's cash curve at the
-    same point (`issuerSpreadAtOnCurve` already takes a tenor).
 17e. **Futures on government bonds, and the basis trade** (user). `commodity-future.ts` is the
     only future in the tree. A deliverable govie future plus the cash-futures basis is the largest
     single source of real repo demand in a real market: the basis trader is long the cash bond,
@@ -1599,7 +1590,21 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17d-ii — THE CREDIT INDEX CLEARS.** The series on the run is one instrument
+**17d-iii — THE CDS CURVE.** Four tenors (`CDS_TENORS` c1/c3/c5/c10, `CDS_BENCHMARK_TENOR` c5
+  the one a name is quoted by and P2's cash comparison was at), one instrument per (name,
+  tenor) (`cdsInstrumentId` takes the tenor), `CDS_TENOR_WEEKS` deleted for `cdsTenorWeeksOf`.
+  A hedger's need is struck at the tenor nearest its exposure's size-weighted remaining life
+  (`nearestCdsTenor`; an `Exposure` now carries `weeksLocal`: a facility's maturity, a desk
+  row's tranche maturity, written protection at its own tenor, a receivable's due week, a
+  contract's weeks remaining); every quoter quotes every tenor at the capital charge of that
+  tenor (`spreadRiskCapitalChargeRate(rating, tenorYears)`), which is what makes the curve a
+  curve. The store is `cdsSpreadHistoryByIssuer[issuer][tenor]`; the view's `cdsSpreadBps` /
+  `cdsSpreadWeeklyMoveBps` take the tenor and read it (the company's `cdsSpreadBps` is the
+  benchmark's last print, no longer the view's source); the mark and margin read the contract's
+  own point. P2 measures every printed tenor against `issuerSpreadAtOnCurve` at the same
+  point. The index's reservation uses its own five-year tenor. Atlas: cds A1/A1.d ✅. Gates
+  green; no run.
+- **17d-ii — THE CREDIT INDEX CLEARS.** The series on the run is one instrument
   (`creditIndexInstrumentId`, kind `CDS_INDEX` on the registry). On the line: the real-money
   holders by their TARGET GAP — an insurer or pension fund whose corporate-credit target
   (`allocationTargetFor`: corpBondPct + loanPct of its assets) exceeds its cash credit book

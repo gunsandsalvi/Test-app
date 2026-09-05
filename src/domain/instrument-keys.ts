@@ -52,9 +52,9 @@ export const equityInstrumentId = (companyId: string): InstrumentId => asInstrum
  */
 export const equityIssuerId = (instrumentId: InstrumentId): EntityId => asEntityId(instrumentId);
 
-/** One region's single-name credit default swap on one reference issuer. */
-export const cdsInstrumentId = (regionId: RegionId, issuerId: string): InstrumentId =>
-  asInstrumentId(`${regionId}-CDS-${issuerId}`);
+/** One region's single-name credit default swap on one reference issuer at one tenor (§3.17d-iii). */
+export const cdsInstrumentId = (regionId: RegionId, issuerId: string, termKey: string): InstrumentId =>
+  asInstrumentId(`${regionId}-CDS-${issuerId}-${termKey}`);
 
 /** §3.17d-ii — one credit index SERIES as the line it clears on (the series id names its region). */
 export const creditIndexInstrumentId = (seriesId: string): InstrumentId => asInstrumentId(seriesId);

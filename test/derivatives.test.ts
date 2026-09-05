@@ -18,7 +18,7 @@ import { StandingBook } from '../src/domain/derivatives/standing-book';
 import { asEntityId } from '../src/domain/ids';
 import { writerReservationVol, ATM_PRICE_PER_VOL_SQRT_T } from '../src/domain/derivatives/classes/option';
 import { lenderReservationBps } from '../src/domain/derivatives/classes/xcs';
-import { protectionNeedLocal, twoWayProtectionQuote, LARGE_EXPOSURE_LIMIT_OF_CAPITAL } from '../src/domain/derivatives/classes/cds';
+import { protectionNeedLocal, twoWayProtectionQuote, nearestCdsTenor, cdsTenorWeeksOf, CDS_TENORS, CDS_BENCHMARK_TENOR, LARGE_EXPOSURE_LIMIT_OF_CAPITAL } from '../src/domain/derivatives/classes/cds';
 import { rollCreditIndex, creditIndexRollDue, survivingShareOf, pendingEventsOf, eventPayoutLocal, indexHolderQuote, indexBasisBps, CDX_ROLL_WEEKS, type CreditIndexSeries } from '../src/domain/derivatives/classes/cds-index';
 
 /** §3.17d-i — a four-name basket, one name's event already settled for the series. */
@@ -100,7 +100,7 @@ test('§3.17-iii IRS: the mark is the remaining fixed-leg difference at today\'s
 });
 
 test('CDS: premium weekly to the seller; a reference default pays par less recovery to the buyer', () => {
-  const c = base({ classId: 'CDS', strike: 200, reference: { kind: 'ISSUER', issuerId: asEntityId('ISSUER') }, termKey: '' });
+  const c = base({ classId: 'CDS', strike: 200, reference: { kind: 'ISSUER', issuerId: asEntityId('ISSUER') }, termKey: 'c5' });
   const prem = leg(DERIVATIVE_CLASSES.CDS.periodicLegUSDToB(c, view()));
   assert.ok(Math.abs(prem.usdToB - (1_000_000 * 0.02) / 52) < 1e-9);
   assert.equal(DERIVATIVE_CLASSES.CDS.eventTermination(c, view()), null);
@@ -112,7 +112,7 @@ test('CDS: premium weekly to the seller; a reference default pays par less recov
 });
 
 test('§3.17-vi CDS: the credit event settles at the issuer\'s OWN workout — it waits while the estate is open, marks at the expectation meanwhile, and pays no premium', () => {
-  const c = base({ classId: 'CDS', strike: 200, reference: { kind: 'ISSUER', issuerId: asEntityId('ISSUER') }, termKey: '', maturityWeek: 10 });
+  const c = base({ classId: 'CDS', strike: 200, reference: { kind: 'ISSUER', issuerId: asEntityId('ISSUER') }, termKey: 'c5', maturityWeek: 10 });
   const open = view({ isIssuerDefaulted: () => true, issuerWorkout: () => ({ state: 'OPEN' }) });
   assert.equal(DERIVATIVE_CLASSES.CDS.eventTermination(c, open), null, 'the payoff waits for the auction');
   assert.equal(DERIVATIVE_CLASSES.CDS.holdsPastMaturity!(c, open), true, 'and the contract outlives its maturity for it');
@@ -208,7 +208,7 @@ test('every registered class states both roles and admissible facts — the comp
   for (const p of Object.values(DERIVATIVE_CLASSES)) {
     assert.ok(p.roleA && p.roleB);
     assert.ok(p.pfeAddOnRate > 0 && p.pfeAddOnRate < 1);
-    const termKey = p.id === 'OPTION' ? 'CALL' : p.id === 'XCS' || p.id === 'CDS_INDEX' ? '' : 's5';
+    const termKey = p.id === 'OPTION' ? 'CALL' : p.id === 'XCS' || p.id === 'CDS_INDEX' ? '' : p.id === 'CDS' ? 'c5' : 's5';
     const move = p.closeOutMoveOf(base({ classId: p.id, reference: referenceFor(p.id), termKey }), view());
     assert.ok(move !== undefined && move > 0 && move < 1, `${p.id}: the reference's move sizes its margin`);
     const marks = p.markToMarketUSDToA(base({ classId: p.id, units: 1, reference: referenceFor(p.id), termKey, settledMarkLocal: 0 }), view()) !== null;
@@ -225,8 +225,8 @@ test('the standing-book index answers exactly what the per-participant walks ans
     base({ id: '1', a: me, b: you, notional: 10, termKey: 's5' }),
     base({ id: '2', a: me, b: you, notional: 20, termKey: 's10' }),
     base({ id: '3', a: you, b: me, notional: 40, termKey: 's2' }),
-    base({ id: '4', classId: 'CDS', a: me, b: you, notional: 100, reference: { kind: 'ISSUER', issuerId: asEntityId('IG-NAME') }, termKey: '' }),
-    base({ id: '5', classId: 'CDS', a: you, b: me, notional: 200, reference: { kind: 'ISSUER', issuerId: asEntityId('HY-NAME') }, termKey: '' }),
+    base({ id: '4', classId: 'CDS', a: me, b: you, notional: 100, reference: { kind: 'ISSUER', issuerId: asEntityId('IG-NAME') }, termKey: 'c5' }),
+    base({ id: '5', classId: 'CDS', a: you, b: me, notional: 200, reference: { kind: 'ISSUER', issuerId: asEntityId('HY-NAME') }, termKey: 'c5' }),
     base({ id: '6', classId: 'COMMODITY_FUTURE', a: you, b: me, notional: 700, units: 7, reference: { kind: 'COMMODITY', commodityId: 'OIL' }, termKey: '3M' }),
     base({ id: '7', classId: 'COMMODITY_FUTURE', a: me, b: you, notional: 300, units: 3, reference: { kind: 'COMMODITY', commodityId: 'OIL' }, termKey: '3M' }),
     base({ id: 'matured', a: me, b: you, notional: 999, maturityWeek: 10 }),
@@ -455,4 +455,24 @@ test('CDS index: a holder under its credit target writes for the gap, one over i
 test('CDS index: the basis is the print against the constituents\' average, and undefined until they print', () => {
   assert.equal(indexBasisBps(110, [100, 140, 0]), -10, 'a name with no print is left out');
   assert.equal(indexBasisBps(110, [0, 0]), undefined);
+});
+
+// §3.17d-iii — the curve: four tenors, a hedge at the one nearest its exposure's life, and the
+// mark and the margin read the contract's own tenor.
+test('CDS curve: a hedge is struck at the tenor nearest its exposure\'s remaining life, the shorter on a tie', () => {
+  assert.deepEqual(CDS_TENORS, ['c1', 'c3', 'c5', 'c10']);
+  assert.equal(CDS_BENCHMARK_TENOR, 'c5');
+  assert.equal(nearestCdsTenor(10), 'c1');
+  assert.equal(nearestCdsTenor(2 * 52), 'c1', 'two years is as near one as three: the shorter');
+  assert.equal(nearestCdsTenor(3.5 * 52), 'c3');
+  assert.equal(nearestCdsTenor(7 * 52), 'c5');
+  assert.equal(nearestCdsTenor(30 * 52), 'c10');
+  assert.equal(cdsTenorWeeksOf('c10'), 520);
+  assert.throws(() => cdsTenorWeeksOf('s5'));
+  // The mark reads the contract's own point on the curve.
+  const c = base({ classId: 'CDS', strike: 100, reference: { kind: 'ISSUER', issuerId: asEntityId('ISSUER') }, termKey: 'c1', maturityWeek: 62 });
+  const m = view({ cdsSpreadBps: (_id, termKey) => (termKey === 'c1' ? 100 : 300) });
+  assert.equal(DERIVATIVE_CLASSES.CDS.markToMarketUSDToA(c, m), 0, 'flat at its own tenor whatever the five-year prints');
+  const move = DERIVATIVE_CLASSES.CDS.closeOutMoveOf(c, view({ cdsSpreadWeeklyMoveBps: (_id, termKey) => (termKey === 'c1' ? 10 : undefined) }));
+  assert.ok(move !== undefined && move > 0);
 });

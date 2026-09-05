@@ -131,8 +131,12 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
       const v = region(r)?.swapParRateByTenor?.[termKey];
       return typeof v === 'number' ? v : Number.NaN;
     },
-    cdsSpreadBps: (issuerId) => {
-      const v = companyById.get(issuerId)?.cdsSpreadBps;
+    // §3.17d-iii: the curve's store is the region's print history per name and tenor; the
+    // company's one quoted spread is the benchmark tenor's last print.
+    cdsSpreadBps: (issuerId, termKey) => {
+      const c = companyById.get(issuerId);
+      const hist = c ? region(c.region)?.cdsSpreadHistoryByIssuer?.[issuerId]?.[termKey] : undefined;
+      const v = hist?.[hist.length - 1];
       return typeof v === 'number' && v > 0 ? v : Number.NaN;
     },
     isInvestmentGrade: (issuerId) => isInvestmentGradeRating(companyById.get(issuerId)?.creditRating),
@@ -175,9 +179,9 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
       if (!field || !curves) return undefined;
       return measuredWeeklyBpsMove(curves.map((z) => z[field] * 10000));
     },
-    cdsSpreadWeeklyMoveBps: (issuerId) => {
+    cdsSpreadWeeklyMoveBps: (issuerId, termKey) => {
       const c = companyById.get(issuerId);
-      return measuredWeeklyBpsMove(c ? region(c.region)?.cdsSpreadHistoryByIssuer?.[issuerId] : undefined);
+      return measuredWeeklyBpsMove(c ? region(c.region)?.cdsSpreadHistoryByIssuer?.[issuerId]?.[termKey] : undefined);
     },
     // §3.17b-i — the shares an option is on: the print, the realised vol (the name's own off its
     // price ring, its region's index before it can estimate one), the weekly move.

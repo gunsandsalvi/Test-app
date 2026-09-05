@@ -34,8 +34,8 @@ export interface DerivativeMarketView {
   overnightRateAnnual(regionId: RegionId): number;
   /** Last cleared swap par rate for a tenor; NaN when none has printed. */
   parRateAnnual(regionId: RegionId, termKey: string): number;
-  /** Last cleared CDS spread for an issuer; NaN when none has printed. */
-  cdsSpreadBps(issuerId: EntityId): number;
+  /** Last cleared CDS spread for an issuer at a tenor (§3.17d-iii); NaN when none has printed. */
+  cdsSpreadBps(issuerId: EntityId, termKey: string): number;
   /** Whether the reference is investment grade this week — the CEM add-on's one split. */
   isInvestmentGrade(issuerId: EntityId): boolean;
   recoveryRate(regionId: RegionId): number;
@@ -60,8 +60,8 @@ export interface DerivativeMarketView {
   fxWeeklyMove(regionId: RegionId): number | undefined;
   /** The weekly move of the region's rate at a swap tenor, in bps. */
   rateWeeklyMoveBps(regionId: RegionId, termKey: string): number | undefined;
-  /** The weekly move of an issuer's protection spread, in bps. */
-  cdsSpreadWeeklyMoveBps(issuerId: EntityId): number | undefined;
+  /** The weekly move of an issuer's protection spread at a tenor, in bps. */
+  cdsSpreadWeeklyMoveBps(issuerId: EntityId, termKey: string): number | undefined;
   // §3.17b-i — THE EQUITY an option is on: its print, its realised volatility (the name's own,
   // its region's index before the name can estimate one — the same read stage 12 made), and its
   // weekly move for margin.
