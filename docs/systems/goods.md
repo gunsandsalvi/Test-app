@@ -143,7 +143,7 @@ checked by `scripts/check-atlas.sh`.
 | E2.b broker-dealers carry at fair value | — | ❌ |
 | **E2.c FORBID never carried at market above cost** | `src/engine/ledger/goods-ledger.ts:settleOutputInventory` | ❌ |
 | E3 the holding loss is an event with a P&L line | — | ❌ |
-| E4 spoilage, obsolescence, shrinkage remove units | `src/engine/ledger/goods-ledger.ts:scrapGoods` | ⚠️ |
+| E4 spoilage, obsolescence, shrinkage remove units | `src/engine/ledger/goods-ledger.ts:spoilOutputStock` · `src/domain/industry-registry.ts:annualSpoilageRateOf` | ⚠️ |
 | E5 FIFO or weighted average; never LIFO | `src/engine2/lots.ts:consumeFifoOnViews` | ✅ |
 | F1 the buyer pays the seller, by name | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
 | F2 payment terms | `src/domain/trade-invoice.ts:paymentTermWeeks` | ✅ |
@@ -260,15 +260,20 @@ The inputs for a real PPI are all present and already measured per sub-unit:
   the sub-unit), recorded as fewer units produced so `W4` holds without a scrap.* Otherwise
   `advanceProductionPipeline` returns exactly what was started `leadWeeks` ago: no scrap rate, no
   defect rate, no process loss.
-- **E4 spoilage.** `scrapGoods` exists and is real, but its only callers are estate resolution
-  (`estate-resolution.ts:253,365,369`) and a consignment whose buyer died
-  (`goods-arrival.ts:97,110`). `shelfLifeWeeksOf` is read once — by `distribution.ts:47`, to size
-  the channel's margin. **Nothing in the model ever perishes.** What decays is the *value* of
-  output stock (the carrying charge above), which is a cost, not a unit.
+- **E4 spoilage — HALF CLOSED (§9.13-INV-ii-b).** It used to read: *nothing in the model ever
+  perishes; what decays is the VALUE of output stock, which is a cost and not a unit.* The cause
+  was one rate doing two jobs — `annualCarryingCostRateOf` summed a warehouse FEE and a SPOILAGE
+  rate, and the week wrote the stock's value down by the total **and** paid the same amount in cash
+  to the distribution sector, so a firm was charged twice for storing a good and no unit ever left.
+  The rate is split at its source; the fee is the cash charge (and the channel is paid the fee
+  alone, not for a good going off in somebody else's warehouse); and the spoilage now takes UNITS,
+  at the row's own basis, recorded on the week's journal so W4 replays it. What is still ⚠️ is the
+  other two words in the node: **obsolescence and shrinkage** have no mechanism, and a good's
+  shelf life is the only reason anything perishes.
 - **B1.d / G4 utilisation.** `weeklyCapacityUnits` and `targetProductionUnits` sit beside each
   other in one function and their ratio is never taken.
 
-B4 and E4 **become a §3 step** together (both are unit-destroying transformations the goods ledger
+B4 **is a §3 step** (a unit-destroying transformation the goods ledger
 already has the wire kind for — `scrapGoods` — so this is wiring, not a new mechanism). B1.d/G4
 are **a measurement, for §3 step 38**.
 

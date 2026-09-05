@@ -35,7 +35,7 @@ import { isActiveCompany } from '../domain/company';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../domain/market-microstructure';
 import { SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
 import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
-import { industryOfSubUnit, firmInputIntensities, annualCarryingCostRateOf, INDUSTRY_REGISTRY } from '../domain/industry-registry';
+import { industryOfSubUnit, firmInputIntensities, annualStorageFeeRateOf, INDUSTRY_REGISTRY } from '../domain/industry-registry';
 import { SECTOR_OCCUPATION_MIX } from '../domain/region-macro';
 import { usefulLifeYearsOf } from '../domain/company-week/capital-programme';
 import { plantNetLocal, plantDepreciationAnnualLocal } from '../domain/plant';
@@ -90,7 +90,9 @@ const INDUSTRIAL_SET = new Uint8Array(NSUB);
     }
     HAS_INDUSTRY[s] = industryOfSubUnit(su) !== undefined ? 1 : 0;
     IS_SUBSCRIPTION[s] = mechById.get(su) === 'SUBSCRIPTION' ? 1 : 0;
-    CARRY_RATE_WEEKLY[s] = annualCarryingCostRateOf(su) / 52;
+    // §3.13-INV-ii-b: the FEE, which is what this lane charges in cash. The spoilage half is
+    // not a charge and is applied to the UNITS where the week's stock is decided (`stage08-back`).
+    CARRY_RATE_WEEKLY[s] = annualStorageFeeRateOf(su) / 52;
     if (su === 'heavy_equipment' || su === 'industrial_automation' || su === 'industrial_chemicals') INDUSTRIAL_SET[s] = 1;
   }
   RECIPE_START[NSUB] = at;
@@ -804,10 +806,22 @@ export function applyFrontPost(
     }
     F.stillUnderConstruction[row] = keep;
 
-    // carrying-decayed output record, in the entry order the seam read
+    // The output record, in the entry order the seam read.
+    //
+    // §3.13-INV-ii-b: the VALUE PASSES THROUGH. It used to be `O.outNewValue[o]`, the core's
+    // `value − value × rate` — a fee written off the asset while the same fee was ALSO paid in
+    // cash to the distribution sector, so a firm was charged twice for storing a good. The charge
+    // stays (`F.carryingCostLocal`, the fee half of the rate); shrinking the asset for it does
+    // not. What genuinely leaves the stock is SPOILAGE, applied in units where the week's record
+    // is decided (`stage08-back`) — here it would be discarded by that merge for every good that
+    // traded, which is what happened to the write-down this replaces.
+    //
+    // `O.outNewValue` is still written by both cores and is now read by nobody; the lane and its
+    // table leave the JS and the C together, under §3's `13-INV-ii-c`, which is also where the
+    // mirror gets the agreement gate that "change both or neither" is asking a comment to do.
     const outRec: Partial<Record<string, { unitsHeld: number; valueLocal: number }>> = {};
     for (let o = S.outStart[row]; o < S.outStart[row + 1]; o++) {
-      outRec[SUBUNITS[S.outSub[o]]] = { unitsHeld: S.outUnits[o], valueLocal: O.outNewValue[o] };
+      outRec[SUBUNITS[S.outSub[o]]] = { unitsHeld: S.outUnits[o], valueLocal: S.outValue[o] };
     }
 
     if (F.isProfile[row]) {

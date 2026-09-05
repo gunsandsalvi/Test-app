@@ -92,3 +92,39 @@ test('the mid-week balance carries the value per unit the row already had, at an
   setOutputStock(degenerate, { unitsHeld: 0, valueLocal: 99 }, sub, 10);
   assert.deepEqual(degenerate.outputInventoryBySubUnit![sub], { unitsHeld: 10, valueLocal: 0 });
 });
+
+// §3.13-INV-ii-b — SPOILAGE DESTROYS UNITS, AND THE JOURNAL SAYS SO (goods.md E4).
+import { spoilOutputStock } from '../src/engine/ledger/goods-ledger';
+import { newWireJournal, setActiveWireJournal, summarizeWires } from '../src/engine/ledger/wire';
+
+test('what perishes is units; the value follows at the row\'s own basis, and W4 can see it', () => {
+  const sub = SUBUNITS[0], other = SUBUNITS[1];
+  const j = newWireJournal(1, 4);
+  setActiveWireJournal(j);
+  let out;
+  try {
+    out = spoilOutputStock(
+      { [sub]: { unitsHeld: 200, valueLocal: 500 }, [other]: { unitsHeld: 50, valueLocal: 100 } },
+      'USA', (su) => (su === sub ? 0.1 : 0),
+    );
+  } finally { setActiveWireJournal(undefined); }
+  assert.deepEqual(out[sub], { unitsHeld: 180, valueLocal: 450 }, 'a tenth perished, and 2.50 a unit is still 2.50 a unit');
+  assert.deepEqual(out[other], { unitsHeld: 50, valueLocal: 100 }, 'a good that does not perish is untouched');
+  // The units did not merely vanish: the week's journal carries the transformation W4 replays.
+  assert.equal(summarizeWires(j).goodsFlowByKey[`USA|${sub}`]?.scrappedUnits, 20);
+  assert.equal(summarizeWires(j).goodsFlowByKey[`USA|${other}`], undefined);
+});
+
+test('a share at or beyond the whole shelf life takes the stock, and never more than it', () => {
+  const sub = SUBUNITS[0];
+  const j = newWireJournal(1, 4);
+  setActiveWireJournal(j);
+  let all, none;
+  try {
+    all = spoilOutputStock({ [sub]: { unitsHeld: 30, valueLocal: 90 } }, 'USA', () => 4);
+    none = spoilOutputStock({ [sub]: { unitsHeld: 30, valueLocal: 90 } }, 'USA', () => -1);
+  } finally { setActiveWireJournal(undefined); }
+  assert.deepEqual(all[sub], { unitsHeld: 0, valueLocal: 0 }, 'a rate over one perishes the stock, not more than it');
+  assert.deepEqual(none[sub], { unitsHeld: 30, valueLocal: 90 }, 'a negative rate cannot create units');
+  assert.equal(summarizeWires(j).goodsFlowByKey[`USA|${sub}`]?.scrappedUnits, 30);
+});

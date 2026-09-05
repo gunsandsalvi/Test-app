@@ -405,18 +405,15 @@ written from here):
     earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
     all). Seven slices, in this order, because each one is load-bearing for the next:
 
-    ii-b. **THE WAREHOUSE FEE AND THE SPOILAGE ARE TWO THINGS, AND ONE RATE DOES BOTH.**
-       `annualCarryingCostRateOf` is *warehouse cost per tonne ÷ value density* **plus**
-       *52 / shelfLifeWeeks* — a STORAGE FEE and a SPOILAGE RATE summed into one number — and the
-       week then applies that number twice over: `front-core` writes the stock's VALUE down by it
-       and `stage08-back` PAYS the same amount in cash to the distribution sector (IND16). A fee is
-       an expense with a payee and must not shrink the asset; spoilage destroys UNITS
-       (`goods.md` E4, which has no writer at all) and must not pay anybody. So a firm pays cash
-       AND its stock shrinks by the same number — except that §3.13-INV-ii found the write-down is
-       discarded by the merge for every sub-unit stage 05 settled, which means traded goods are
-       charged once and untraded goods twice. Split the rate at its source, charge the fee, perish
-       the units, and E4 gets its writer. The lane is mirrored in `native/kernels.c` and the
-       positional order is shared with it — change both or neither.
+    ii-c. **THE DEAD LANE GOES, AND THE MIRROR GETS A GATE.** `O.outNewValue` and the
+       `CARRY_RATE_WEEKLY` table are written by BOTH cores and read by nobody since §9.13-INV-ii-b;
+       they leave the JS and the `native/kernels.c` mirror together. The reason they are still
+       there is the real finding: the two cores share three POSITIONAL argument lists and the only
+       thing holding them in step is a comment saying *change both or neither* — the gates never
+       load `kernels.node`, so a mismatched position would corrupt every firm's week and no §4
+       check would see it. The lane cannot be removed safely until that is a TEST: run both cores
+       over one small synthetic seam and assert every output lane agrees. Then the removal is
+       provable, and so is the next twenty years of edits to that file.
     iii. **THE GOODS PRICE IS STORED** — step 13's item 3, *the cheapest half of the whole step*.
        The auction's cleared price per `region|subUnit` goes in `v2.prices` (whose own header
        already names `setOutputStock` as the same defect one asset class over); the region's
@@ -1243,6 +1240,28 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-ii-b — THE WAREHOUSE FEE AND THE SPOILAGE ARE TWO THINGS, AND `goods.md` E4 GETS ITS
+  WRITER.** `annualCarryingCostRateOf` was *warehouse cost per tonne ÷ value density* **plus**
+  *52 / shelf life* — a FEE and a SPOILAGE RATE summed into one number — and the week applied that
+  number twice over: the front pass wrote the stock's VALUE down by it and stage 08 PAID the same
+  amount in cash to the distribution sector. So a firm was charged twice for storing a good, the
+  channel was paid for a good going off in somebody else's warehouse, and **no unit ever perished**
+  — E4's own diff entry said so in as many words. Three reads now
+  (`annualStorageFeeRateOf`, `annualSpoilageRateOf`, `annualCostOfHoldingRateOf`) and each caller
+  takes the half it means: the cash charge and the channel's revenue are the FEE, and a
+  distributor's margin, which really does have to cover both, takes the sum.
+  **The spoilage takes UNITS** (`goods-ledger.ts:spoilOutputStock`), at the row's own basis per
+  unit, recorded as a transformation on the week's journal so W4 replays it — units that vanish
+  with nothing saying so are what that identity exists to catch. It runs where the week's stock is
+  FINALLY decided, the one merged record §9.13-INV-ii made: anything applied earlier is discarded
+  by that merge for every good that traded, which is exactly how the write-down it replaces came to
+  be dead on traded goods and live on untraded ones. Pinned in `test/inventory.test.ts` (the basis
+  survives, a good with no shelf life is untouched, a rate past one takes the stock and not more,
+  and the journal carries the scrap). Atlas: goods E4 re-marked and re-argued, still ⚠️ for the
+  obsolescence and shrinkage it does not have; B4 is now a §3 step on its own. Gates green; no run
+  (rule 11). Split (rule 1.10): `13-INV-ii-c`, the lane both cores now write and nobody reads —
+  and the JS/C agreement gate that has to exist before it can safely go.
 
 **13-INV-ii — ONE MARK A WEEK, AND THE FILED NUMBER IS THE STOCK.** Two of the three defects the
   slice named; the third turned out to be a mechanism and was split out as `13-INV-ii-b` (§3)

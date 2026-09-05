@@ -1297,13 +1297,30 @@ export function commissioningLeadWeeksOf(unitId: string): number {
  * The flat 0.02 this replaces charged a semiconductor fab and a dairy the same rate to hold
  * their output.
  */
-export function annualCarryingCostRateOf(unitId: string): number {
+/**
+ * §3.13-INV-ii-b — THE FEE AND THE SPOILAGE ARE TWO THINGS. They were summed into one rate and
+ * the week then applied that one number twice over: the stock's VALUE was written down by it and
+ * the same amount was PAID in cash to the distribution sector. A storage fee is an expense with a
+ * payee and must not shrink the asset; spoilage destroys UNITS (`goods.md` E4) and must not pay
+ * anybody. Three reads now, each for the question that wants it.
+ */
+/** What a week of warehouse costs, as a share of the stock's value — a fee, paid to a channel. */
+export function annualStorageFeeRateOf(unitId: string): number {
   const su = byId.get(unitId);
   if (!su || su.deliveryMode !== 'PHYSICAL') return 0;
   const density = su.baselineValueDensityUsdPerTonne;
-  const storage = density && density > 0 ? WAREHOUSE_USD_PER_TONNE_YEAR / density : 0;
-  const spoilage = su.shelfLifeWeeks && su.shelfLifeWeeks > 0 ? 52 / su.shelfLifeWeeks : 0;
-  return storage + spoilage;
+  return density && density > 0 ? WAREHOUSE_USD_PER_TONNE_YEAR / density : 0;
+}
+/** What share of the stock PERISHES in a year: a good with a shelf life loses all of it over that
+ *  life. Units, not value — the units are gone and the value follows them. */
+export function annualSpoilageRateOf(unitId: string): number {
+  const su = byId.get(unitId);
+  if (!su || su.deliveryMode !== 'PHYSICAL') return 0;
+  return su.shelfLifeWeeks && su.shelfLifeWeeks > 0 ? 52 / su.shelfLifeWeeks : 0;
+}
+/** WHAT HOLDING IT COSTS, both halves — what a distributor's margin has to cover to carry it. */
+export function annualCostOfHoldingRateOf(unitId: string): number {
+  return annualStorageFeeRateOf(unitId) + annualSpoilageRateOf(unitId);
 }
 
 /**

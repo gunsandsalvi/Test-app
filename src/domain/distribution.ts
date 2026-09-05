@@ -33,7 +33,7 @@
  * layer. And the channel's take is paid, by name, to the firms that run it.
  */
 
-import { annualCarryingCostRateOf, productionLeadWeeksOf } from './industry-registry';
+import { annualCostOfHoldingRateOf, productionLeadWeeksOf } from './industry-registry';
 import { shelfLifeWeeksOf, deliveryModeOf } from './goods-physical';
 
 /**
@@ -55,7 +55,7 @@ function channelCoverWeeks(subUnitId: string): number {
 export function channelMarginRate(subUnitId: string, shortRateAnnual: number): number {
   const coverWeeks = channelCoverWeeks(subUnitId);
   if (!(coverWeeks > 0)) return 0;
-  const annualRate = annualCarryingCostRateOf(subUnitId) + Math.max(0, shortRateAnnual);
+  const annualRate = annualCostOfHoldingRateOf(subUnitId) + Math.max(0, shortRateAnnual);
   return annualRate * (coverWeeks / 52);
 }
 

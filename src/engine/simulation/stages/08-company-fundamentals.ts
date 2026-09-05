@@ -23,7 +23,7 @@ import { leadBankAllocator } from './dealer-desks';
 import { WeeklyStepContext, EarningsReport } from './context';
 import { PaymentJournal, newPaymentJournal, journalPush, journalAppendRow, applyPendingLeg } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
-import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
+import { annualStorageFeeRateOf } from '../../../domain/industry-registry';
 import { getRngState, setRngState } from '../../rng';
 import { runStage08FrontPass } from '../../../engine2/stage08-front';
 import { ensureV2 } from '../../../engine2/world';
@@ -148,7 +148,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   prevActiveFirms.forEach(c => {
     let total = 0;
     Object.entries(c.outputInventoryBySubUnit).forEach(([su, inv]) => {
-      total += (inv as { valueLocal: number }).valueLocal * (annualCarryingCostRateOf(su) / 52);
+      // §3.13-INV-ii-b: the distribution sector is paid the STORAGE FEE. It was paid the fee
+      // AND the spoilage — money to a party for a good going off in its owner's warehouse.
+      total += (inv as { valueLocal: number }).valueLocal * (annualStorageFeeRateOf(su) / 52);
     });
     if (total > 0) carryingCostByTicker.set(c.ticker, total);
   });

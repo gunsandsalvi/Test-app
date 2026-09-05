@@ -11,6 +11,7 @@
  */
 
 import { commissionPlant, retirePlant, scrapPlant, writePlantRows, plantVintagesOf } from '../engine/ledger/plant-ledger';
+import { spoilOutputStock } from '../engine/ledger/goods-ledger';
 import type { PrimarySettlement } from '../engine/simulation/stages/context';
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
 import { equityInstrumentId } from '../domain/instrument-keys';
@@ -24,7 +25,7 @@ import { BackLanes } from './stage08-lanes';
 import { isActiveCompany, isPubliclyListed, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare, TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../domain/call-protection';
 import { isInvestmentGrade } from '../engine/simulation/stages/asset-allocation';
-import { industryOfSubUnit, firmInputIntensities, financingProfileOf, usefulLifeYearsOfGood } from '../domain/industry-registry';
+import { industryOfSubUnit, firmInputIntensities, financingProfileOf, usefulLifeYearsOfGood, annualSpoilageRateOf } from '../domain/industry-registry';
 import { curvePointAt } from '../engine/nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../engine/pricing';
 import { annuityFactor, zeroRateAt } from '../domain/pricing';
@@ -1962,7 +1963,14 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // reads only `unitsHeld`). Start from the seam's baseline for every sub-unit the firm held,
     // then overlay what stage 05 settled fresh for the ones it actually processed: 05 runs first
     // and has the complete, real production and sales picture for those lines.
-    const mergedOutputInventoryBySubUnit = { ...newOutputInventoryBySubUnit, ...(update?.outputInventoryBySubUnit || {}) };
+    // §3.13-INV-ii-b — AND THE WEEK'S SPOILAGE, here, because this is the one place the stock is
+    // finally decided: what perishes is units (`goods.md` E4), the value follows at the row's own
+    // basis, and the loss is a transformation on the journal so W4 still closes. The write-down
+    // this replaces sat in the front pass and was discarded by this very merge for every good
+    // that traded — charged once on a traded good and twice on an untraded one.
+    const mergedOutputInventoryBySubUnit = spoilOutputStock(
+      { ...newOutputInventoryBySubUnit, ...(update?.outputInventoryBySubUnit || {}) },
+      comp.region, (su) => annualSpoilageRateOf(su) / 52);
     let buybacksThisWeek = buybacksFromCore;
     const __k3 = S08K_PROF ? performance.now() : 0;
     const isReportingThisWeek = !isDefaulted && isPubliclyListed(comp)

@@ -201,3 +201,36 @@ export function scrapOutputUnitsTo(comp: StockHolder, subUnitId: string, unitsAf
   row.unitsHeld = unitsAfter; row.valueLocal = valueAfterLocal;
 }
 
+
+/**
+ * §3.13-INV-ii-b — A WEEK OF SPOILAGE ON A FIRM'S FINISHED STOCK, and `goods.md` E4's missing
+ * writer. What perishes is UNITS: the value follows them at the row's own basis per unit, which is
+ * what makes this a loss of stock rather than a re-mark of it. Recorded as a transformation on the
+ * week's journal, like production and scrappage, so W4 still closes — units that vanish with
+ * nothing saying so are exactly what that identity exists to catch.
+ *
+ * It runs where the week's stock is FINALLY decided (`stage08-back`'s one merged record, §3.13-INV-ii),
+ * because anything applied earlier is overwritten by whatever stage 05 settled — which is how the
+ * carrying-cost write-down this replaces came to be dead for every good that traded.
+ */
+export function spoilOutputStock(
+  record: Partial<Record<string, { unitsHeld: number; valueLocal: number }>>,
+  region: RegionId,
+  weeklySpoilShareOf: (subUnitId: string) => number,
+): Partial<Record<string, { unitsHeld: number; valueLocal: number }>> {
+  let touched = false;
+  const out: Partial<Record<string, { unitsHeld: number; valueLocal: number }>> = {};
+  for (const [subUnitId, inv] of Object.entries(record)) {
+    if (!inv) continue;
+    const share = Math.max(0, Math.min(1, weeklySpoilShareOf(subUnitId)));
+    const spoiledUnits = inv.unitsHeld > 0 ? inv.unitsHeld * share : 0;
+    if (!(spoiledUnits > 0)) { out[subUnitId] = inv; continue; }
+    touched = true;
+    scrapGoods(region, subUnitId, spoiledUnits);
+    const survivingUnits = inv.unitsHeld - spoiledUnits;
+    // The basis per unit is untouched: a good that perishes takes its own cost with it.
+    const perUnitLocal = inv.valueLocal / inv.unitsHeld;
+    out[subUnitId] = { unitsHeld: survivingUnits, valueLocal: survivingUnits * perUnitLocal };
+  }
+  return touched ? out : record;
+}
