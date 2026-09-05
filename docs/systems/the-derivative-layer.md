@@ -331,12 +331,14 @@ are the two cases where consent is legally overridden — but it means the node'
 novation, the one that is a real change of who faces whom by choice, has no code. **§3 step
 17**, small, and naturally part of its clearing-member work.
 
-### ❌ E4 — THE LOSS CHAIN IS NOT TRACEABLE
+### ⚠️ E4 — THE LOSS CHAIN IS TRACEABLE BY LINE, NOT YET BY SURVIVOR
 
-Nothing records who lost what when a party fails with open positions. `closeOutDerivativesOfParty`
-returns a count of contracts closed and nothing else; the cash legs are indistinguishable in the
-journal from any other `derivative close-out` reason. **A measurement, for §3 step 38** — the node
-is a VERIFY, and what it wants is a read of the loss chain, not a new mechanism.
+*2026-09-05 (§9.17-iv-c-ii). `closeOutDerivativesOfParty` returns the rounds, and each round
+(`clearing-house.ts:WaterfallRound`, kept as `Region.lastWaterfall`) says who defaulted, what it
+owed, and what each line of the stack paid — margin, fund, capital, survivors, unfunded, the claim
+on the estate. What it does not keep is each SURVIVOR's share of the write-down: that is in the
+fund rows the round rewrote, and nothing carries it from one week to the next. A measurement,
+for §3 step 38 — the node is a VERIFY, and what it wants is a read of the chain party by party.*
 
 ### ✅ D3 — CLOSED: THE MARGIN IS THE CLEARING HOUSE'S CASH WHILE IT IS HELD (§9.17-iv-a)
 
