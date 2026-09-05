@@ -551,14 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-f-iv-c. **CAPACITY READS THE VINTAGES WHOSE KIND SERVES THE LINE.** (A4's cost of
-    misallocation, A5's value.) A line's capacity is `unitsPerNetPpeDollar × net plant` of the
-    WHOLE register (`05-unit-bidding.ts:976`), so a steel mill's heavy equipment merged into a
-    software firm makes software at the buyer's ratio. With iv-b the line's industry says which
-    kinds its plant is made of: capacity reads the net of those vintages only, a vintage of a kind
-    the line does not use produces nothing for it (misallocation is possible and costly), and a
-    vintage's value is what it can produce — which is what the estate's bidders should be paying
-    for, and what a write-down (A5) is a fall in.
 26b. **Housing clears.** `housingStockUSD`, a median price and an ownership rate are an
     aggregate marked by formula — dwellings have no owners and no price anyone struck, which
     rule 3 does not allow and no step currently covers. Households, builders and estates clear
@@ -1360,6 +1352,25 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-f-iv-c — CAPACITY READS THE VINTAGES WHOSE KIND SERVES THE LINE.** A line's capacity was
+  `unitsPerNetPpeDollar × net plant` of the WHOLE register, so a steel mill's heavy equipment
+  merged into a software firm made software at the buyer's ratio. `plant.ts:plantEffectiveNetLocal`
+  is what a register can produce for a use that needs its capital in a mix of kinds — Leontief
+  over the line's industry's `capitalMix`: the net of each kind over its share, the minimum — so a
+  register built in the mix (the seed's, a firm that buys by its mix) is worth its whole net, a
+  vintage of a kind the line does not use produces nothing for it, and the kind in excess of the
+  scarcest is idle. `05-unit-bidding.ts` reads it per line (`unitsPerNetPpeDollar` is fixed
+  against it, as before). The estate's bidders pay for what the kinds on offer can produce for
+  THEM: `sellPlantToBidders` probes the offered slice against the bidder's own register in its
+  own mix, and the effective plant it adds per unit of book scales the bidder's reservation — a
+  slice that cannot serve it draws no bid. the-capital-programme A4 ⚠️→✅ (specific in kind, and
+  the wrong kind is worth its binding kind — misallocation possible and costly), A2 re-cited; A5
+  stays ⚠️ honestly: value is what it can produce for capacity and for the estate's price, but
+  the books never revalue a vintage and the scrap is by age, not by the kind in excess. The
+  staffing ceiling (`fullStaffingCapHeads`) still reads the whole net — heads per plant, all of
+  it staffed. `test/plant.test.ts` (in proportion the whole net produces; the wrong kind nothing;
+  the excess idle; a use naming no capital reads the whole). Gates green; no run (rule 11).
 
 **26-f-iv-b — THE CAPEX BASKET IS THE INDUSTRY'S, AND A CAPITAL GOOD HAS A LIFE.**
   `capexBasketWeight` — "the share of ANY buyer's capex basket", one mix for a refinery and a

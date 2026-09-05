@@ -30,7 +30,7 @@ import { patienceWeeksOf, riskAversionOf, expectationFromHistory, adaptiveExpect
 import { TIER_SPEND_MIX } from '../../macro/household-cohorts';
 import { subUnitYieldLossShareOf } from '../../macro/weather';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { plantNetLocal } from '../../../domain/plant';
+import { plantEffectiveNetLocal } from '../../../domain/plant';
 import { purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
 import { pay, payByIds, internReason, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
@@ -973,8 +973,12 @@ function buildRegionSupplyPlans(
     // what the capital can make. The line carries its own capital productivity — units a week per
     // dollar of net PP&E, fixed the first time it trades — and capacity is that times the capital
     // it has now. IND1/IND13 already grow PP&E by what was DELIVERED and COMMISSIONED, so
-    // capacity simply reads the result — §3.26-f-ii: off the plant register, at this week.
-    const netPPEForCapacityLocal = Math.max(1, plantNetLocal(comp.plant, week));
+    // capacity simply reads the result — §3.26-f-ii: off the plant register, at this week;
+    // §3.26-f-iv-c: the plant that SERVES this line — Leontief over the kinds its industry's
+    // capital is made of (`capitalMixOf`), so a vintage of a kind the line does not use, or one
+    // in excess of the scarcest kind, produces nothing for it.
+    const netPPEForCapacityLocal = Math.max(1,
+      plantEffectiveNetLocal(comp.plant, capitalMixOf([{ subUnitId, revenueShare: 1 }], profileKeyOf(comp)), week));
     if (!(line.unitsPerNetPpeDollar! > 0)) {
       const openingCapacityUnits =
         ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / referencePriceLocal;

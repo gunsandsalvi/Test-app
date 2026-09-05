@@ -14,7 +14,9 @@
  * goods — and the discount a buyer takes is the return it needs for the time it is tied up.
  */
 
-import { plantNetLocal, slicePlant, mergePlant, retireWornPlant } from '../../../domain/plant';
+import { capitalMixOf } from '../../../domain/industry-registry';
+import { profileKeyOf } from './profiles';
+import { plantNetLocal, slicePlant, mergePlant, retireWornPlant, plantEffectiveNetLocal } from '../../../domain/plant';
 import { movePlant, retirePlant, abandonPlant } from '../../ledger/plant-ledger';
 import { tradeInvoicesOf } from '../../ledger/contract-ledger';
 import { assertNever } from '../../../domain/defect';
@@ -372,9 +374,21 @@ function sellPlantToBidders(
     const netPpeLocal = plantNetLocal(peer.plant, ctx.nextWeek);
     if (!(netPpeLocal > 0)) return; // no plant of its own: no return on capital to read a bid from
     const roc = (peer.ebit ?? 0) / netPpeLocal;
+    // §3.26-f-iv-c — WHAT THE PLANT ON OFFER CAN PRODUCE FOR THIS BIDDER: the effective plant it
+    // adds to the bidder's register in the bidder's own mix of kinds, per unit of book. A slice
+    // in the wrong kinds (buildings for a firm short of machines) adds little and is bid for as
+    // little; a slice that completes the bidder's mix is worth its whole book. A5's value.
+    const peerMix = capitalMixOf(peer.productLines, profileKeyOf(peer));
+    const probe = slicePlant(comp.plant, Math.min(1, offeredLocal / Math.max(1e-9, plantNetLocal(comp.plant, ctx.nextWeek))));
+    const probeNetLocal = plantNetLocal(probe.taken, ctx.nextWeek);
+    const productiveShare = probeNetLocal > 0
+      ? Math.max(0, Math.min(1, (plantEffectiveNetLocal(mergePlant(peer.plant, probe.taken), peerMix, ctx.nextWeek)
+        - plantEffectiveNetLocal(peer.plant, peerMix, ctx.nextWeek)) / probeNetLocal))
+      : 0;
+    if (!(productiveShare > 0)) return; // nothing on offer it can use: no bid
     // §3.26-d: against ITS OWN cost of capital (one owner) — the region's long rate at its own
     // beta and its own board's risk aversion, not one hurdle for every bidder.
-    const reservation = Math.min(1, roc / costOfCapitalOf(peer, riskFreeRateOf(ctx.updatedRegions[estate.regionId])));
+    const reservation = Math.min(1, productiveShare * roc / costOfCapitalOf(peer, riskFreeRateOf(ctx.updatedRegions[estate.regionId])));
     if (!(reservation > 0.01)) return;
     const wantLocal = Math.max(0, (peer.growthCapex ?? 0) + (peer.maintenanceCapex ?? 0));
     if (!(wantLocal > 1)) return;

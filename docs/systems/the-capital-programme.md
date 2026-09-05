@@ -78,10 +78,10 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 a stock of productive assets held by a named firm | `src/domain/plant.ts:PlantVintage` · `src/domain/plant.ts:plantGrossLocal` | ✅ |
-| A2 capacity is a function of the stock | `src/engine/simulation/stages/05-unit-bidding.ts:unitsPerNetPpeDollar` | ✅ |
+| A2 capacity is a function of the stock | `src/engine/simulation/stages/05-unit-bidding.ts:unitsPerNetPpeDollar` · `src/domain/plant.ts:plantEffectiveNetLocal` | ✅ |
 | A3 it depreciates — a cost and a reduction | `src/domain/plant.ts:plantDepreciationAnnualLocal` · `src/domain/company-week/income-statement.ts:industrialIncome` | ✅ |
-| A4 capital is specific | `src/domain/plant.ts:PlantVintage` · `src/engine/simulation/stages/estate-resolution.ts:peersOf` | ⚠️ |
-| A5 its value is what it can produce; it can be written down | `src/domain/plant.ts:scrapPlantShare` · `src/domain/company-week/capital-programme.ts:capacityRetirement` | ⚠️ |
+| A4 capital is specific | `src/domain/plant.ts:PlantVintage` · `src/domain/plant.ts:plantEffectiveNetLocal` | ✅ |
+| **A5 its value is what it can produce; it can be written down** | `src/domain/plant.ts:plantEffectiveNetLocal` · `src/engine/simulation/stages/estate-resolution.ts:sellPlantToBidders` · `src/domain/plant.ts:scrapPlantShare` | ⚠️ |
 | **B1 invests when the return beats the cost of capital** | `src/domain/company-week/capital-programme.ts:desiredGrowthCapex` · `src/domain/company-week/cost-of-capital.ts:costOfCapitalOf` | ❌ |
 | B1.a the return comes from expected demand and price | `src/engine2/stage08-lanes.ts:categoryShortfall` | ⚠️ |
 | **B1.b the cost of capital comes from the markets** | `src/engine2/front-core.ts:effectiveDebtRate` | ⚠️ |
@@ -210,7 +210,7 @@ week and the cash raising next week's cap. E3 says investment is debt-funded *at
 is the link that makes credit growth and investment the same cycle; here they are two decisions that
 communicate through a cash balance with a one-week lag and no shared hurdle. Falls out of B1's step.
 
-### ⚠️ A4 / A5 — PLANT IS DATED VINTAGES NOW, AND STILL HAS NO KIND
+### ✅ A4 / ⚠️ A5 — PLANT IS DATED VINTAGES OF A KIND, AND WHAT IT CAN PRODUCE IS ITS SCARCEST KIND
 
 *2026-09-05 (§9.26-f-ii):* plant is a register of dated vintages (`domain/plant.ts`): what each
 commissioning cost, the week it entered service, its own life. Gross, net, accumulated depreciation
@@ -247,12 +247,20 @@ kind was the GOOD's question ("does any recipe consume this?"), so four of the f
 landed as input lots nobody drew; it is the buyer's (`purchaseKindOf`), and a manufacturer's heavy
 equipment is plant.
 
-What keeps A4 ⚠️ is that capacity does not read kinds: `sellPlantToBidders` sells to same-region,
-same-sector peers, a merger moves vintages across sectors, and a buyer converts them into capacity at
-**its own** `unitsPerNetPpeDollar` on the whole register — a steel mill's plant becomes whatever the
-buyer makes (**§3 step 26-f-iv-c**). A5 is the same shape: a vintage is carried at cost less wear and
-never revalued against what it can produce; the only write-down is `capacityRetirement`'s scrap of a
-share mothballed for a year (now the oldest vintages, by vintage).
+*2026-09-05 (§9.26-f-iv-c), A4 closed:* capacity reads the plant that SERVES the line —
+`plant.ts:plantEffectiveNetLocal`, Leontief over the kinds the line's industry's capital is made of:
+the net of each kind over its share, the minimum. A register built in the mix is worth its whole net;
+heavy equipment merged into a software firm adds nothing to what it can make; a firm with all the
+buildings and none of the machines makes nothing. Misallocation is possible and costly, which is what
+A4 asks. The estate's bidders pay for what the kinds on offer can produce for THEM — the effective
+plant a slice adds to the bidder's own register in its own mix, per unit of book, scales the
+reservation (`sellPlantToBidders`), and a bidder the slice cannot serve does not bid.
+
+A5 stays ⚠️: a vintage's value is now what it can produce for capacity and for the estate's price,
+but the BOOKS never revalue it — a vintage is carried at cost less wear whatever its kind's use, and
+the only write-down is `capacityRetirement`'s scrap of a share mothballed for a year, taken oldest
+first rather than from the kinds in excess of the scarcest. A write-down that is a fall in what the
+plant can produce is a later step.
 
 ### ❌ D4 / E4 — THE TWO VERIFY NODES ARE NEVER MEASURED
 

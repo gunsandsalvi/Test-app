@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   seedPlantVintages, plantGrossLocal, plantNetLocal, plantAccumulatedDepreciationLocal,
-  plantDepreciationAnnualLocal, commissionVintage, retireWornPlant, scrapPlantShare, slicePlant,
+  plantDepreciationAnnualLocal, plantEffectiveNetLocal, commissionVintage, retireWornPlant, scrapPlantShare, slicePlant,
   mergePlant, wornShareOf, type PlantVintage,
 } from '../src/domain/plant';
 
@@ -97,4 +97,20 @@ test('§3.26-f-iv-b: each kind is half worn over its own life, so the charge is 
   const plant = seedPlantVintages(1_000, 100, [{ kind: 'commercial_construction', weight: 1, usefulLifeYears: 40 }, { kind: 'enterprise_software', weight: 1, usefulLifeYears: 5 }]);
   near(plantNetLocal(plant, 100), 500, 'half worn whatever the lives');
   near(plantDepreciationAnnualLocal(plant, 100), 500 / 40 + 500 / 5, 'the building wears slowly, the software fast');
+});
+
+test('§3.26-f-iv-c: the plant that serves a use is its scarcest kind — a register built in the mix is worth its whole net', () => {
+  const mix = { heavy_equipment: 0.75, enterprise_software: 0.25 };
+  const inMix = seedPlantVintages(1_000, 100, [{ kind: 'heavy_equipment', weight: 3, usefulLifeYears: 10 }, { kind: 'enterprise_software', weight: 1, usefulLifeYears: 10 }]);
+  near(plantEffectiveNetLocal(inMix, mix, 100), plantNetLocal(inMix, 100), 'in proportion: the whole net produces');
+  // Buildings for a use that needs machines: nothing.
+  const wrong = commissionVintage([], 1_000, 100, 40, 'commercial_construction');
+  assert.equal(plantEffectiveNetLocal(wrong, mix, 100), 0, 'a kind the use does not need produces nothing for it');
+  // More software than the mix can use adds nothing; the scarce kind binds.
+  const lopsided = mergePlant(inMix, commissionVintage([], 1_000, 100, 10, 'enterprise_software'));
+  near(plantEffectiveNetLocal(lopsided, mix, 100), plantNetLocal(inMix, 100), 'the excess kind is idle');
+  // Heavy equipment merged into a firm that has none of the software it needs: the equipment binds on the software.
+  const half = { heavy_equipment: 0.5, enterprise_software: 0.5 };
+  near(plantEffectiveNetLocal(inMix, half, 100), plantNetLocal(inMix, 100) * 0.25 / 0.5, 'a use needing half software gets twice the software it has');
+  assert.equal(plantEffectiveNetLocal(inMix, {}, 100), plantNetLocal(inMix, 100), 'a use naming no capital reads the whole net');
 });

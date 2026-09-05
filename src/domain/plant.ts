@@ -104,6 +104,31 @@ export function plantDepreciationAnnualLocal(plant: readonly PlantVintage[], wee
   return s;
 }
 
+/**
+ * §3.26-f-iv-c — WHAT THE REGISTER CAN PRODUCE FOR A USE that needs its capital in a MIX of kinds
+ * (an industry's `capitalMix`): the plant is only as large as its scarcest kind allows. A factory
+ * with all the buildings and none of the machines makes nothing; heavy equipment merged into a
+ * software firm adds nothing to what the software firm can make. Leontief over kinds — the net of
+ * each kind over its share, the minimum — so a register built in the mix (the seed's, or a firm
+ * that buys by its mix) is worth its whole net, and one of the wrong kinds is worth its binding
+ * kind. This is what makes misallocation possible and costly (the-capital-programme A4), and a
+ * vintage's value what it can produce rather than what it cost (A5). A mix with no kinds (a use
+ * that names no capital) reads the whole net.
+ */
+export function plantEffectiveNetLocal(plant: readonly PlantVintage[], mixByKind: Record<string, number>, week: number): number {
+  const kinds = Object.entries(mixByKind).filter(([, w]) => w > 0);
+  const total = kinds.reduce((a, [, w]) => a + w, 0);
+  if (!(total > 0)) return plantNetLocal(plant, week);
+  const netByKind: Record<string, number> = {};
+  for (const v of plant) {
+    if (!isLive(v, week)) continue;
+    netByKind[v.kind] = (netByKind[v.kind] ?? 0) + v.costLocal * (1 - wornShareOf(v, week));
+  }
+  let effective = Infinity;
+  for (const [kind, w] of kinds) effective = Math.min(effective, (netByKind[kind] ?? 0) / (w / total));
+  return effective === Infinity ? 0 : effective;
+}
+
 /** Register order: oldest first; equal service weeks by life. */
 const byAge = (a: PlantVintage, b: PlantVintage): number =>
   a.enteredServiceWeek - b.enteredServiceWeek || a.usefulLifeYears - b.usefulLifeYears
