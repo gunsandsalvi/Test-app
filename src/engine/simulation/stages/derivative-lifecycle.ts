@@ -20,7 +20,7 @@
 
 import { GameState, RegionId } from '../../../types';
 import { derivativesBookOf, strikeDerivatives, keepDerivatives } from '../../ledger/contract-ledger';
-import { ccpOfContract, memberMarginAccount, runWaterfall, writeDownSurvivors, ccpOwnCapitalLocal, memberMarginCapacityLocal, admittedShareOf, scaledContract, type WaterfallRound } from '../../../domain/clearing-house';
+import { ccpOfContract, ccpOfMoney, memberMarginAccount, runWaterfall, writeDownSurvivors, ccpOwnCapitalLocal, memberMarginCapacityLocal, admittedShareOf, scaledContract, type WaterfallRound } from '../../../domain/clearing-house';
 import { ccpFundOf, publishCcpFund, ccpSheetAt, memberMarginPostedLocal } from '../../ledger/contract-ledger';
 import { bankReservesOf, cashOf, obligationCurrencyOf } from '../../ledger/accounts';
 import { institutionSpendableLocal } from './settlement';
@@ -32,7 +32,7 @@ import { ccpParty } from '../../../domain/party';
 
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../domain/derivatives/contract';
-import { DerivativeMarketView } from '../../../domain/derivatives/profile';
+import { DerivativeMarketView, DerivativeLeg, DerivativeLegs } from '../../../domain/derivatives/profile';
 import { derivativeProfile, initialMarginLocal, initialMarginAtStrike, withInitialMargin } from '../../../domain/derivatives/registry';
 import { measuredWeeklyMove, measuredWeeklyBpsMove, realizedAnnualVol } from '../../../domain/volatility';
 import { ringFill } from '../../../engine2/world';
@@ -221,24 +221,29 @@ const everyoneStands: Stands = () => true;
  * waterfall's to fund (17-iv-c; until then it is the house's cash, and `O15` shows it short).
  * Returns nothing; `net` keeps each member's cash settled here for the markets' budget tests.
  */
-export function payThroughHouse(ctx: WeeklyStepContext, c: DerivativeContract, usdToB: number, reason: string, net: Map<string, number>, stands: Stands = everyoneStands): void {
+export function payThroughHouse(ctx: WeeklyStepContext, c: DerivativeContract, usdToB: number, reason: string, net: Map<string, number>, stands: Stands = everyoneStands, /** §3.17b-iv: a leg in another money goes through the house of THAT money. */ currency: CurrencyCode = c.currency): void {
   const amount = Math.abs(usdToB);
   if (!(amount > MIN_LEG_LOCAL)) return;
   const payer = usdToB > 0 ? c.a : c.b;
   const payee = usdToB > 0 ? c.b : c.a;
-  const house = ccpOfContract(c);
-  // §3.13c: the contract says what it settles in; `currencyOf(c.regionId)` was a proxy.
+  const house = ccpOfMoney(currency);
+  // §3.13c: the contract says what it settles in; `currencyOf(c.regionId)` was a proxy. The net
+  // each member settled here is kept in the contract's money.
+  const netAmount = currency === c.currency ? amount : convert(amount, currency, c.currency, ctx.v2.fx);
   if (stands(payer)) {
-    pay(ctx, { payer, payee: house, amount, currency: c.currency, reason });
+    pay(ctx, { payer, payee: house, amount, currency, reason });
     const pk = derivativePartyKey(payer);
-    net.set(pk, (net.get(pk) ?? 0) - amount);
+    net.set(pk, (net.get(pk) ?? 0) - netAmount);
   }
   if (stands(payee)) {
-    pay(ctx, { payer: house, payee, amount, currency: c.currency, reason });
+    pay(ctx, { payer: house, payee, amount, currency, reason });
     const ek = derivativePartyKey(payee);
-    net.set(ek, (net.get(ek) ?? 0) + amount);
+    net.set(ek, (net.get(ek) ?? 0) + netAmount);
   }
 }
+
+/** A profile's legs for the week, as a list. */
+const asLegs = (legs: DerivativeLegs): DerivativeLeg[] => (legs === null ? [] : Array.isArray(legs) ? legs : [legs]);
 
 /**
  * A PARTY'S DEATH CLOSES OUT EVERY CONTRACT IT STANDS ON, the week it
@@ -411,12 +416,11 @@ export function settleDerivativeClass(
     if (c.classId !== classId) { kept.push(c); continue; }
 
     const event = profile.eventTermination(c, view);
-    if (event) { payThroughHouse(ctx, c, event.usdToB, event.reason, net, stands); releaseInitialMargin(ctx, c, view); continue; }
+    if (event) { asLegs(event).forEach((l) => payThroughHouse(ctx, c, l.usdToB, l.reason, net, stands, l.currency)); releaseInitialMargin(ctx, c, view); continue; }
 
     // §3.17-vi: a contract with an event pending outlives its maturity until the event settles.
     if (c.maturityWeek <= view.week && !profile.holdsPastMaturity?.(c, view)) {
-      const leg = profile.periodicLegUSDToB(c, view);
-      if (leg) payThroughHouse(ctx, c, leg.usdToB, leg.reason, net, stands);
+      asLegs(profile.periodicLegUSDToB(c, view)).forEach((l) => payThroughHouse(ctx, c, l.usdToB, l.reason, net, stands, l.currency));
       settleMark(c, profile.markReasonFinal ?? 'derivative settled');
       releaseInitialMargin(ctx, c, view);
       continue;
@@ -435,8 +439,7 @@ export function settleDerivativeClass(
       continue;
     }
 
-    const leg = profile.periodicLegUSDToB(c, view);
-    if (leg) payThroughHouse(ctx, c, leg.usdToB, leg.reason, net, stands);
+    asLegs(profile.periodicLegUSDToB(c, view)).forEach((l) => payThroughHouse(ctx, c, l.usdToB, l.reason, net, stands, l.currency));
     settleMark(c, profile.markReasonLive ?? 'derivative variation margin');
     kept.push(c);
   }

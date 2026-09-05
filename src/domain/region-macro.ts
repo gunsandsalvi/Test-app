@@ -917,6 +917,10 @@ export interface Region {
    *  option class prices at it while it stands; the realised one before. Written by
    *  `derivative-markets/option.ts`. */
   indexImpliedVol?: number;
+  /** §3.17b-iv — the FUNDING basis the cross-currency swap book cleared, per foreign region, in
+   *  bps per year. The forward book's `crossCurrencyBasisBps` is the other basis; 17b-iv-b makes
+   *  them one. Written by `derivative-markets/xcs.ts`. */
+  xcsBasisBps?: Record<string, number>;
   /** PUB: matured paper that no named book ever bought — the front-of-ladder undersubscription
    *  the treasury auction leaves behind. It is not a payment; nobody was owed it. */
   lastUnsoldMaturedLocal?: number;

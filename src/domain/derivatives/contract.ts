@@ -55,7 +55,7 @@ export const companyPartyKey = (companyId: EntityId): string => derivativePartyK
 export const institutionPartyKey = (id: EntityId): string => derivativePartyKey({ kind: 'INSTITUTION', id });
 
 /** The classes the registry knows. A new derivative adds a member here and a profile module. */
-export type DerivativeClassId = 'IRS' | 'CDS' | 'COMMODITY_FUTURE' | 'FX_FORWARD' | 'OPTION';
+export type DerivativeClassId = 'IRS' | 'CDS' | 'COMMODITY_FUTURE' | 'FX_FORWARD' | 'OPTION' | 'XCS';
 
 /**
  * §3.13-BOOK dIIb — WHAT A CONTRACT IS ON, typed by class. This was `referenceId: string`, four

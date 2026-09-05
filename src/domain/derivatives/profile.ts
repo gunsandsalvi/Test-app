@@ -16,7 +16,7 @@
  * dead COUNTERPARTY is the lifecycle's own close-out and no profile's business.
  */
 
-import { RegionId } from '../geography';
+import { RegionId, CurrencyCode } from '../geography';
 import { DerivativeClassId, DerivativeContract } from './contract';
 import type { EntityId } from '../ids';
 
@@ -80,7 +80,12 @@ export interface DerivativeMarketView {
 export interface DerivativeLeg {
   usdToB: number;
   reason: string;
+  /** §3.17b-iv — the money this leg is in, where it is not the contract's: a cross-currency swap's
+   *  home leg. The lifecycle pays it through the house of THAT money. Absent = the contract's. */
+  currency?: CurrencyCode;
 }
+/** A profile's legs for the week: one, several (a two-currency exchange), or none. */
+export type DerivativeLegs = DerivativeLeg | DerivativeLeg[] | null;
 
 export interface DerivativeClassProfile {
   id: DerivativeClassId;
@@ -106,7 +111,7 @@ export interface DerivativeClassProfile {
    */
   closeOutMoveOf(c: DerivativeContract, m: DerivativeMarketView): number | undefined;
   /** The week's periodic exchange on a live contract, signed to B. Null for mark-leg classes. */
-  periodicLegUSDToB(c: DerivativeContract, m: DerivativeMarketView): DerivativeLeg | null;
+  periodicLegUSDToB(c: DerivativeContract, m: DerivativeMarketView): DerivativeLegs;
   /**
    * The contract's cumulative value to A at current prints. The lifecycle settles the delta
    * against `settledMarkLocal` and owns the delta rule. Null: no marking this week (no fresh
@@ -120,7 +125,7 @@ export interface DerivativeClassProfile {
    * An event that ends the contract THIS week (credit event; a reference that stopped existing).
    * Non-null = final leg then gone; null = no event. Counterparty death is NOT detected here.
    */
-  eventTermination(c: DerivativeContract, m: DerivativeMarketView): DerivativeLeg | null;
+  eventTermination(c: DerivativeContract, m: DerivativeMarketView): DerivativeLegs;
   /**
    * Replacement value to B at current prints — what a dead counterparty's estate settles
    * (rate-leg classes; mark-leg classes close out at the mark, which the lifecycle owns).

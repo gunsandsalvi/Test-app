@@ -82,7 +82,7 @@ checked by `scripts/check-atlas.sh`. The three FORBIDs of **WHAT A DERIVATIVE IS
 | D3 an observable underlying priced elsewhere | `src/domain/derivatives/profile.ts:DerivativeMarketView` | ✅ |
 | **D3.a FORBID no underlying that only exists inside the derivative** | `src/engine/macro/evolution.ts:evolveCommodity` | ⚠️ |
 | D4 a payoff function of D3 | `src/domain/derivatives/profile.ts:periodicLegUSDToB` | ✅ |
-| D5 a currency per leg, legs need not share one | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ⚠️ |
+| D5 a currency per leg, legs need not share one | `src/domain/derivatives/profile.ts:DerivativeLeg` · `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ✅ |
 | D6 a term: start, end, payment dates between | `src/domain/derivatives/contract.ts:maturityWeek` | ✅ |
 | D6.a a periodicity and accrual convention per periodic leg | `src/domain/derivatives/classes/irs.ts:IRS_PROFILE` | ⚠️ |
 | D7 a price at inception | `src/domain/derivatives/contract.ts:strike` | ✅ |
@@ -200,7 +200,13 @@ strike: ctx.getFxToUsd(issuer) * (1 - basisBps / 10000)
 to spot, and it carries no interest differential, so it is not covered interest parity either. See
 `fx-forwards-and-xcs.md` §3, whose tree owns this finding (E1/B2).
 
-### ⚠️ D5 / D6.a — ONE CURRENCY PER CONTRACT, ONE PERIODICITY, NO ACCRUAL CONVENTION
+### ✅ D5 / ⚠️ D6.a — A CURRENCY PER LEG; ONE PERIODICITY, NO ACCRUAL CONVENTION
+
+*2026-09-05 (§9.17b-iv-a). A leg says its money: `profile.ts:DerivativeLeg.currency`, absent for
+the contract's own, and the lifecycle pays each leg through the house of ITS money
+(`payThroughHouse`); a profile returns one leg, several, or none (`DerivativeLegs`). The
+cross-currency swap is the two-currency instrument the paragraph below said could not be
+represented. D6.a stands: every periodic leg is still `/52`.*
 
 `derivative-lifecycle.ts:payThroughHouse` settles every leg in the contract's one `currency` — the contract has
 a region, not a currency per leg. An FX forward's two currencies exist only inside its mark, which

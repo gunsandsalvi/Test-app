@@ -70,6 +70,11 @@ export const fxSpotInstrumentId = (pairKey: string): InstrumentId => asInstrumen
  */
 export const fxBasisInstrumentId = (pairKey: string): InstrumentId => asInstrumentId(`XCS-${pairKey}`);
 
+/** §3.17b-iv — the cross-currency FUNDING book for one borrower-region/foreign-region pair: the
+ *  basis a term loan of the foreign money clears at. A different book from the forward's basis. */
+export const xcsFundingInstrumentId = (homeRegion: RegionId, foreignRegion: RegionId): InstrumentId =>
+  asInstrumentId(`XCSFUND-${homeRegion}->${foreignRegion}`);
+
 /** §3.17b-iii — one region's index option book, by kind (a put or a call). */
 export const indexOptionInstrumentId = (regionId: RegionId, optionType: string): InstrumentId =>
   asInstrumentId(`${regionId}-OPT-${optionType}`);

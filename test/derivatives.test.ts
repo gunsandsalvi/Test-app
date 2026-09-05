@@ -17,6 +17,11 @@ import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivat
 import { StandingBook } from '../src/domain/derivatives/standing-book';
 import { asEntityId } from '../src/domain/ids';
 import { writerReservationVol, ATM_PRICE_PER_VOL_SQRT_T } from '../src/domain/derivatives/classes/option';
+import { lenderReservationBps } from '../src/domain/derivatives/classes/xcs';
+import type { DerivativeLeg, DerivativeLegs } from '../src/domain/derivatives/profile';
+
+/** The one leg a single-leg class returns this week. */
+const leg = (x: DerivativeLegs): DerivativeLeg => { if (x === null || Array.isArray(x)) throw new Error('one leg expected'); return x; };
 import { calculateBlackScholesGreeks } from '../src/engine/blackScholes';
 import { realisedUnsecuredRecoveryRate, CLAIM_SENIORITY, type Estate } from '../src/domain/estate';
 import { partyKey } from '../src/engine/ledger/party';
@@ -51,7 +56,7 @@ const referenceFor = (classId: DerivativeContract['classId']): DerivativeReferen
   classId === 'CDS' ? { kind: 'ISSUER', issuerId: asEntityId('X') }
     : classId === 'OPTION' ? { kind: 'SHARES', issuerId: asEntityId('X') }
     : classId === 'COMMODITY_FUTURE' ? { kind: 'COMMODITY', commodityId: 'X' }
-      : classId === 'FX_FORWARD' ? { kind: 'REGION', regionId: 'EUR' } : { kind: 'RATE' };
+      : classId === 'FX_FORWARD' || classId === 'XCS' ? { kind: 'REGION', regionId: 'EUR' } : { kind: 'RATE' };
 
 const base = (over: Partial<DerivativeContract>): DerivativeContract => ({
   id: 'c', classId: 'IRS', regionId: 'USA', currency: 'USD',
@@ -61,9 +66,9 @@ const base = (over: Partial<DerivativeContract>): DerivativeContract => ({
 });
 
 test('IRS: the periodic leg is fixed-minus-overnight on the notional, weekly, to the receiver', () => {
-  const leg = DERIVATIVE_CLASSES.IRS.periodicLegUSDToB(base({}), view())!;
-  assert.ok(Math.abs(leg.usdToB - (1_000_000 * (0.05 - 0.03)) / 52) < 1e-9);
-  assert.equal(leg.reason, 'swap settlement');
+  const l = leg(DERIVATIVE_CLASSES.IRS.periodicLegUSDToB(base({}), view()));
+  assert.ok(Math.abs(l.usdToB - (1_000_000 * (0.05 - 0.03)) / 52) < 1e-9);
+  assert.equal(l.reason, 'swap settlement');
 });
 
 test('§3.17-iii IRS: the mark is the remaining fixed-leg difference at today\'s par, discounted; it is zero at maturity and null without a print', () => {
@@ -82,13 +87,13 @@ test('§3.17-iii IRS: the mark is the remaining fixed-leg difference at today\'s
 
 test('CDS: premium weekly to the seller; a reference default pays par less recovery to the buyer', () => {
   const c = base({ classId: 'CDS', strike: 200, reference: { kind: 'ISSUER', issuerId: asEntityId('ISSUER') }, termKey: '' });
-  const prem = DERIVATIVE_CLASSES.CDS.periodicLegUSDToB(c, view())!;
+  const prem = leg(DERIVATIVE_CLASSES.CDS.periodicLegUSDToB(c, view()));
   assert.ok(Math.abs(prem.usdToB - (1_000_000 * 0.02) / 52) < 1e-9);
   assert.equal(DERIVATIVE_CLASSES.CDS.eventTermination(c, view()), null);
-  const ev = DERIVATIVE_CLASSES.CDS.eventTermination(c, view({ isIssuerDefaulted: () => true }))!;
+  const ev = leg(DERIVATIVE_CLASSES.CDS.eventTermination(c, view({ isIssuerDefaulted: () => true })));
   assert.ok(Math.abs(ev.usdToB - -(1_000_000 * 0.6)) < 1e-9, 'seller pays the buyer (negative to B)');
   // §3.17-iii: what variation margin already paid the buyer on the way is netted from the payout.
-  const evAfterVm = DERIVATIVE_CLASSES.CDS.eventTermination(base({ ...c, settledMarkLocal: 100_000 }), view({ isIssuerDefaulted: () => true }))!;
+  const evAfterVm = leg(DERIVATIVE_CLASSES.CDS.eventTermination(base({ ...c, settledMarkLocal: 100_000 }), view({ isIssuerDefaulted: () => true })));
   assert.ok(Math.abs(evAfterVm.usdToB - -(1_000_000 * 0.6 - 100_000)) < 1e-9);
 });
 
@@ -102,7 +107,7 @@ test('§3.17-vi CDS: the credit event settles at the issuer\'s OWN workout — i
   const closed = view({ isIssuerDefaulted: () => true, issuerWorkout: () => ({ state: 'CLOSED', recovery: 0.1 }) });
   assert.equal(DERIVATIVE_CLASSES.CDS.holdsPastMaturity!(c, closed), false);
   assert.ok(Math.abs(DERIVATIVE_CLASSES.CDS.markToMarketUSDToA(c, closed)! - 1_000_000 * 0.9) < 1e-9);
-  const ev = DERIVATIVE_CLASSES.CDS.eventTermination(base({ ...c, settledMarkLocal: 600_000 }), closed)!;
+  const ev = leg(DERIVATIVE_CLASSES.CDS.eventTermination(base({ ...c, settledMarkLocal: 600_000 }), closed));
   assert.ok(Math.abs(ev.usdToB - -(1_000_000 * 0.9 - 600_000)) < 1e-9, 'the settlement is the true-up from the expectation to what the unsecured class got back');
   assert.equal(DERIVATIVE_CLASSES.CDS.holdsPastMaturity!(c, view()), false, 'a live reference: maturity is final');
   const est = { companyId: asEntityId('ISSUER'), ticker: 'ISS', regionId: 'USA', openedWeek: 1, assets: { cashLocal: 0, receivablesLocal: 0, inventoryLocal: 0, ppeLocal: 0 }, distributedLocal: 0, claims: [
@@ -189,7 +194,7 @@ test('every registered class states both roles and admissible facts — the comp
   for (const p of Object.values(DERIVATIVE_CLASSES)) {
     assert.ok(p.roleA && p.roleB);
     assert.ok(p.pfeAddOnRate > 0 && p.pfeAddOnRate < 1);
-    const termKey = p.id === 'OPTION' ? 'CALL' : 's5';
+    const termKey = p.id === 'OPTION' ? 'CALL' : p.id === 'XCS' ? '' : 's5';
     const move = p.closeOutMoveOf(base({ classId: p.id, reference: referenceFor(p.id), termKey }), view());
     assert.ok(move !== undefined && move > 0 && move < 1, `${p.id}: the reference's move sizes its margin`);
     const marks = p.markToMarketUSDToA(base({ classId: p.id, units: 1, reference: referenceFor(p.id), termKey, settledMarkLocal: 0 }), view()) !== null;
@@ -268,7 +273,7 @@ test('§3.17-ii: initial margin is the reference\'s own move over a session, on 
 test('§3.17b-i OPTION: the premium is paid once in the strike week, the mark is the option\'s value, and expiry exercises at intrinsic', () => {
   const call = base({ classId: 'OPTION', reference: { kind: 'SHARES', issuerId: asEntityId('X') }, termKey: 'CALL', strike: 100, units: 1000, notional: 100_000, struckWeek: 10, maturityWeek: 36 });
   const atStrike = view({ week: 10, equityPrice: () => 100, equityAnnualVol: () => 0.3, overnightRateAnnual: () => 0.03 });
-  const prem = DERIVATIVE_CLASSES.OPTION.periodicLegUSDToB(call, atStrike)!;
+  const prem = leg(DERIVATIVE_CLASSES.OPTION.periodicLegUSDToB(call, atStrike));
   assert.ok(prem.usdToB > 0 && prem.reason === 'option premium', 'the holder pays the writer once');
   assert.ok(Math.abs(prem.usdToB - DERIVATIVE_CLASSES.OPTION.markToMarketUSDToA(call, atStrike)!) < 1e-9, 'and it is the option\'s value that week');
   assert.equal(DERIVATIVE_CLASSES.OPTION.periodicLegUSDToB(call, view({ week: 11 })), null, 'never again');
@@ -276,14 +281,14 @@ test('§3.17b-i OPTION: the premium is paid once in the strike week, the mark is
   const up = DERIVATIVE_CLASSES.OPTION.markToMarketUSDToA(call, view({ week: 20, equityPrice: () => 120 }))!;
   assert.ok(up > 20_000, 'in the money: worth its intrinsic and more');
   assert.equal(DERIVATIVE_CLASSES.OPTION.markToMarketUSDToA(call, view({ equityAnnualVol: () => undefined })), null, 'nothing to price at: no mark');
-  const exercised = DERIVATIVE_CLASSES.OPTION.eventTermination(base({ ...call, settledMarkLocal: 15_000 }), view({ week: 36, equityPrice: () => 120 }))!;
+  const exercised = leg(DERIVATIVE_CLASSES.OPTION.eventTermination(base({ ...call, settledMarkLocal: 15_000 }), view({ week: 36, equityPrice: () => 120 })));
   assert.ok(Math.abs(exercised.usdToB - -(20_000 - 15_000)) < 1e-9, 'the writer pays intrinsic beyond what the mark already paid');
   assert.equal(exercised.reason, 'option exercised');
-  const expired = DERIVATIVE_CLASSES.OPTION.eventTermination(base({ ...call, settledMarkLocal: 3_000 }), view({ week: 36, equityPrice: () => 90 }))!;
+  const expired = leg(DERIVATIVE_CLASSES.OPTION.eventTermination(base({ ...call, settledMarkLocal: 3_000 }), view({ week: 36, equityPrice: () => 90 })));
   assert.ok(Math.abs(expired.usdToB - 3_000) < 1e-9, 'worthless: the holder gives back what the mark had paid it');
   assert.equal(expired.reason, 'option expired');
   const put = base({ ...call, termKey: 'PUT' });
-  const putExercised = DERIVATIVE_CLASSES.OPTION.eventTermination(put, view({ week: 36, equityPrice: () => 90 }))!;
+  const putExercised = leg(DERIVATIVE_CLASSES.OPTION.eventTermination(put, view({ week: 36, equityPrice: () => 90 })));
   assert.ok(Math.abs(putExercised.usdToB - -10_000) < 1e-9, 'a put pays the fall through the strike');
   assert.equal(DERIVATIVE_CLASSES.OPTION.closeOutMoveOf(call, view()), 0.05, 'margin on the shares\' own move');
 });
@@ -291,10 +296,10 @@ test('§3.17b-i OPTION: the premium is paid once in the strike week, the mark is
 test('§3.17b-iii OPTION on an index: the put is on the region\'s composite, and a writer\'s reservation is a volatility', () => {
   const put = base({ classId: 'OPTION', reference: { kind: 'INDEX', regionId: 'USA' }, termKey: 'PUT', strike: 4000, units: 25, notional: 100_000, struckWeek: 10, maturityWeek: 23 });
   const v = view({ week: 10, indexLevel: () => 4000, indexAnnualVol: () => 0.2 });
-  const prem = DERIVATIVE_CLASSES.OPTION.periodicLegUSDToB(put, v)!;
+  const prem = leg(DERIVATIVE_CLASSES.OPTION.periodicLegUSDToB(put, v));
   assert.ok(prem.usdToB > 0, 'the holder pays a premium at strike');
   assert.equal(DERIVATIVE_CLASSES.OPTION.closeOutMoveOf(put, v), 0.03, 'margin on the index\'s own move');
-  const fell = DERIVATIVE_CLASSES.OPTION.eventTermination(put, view({ week: 23, indexLevel: () => 3600 }))!;
+  const fell = leg(DERIVATIVE_CLASSES.OPTION.eventTermination(put, view({ week: 23, indexLevel: () => 3600 })));
   assert.ok(Math.abs(fell.usdToB - -(400 * 25)) < 1e-9, 'a 10% fall pays the fall on the units');
   // The reservation: realised vol plus the premium that pays the return on the capital consumed.
   const r0 = writerReservationVol({ realisedVol: 0.2, capitalChargeRate: 0, requiredReturnAnnual: 0.1, tenorYears: 0.25 });
@@ -305,4 +310,29 @@ test('§3.17b-iii OPTION on an index: the put is on the region\'s composite, and
   const S = 100, T = 0.25, vol = 0.2;
   const bs = calculateBlackScholesGreeks(S, S, T, 0, vol, 'PUT').price;
   assert.ok(Math.abs(bs / S - ATM_PRICE_PER_VOL_SQRT_T * vol * Math.sqrt(T)) < 0.002, `ATM price ${bs} against the approximation`);
+});
+
+test('§3.17b-iv XCS: two notionals in two monies, exchanged at the start and back at the end at the original rate, interest on both between', () => {
+  // A USA bank borrows EUR 1M against USD 1.1M; the pair is 1.1 USD per EUR at strike.
+  const c = base({ classId: 'XCS', regionId: 'USA', currency: 'EUR', reference: { kind: 'REGION', regionId: 'EUR' }, termKey: '', notional: 1_000_000, units: 1_100_000, strike: 20, struckWeek: 10, maturityWeek: 62, settledMarkLocal: 0 });
+  const rates = (usd: number, eur: number) => (r: string) => (r === 'USA' ? usd : eur);
+  const atStrike = view({ week: 10, fxToUsd: rates(1, 1.1), overnightRateAnnual: rates(0.05, 0.03) });
+  const exchange = DERIVATIVE_CLASSES.XCS.periodicLegUSDToB(c, atStrike) as { usdToB: number; currency?: string }[];
+  assert.deepEqual(exchange.map((l) => [l.usdToB, l.currency ?? 'EUR']), [[-1_000_000, 'EUR'], [1_100_000, 'USD']], 'the lender delivers euros, the borrower pays dollars');
+  assert.ok(Math.abs(DERIVATIVE_CLASSES.XCS.markToMarketUSDToA(c, atStrike)!) < 1e-6, 'worth nothing at the rate it struck at');
+  const later = view({ week: 20, fxToUsd: rates(1, 1.1), overnightRateAnnual: rates(0.05, 0.03) });
+  const interest = DERIVATIVE_CLASSES.XCS.periodicLegUSDToB(c, later) as { usdToB: number; currency?: string; reason: string }[];
+  assert.ok(Math.abs(interest[0].usdToB - 1_000_000 * (0.03 + 0.002) / 52) < 1e-6, 'the borrower pays euro overnight plus the basis on the euros');
+  assert.ok(Math.abs(interest[1].usdToB - -(1_100_000 * 0.05 / 52)) < 1e-6 && interest[1].currency === 'USD', 'the lender pays dollar overnight on the dollars');
+  // The euro strengthens: the dollars the borrower gets back are worth fewer euros — its loss, the hedge of its euro book's gain.
+  const eurUp = view({ week: 30, fxToUsd: rates(1, 1.25) });
+  assert.ok(Math.abs(DERIVATIVE_CLASSES.XCS.markToMarketUSDToA(c, eurUp)! - (1_100_000 / 1.25 - 1_000_000)) < 1e-6);
+  const end = DERIVATIVE_CLASSES.XCS.eventTermination(base({ ...c, settledMarkLocal: -120_000 }), view({ week: 62, fxToUsd: rates(1, 1.25) })) as { usdToB: number; currency?: string; reason: string }[];
+  assert.deepEqual(end.map((l) => [l.usdToB, l.currency ?? 'EUR', l.reason]), [
+    [1_000_000, 'EUR', 'xcs notional exchanged back'],
+    [-1_100_000, 'USD', 'xcs notional exchanged back'],
+    [-120_000, 'EUR', 'xcs collateral returned'],
+  ], 'back at the original rate, and the collateral the move posted goes back');
+  assert.equal(DERIVATIVE_CLASSES.XCS.eventTermination(c, later), null);
+  assert.ok(Math.abs(lenderReservationBps({ capitalChargeRate: 0.0015, requiredReturnAnnual: 0.1 }) - 1.5) < 1e-9, 'the return on the capital consumed, in bps a year');
 });

@@ -549,11 +549,14 @@ written from here):
 
 17b. **An options class, and the FX swap lines** — split 2026-09-05, one commit each; 17b-i
     (the option class on the one book) is in §9. What is left, in order:
-17b-iv. **THE FX FUNDING MARKET.** `fx-forwards-and-xcs.md` B2, B4, C1: a term book per pair
-    where a bank short a currency borrows it against its own for a term — the cross-currency
-    swap, a class on the one book with two notionals exchanged — cleared at the basis the
-    region's foreign-currency funding deficit sets; `fx-funding.ts`'s spot purchase stays for
-    what is due this week.
+17b-iv. **THE FX FUNDING MARKET** — split 2026-09-05; 17b-iv-a (the cross-currency swap class
+    and its funding book) is in §9. What is left:
+17b-iv-b. **ONE BASIS.** The forward book prices off the funding basis the swap book clears
+    (`Region.xcsBasisBps`) instead of clearing a basis of its own — CIP as the consequence of
+    an arbitrage the desks take (B2.a): a desk that can borrow the foreign money at the funding
+    basis writes the forward at spot plus the two overnight rates plus that basis, and the
+    forward book's own basis clearing (`fx-forward.ts`, `Region.crossCurrencyBasisBps`) and the
+    evolved `fx.basisSpreadBps` retire into it. B2 ✅, B3 ✅, B2.a ✅.
 17b-v. **THE SWAP LINES.** A central bank lends its currency to another central bank against
     that bank's own, drawn when the basis clears past a stated width, on-lent to its banks at
     the basis plus a penalty — the backstop that caps the basis, and a real event the news tells.
@@ -1617,6 +1620,36 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17b-iv-a — THE CROSS-CURRENCY SWAP, AND THE FX FUNDING MARKET.** A LEG SAYS ITS MONEY:
+`profile.ts:DerivativeLeg.currency` (absent = the contract's), a profile's legs for the week are
+one, several or none (`DerivativeLegs`), and `payThroughHouse` pays each leg through the house of
+its own money, keeping each member's net in the contract's — so a two-currency instrument exists
+on the one book (`derivative.md` D5 ✅). THE CLASS (`classes/xcs.ts:XCS_PROFILE`, roles BORROWER
+and LENDER, the CEM FX add-on): the borrower's home region is `regionId`, the FOREIGN region the
+reference, the foreign money the contract's currency, the foreign notional `notional`, the HOME
+notional at strike `units` (the store's one free number, and it is what the end returns), the
+basis `strike` in bps; the strike week's periodic leg is the notional exchange both ways, every
+week after the interest both ways (foreign overnight plus the basis on the foreign notional,
+home overnight on the home notional), the mark the value to the borrower of the final exchange
+at today's rate, and maturity an event termination that exchanges the notionals BACK AT THE
+ORIGINAL RATE and returns the variation margin that collateralised the move — the value realised
+once, in the exchange (C3). THE MARKET (`derivative-markets/xcs.ts:runXcsMarket`, per
+borrower-region/foreign-region pair, `xcsFundingInstrumentId`, kind `XCS`): who borrows is a
+home bank whose desk ended the last close short the foreign money (its securities account's
+foreign row below zero — the nostro position `fx-funding.ts` rightly does not treat as a client
+shortfall), less its standing swaps, to its limit at the house; who lends is the foreign region's
+banks from their reserves on the one derivative budget, each at a reservation basis that pays its
+required return on the capital the swap consumes (`lenderReservationBps`); the book clears the
+basis (the stat, bps) and the borrower region publishes it (`Region.xcsBasisBps`); the fills
+strike at a year (`XCS_TENOR_WEEKS`), the home notional at today's rate, admitted, struck,
+margined; the class settles AFTER its market so the strike week's settle exchanges the notionals.
+Atlas fx C1, C2, C3, C4, D3 ✅, C1.a ⚠️ (overnight rates, not curves), B4 ⚠️ (the number
+exists; the join with the flows is 38's), B3 stays ⚠️ with the reason sharpened — the funding
+basis and the forward book's hedging basis are two prints of one price — which is 17b-iv-b.
+`test/derivatives.test.ts`: the exchange both ways at strike, worth nothing at its own rate,
+interest on both legs in both monies, the mark on the rate's move, the exchange back with the
+collateral returned; the lender's reservation. Gates green; no run.
 
 **17b-iii — THE OPTIONS MARKET.** Index puts, per region
 (`derivative-markets/option.ts:runOptionMarket`, the class's slot filled). WHO NEEDS COVER: every

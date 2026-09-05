@@ -101,16 +101,16 @@ checked by `scripts/check-atlas.sh`.
 | B2.b the arbitrage is not free — balance sheet, capital, credit lines | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ✅ |
 | **B3 the cross-currency basis is the deviation, a real price** | `src/engine/macro/evolution.ts:evolveFxPair` | ⚠️ |
 | B3.a it widens when funding in one currency is scarce | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:entityHedgeToleranceBps` | ✅ |
-| B4 VERIFY a region with a foreign-currency funding deficit pays the basis | — | ❌ |
-| **C1 XCS: two legs, two currencies, notionals exchanged at start and end** | — | ❌ |
-| C1.a it is an IRS with an FX leg, inheriting both curves | — | ❌ |
-| C2 its economic use is funding, for years, without an open FX position | `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ⚠️ |
-| C3 the notional exchange at the end is at the original rate | — | ❌ |
-| C4 its price includes the basis in B3 | `src/engine/carryCalculator.ts:calculateExpectedCarry` | ⚠️ |
+| B4 VERIFY a region with a foreign-currency funding deficit pays the basis | `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` | ⚠️ |
+| **C1 XCS: two legs, two currencies, notionals exchanged at start and end** | `src/domain/derivatives/classes/xcs.ts:XCS_PROFILE` · `src/domain/derivatives/profile.ts:DerivativeLeg` | ✅ |
+| C1.a it is an IRS with an FX leg, inheriting both curves | `src/domain/derivatives/classes/xcs.ts:XCS_PROFILE` | ⚠️ |
+| C2 its economic use is funding, for years, without an open FX position | `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` · `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ✅ |
+| C3 the notional exchange at the end is at the original rate | `src/domain/derivatives/classes/xcs.ts:XCS_PROFILE` | ✅ |
+| C4 its price includes the basis in B3 | `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` | ✅ |
 | D1 an importer or exporter with a known future foreign payment | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:corporateExposureByRegion` | ✅ |
 | D2 an investor holding a foreign asset who wants the asset, not the currency | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:hedgeableExposureByRegion` | ✅ |
 | D2.a it must roll the hedge — a recurring demand and a recurring cost | `src/domain/derivatives/classes/fx-forward.ts:FX_FORWARD_TENOR_WEEKS` | ✅ |
-| D3 a bank funding a foreign-currency book | `src/engine/simulation/stages/fx-funding.ts:convertsForItself` | ❌ |
+| D3 a bank funding a foreign-currency book | `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` · `src/engine/simulation/stages/fx-funding.ts:convertsForItself` | ✅ |
 | D4 a dealer, constrained by its own currency and funding positions | `src/domain/dealer-derivatives.ts:FxDealerBook` | ✅ |
 | **E1 FORBID no forward rate from a parity formula** | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:runFxForwardMarket` | ⚠️ |
 | E2 FORBID no hedge that removes the position without a counterparty holding it | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:pickDealerBank` | ✅ |
@@ -121,7 +121,13 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ⚠️ B3 / C4 — THERE ARE TWO CROSS-CURRENCY BASES AND THEY HAVE NOTHING TO DO WITH EACH OTHER
+### ⚠️ B3 / ✅ C4 — THERE ARE TWO CROSS-CURRENCY BASES AND THEY HAVE NOTHING TO DO WITH EACH OTHER
+
+*2026-09-05 (§9.17b-iv-a). C4 is the swap's: the cross-currency swap strikes AT the basis its
+funding book clears (`Region.xcsBasisBps`, per foreign region). B3 stays ⚠️, and for a reason
+this step sharpened: the FUNDING basis the swap book clears and the HEDGING basis the forward
+book clears are two prints of one price with no arbitrage between them, beside the evolved
+`fx.basisSpreadBps` below — 17b-iv-b makes the forward price off the funding basis.*
 
 **This tree owns this finding** (`currency-and-fx.md` points here for it).
 
@@ -198,7 +204,19 @@ single largest reason anyone trades an FX forward — is absent from the instrum
 basis, a working auction); what is missing is that the auction should print the forward *rate* and
 the basis should be read out of it against parity — which is B2.a's direction and rule 3's.
 
-### ❌ C1 / C1.a / C3 — THE CROSS-CURRENCY SWAP DOES NOT EXIST
+### ✅ C1, C3 / ⚠️ C1.a — THE CROSS-CURRENCY SWAP
+
+*2026-09-05 (§9.17b-iv-a). `classes/xcs.ts:XCS_PROFILE`: two notionals in two monies, exchanged
+in the strike week (the lender delivers the foreign money, the borrower pays the home money —
+two legs, each in its own money, each through the house of that money:
+`profile.ts:DerivativeLeg.currency`, `derivative-lifecycle.ts:payThroughHouse`), interest on both
+every week between (the borrower pays the foreign overnight plus the basis on the foreign
+notional, the lender the home overnight on the home notional), and at maturity exchanged BACK AT
+THE ORIGINAL RATE — the home notional is the contract's `units`, what the end returns — with the
+variation margin that collateralised the rate's move on the way returned, so the value is
+realised once, in the exchange (C3). C1.a is ⚠️ because the legs float on the two OVERNIGHT
+rates, not on two curves: a term structure per leg is `interest-rate-swaps.md` A1.d's absence.
+The paragraph below is the state before it.*
 
 Section C is a third of this tree and has no code. `DerivativeClassId` is
 `'IRS' | 'CDS' | 'COMMODITY_FUTURE' | 'FX_FORWARD'` — there is no XCS class, no two-currency
@@ -255,7 +273,15 @@ below is `❌`.
 **§3 step 37-FX-CROSS**, and it is the same step as C1: a two-currency contract with a near leg and
 a far leg answers A4 and C1 together.
 
-### ❌ D3 — THE BANKS, WHO NEED THIS MARKET MOST, ARE NOT IN IT
+### ✅ D3 — CLOSED: THE BANKS FUND THEIR FOREIGN BOOKS IN THE SWAP MARKET
+
+*2026-09-05 (§9.17b-iv-a). `derivative-markets/xcs.ts:runXcsMarket`: a home-region bank whose
+desk ended the last close short a foreign money — its securities account's foreign row below
+zero, the nostro position `convertsForItself` rightly refuses to treat as a client shortfall —
+borrows it for a year from the foreign region's banks, from their reserves, at the basis the book
+clears from the lenders' reservations (`xcs.ts:lenderReservationBps`, the return on the capital
+the swap consumes). Less the swaps it already has on, no more than it can margin at the house.
+The paragraph below is the state before it.*
 
 `fx-funding.ts:convertsForItself` excludes `BANK`, `BANK_SECURITIES`, `BANK_CREDIT`,
 `CLEARING_HOUSE` and `CENTRAL_BANK` from buying currency as clients, with a correct reason (a
@@ -269,7 +295,12 @@ simply sits as a nostro balance that `fx-revaluation.ts` re-marks.
 **§3 step 37-FX-CROSS**, and it is the demand side that would make A4's FX swap worth building —
 `banks-funding-and-liquidity.md` E and `currency-and-fx.md` B5 both point at it.
 
-### ❌ B2 / B4 / ⚠️ E4 — THE THREE MEASUREMENTS
+### ❌ B2 / ⚠️ B4, E4 — THE THREE MEASUREMENTS
+
+*2026-09-05 (§9.17b-iv-a). B4 has its number now: the funding basis a region's banks pay for
+each foreign money, cleared and published per week (`Region.xcsBasisBps`). Whether a region
+running a funding deficit in that money pays MORE of it is the join with the cross-border flows
+that step 38 measures; the ingredient the paragraph below said was missing exists.*
 
 **B2** — nothing compares the forward to spot-adjusted-for-funding-costs, and nothing can while
 the forward carries no funding costs (above). **B4** — nothing measures whether a region running a
