@@ -94,6 +94,13 @@ export function arbSizeShare(edge: number, weeklyMoveBps: number): number {
 export const arbCapacityLocal = (spendableLocal: number, primeBrokerageAvailableLocal: number | undefined): number =>
   Math.max(0, spendableLocal) + Math.max(0, primeBrokerageAvailableLocal ?? 0);
 
+/** The net basis (print less carry, per unit of face) as a rate on the cash price over the weeks
+ *  to delivery, in bps a year — the one annualisation the book and the audit (X2) both read. */
+export function bondBasisDeviationBps(netBasis: number, cashPrice: number, yearsToDelivery: number): number {
+  const T = Math.max(1 / 52, yearsToDelivery);
+  return (netBasis / Math.max(1e-9, cashPrice) / T) * 10000;
+}
+
 /**
  * THE BOND BASIS, READ. The net basis (print less carry, per unit of face) as a rate on the cash
  * price over the weeks to delivery; against it, the financing the fund pays ABOVE the repo rate
@@ -103,8 +110,7 @@ export function bondBasisRead(args: {
   netBasis: number; cashPrice: number; yearsToDelivery: number;
   financingRateAnnual: number; repoRateAnnual: number; marginRate: number; requiredReturnAnnual: number;
 }): ComparableRead {
-  const T = Math.max(1 / 52, args.yearsToDelivery);
-  const deviationBps = (args.netBasis / Math.max(1e-9, args.cashPrice) / T) * 10000;
+  const deviationBps = bondBasisDeviationBps(args.netBasis, args.cashPrice, args.yearsToDelivery);
   const carryBps = Math.max(0, args.financingRateAnnual - args.repoRateAnnual) * 10000
     + Math.max(0, args.marginRate) * Math.max(0, args.requiredReturnAnnual) * 10000;
   return { deviationBps, carryBps };
@@ -120,8 +126,7 @@ export function bondBasisMirrorRead(args: {
   netBasis: number; cashPrice: number; yearsToDelivery: number;
   borrowFeeBps: number; marginRate: number; requiredReturnAnnual: number;
 }): ComparableRead {
-  const T = Math.max(1 / 52, args.yearsToDelivery);
-  const deviationBps = -(args.netBasis / Math.max(1e-9, args.cashPrice) / T) * 10000;
+  const deviationBps = -bondBasisDeviationBps(args.netBasis, args.cashPrice, args.yearsToDelivery);
   const carryBps = Math.max(0, args.borrowFeeBps) + Math.max(0, args.marginRate) * Math.max(0, args.requiredReturnAnnual) * 10000;
   return { deviationBps, carryBps };
 }

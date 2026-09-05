@@ -748,6 +748,10 @@ export interface Region {
    *  readCdsBasis`: `readBps` long the rung and the cover, `mirrorBps` its reverse). A basis
    *  wider than that carry is free money nobody took — the bound P2 holds the print to. */
   cdsBasisCarryBpsByIssuer?: Record<string, { week: number; readBps: number; mirrorBps: number }>;
+  /** §3.27-iii-c-i — the same for the bond basis: the cheapest carry any fund faced this week to
+   *  take it, each way (`relative-value.ts:readBondBasis`), in bps a year as the book annualises
+   *  the basis. A basis wider than it is free money nobody took — X2's bound. */
+  bondBasisCarryBps?: { week: number; readBps: number; mirrorBps: number };
   /**
    * CAL/DER — the SECURED OVERNIGHT INDEX: the cleared GC repo rate compounded week by week, the
    * way a published overnight benchmark actually is. It is a level, not a rate: the ratio of two

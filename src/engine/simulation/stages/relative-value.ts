@@ -358,6 +358,7 @@ function readBondBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], vie
     // — none yet is an unpriced borrow, which the lending book prices the week it is asked.
     const borrowFeeBps = reg.borrowFeeBpsByCompanyId?.[bondId] ?? 0;
 
+    let cheapestReadBps = Number.POSITIVE_INFINITY, cheapestMirrorBps = Number.POSITIVE_INFINITY;
     funds.filter((f) => f.region === regionId).forEach((fund) => {
       const line = pbBook.find((l) => l.fundId === fund.id);
       const read = bondBasisRead({
@@ -368,6 +369,7 @@ function readBondBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], vie
       });
       const requiredReturnAnnual = entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund));
       const mirror = bondBasisMirrorRead({ netBasis: reg.bondFuturesBasis!, cashPrice, yearsToDelivery, borrowFeeBps, marginRate, requiredReturnAnnual });
+      cheapestReadBps = Math.min(cheapestReadBps, read.carryBps); cheapestMirrorBps = Math.min(cheapestMirrorBps, mirror.carryBps);
       // §3.17e-iii-a: signed — + long the cash on the line and short the future, − its mirror.
       const share = arbTargetShare(edgeBps(read), edgeBps(mirror), (weeklyPriceMove / cashPrice) * 10000);
       const capacityLocal = arbCapacityLocal(entityCashOf(ctx.v2, fund), fund.primeBrokerageAvailableLocal);
@@ -417,5 +419,7 @@ function readBondBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], vie
       }
       if (Math.abs(futureLegFace) > 1) ctx.relativeValueLegs.push({ ...legs.future, entityId: fund.id, faceLocal: futureLegFace, forced });
     });
+    // §3.27-iii-c-i: what the cheapest arbitrageur faced, each way — the bound X2 holds the basis to.
+    if (Number.isFinite(cheapestReadBps)) reg.bondBasisCarryBps = { week, readBps: cheapestReadBps, mirrorBps: cheapestMirrorBps };
   });
 }

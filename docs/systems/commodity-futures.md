@@ -189,7 +189,8 @@ infers from two cleared prices, and D4's "which must therefore exist and be clea
 E1 stays ⚠️ one level down: the futures curve is cleared against real schedules relative to a
 cleared spot, but the **physical market underneath it has no deliverable stock** — nobody can take
 a barrel off it (D2 ❌, `commodities-spot.md` D2/A4). `audit/prices.ts:x2` (*"futures within carry
-of spot"*) keeps measuring the curve against the print. **§3 step 37-COMMODITY.**
+of spot"*) holds every tenor's print to the desks' own ceiling, `costOfCarryPrice` at the USA short
+rate and the category's storage (§9.27-iii-c-i) — the 0.8/1.25 box is gone. **§3 step 37-COMMODITY.**
 
 ### ❌ B3.a / D3 / E3 — THERE IS NO ROLL
 

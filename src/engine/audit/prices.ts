@@ -21,6 +21,9 @@ import { CDS_BENCHMARK_TENOR, CDS_TENOR_YEARS } from '../../domain/derivatives/c
 import { spreadBpsFromPrice, SPREAD_SOLVE_RESOLUTION_BPS } from '../../domain/pricing/bond';
 import { creditRecoveryRate, BANK_MIN_CAPITAL_RATIO } from '../../domain/bank-pricing';
 import { repoCorridorBps } from '../macro/banking';
+import { costOfCarryPrice, PHYSICAL_STORAGE_COST_ANNUAL, FUTURES_TENOR_MONTHS } from '../../domain/derivatives/classes/commodity-future';
+import { bondBasisDeviationBps } from '../../domain/relative-value';
+import { nextDeliveryWeek } from '../../domain/derivatives/classes/bond-future';
 import { clearedPriceOf } from '../../engine2/prices';
 import { asInstrumentId } from '../../domain/ids';
 
@@ -223,21 +226,44 @@ function x2(state: GameState, week: number): AuditFinding[] {
     if (hi > lo * 2.5) { wide++; if (examples.length < 3) examples.push(`${su} ${prices.map(([r, p]) => `${r} ${p.toFixed(0)}`).join('/')}`); }
   });
   if (wide > n * 0.25) out.push({ family: 'X', check: 'X2 one good, one price with a wedge', week, usd: wide, message: `${wide} of ${n} goods differ more than 2.5× across regions in one currency (${examples.join(' | ')})` });
-  let badCarry = 0;
-  state.commodities.forEach((c) => { if (!(c.spotPrice > 0)) return; const ratio = c.futures3M / c.spotPrice; if (ratio < 0.8 || ratio > 1.25) badCarry++; });
-  if (badCarry) out.push({ family: 'X', check: 'X2 futures within carry of spot', week, usd: badCarry, message: `${badCarry} commodities' 3m future sits more than 20–25% from spot` });
-  // §3.17e-ii-a: the bond future against the cash bond carried — the first comparable the
-  // relative-value book trades, so a basis that survives it is a finding.
+  // §3.27-iii-c-i: the desks' own ceiling — spot financed at the USA short rate to the tenor plus
+  // the category's storage (`costOfCarryPrice`, the bound `commodity-future.ts` brings supply
+  // against) — holds every tenor's print from above. Nothing holds it from below: nobody shorts
+  // the physical (the convenience yield is inferred from the curve), so a print under carry is a
+  // backwardation the curve is entitled to. A print above it is free money nobody took; the
+  // 0.8/1.25 box that stood here had no rate, no storage cost and no tenor in it.
+  const financingRateAnnual = state.regions.USA?.zeroRates?.tenor3M;
+  let aboveCarry = 0, contracts = 0; const carryExamples: string[] = [];
+  if (financingRateAnnual !== undefined) state.commodities.forEach((c) => {
+    if (!(c.spotPrice > 0)) return;
+    const storageCostAnnual = PHYSICAL_STORAGE_COST_ANNUAL[c.category];
+    FUTURES_TENOR_MONTHS.forEach((tenorMonths) => {
+      const print = tenorMonths === 1 ? c.futures1M : tenorMonths === 3 ? c.futures3M : c.futures6M;
+      if (!(print > 0)) return;
+      contracts++;
+      const ceiling = costOfCarryPrice({ spotPrice: c.spotPrice, financingRateAnnual, storageCostAnnual, tenorYears: tenorMonths / 12 });
+      if (print - ceiling > floatDustLocal(print + ceiling, 2)) { aboveCarry++; if (carryExamples.length < 3) carryExamples.push(`${c.symbol} ${tenorMonths}m ${print.toFixed(2)} > carry ${ceiling.toFixed(2)}`); }
+    });
+  });
+  if (aboveCarry) out.push({ family: 'X', check: 'X2 futures within carry of spot', week, usd: aboveCarry, message: `${aboveCarry} of ${contracts} commodity contracts print above spot-plus-carry, the desks' own ceiling (${carryExamples.join(' | ')})` });
+  // §3.17e-ii-a / §3.27-iii-c-i: the bond future against the cash bond carried — the first
+  // comparable the relative-value book trades — held to that book's own bound: the cheapest carry
+  // any fund faced this week to take the basis, each way (`Region.bondBasisCarryBps`, recorded by
+  // `readBondBasis`), annualised as the book annualises the basis. A wider basis is free money
+  // nobody took; the 2-point band that stood here was a stated width.
   const v2 = ensureV2(state);
   let badBasis = 0; const basisExamples: string[] = [];
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    if (!reg || reg.bondFuturesBasis === undefined || reg.bondFuturesDeliverableId === undefined) return;
+    const carry = reg?.bondBasisCarryBps;
+    if (!reg || reg.bondFuturesBasis === undefined || reg.bondFuturesDeliverableId === undefined || !carry || carry.week !== state.currentWeek) return;
     const cash = trancheClearedPricePerFace(v2, asInstrumentId(reg.bondFuturesDeliverableId));
     if (!(cash !== undefined && cash > 0)) return;
-    if (Math.abs(reg.bondFuturesBasis) / cash > 0.02) { badBasis++; basisExamples.push(`${r} ${(reg.bondFuturesBasis * 100).toFixed(2)}pt`); }
+    const deviationBps = bondBasisDeviationBps(reg.bondFuturesBasis, cash, (nextDeliveryWeek(state.currentWeek) - state.currentWeek) / 52);
+    const dust = floatDust(Math.abs(deviationBps) + Math.max(carry.readBps, carry.mirrorBps), 4);
+    if (deviationBps > carry.readBps + dust || -deviationBps > carry.mirrorBps + dust) { badBasis++; basisExamples.push(`${r} ${(reg.bondFuturesBasis * 100).toFixed(2)}pt = ${deviationBps.toFixed(0)}bp/yr against ${(deviationBps > 0 ? carry.readBps : carry.mirrorBps).toFixed(0)}bp of carry`); }
   });
-  if (badBasis) out.push({ family: 'X', check: 'X2 bond future within carry of cash', week, usd: badBasis, message: `${badBasis} regions' bond future sits more than 2 points from the cash bond carried (${basisExamples.join(' | ')})` });
+  if (badBasis) out.push({ family: 'X', check: 'X2 bond future within carry of cash', week, usd: badBasis, message: `${badBasis} regions' bond future sits further from the cash bond carried than the cheapest carry any fund faced to take it (${basisExamples.join(' | ')})` });
   return out;
 }
 

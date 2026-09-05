@@ -553,16 +553,17 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-27-iii-c. **X2 reads the wedge and the carry.** `prices.ts` X2 tests the same good across regions
-    against a fixed 2.5× and fires only past a 25% quota, where the wedge is the freight on the
-    cheapest-to-dearest lane (`state.freightRatePerTonneLaneMoneyByLane × unitMassTonnes`, converted
-    as `05-unit-bidding.ts` converts it) and every breach is an arbitrage nobody took; the 3m future
-    against a 0.8/1.25 box with no rate, storage cost or tenor, where the desks' own ceiling is
-    `costOfCarryPrice` at the USA 3m rate and the category's storage (`commodity-future.ts`) and
-    nothing bounds the floor (no one shorts the physical: the convenience yield is inferred); the
-    bond future against 2 points of the cash price, where the relative-value book's cheapest carry
-    is the bound — recorded as 27-iii-a records the CDS's (`readBondBasis`). Every breach a finding,
-    the count its size. the-audit B4 ⚠️→✅; commodity-futures E1 re-marked.
+27-iii-c-ii. **X2 reads the wedge the sourcing intent saw.** *(rule 10 split; c-i, the two carries,
+    is done.)* `prices.ts` X2 tests the same good across regions against a fixed 2.5× and fires only
+    past a 25% quota. The wedge is what `sourcing-intent.ts` computes and throws away: for every
+    buyer and good, each origin's landed cost — its ex-works print in the buyer's money, the lane's
+    cleared freight per unit (`freightPerUnitLocal`), the pipeline's carry over the transit — and
+    the ALTERNATIVE with stock (`alternativeLanded`) once the cheapest origin is sold out; the split
+    lives on `ctx` and dies with the week. The intent records, on the buyer's `CategoryDemandState`,
+    the cheapest landed alternative that still had stock, and X2 holds the landed price paid
+    (`unitPriceLocal`) to it: a buyer that paid more than a route with stock is a finding, one per
+    buyer and good, dust the only band; in-place goods and services (`originIsPossible`) have no
+    wedge and no test. the-audit B4 ⚠️→✅.
 27-iv. **The basis is arbitraged at every tenor the protection book prints.** The relative-value
     book reads the CDS–cash basis at the BENCHMARK tenor only (`readCdsBasis`,
     `CDS_BENCHMARK_TENOR`); the 1y/3y/10y books open at the issuer's cash spread at that tenor and
@@ -1351,6 +1352,17 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**27-iii-c-i — X2 READS THE TWO CARRIES.** The 3m future was held to a `0.8/1.25` box of spot with
+  no rate, storage cost or tenor in it, and the bond future to 2 points of the cash price. X2 now
+  holds every commodity contract (1m/3m/6m) to the desks' own ceiling — `costOfCarryPrice` at the
+  USA short rate and the category's storage, the bound `commodity-future.ts` brings supply against —
+  from above only (nobody shorts the physical, so a backwardation is the curve's to print), and the
+  bond future's basis to the relative-value book's own bound: `readBondBasis` records the cheapest
+  carry any fund faced each way (`Region.bondBasisCarryBps`; the annualisation through one owner,
+  `domain/relative-value.ts:bondBasisDeviationBps`), and a wider basis is free money nobody took.
+  Both count every breach. the-audit B4 stays ⚠️ for the goods wedge, c-ii. Gates green; no run
+  (rule 11).
 
 **27-iii-b — X1 READS THE CORRIDOR AND THE FLOOR IT CLAIMS.** X1 held repo to `policy ± 150bp` where
   the corridor is the two posted facilities' — the RRP window's floor, never below zero, and the

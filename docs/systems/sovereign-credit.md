@@ -527,7 +527,8 @@ the carry price — the cash price financed at the repo rate to delivery less th
 (`bondFuturesCarryPrice`) — and the duration mandates are on it by the swap book's own gap read,
 long for the gap below carry and short for a sovereign excess above it (`bondFutureHolderQuote`).
 The print joins `Region.bondFuturesPriceHistory` and the net basis is `Region.bondFuturesBasis`
-(`bondFuturesNetBasis`), measured. **What is absent is I3**: the basis trader — long the bond,
+(`bondFuturesNetBasis`), measured — and held, by `audit/prices.ts:x2`, to the cheapest carry the
+relative-value book read to take it (`Region.bondBasisCarryBps`, §9.27-iii-c-i). **What is absent is I3**: the basis trader — long the bond,
 financed in repo or prime brokerage, short the future when the basis pays for the financing and
 the margin, cut on a drawdown — is the first comparable of §3 step 17f's relative-value book, and
 the repo demand step 7 and 30b are missing arrives with it.

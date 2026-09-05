@@ -148,9 +148,11 @@ resolution and nothing else, P2 holds the benchmark basis to the relative-value 
 carry and the priced recovery to the workouts' history at its standard error, and every breach
 is a finding. §9.27-iii-b: X1 holds repo to the corridor the facilities post
 (`repoCorridorBps`) and solvency to `BANK_MIN_CAPITAL_RATIO`, and the deposit line — a regularity
-the mechanism does not promise — left for §6. B4 stays `⚠️` for §3.27-iii-c: X2's 2.5× wedge,
-0.8/1.25 carry box and 2-point bond basis are stated widths where the lane's freight, the desks'
-cost of carry and the book's own carry are the honest bounds.
+the mechanism does not promise — left for §6. §9.27-iii-c-i: X2 holds every commodity print to the
+desks' own ceiling (`costOfCarryPrice`) and the bond future's basis to the relative-value book's
+cheapest carry (`Region.bondBasisCarryBps`). B4 stays `⚠️` for §3.27-iii-c-ii: X2's 2.5× wedge
+across regions is a stated width where the landed alternative the sourcing intent saw is the
+honest bound.
 
 ### ⚠️ A3 — THE SIZE IS A NUMBER WITHOUT ITS CURRENCY
 
