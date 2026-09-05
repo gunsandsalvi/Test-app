@@ -510,9 +510,10 @@ written from here):
     not resolve its parties, the books outside the register). The old order put every one of those
     behind three large representation refactors. The new order puts them first, each small and
     byte-identical, so the goal is mostly in hand before a number moves:
-    d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
-       was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
-       `UnitOfMeasure` without money) is in §9. What is left, in order:
+    d–f. **DONE, in §9** (2026-09-05): the instrument index (dI–dV), the contract store and its
+       six kinds (d4a–d4c-vi), the liens (d5a–c), the one kind list (e), and the position book as
+       lots with a basis, the goods and the accruals on it (f1–f5). What is left of PART II's
+       13-BOOK:
     g. **PLANT AND HOUSING JOIN** — BLOCKED on step 26 deciding what a unit of plant is. Not a
        cost exclusion: there is no unit to register until that decision is made.
 
@@ -546,16 +547,13 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-13e. **A HOLDER OF RECORD IS EVERY HOLDER.** `sovereign-calendar.ts:accrueSovereignHolders` walks
-    the institutional register and the banks' investment books — so a bank's govvie DESK inventory
-    and the CENTRAL BANK's own book accrue nothing, and their share of every sovereign coupon is
-    paid out to the other holders instead. It is the exact shape the corporate side means to fix
-    ("THE DESKS ARE HOLDERS OF RECORD TOO", `shared-helpers.ts:applyHolderInterestAccruals`
-    pass 3), never carried across — **and that corporate fix was not working either until
-    §9.13-CREDIT row 2**: it looked a tranche-keyed desk book up by ISSUER and missed every
-    position, so read the repaired version rather than the one this step was written against.
-    Found while building 13b, which now moves accrued balances onto those two holders when they
-    buy.
+13e. **A HOLDER OF RECORD IS EVERY HOLDER** — split 2026-09-05; 13e-i (a bank's govvie DESK
+    accrues and is paid on the date, the bank's income the week it is earned) is in §9. What is
+    left:
+13e-ii. **THE CENTRAL BANK JOINS THE CALENDAR.** `central-bank.ts` pays the central bank its
+    coupon WEEKLY, `face × coupon / 52` straight from the treasury, outside the holder walk — a
+    second convention for one thing. Its book accrues on its rows like every holder's, the date
+    pays it, its income is what accrued, and its receivable is a read of its book.
 13f. **An accrued coupon is an ASSET, and only the banks carry it.** The ledger holds the balance;
     a bank shows it as `sovereignAccruedCouponLocal`, an institution shows nothing. So an
     institution that pays a seller's accrued at settlement (13b) has the cash gone and no
@@ -1691,6 +1689,14 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13e-i — THE DESK IS A HOLDER OF RECORD.** A bank's govvie desk inventory earned no coupon:
+`accrueSovereignHolders` walked the institutions and the banks' own books and nothing else, so
+the paper a market maker was long accrued nothing and the treasury never owed it. The desk's
+GOV_BOND rows accrue on what they are long (a short accrues nothing; a bill has no coupon), the
+bank books the income the week it is earned exactly as for its own book, the date pays the
+desk's securities account off its rows like every other book's, and the bank's
+`sovereignAccruedCouponLocal` reads both books. Gates green; no run.
 
 **13-BOOK f5 — THE LAST GOODS STOCK OUTSIDE THE GOODS LEDGER HAS A HOLDER.**
 `categoryDemand[c].inventoryLevelLocal` and its lag copy are deleted. A region's unsold stock

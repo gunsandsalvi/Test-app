@@ -43,7 +43,8 @@ import { RegionId } from '../../../types';
 import { bankSovereignPositions } from '../../sovereign-register';
 import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
-import { accrueInterestOnRow, settleAccruedOnRow, closeEmptyPositions, registerBooks, bookIdOfParty } from '../../ledger/holdings-ledger';
+import { accrueInterestOnRow, settleAccruedOnRow, closeEmptyPositions, registerBooks, bookIdOfParty, deskBookId } from '../../ledger/holdings-ledger';
+import { deskRowsOf } from '../../desk-register';
 import { bookAccruedLocal, rowUnits } from '../../../engine2/holdings';
 import { typeRefOf, instrumentRefOf } from '../../../engine2/world';
 import { defect } from '../../../domain/defect';
@@ -111,6 +112,13 @@ export function accrueSovereignHolders(
     // reserves buy it and its coupons land there) — the accrual is on FACE.
     bankSovereignPositions(ctx.v2, c.id).forEach((p) => {
       earnedLocal += accrue(p.bondId, p.row, p.faceLocal);
+    });
+    // §3.13e-i — THE DESK IS A HOLDER OF RECORD TOO. Its govvie inventory sits on its own book
+    // (the bills and the bonds share one kind; a bill has no coupon and accrues nothing here) and
+    // earns the coupon on what it is LONG, the bank's income the week it is earned like its own
+    // book's; a short accrues nothing — the paper it sold is on a holder that does.
+    deskRowsOf(ctx.v2, c.id, 'GOV_BOND').forEach((p) => {
+      earnedLocal += accrue(p.instrumentId, p.row, Math.max(0, p.units));
     });
     if (earnedLocal > 0) bankEarnedLocal.set(c.ticker, earnedLocal);
   });
@@ -215,8 +223,8 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
     const earnedLocal = bankEarnedLocal.get(c.ticker) ?? 0;
-    // §3.13-BOOK f4b: what the bank's own book is owed — its rows' receivable, read.
-    const heldLocal = bookAccruedLocal(ctx.v2, c.id);
+    // §3.13-BOOK f4b: what the bank is owed — its own book's rows and its desk's (13e-i), read.
+    const heldLocal = bookAccruedLocal(ctx.v2, c.id) + bookAccruedLocal(ctx.v2, deskBookId(c.id));
     if (earnedLocal === 0 && heldLocal === (c.bankBalanceSheet.sovereignAccruedCouponLocal ?? 0)) return;
     c.bankBalanceSheet = {
       ...bookPnL(c.bankBalanceSheet, earnedLocal, 'sovereign coupon accrual', c.ticker),
