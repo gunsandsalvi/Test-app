@@ -36,7 +36,7 @@ import { facilityBookOf } from '../../../../engine2/tranches';
 import { buildEntityIndex } from '../../../ledger/entity-index';
 import { registerBook } from '../../../ledger/instrument-ledger';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { clearFinancialAsset, type ClearingInstrument, type ClearingParticipant } from '../financial-clearing-engine';
+import { clearFinancialAsset, type ClearingInstrument, type ClearingParticipant, takePrint } from '../financial-clearing-engine';
 import { postInitialMargin, withInitialMargin, admitToHouse, openMemberCapacity, memberNotionalCapacityLocal, reserveMemberCapacity } from '../derivative-lifecycle';
 
 /** A lender's seat in the book, in the participant-id space the engine keys fills by. */
@@ -129,7 +129,7 @@ function runXcsMarket({ ctx, week, standing, view }: DerivativeMarketRun): void 
       if (participants.length === 0) { backstop(undefined, new Map()); return; }
 
       const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
-      const clearedBps = result.newStatById.get(instrumentId);
+      const clearedBps = takePrint(ctx, result, instrumentId, `${home} xcs`);
       if (clearedBps === undefined) { backstop(undefined, new Map()); return; }
 
       // ---- 4. STRIKE: each borrower draws from each lender in proportion to what it lent. ----

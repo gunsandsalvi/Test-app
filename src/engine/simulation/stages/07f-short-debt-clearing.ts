@@ -53,7 +53,7 @@ import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetLocal, accrue
 import type { CreditRating } from '../../../domain/company';
 import { priceFromYield, zeroRateAt } from '../../../domain/pricing';
 import type { PaperTerms } from '../../../domain/pricing';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat, takePrint, unclearedAt } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityLocal } from './repo-clearing';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
 import { centralBankParticipant, bookCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
@@ -412,7 +412,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const id = b.key;
         // §3.13-SOV row 4: the auction cleared the PRICE. It is no longer derived from a yield —
         // the yield is derived from it, below, for the curve.
-        const clearedPrice = result.newStatById.get(id) ?? instruments.find((i) => i.id === id)?.currentStat ?? 1;
+        const clearedPrice = takePrint(ctx, result, id, `${regionId} bill`) ?? instruments.find((i) => i.id === id)?.currentStat ?? 1;
         priceFractionById.set(id, clearedPrice);
       });
       const rebateByParticipant = new Map<string, Map<InstrumentId, number>>();
@@ -493,7 +493,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // class that had already priced its way out of it.
       const billInstrumentById = new Map(instruments.map((i) => [i.id, i]));
       const billPoints = activeBills.map((b) => {
-        const px = result.newStatById.get(b.key);
+        const px = result.printById.get(b.key)?.stat;
         const inst = billInstrumentById.get(b.key);
         // §3.21 — PLACED, not OFFERED; the same change as 07c. An undersubscribed bill auction
         // that placed nothing has no clearing level, and the bill keeps the price it had.
@@ -515,7 +515,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       ]);
       if (process.env.BILL_TRACE === '1') {
         console.log(`  [bill-trace] ${regionId} w${ctx.nextWeek}: ` + activeBills.map((b) => {
-          const px = result.newStatById.get(b.key);
+          const px = result.printById.get(b.key)?.stat;
           return `${b.key} px=${px === undefined ? 'none' : px.toFixed(8)} y=${(billPoints.find((p) => p.tenorYears === b.years)!.yield * 100).toFixed(4)}%`;
         }).join(' | '));
       }
@@ -1118,7 +1118,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const outcome = cpResult.primaryOutcomeById.get(p.id);
         const placedLocal = outcome && !outcome.withdrawn ? Math.max(0, outcome.marketTakeLocal) : 0;
         const tradedSomething = cpInstruments[pi].tradableFloatLocal > 0 || placedLocal > 0;
-        const px = cpResult.newStatByIndex[pi];
+        unclearedAt(ctx, cpResult, pi, `${regionId} commercial paper`);
+        const px = cpResult.statByIndex[pi];
         const printed = tradedSomething && px > 0 && isFinite(px);
         cpClearedPriceById.set(p.id, printed ? px : openingPrice[pi]);
         if (printed) setClearedPrice(v2Mirror, p.id, px);

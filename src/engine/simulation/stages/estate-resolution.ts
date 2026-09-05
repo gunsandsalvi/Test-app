@@ -42,7 +42,7 @@ import { pay, pendingSettlementLocal, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { cashOf } from '../../ledger/accounts';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
 import { asInstrumentId } from '../../../domain/ids';
 import { facilitiesOfBorrower, issuerIdOf } from '../../../engine2/tranches';
 import type { InstrumentId } from '../../../domain/ids';
@@ -391,7 +391,7 @@ function sellPlantToBidders(
     dealerSpreadBps: 0, // no desk stands in a workout
     unsoldStaysWithHolder: true, // what no bidder takes stays the estate's
   });
-  const price = result.newStatById.get(instrumentId);
+  const price = takePrint(ctx, result, instrumentId, `${estate.regionId} estate plant`);
   if (price === undefined || !(price > 0)) return { soldLocal: 0, priceOfBook: undefined };
   let soldLocal = 0;
   bidders.forEach((b) => {

@@ -258,17 +258,44 @@ interface ClearingParams {
   unsoldStaysWithHolder?: boolean;
 }
 
+/** §3.21 — what a book printed, and whether it cleared there. */
+export interface ClearedPrint { stat: number; uncleared?: UnclearedReason }
+
+/**
+ * §3.21 — READ A PRINT AND SAY SO. Returns the book's statistic for the instrument — last week's,
+ * carried, when the book did not clear — and records an uncleared book on the week's list, which
+ * the state keeps (`lastWeekUnclearedBooks`) and the news tells. `undefined` when the instrument
+ * was not in the book.
+ */
+export function takePrint(week: { unclearedBooks: string[] }, result: ClearingResult, id: InstrumentId, label: string): number | undefined {
+  const p = result.printById.get(id);
+  if (p === undefined) return undefined;
+  if (p.uncleared) week.unclearedBooks.push(`${label} ${id} ${p.uncleared}`);
+  return p.stat;
+}
+/** The same by dense index: records and returns whether the instrument's book failed to clear. */
+export function unclearedAt(week: { unclearedBooks: string[] }, result: ClearingResult, i: number, label: string): UnclearedReason | undefined {
+  const reason = unclearedReasonOf(result.unclearedByIndex[i]);
+  if (reason) week.unclearedBooks.push(`${label} #${i} ${reason}`);
+  return reason;
+}
+
 export interface ClearingResult {
   /** §4.C Stage I int flip — dense views by instrument/participant INDEX (the build's own
    *  order). The string-keyed maps below are materialized FROM these after the shards run, in
    *  the same insertion order the per-fill writes had, and die when the last reader flips. */
-  newStatByIndex: Float64Array;
+  statByIndex: Float64Array;
+  /** §3.21 — per instrument: 0 cleared, else the reason the solve found no level (`unclearedReasonOf`);
+   *  `statByIndex` then carries last week's statistic. Every adapter reads its print through
+   *  `takePrint` / `unclearedAt`, which is where a book says what it does about it. */
+  unclearedByIndex: Uint8Array;
   dealerInventoryByIndex: Float64Array;
   primaryByIndex: ({ withdrawn: boolean; marketTakeLocal: number; clearedStat: number } | undefined)[];
   /** pi * nInstruments + i; only fills > $1 are written, so 0 means absent. */
   holdingsMatrix: Float64Array;
   nInstruments: number;
-  newStatById: Map<InstrumentId, number>;
+  /** §3.21 — the print with its outcome; a reader that wants the number alone goes through `takePrint`. */
+  printById: Map<InstrumentId, ClearedPrint>;
   newParticipantHoldings: Map<string, Map<InstrumentId, number>>;
   newDealerInventoryById: Map<InstrumentId, number>;
   totalDealerRevenueLocal: number;
@@ -387,11 +414,30 @@ export function sortIndexByKey(keys: ArrayLike<number>, n: number): Int32Array {
   return src;
 }
 
+/**
+ * §3.21 — THE SOLVE SAYS WHETHER IT CLEARED. There are books for which no clearing level exists:
+ * no demand at any level (the segment walk finds no crossing), and level-independent mandated
+ * cores that sum past the float (oversubscribed at the extreme). A total function over that
+ * partial domain had to invent something, and what it invented was the bracket bound — −2000bp,
+ * 100,000bp, 1% or 100× last week's price — printed straight onto the books. Now the solve
+ * reports the outcome beside the number (`lastSolveOutcome`, read by the kernel right after the
+ * call: a module variable, not an allocation, in the hot loop), and the kernel CARRIES last
+ * week's statistic for an uncleared book while the allocation still rations the cores pro rata.
+ * The saturation retreat stays: a book whose demand merely cannot absorb the float clears at the
+ * least aggressive level at which every willing buyer has full size.
+ */
+export type UnclearedReason = 'NO_DEMAND' | 'OVERSUBSCRIBED';
+export const SOLVE_CLEARED = 0, SOLVE_NO_DEMAND = 1, SOLVE_OVERSUBSCRIBED = 2;
+let lastSolveOutcome = SOLVE_CLEARED;
+export const unclearedReasonOf = (code: number): UnclearedReason | undefined =>
+  code === SOLVE_NO_DEMAND ? 'NO_DEMAND' : code === SOLVE_OVERSUBSCRIBED ? 'OVERSUBSCRIBED' : undefined;
+
 function solveClearingStat(
   inst: { statKind: ClearingInstrument['statKind']; tradableFloatLocal: number },
   bracketLow: number,
   bracketHigh: number
 ): number {
+  lastSolveOutcome = SOLVE_CLEARED;
   const isYieldLike = inst.statKind === 'YIELD_LIKE';
   const n = colCount;
 
@@ -427,7 +473,8 @@ function solveClearingStat(
   // is not a price (§7.21, §7.75).
   const demandAtWideEnd = demandAtU(uHi);
   const targetLocal = Math.min(inst.tradableFloatLocal, demandAtWideEnd * 0.999999);
-  if (demandAtU(uLo) > targetLocal) return toStat(uLo); // oversubscribed even at the extreme
+  if (!(demandAtWideEnd > 0)) { lastSolveOutcome = SOLVE_NO_DEMAND; return toStat(uHi); } // nobody wants any, at any level
+  if (demandAtU(uLo) > targetLocal) { lastSolveOutcome = SOLVE_OVERSUBSCRIBED; return toStat(uLo); } // oversubscribed even at the extreme
 
   // Slope-change events: where each entry's ramp rises out of its core, and where it caps.
   // Parallel number arrays sorted through an index, not an array of {u, dSlope} objects — the
@@ -476,7 +523,8 @@ function solveClearingStat(
     }
     if (k < evCount) slope += evD[order[k]];
   }
-  // Numerically flat all the way (target met only at the wide end): the saturation point is there.
+  // Numerically flat all the way with no crossing: there was no level to clear at.
+  lastSolveOutcome = SOLVE_NO_DEMAND;
   return toStat(uHi);
 }
 
@@ -519,6 +567,8 @@ export interface KernelShardResult {
   from: number;
   to: number;
   clearedStat: Float64Array;      // per instrument in [from, to)
+  /** §3.21 — 0 cleared, 1 no demand, 2 oversubscribed; on 1 or 2 `clearedStat` is last week's, carried. */
+  uncleared: Uint8Array;
   dealerInventory: Float64Array;
   primaryWithdrawn: Uint8Array;
   primaryMarketTake: Float64Array;
@@ -669,6 +719,7 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
   const out: KernelShardResult = {
     from, to,
     clearedStat: new Float64Array(span),
+    uncleared: new Uint8Array(span),
     dealerInventory: new Float64Array(span),
     primaryWithdrawn: new Uint8Array(span),
     primaryMarketTake: new Float64Array(span),
@@ -718,6 +769,7 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
       { statKind: isYieldLike ? 'YIELD_LIKE' : 'PRICE_LIKE', tradableFloatLocal: liveFloatLocal },
       bracketLow, bracketHigh
     );
+    let outcome = lastSolveOutcome;
     let offeringWithdrawn = false;
     const withdrawStat = packed.withdrawStat[i];
     if (offeringLocal > 0 && !Number.isNaN(withdrawStat)) {
@@ -729,8 +781,12 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
           { statKind: isYieldLike ? 'YIELD_LIKE' : 'PRICE_LIKE', tradableFloatLocal: liveFloatLocal },
           bracketLow, bracketHigh
         );
+        outcome = lastSolveOutcome;
       }
     }
+    // §3.21: an uncleared book carries last week's statistic; the outcome travels beside it.
+    if (outcome !== SOLVE_CLEARED) solvedStat = currentStat;
+    out.uncleared[o] = outcome;
 
     // §5-CLOSE (user, 2026-09-02): THERE IS NO CAP. The book prints where demand met supply
     // this week. The weekly move caps (18–25% by book, adaptive since §7.338, bounded since
@@ -889,7 +945,8 @@ function accumulateShard(
   const nI = result.nInstruments;
   for (let i = shard.from; i < shard.to; i++) {
     const o = i - shard.from;
-    result.newStatByIndex[i] = shard.clearedStat[o];
+    result.statByIndex[i] = shard.clearedStat[o];
+    result.unclearedByIndex[i] = shard.uncleared[o];
     result.dealerInventoryByIndex[i] = shard.dealerInventory[o];
     if (shard.hasPrimary[o]) {
       result.primaryByIndex[i] = {
@@ -1013,7 +1070,7 @@ export function clearFinancialAsset(
   // the exact insertion order the per-fill writes had, so a book whose adapter reads only the
   // dense views never pays for them. The holdings scratch is REUSED across books, so touching a
   // stale result after the next book cleared is a defect and fails loudly here.
-  let statMap: Map<InstrumentId, number> | null = null;
+  let statMap: Map<InstrumentId, ClearedPrint> | null = null;
   let holdMaps: Map<string, Map<InstrumentId, number>> | null = null;
   let dealerMap: Map<InstrumentId, number> | null = null;
   let primaryMap: Map<InstrumentId, { withdrawn: boolean; marketTakeLocal: number; clearedStat: number }> | null = null;
@@ -1021,15 +1078,19 @@ export function clearFinancialAsset(
     if (myEpoch !== denseEpoch) throw new Error('ClearingResult read after the next book cleared — the dense scratch is reused; consume each result before the next clearFinancialAsset call');
   };
   const result: ClearingResult = {
-    newStatByIndex: new Float64Array(nDense),
+    statByIndex: new Float64Array(nDense),
+    unclearedByIndex: new Uint8Array(nDense),
     dealerInventoryByIndex: new Float64Array(nDense).fill(NaN),
     primaryByIndex: new Array(nDense),
     holdingsMatrix: denseHold,
     nInstruments: nDense,
-    get newStatById() {
+    get printById() {
       if (!statMap) {
         statMap = new Map();
-        for (let i = 0; i < nDense; i++) statMap.set(instIds[i], this.newStatByIndex[i]);
+        for (let i = 0; i < nDense; i++) {
+          const reason = unclearedReasonOf(this.unclearedByIndex[i]);
+          statMap.set(instIds[i], reason ? { stat: this.statByIndex[i], uncleared: reason } : { stat: this.statByIndex[i] });
+        }
       }
       return statMap;
     },

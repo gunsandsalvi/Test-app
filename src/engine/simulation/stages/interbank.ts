@@ -35,7 +35,7 @@ import { currencyOf } from '../../../domain/geography';
 import { pay, pendingSettlementLocal } from './settlement';
 import { bankCashBufferRatioOf, SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS } from '../../macro/banking';
 import { issuerSpreadAtOnCurve } from '../../credit-price';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant } from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, takePrint } from './financial-clearing-engine';
 import { interbankInstrumentId } from '../../../domain/instrument-keys';
 import { registerBook } from '../../ledger/instrument-ledger';
 import { bankParticipantId, bankTickerOfParticipant } from '../../../domain/participant-keys';
@@ -112,7 +112,7 @@ export function runInterbankSession(ctx: WeeklyStepContext, regionId: RegionId, 
     // The need is an inelastic order from outside the lender set: what it leaves unfilled is the
     // measurement the window reads, so the residual is not handed back to a holder.
     const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
-    const clearedBps = result.newStatById.get(instrumentId);
+    const clearedBps = takePrint(ctx, result, instrumentId, `${regionId} interbank`);
     if (clearedBps === undefined || !Number.isFinite(clearedBps)) return;
     const rateAnnual = Number(((policyBps + Math.max(0, clearedBps)) / 10000).toFixed(6));
     let fundedLocal = 0;

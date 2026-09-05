@@ -37,7 +37,7 @@ import { facilityBookOf } from '../../../../engine2/tranches';
 import { buildEntityIndex } from '../../../ledger/entity-index';
 import { registerBook } from '../../../ledger/instrument-ledger';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { clearFinancialAsset, type ClearingInstrument, type ClearingParticipant } from '../financial-clearing-engine';
+import { clearFinancialAsset, type ClearingInstrument, type ClearingParticipant, takePrint } from '../financial-clearing-engine';
 import { postInitialMargin, withInitialMargin, admitToHouse, openMemberCapacity, memberNotionalCapacityLocal, reserveMemberCapacity } from '../derivative-lifecycle';
 
 /** A desk's seat in the book, in the participant-id space the engine keys fills by. */
@@ -129,7 +129,7 @@ function runOptionMarket({ ctx, week, standing, view }: DerivativeMarketRun): vo
     if (participants.length === 0) return;
 
     const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
-    const clearedVolPct = result.newStatById.get(instrumentId);
+    const clearedVolPct = takePrint(ctx, result, instrumentId, 'index option');
     if (clearedVolPct === undefined) return;
     const impliedVol = Number((clearedVolPct / 100).toFixed(4));
     // Published: the class prices every option on this index at it from here on.

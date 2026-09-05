@@ -154,6 +154,9 @@ export interface WeeklyStepContext {
    * holding ceiling exceeded what it already held. A market that cannot trade is a defect, not
    * a quiet pass (§7.102's shape). Asserted empty by the harness. */
   deadCeilingBooks: string[];
+  /** §3.21 — books that found no clearing level this week (`financial-clearing-engine.ts:takePrint`):
+   *  `<label> <instrument> <reason>`; the print carried was last week's. Kept on the state and told. */
+  unclearedBooks: string[];
   /** CASH/SETL1 — the week's payment instructions. Stages record; the settlement stage executes
    * (see stages/settlement.ts). A stage must not move money any other way. */
   /** SCALE phase 2: the register as typed-array columns, invalidated with the index above. */
@@ -427,6 +430,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     lentSharesByLender: new Map(),
     buyInSharesByBorrower: new Map(),
     deadCeilingBooks: [],
+    unclearedBooks: [],
     // SEG1: last week's after-cutoff payments (recorded by stages that run after the
     // settlement stage) roll into this cycle — a real system's next-day settlement.
     paymentJournal: (state as { pendingPaymentJournal?: import('./settlement').PaymentJournal })

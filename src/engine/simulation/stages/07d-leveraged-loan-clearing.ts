@@ -60,7 +60,7 @@ import { settleClearedBook, feeDesksForRegion, primaryTakes, accruedOnFills, par
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, totalDeskCapacityLocal } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
-import { openDemandStaging, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
+import { openDemandStaging, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat, unclearedAt } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 import { settlePricedOfferings } from './primary-settlement';
@@ -480,7 +480,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const outcome = result.primaryOutcomeById.get(l.id);
       const placedLocal = outcome && !outcome.withdrawn ? Math.max(0, outcome.marketTakeLocal) : 0;
       const tradedSomething = instruments[li].tradableFloatLocal > 0 || placedLocal > 0;
-      const px = result.newStatByIndex[li];
+      unclearedAt(ctx, result, li, `${regionId} leveraged loan`);
+      const px = result.statByIndex[li];
       const printed = tradedSomething && px > 0 && isFinite(px);
       clearedPriceById.set(l.id, printed ? px : openingPrice[li]);
       if (printed) setClearedPrice(v2, l.id, px);

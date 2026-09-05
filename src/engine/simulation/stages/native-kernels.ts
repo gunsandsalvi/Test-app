@@ -45,6 +45,7 @@ if (addon) {
     const out: KernelShardResult = {
       from, to,
       clearedStat: new Float64Array(span),
+      uncleared: new Uint8Array(span),
       dealerInventory: new Float64Array(span),
       primaryWithdrawn: new Uint8Array(span),
       primaryMarketTake: new Float64Array(span),
@@ -66,7 +67,7 @@ if (addon) {
       scalars,
       [out.clearedStat, out.dealerInventory, out.primaryWithdrawn,
         out.primaryMarketTake, out.hasPrimary, out.fillInst, out.fillPart,
-        out.fillFilled, out.fillTraded, out.fillFee],
+        out.fillFilled, out.fillTraded, out.fillFee, out.uncleared],
     );
     return out;
   });

@@ -79,6 +79,8 @@ export interface GameState {
   /** GUARD — books that could not trade this week: no participant's ceiling exceeded its own
    * position. Must be empty; see WeeklyStepContext.deadCeilingBooks. */
   lastWeekDeadCeilingBooks?: string[];
+  /** §3.21 — the books that did not clear last week, and why; their prints were carried. */
+  lastWeekUnclearedBooks?: string[];
   /** SETL2 — last week's settlement, decomposed. `unmodeledByReason` names every flow still
    * missing a real counterparty and how much it moved; §6 watches the total DOWN as each one
    * gets named, and this is what makes that watchable rather than asserted. */

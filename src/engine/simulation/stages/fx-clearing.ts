@@ -42,9 +42,7 @@ import {
   centralBankReservationMoveFrac, centralBankFullSizeRangeFrac,
   CENTRAL_BANK_FX_INTERVENTION_SHARE,
 } from '../../../domain/fx-market';
-import {
-  clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
-} from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
 import { centralBankFxReservesLocal } from '../../../domain/central-bank';
 import { DEALER_QUOTE_WIDTH_BPS } from '../../../domain/dealer-derivatives';
 import { deskNotionalCapacityLocal } from '../../../domain/derivatives/registry';
@@ -348,7 +346,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       dealerSpreadBps: 0,
     });
 
-    const clearedBookStat = result.newStatById.get(instrument.id);
+    const clearedBookStat = takePrint(ctx, result, instrument.id, 'fx spot');
     clearedRateByPair.set(key, clearedBookStat !== undefined && clearedBookStat > 0 ? fromBook(clearedBookStat) : currentRate);
     const residualLocal = result.newDealerInventoryById.get(instrument.id) ?? 0;
     residualByPair.set(key, residualLocal);

@@ -58,6 +58,7 @@ self.onmessage = (ev: MessageEvent<WebJob>) => {
   const u8 = (len: number) => { const v = new Uint8Array(job.out, off, len); off += len; return v; };
   u8(span).set(shard.primaryWithdrawn);
   u8(span).set(shard.hasPrimary);
+  u8(span).set(shard.uncleared);
   const header = new Int32Array(job.out, 0, 2);
   header[1] = shard.fillCount;
   Atomics.store(header, 0, 1);

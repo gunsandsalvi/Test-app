@@ -110,7 +110,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 quantity is rationed by a stated rule | `src/engine/simulation/stages/financial-clearing-engine.ts:runClearingKernel` | ✅ |
 | **C4 it can fail to clear** | `src/engine/simulation/stages/double-auction.ts:emptyAuctionResult` | ⚠️ |
 | C4.a a failed auction has consequences that propagate | `src/engine/ledger/tranche-ledger.ts:retireTranche` | ✅ |
-| **C4.b failure is representable and observable, not a quiet substitute** | `src/engine/simulation/stages/financial-clearing-engine.ts:solveClearingStat` | ❌ |
+| **C4.b failure is representable and observable, not a quiet substitute** | `src/engine/simulation/stages/financial-clearing-engine.ts:UnclearedReason` · `src/engine/simulation/stages/financial-clearing-engine.ts:takePrint` | ✅ |
 | C5 VERIFY the price is a function of the schedules alone | `src/engine/simulation/stages/financial-clearing-engine.ts:sortIndexByKey` | ✅ |
 | D1 a price, in a stated unit, for a stated instrument | `src/engine/simulation/stages/financial-clearing-engine.ts:ClearingResult` | ✅ |
 | D1.a price is the primitive; yield and spread are derived | `src/engine/simulation/stages/financial-clearing-engine.ts:ClearingInstrument` | ⚠️ |
@@ -173,22 +173,19 @@ unmet flow becomes somebody's book by construction after the price has been stru
 not affected — but the position is a residual absorber, and it belongs to `fx-spot.md` /
 `dealer-desks.md` to name. Recorded here as the one place B4's shape survives.
 
-### ❌ C4.b / ⚠️ C4 / C2 — THE FINANCIAL SOLVE IS A TOTAL FUNCTION AND INVENTS A PRICE WHEN NONE EXISTS
+### ✅ C4.b / ⚠️ C4 / C2 — THE FINANCIAL SOLVE SAYS WHEN NO PRICE EXISTS
 
-`solveClearingStat` returns `number`. It has no way to say "did not clear", so on the two inputs
-where no clearing level exists it returns a bracket bound:
-
-- `financial-clearing-engine.ts:444` — `if (demandAtU(uLo) > targetLocal) return toStat(uLo);` prints
-  `bracketLow`, which is 1% of last week's price for a PRICE_LIKE book — every book now — and was
-  **−2000 bps** while the credit books ran YIELD_LIKE (`:747`);
-- `:494` — `return toStat(uHi);` prints `bracketHigh`, **100,000 bps** or 100× last week's price
-  (`:748`), reached when the segment walk finds no crossing at all.
-
-Both bounds go straight onto the books: the print is deposited in the price store like any other
-(`engine2/prices.ts:setClearedPrice`), and from there into the curve, the marks and every derived
-statistic. There is nothing between the bracket and the print — `:788-793` records the user's own
-instruction that there is no cap, which was right about caps and leaves the bound reaching the
-books directly.
+*2026-09-05 (§9.21).* `solveClearingStat` used to return a number and nothing else, so on the two
+inputs where no clearing level exists — no demand at any level, and level-independent mandated
+cores past the float at every level — it printed a bracket bound (−2000bp / 100,000bp, 1% / 100× of
+last week's price) straight onto the books. Now the solve reports its outcome beside the number
+(`SOLVE_NO_DEMAND`, `SOLVE_OVERSUBSCRIBED`; the C kernel the same), the kernel CARRIES last week's
+statistic for an uncleared book while the allocation still rations the cores pro rata, and the
+result carries the outcome per instrument (`unclearedByIndex`, `printById: ClearedPrint`). The
+number-only accessors are gone: every adapter reads its print through `takePrint` / `unclearedAt`,
+which record an uncleared book on the week (`ctx.unclearedBooks`, kept as
+`lastWeekUnclearedBooks`, told by the news) — a carried mark is never mistaken for a struck one.
+C4 (the goods auction's own empty result) and C2 are unchanged by this.
 
 **The saturation retreat is not the fix and is not the defect.** `:443`
 `targetLocal = min(float, demandAtWideEnd × 0.999999)` handles a book whose demand cannot ABSORB the

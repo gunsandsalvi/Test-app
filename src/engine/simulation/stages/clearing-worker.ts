@@ -49,6 +49,7 @@ port.on('message', (job: Job) => {
     from: shard.from,
     to: shard.to,
     clearedStat: shard.clearedStat,
+    uncleared: shard.uncleared,
     dealerInventory: shard.dealerInventory,
     primaryWithdrawn: shard.primaryWithdrawn,
     primaryMarketTake: shard.primaryMarketTake,

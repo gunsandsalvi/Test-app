@@ -24,7 +24,7 @@ import {
   stockLoanNetLocal, sharesOnLoan } from '../../../domain/securities-lending';
 import { WeeklyStepContext } from './context';
 import { pay, institutionSpendableLocal } from './settlement';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { entityRequiredReturn, maxOverweightMultipleOf, fullSizeSpreadRangeBpsOf } from './asset-allocation';
 import { fairValuePerShare, companyBookEquityLocal, companyNetInvestmentRate } from '../../equity-valuation';
@@ -450,7 +450,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     let seq = 0;
     borrowNames.forEach((c) => {
       const instrumentId = sblInstrumentId(regionId, c.id);
-      const clearedBps = result.newStatById.get(instrumentId);
+      const clearedBps = takePrint(ctx, result, instrumentId, `${regionId} stock loan`);
       if (clearedBps === undefined) return;
       lastFee[c.id] = Number(clearedBps.toFixed(1));
 
@@ -734,7 +734,7 @@ export function runBondLendingPass(state: GameState, ctx: WeeklyStepContext): vo
         let seq = 0;
         bondIds.forEach((bondId) => {
           const instrumentId = sblInstrumentId(regionId, bondId);
-          const clearedBps = result.newStatById.get(instrumentId);
+          const clearedBps = takePrint(ctx, result, instrumentId, `${regionId} bond loan`);
           if (clearedBps === undefined) return;
           lastFee[bondId] = Number(clearedBps.toFixed(1));
           const price = priceOf(bondId);

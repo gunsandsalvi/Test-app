@@ -243,6 +243,26 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
     });
   });
 
+  // ---- 5b. §3.21: books that found no clearing level this week carried last week's print, and
+  // said so. One story a week, naming them, so a carried mark is never mistaken for a struck one. ----
+  if (ctx.unclearedBooks.length > 0) {
+    const byReason = new Map<string, string[]>();
+    ctx.unclearedBooks.forEach((entry) => {
+      const reason = entry.endsWith('OVERSUBSCRIBED') ? 'oversubscribed at every level' : 'no demand at any level';
+      const arr = byReason.get(reason) ?? []; arr.push(entry.replace(/ (NO_DEMAND|OVERSUBSCRIBED)$/, '')); byReason.set(reason, arr);
+    });
+    push({
+      id: `uncleared-books-${week}`,
+      kind: 'books that did not clear',
+      category: 'MACRO',
+      title: `${ctx.unclearedBooks.length} book${ctx.unclearedBooks.length === 1 ? '' : 's'} found no clearing level this week`,
+      description: [...byReason.entries()].map(([reason, books]) => `${books.length} ${reason}: ${books.slice(0, 8).join(', ')}${books.length > 8 ? ` and ${books.length - 8} more` : ''}`).join('. ') + '. Each carries last week\'s print; nothing traded at a price nobody struck.',
+      cause: 'A book with no demand at any level, or with mandated holdings past what exists at every level, has no price this week.',
+      refs: [],
+      materialityLocal: 0,
+    });
+  }
+
   // ---- 6b. §3.20-LLR-iii: the run — a bank's uninsured depositors left it this week. ----
   banksOf(ctx.updatedCompanies).forEach((b) => {
     const fledLocal = ctx.updatedRegions[b.region]?.depositorFlightLocal?.[b.id] ?? 0;

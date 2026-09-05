@@ -33,7 +33,7 @@ import { companyParty } from '../../../domain/party';
 import { isActiveCompany, isPubliclyListed, banksOf } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { entityRequiredReturn, maxOverweightMultipleOf } from './asset-allocation';
-import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
+import { openDemandStaging, claimDemandRow, setDemand, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat, unclearedAt } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<InstrumentId, ParticipantDemand>();
@@ -475,7 +475,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         });
       });
       deltaByInstrument.forEach((dShares, instId) => {
-        const px = result.newStatById.get(instId) ?? refPriceById.get(instId) ?? 0;
+        const px = result.printById.get(instId)?.stat ?? refPriceById.get(instId) ?? 0;
         const usd = dShares * px;
         if (Math.abs(usd) > 1e5) {
           console.log(`  [eq-cons] ${regionId} ${instId}: net share delta ${dShares.toFixed(2)} = ${(usd / 1e6).toFixed(3)}M at ${px.toFixed(2)} (offering: ${offeringsByIssuerId.has(instId)})`);
@@ -499,7 +499,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const holdAt = (pi: number | undefined, ii: number): number =>
       pi === undefined ? 0 : result.holdingsMatrix[pi * nI + ii];
     for (let ii = 0; ii < nI; ii++) {
-      const newPrice = result.newStatByIndex[ii];
+      unclearedAt(ctx, result, ii, `${regionId} equity`);
+      const newPrice = result.statByIndex[ii];
       if (!(newPrice > 0)) continue;
       const comp = regionCompanies[ii];
       comp.stockPrice = Number(newPrice.toFixed(2));

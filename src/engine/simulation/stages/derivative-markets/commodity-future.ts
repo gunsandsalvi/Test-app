@@ -33,7 +33,7 @@ import { DerivativeContract, DerivativeParty, bankPartyKey, companyPartyKey } fr
 import { deskNotionalCapacityLocal, initialMarginRateOf } from '../../../../domain/derivatives/registry';
 import { COMMODITY_CATEGORY_LINKAGE } from '../../../../domain/instruments';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../../domain/market-microstructure';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from '../financial-clearing-engine';
 import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { exposureToHedgeLocal } from '../corporate-financing';
 import { leverageHeadroomLocal } from '../../../macro/banking';
@@ -225,7 +225,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
         // Bilateral between named hedgers, desks and funds; nobody stands between them yet.
         dealerSpreadBps: 0,
       });
-      const clearedPrice = result.newStatById.get(id);
+      const clearedPrice = takePrint(ctx, result, id, 'commodity future');
       if (clearedPrice === undefined || !(clearedPrice > 0)) return;
 
       // ---- 3. THE PRICE, and what it implies. `futures1M/3M/6M` were spot times a constant; they

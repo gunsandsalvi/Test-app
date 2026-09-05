@@ -121,13 +121,17 @@ static double demandAtU(double u, int isYieldLike, int n){
   return sum;
 }
 
+/* §3.21: the solve says whether it cleared — 0 cleared, 1 no demand, 2 oversubscribed. */
+static int lastSolveOutcome = 0;
 static double solveClearingStat(int isYieldLike, double floatUSD, double bLow, double bHigh){
   int n = colCount;
+  lastSolveOutcome = 0;
   double uLo = isYieldLike ? bLow : -bHigh;
   double uHi = isYieldLike ? bHigh : -bLow;
   double wide = demandAtU(uHi, isYieldLike, n);
   double target = jmin(floatUSD, wide * 0.999999);
-  if (demandAtU(uLo, isYieldLike, n) > target) return isYieldLike ? uLo : -uLo;
+  if (!(wide > 0)) { lastSolveOutcome = 1; return isYieldLike ? uHi : -uHi; }
+  if (demandAtU(uLo, isYieldLike, n) > target) { lastSolveOutcome = 2; return isYieldLike ? uLo : -uLo; }
   int evCount = 0; double slopeAtLo = 0;
   for (int i = 0; i < n; i++){
     double maxH = colMaxH[i];
@@ -191,11 +195,12 @@ static napi_value ClearingKernel(napi_env env, napi_callback_info info){
   int32_t *fillInst = taPtr(env, arrAt(env, out, 5), NULL), *fillPart = taPtr(env, arrAt(env, out, 6), NULL);
   double *fillFilled = taPtr(env, arrAt(env, out, 7), NULL), *fillTraded = taPtr(env, arrAt(env, out, 8), NULL);
   double *fillFee = taPtr(env, arrAt(env, out, 9), NULL);
+  uint8_t *unclearedA = taPtr(env, arrAt(env, out, 10), NULL);
   growScratch(pCount);
   long fillCount = 0;
   for (int i = 0; i < n; i++){
     double currentStat = currentStatA[i];
-    if (skip[i]){ clearedStatA[i] = currentStat; dealerInventory[i] = NAN; continue; }
+    if (skip[i]){ clearedStatA[i] = currentStat; unclearedA[i] = 0; dealerInventory[i] = NAN; continue; }
     int isYL = yieldLike[i] == 1;
     double offeringUSD = offering[i];
     double bLow = isYL ? -2000 : jmax(1e-6, currentStat * 0.01);
@@ -214,13 +219,17 @@ static napi_value ClearingKernel(napi_env env, napi_callback_info info){
     }
     double liveFloat = flt[i] + offeringUSD;
     double solved = solveClearingStat(isYL, liveFloat, bLow, bHigh);
+    int outcome = lastSolveOutcome;
     int withdrawn = 0;
     double wStat = withdrawStat[i];
     if (offeringUSD > 0 && !isnan(wStat)){
       int beyond = isYL ? solved > wStat : solved < wStat;
-      if (beyond){ withdrawn = 1; liveFloat = flt[i]; solved = solveClearingStat(isYL, liveFloat, bLow, bHigh); }
+      if (beyond){ withdrawn = 1; liveFloat = flt[i]; solved = solveClearingStat(isYL, liveFloat, bLow, bHigh); outcome = lastSolveOutcome; }
     }
-    /* §3.19-i: the print IS the solve — there is no cap and no damper lane. */
+    /* §3.19-i: the print IS the solve — there is no cap and no damper lane. §3.21: an uncleared
+       book carries last week's statistic and says so. */
+    if (outcome != 0) solved = currentStat;
+    unclearedA[i] = (uint8_t)outcome;
     double cleared = tofixed4(solved);
     clearedStatA[i] = isfinite(cleared) ? cleared : currentStat;
     double clearedStat = clearedStatA[i];

@@ -61,7 +61,7 @@ import { pendingSettlementLocal, institutionUnsettledLessCollateralLocal } from 
 import { settleClearedBook, feeDesksForRegion, primaryTakes, primaryAssetOf, accruedOnFills, participantPartyOf, bankIdOfTickerFor } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
 import { positionKey } from './securities-lending';
 import { maxOverweightMultipleOf } from './asset-allocation';
 
@@ -578,7 +578,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const instrumentByIdSov = new Map(instruments.map((i) => [i.id, i]));
     const observedPoints = bonds
       .map((b) => {
-        const px = result.newStatById.get(b.id);
+        const px = takePrint(ctx, result, b.id, `${regionId} sovereign bond`);
         if (px === undefined) return undefined;
         const inst = instrumentByIdSov.get(b.id);
         // §3.21, and the credit books' reading of it: what was PLACED, not what was OFFERED.
@@ -595,7 +595,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       .filter((p): p is { tenorYears: number; yield: number } => p !== undefined);
     if (process.env.SOV_TRACE === '1') {
       console.log(`  [sov-trace] ${regionId} w${ctx.nextWeek}: bonds=${bonds.length} points=${observedPoints.length} ` +
-        bonds.slice(0, 4).map((b) => `${b.id}@${b.years.toFixed(2)}y out=${(b.outstandingLocal / 1e9).toFixed(1)}B float=${((instruments.find((i) => i.id === b.id)?.tradableFloatLocal ?? 0) / 1e9).toFixed(1)}B px=${result.newStatById.get(b.id)?.toFixed(5) ?? 'none'}`).join(' | '));
+        bonds.slice(0, 4).map((b) => `${b.id}@${b.years.toFixed(2)}y out=${(b.outstandingLocal / 1e9).toFixed(1)}B float=${((instruments.find((i) => i.id === b.id)?.tradableFloatLocal ?? 0) / 1e9).toFixed(1)}B px=${result.printById.get(b.id)?.stat?.toFixed(5) ?? 'none'}`).join(' | '));
     }
     // §3.13-SOV row 5 / §3.25 — THIS STAGE DOES NOT OWN THE CURVE. It cleared bonds against the
     // curve standing at week start, which is what a real session prices against, and deposits what

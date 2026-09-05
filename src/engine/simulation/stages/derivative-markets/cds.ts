@@ -34,7 +34,7 @@ import { CDS_TENORS, CDS_TENOR_YEARS, CDS_BENCHMARK_TENOR, cdsTenorWeeksOf, near
 import { indexHolderQuote } from '../../../../domain/derivatives/classes/cds-index';
 import { DerivativeContract, DerivativeParty, bankPartyKey, derivativePartyKey } from '../../../../domain/derivatives/contract';
 import { deskNotionalCapacityLocal, initialMarginRateOf } from '../../../../domain/derivatives/registry';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from '../financial-clearing-engine';
 import { isActiveCompany, type Company } from '../../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from '../shared-helpers';
 import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequiredReturn, fullSizeSpreadRangeBpsOf } from '../asset-allocation';
@@ -325,7 +325,7 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
     let seq = 0;
     referenceIssuers.forEach((issuer) => CDS_TENORS.forEach((tenor) => {
       const instrumentId = cdsInstrumentId(regionId, issuer.id, tenor);
-      const clearedBps = result.newStatById.get(instrumentId);
+      const clearedBps = takePrint(ctx, result, instrumentId, `${regionId} cds`);
       if (clearedBps === undefined) return;
       const print = Number(clearedBps.toFixed(1));
       // §3.17-ii: the print joins the name's history AT ITS TENOR (§3.17d-iii: the curve's store)

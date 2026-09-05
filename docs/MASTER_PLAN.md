@@ -551,49 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-21-BRACKET. **THE BRACKET IS STILL A PRINT, AND IT IS MEASURED: 206 TIMES IN 16 WEEKS.**
-    Step 21 below names this; instrumenting `solveClearingStat` counted it. Over the 16-week
-    reference, cumulative: **67 solves returned the TIGHT bracket** (`demandAtU(uLo) > targetUSD`
-    — oversubscribed even at the extreme, printing −2000bp for a spread or 1% of last week's
-    price) and **139 returned the WIDE one** (the segment walk found no crossing, printing
-    100,000bp — a 1000% spread — or 100× the price). Both counts grow monotonically with the run
-    (tight: 0, 1, 5, 18, … 67).
-
-    **And there is no damper to absorb them.** `financial-clearing-engine.ts:793` records the
-    user's own instruction — *"THERE IS NO CAP. The book prints where demand met supply this
-    week"* — which was right about caps and leaves the bracket reaching the books directly:
-    `comp.oasSpreadBps`, the curve's observed point, every mark derived from them.
-
-    **THE CAUSE IS THE SIGNATURE.** `solveClearingStat` returns `number`. There are books for
-    which no clearing level exists — no demand at any level (the 139: `targetUSD` is zero, the
-    walk's `slope > 0` test fails at every segment, and the fall-through prints the bound), and
-    demand that exceeds the float at every level (the 67: level-independent mandated cores summing
-    past what exists, which is not a mandate but an inconsistency). **A total function over a
-    partial domain has to invent something, and what it invents is the bracket.** Adding an
-    `UNTRADED` state to the adapters — which is what this step first proposed — is a symptom
-    patch: it leaves the function free to keep inventing and asks every caller to notice.
-
-    The fix is that the solve RETURNS whether it cleared, so a book with no price cannot be
-    mistaken for one with a price, and the compiler makes every adapter say what it does about
-    that: carry last week's mark and say so, or trade nothing. The saturation retreat
-    (`targetUSD = min(float, demandAtWideEnd × 0.999999)`) stays — it is right for a book whose
-    demand merely cannot ABSORB the float, and it is exactly why the wide-end fall-through is
-    reachable only when there is no demand at all.
-
-
-
-21. **A bracket can never be a print.** *(MEASURED — see **21-BRACKET** above: 67 tight and 139
-    wide prints over the 16-week reference, growing monotonically, with no damper between them and
-    the books. The saturation retreat added since this step was written handles a book whose
-    demand cannot ABSORB the float; it cannot handle one with NO demand, which is the 139, because
-    there is no level to retreat to.)*
-    `financial-clearing-engine.ts` returns the numerical
-    bracket as the cleared price whenever level-independent demand at the extreme exceeds the float
-    — which the central bank (`central-bank-demand.ts:45`) and every index fund (`etf-demand.ts:43`)
-    routinely produce — giving −2000 bps for a YIELD_LIKE book; `:487` gives 100,000 bps at the other
-    end when demand is flat. That print becomes `comp.oasSpreadBps` (07b:271) and the curve's
-    observed point (07c:512). Ration the cores and solve for where the marginal core clears; a book
-    with no demand at any level is UNTRADED, not priced.
 22. **Commodity spot clears.** `evolution.ts:1424` moves spot by `exp(drift + …)` with a floor;
     `07-commodities.ts` is a 16-line wrapper that does not supersede it. One writer, and it is the
     auction. The futures curve beside it is already cleared — today they are two disconnected
@@ -1435,6 +1392,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**21 — A BRACKET CAN NEVER BE A PRINT.** (21-BRACKET's measurement — 67 tight and 139 wide bracket
+  prints over the 16-week reference — is closed with it.) `solveClearingStat` returned `number` and
+  printed a bracket bound wherever no clearing level existed. Now the solve reports its outcome
+  beside the number (`SOLVE_CLEARED` / `SOLVE_NO_DEMAND` — nobody wants any at any level — /
+  `SOLVE_OVERSUBSCRIBED` — mandated cores past the float at every level; `lastSolveOutcome`, a
+  module variable, no allocation in the hot loop; the C kernel mirrors it and the workers carry
+  the lane), the kernel carries LAST WEEK'S statistic for an uncleared book while the allocation
+  still rations the cores pro rata, and `ClearingResult` says so per instrument
+  (`unclearedByIndex`, `printById: ClearedPrint`). The number-only accessors are deleted, so the
+  compiler made every one of the twenty adapters say what it does: each reads its print through
+  `takePrint` / `unclearedAt`, which record the book on `ctx.unclearedBooks` (kept as
+  `lastWeekUnclearedBooks`, told once a week by the news). The saturation retreat stays. Test:
+  cleared, no demand, oversubscribed. `the-clearing-engine.md` C4.b ✅. Gates green; no run.
 
 **20-LLR-iv — A BANK CAN FAIL FOR LIQUIDITY.** 20-LLR is closed with this. Resolution triggered on
   capital alone (`isBankUnderPca`, a book ratio); `domain/bank-resolution.ts:isBankIlliquid` is the

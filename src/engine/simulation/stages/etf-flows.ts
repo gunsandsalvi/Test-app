@@ -45,7 +45,7 @@ import { householdEtfHoldingsLocal } from '../../macro/household-portfolio';
 import { BUFFER_TARGET_WEEKS } from '../../macro/household-cohorts';
 import { measuredWeeklyMove, medianOf } from '../../../domain/volatility';
 import { ringFill, rowOf } from '../../../engine2/world';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
@@ -746,7 +746,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       // Undamped: a fund's shares can only move as far as the basket behind them plus the
       // assembly cost, which is a real bound and does not need a second one.
     });
-    const clearedPrice = result.newStatById.get(instrumentId);
+    const clearedPrice = takePrint(ctx, result, instrumentId, `${fund.region} ETF`);
     if (clearedPrice === undefined || !(clearedPrice > 0)) return;
     fund.etf = {
       ...fund.etf!,

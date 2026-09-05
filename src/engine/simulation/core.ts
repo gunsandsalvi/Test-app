@@ -464,7 +464,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     overdraftStreaks: ctx.overdraftStreaks,
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.
-    dealers: dealersFromBanks(ctx.v2, (b) => bankReservesOf(ctx.v2, b.id), (b) => facilityBookOf(ctx.v2, b.id), (b) => bankBookAssetsLocal(ctx.v2, b.id), nextState.companies), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
+    dealers: dealersFromBanks(ctx.v2, (b) => bankReservesOf(ctx.v2, b.id), (b) => facilityBookOf(ctx.v2, b.id), (b) => bankBookAssetsLocal(ctx.v2, b.id), nextState.companies), lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, lastWeekUnclearedBooks: ctx.unclearedBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
     // SETL2: the week's settlement, decomposed. §6 watches the boundary line DOWN, and a number
     // you cannot attribute is a number you cannot watch — this carries what hit it and why.
     lastSettlement: ctx.lastSettlementReport && {

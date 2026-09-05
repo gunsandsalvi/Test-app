@@ -33,7 +33,7 @@ import { bankParty, bankPartyOf } from '../../../../domain/party';
 import { institutionProfile, allocationTargetFor } from '../../../../domain/institution-profiles';
 import { isCreditClass } from '../../../../domain/assets';
 import { MEASURE_WINDOW_WEEKS } from '../../../../domain/volatility';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant } from '../financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, takePrint } from '../financial-clearing-engine';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from '../shared-helpers';
 import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequiredReturn, fullSizeSpreadRangeBpsOf } from '../asset-allocation';
 import { bankRequiredReturnAnnual } from '../bank-lending';
@@ -179,7 +179,7 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
       durationYears: CDS_INDEX_TENOR_WEEKS / 52,
     };
     const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
-    const clearedBps = result.newStatById.get(instrumentId);
+    const clearedBps = takePrint(ctx, result, instrumentId, 'cds index');
     if (clearedBps === undefined) return;
 
     // ---- 4. THE PRINT, and the basis against the names it is made of. ----

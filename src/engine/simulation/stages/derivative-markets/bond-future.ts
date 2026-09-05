@@ -33,7 +33,7 @@ import { bankParty, bankPartyOf } from '../../../../domain/party';
 import { institutionProfile, allocationTargetFor } from '../../../../domain/institution-profiles';
 import { carriesRateDuration } from '../../../../domain/assets';
 import { MEASURE_WINDOW_WEEKS } from '../../../../domain/volatility';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant } from '../financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, takePrint } from '../financial-clearing-engine';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { bankReservesOf } from '../../../ledger/accounts';
 import { bankBookAssetsLocal } from '../../../desk-register';
@@ -144,7 +144,7 @@ function runBondFuturesMarket({ ctx, week, view, standing }: DerivativeMarketRun
       durationYears,
     };
     const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
-    const cleared = result.newStatById.get(instrumentId);
+    const cleared = takePrint(ctx, result, instrumentId, 'bond future');
     if (cleared === undefined) return;
 
     // ---- 4. THE PRINT, and the basis against the bond it delivers. ----

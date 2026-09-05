@@ -31,7 +31,7 @@ import {
   SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, repricingLossLocal,
 } from '../../../../domain/derivatives/classes/irs';
 import { DerivativeContract, DerivativeParty, bankPartyKey, companyPartyKey, institutionPartyKey } from '../../../../domain/derivatives/contract';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from '../financial-clearing-engine';
 import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
 import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
@@ -255,7 +255,7 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
     let seq = 0;
     SWAP_TENORS.forEach((k) => {
       const instrumentId = swapInstrumentId(regionId, k);
-      const clearedBps = result.newStatById.get(instrumentId);
+      const clearedBps = takePrint(ctx, result, instrumentId, `${regionId} swap`);
       if (clearedBps === undefined) return;
       parByTenor[k] = Number((clearedBps / 10000).toFixed(6));
       const takenByEntity = new Map<EntityId, number>();

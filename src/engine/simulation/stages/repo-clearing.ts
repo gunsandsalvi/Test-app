@@ -58,9 +58,7 @@ import {
 } from '../../../domain/repo';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay, PartyRef, pendingSettlementLocal, institutionSpendableLocal } from './settlement';
-import {
-  clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
-} from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 
 import { repoOvernightInstrumentId, repoTermInstrumentId } from '../../../domain/instrument-keys';
@@ -501,7 +499,7 @@ export function runRegionalRepoSession(
       // Overnight money reprices to the corridor the week policy moves; the corridor — the
       // participants' own posted outside options — is the real bound, and the harness asserts it.
     });
-    const clearedBps = result.newStatById.get(args.instrumentId) ?? args.currentBps;
+    const clearedBps = takePrint(ctx, result, args.instrumentId, `${regionId} repo`) ?? args.currentBps;
     const lentByParty = new Map<string, number>();
     let totalLentLocal = 0;
     result.newParticipantHoldings.forEach((byInstrument, pid) => {
