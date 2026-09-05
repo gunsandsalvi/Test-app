@@ -23,7 +23,7 @@ const sheet = (over: Partial<BankingSector> = {}): BankingSector => ({
   bankEquityLocal: 5, bankCapitalRatio: 0.05, netInterestMarginPct: 0.02,
   loanLossProvisionRateAnnualPct: 0.01, creditConditionsIndex: 0, centralBankReservesLocal: 10,
   moneySupplyM2Local: 80, itemizedHoldings: [], srfBorrowingLocal: 0, onRrpLendingLocal: 0,
-  repoLentLocal: 0, repoBorrowedLocal: 0, repoEncumberedCollateralLocal: 0,
+  repoLentLocal: 0, repoBorrowedLocal: 0,
   businessLoans: [], householdLoans: [], centralBankLoanLocal: 30,
   ...over,
 });

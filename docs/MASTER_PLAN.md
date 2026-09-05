@@ -512,12 +512,17 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    d5. **A CLAIM ON A POSITION IS A LIEN ON A LOT** (added 2026-09-04). Repo encumbrance
-        (`encumberedFaceByBond`), stock-loan collateral and posted initial margin
-        (`initialMarginHeldLocal`, a scalar on the desk) are parallel numbers reconciled after the
-        fact. Each becomes a lien on the lot it binds, so a pledged unit cannot also be sold or
-        counted free, and `the-derivative-layer.md` D3 ("held, not consumed") is true on the
-        poster's side. Depends on (f)'s lots for identified assets; fungible ones can carry it now.
+    d5. **A CLAIM ON A POSITION IS A LIEN ON A LOT** (added 2026-09-04; split 2026-09-05, found
+        writing it: the three claims bind three different stores, and only the first binds a
+        register row). d5a (repo pledges are liens on the sovereign rows) is in §9. Depends on
+        (f)'s lots for identified assets; fungible ones carry it now. What is left, in order:
+    d5b. **STOCK-LOAN CASH COLLATERAL IS A LIEN ON THE LENDER'S ACCOUNT.**
+        `settlement.ts:stockLoanCollateralHeldLocal` sums the loan book and every spendable read
+        nets it after the fact; the account row itself says what of its balance is only held.
+    d5c. **POSTED INITIAL MARGIN IS A LIEN ON THE ACCOUNT THAT HOLDS IT.**
+        `fxDealerBook.initialMarginHeldLocal` is a scalar on the desk; the margin it holds is a
+        lien on its securities account, so `the-derivative-layer.md` D3 ("held, not consumed") is
+        true on the poster's side.
     e. **COLLAPSE THE FOUR TAXONOMIES** into the index's kind.
     f. **ONE POSITION BOOK, AS LOTS** — `v2.holdings` and `v2.lots` merge. A fungible asset sums
        its lots, an identified one addresses them, and **every position gains a basis**, which
@@ -1704,6 +1709,22 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d5a — A REPO PLEDGE IS A LIEN ON THE ROW IT BINDS.** The register gained one column
+(`holdings.ts:lienUnits`): the units of a row under a lien. The repo book is its one writer —
+`publishRepoBook` sets every borrower's liens to exactly what the new book pledges of each bond
+(the matured contracts leave the book before the session asks what is free, so their liens come
+off first) — and a resolution moves a lien with the rows it binds. A transfer that would leave
+a row below its lien DEFECTS at the site (`debitRow`'s transfer arm: the auctions' floor at
+pledged face is now guarded, not assumed); a retirement shrinks the lien to what is left and the
+book's collateral call follows. Every unencumbered read asks the register
+(`sovereign-register.ts:lienFaceByBond`): the repo session, 07c, 07f, the reconcile, the
+harness. Deleted, each naming its read: the sheet's `repoEncumberedCollateralLocal` scalar and
+its five carriers (`lienFaceLocal`), `collateralCapacityLocal` and the scalar fallback of
+`unencumberedBorrowingCapacityLocal` (its callers all passed the per-bond map),
+`collateral.ts:pledgedFaceByBond` (`repo.ts:encumberedFaceByBond`, which the publish uses to
+write). `O12` checks lien = pledge per bank and bond. Byte-identical for every read. Gates
+green; no run.
 
 **13-BOOK d4c-vi — THE CAPITAL COMMITMENTS ARE ROWS OF THE CONTRACT STORE, AND ONE LIVENESS
 CHECK WALKS EVERY KIND.** `peFund.lpCommitments` is deleted; `domain/commitment.ts:LpCommitment`

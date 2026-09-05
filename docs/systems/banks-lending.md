@@ -124,7 +124,7 @@ checked by `scripts/check-atlas.sh`.
 | D2.b FORBID a provision is never a quiet reserve | `src/engine/ledger/bank-book.ts:bookPnL` | ✅ |
 | D3 interest accrues and is received; non-payment observable | `src/engine/simulation/stages/bank-lending.ts:loanInterestWeeklyLocal` | ⚠️ |
 | **D4 a loan can be sold or syndicated** | `src/engine/ledger/tranche-ledger.ts:moveFacilityLender` | ⚠️ |
-| **D5 it can be pledged to the central bank or in repo** | `src/engine/simulation/stages/repo-clearing.ts:collateralCapacityLocal` | ❌ |
+| **D5 it can be pledged to the central bank or in repo** | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` | ❌ |
 | **E1 a missed payment or covenant breach is an EVENT** | — | ❌ |
 | **E2 the loan is reclassified: performing → impaired** | `src/domain/banking.ts:status` | ❌ |
 | E3 workout: restructure, extend or enforce | `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ⚠️ |
@@ -181,7 +181,7 @@ provision exists to show: that it saw the loss coming. Pairs with E1 above; the 
 
 ### ❌ D5 / B2.b — THE COLLATERAL AND LIQUIDITY WIRES ARE CUT AT THE LOAN BOOK
 
-D5: `collateralCapacityLocal` and `unencumberedByBond` read the bank's own sovereign rows on the
+D5: `unencumberedBorrowingCapacityLocal` and `unencumberedByBond` read the bank's own sovereign rows on the
 register (§9.13-BOOK d3b) and nothing else. `domain/repo.ts:16` states the scope decision explicitly — "Sovereign general
 collateral only, deliberately" — so a loan cannot be pledged, and a bank whose assets are loans has
 zero borrowing capacity however good the loans are. **That half is OUT OF SCOPE and says so**, and

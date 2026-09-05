@@ -130,7 +130,9 @@ import { isPubliclyListed, isActiveCompany, banksOf } from '../src/domain/compan
 import { ensureV2 } from '../src/engine2/world';
 import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
 import { issuedSharesOf, etfSharesOutstandingOf } from '../src/engine2/instruments';
-import { derivativesOf, repoBookOf, tradeInvoicesOf } from '../src/engine/ledger/contract-ledger';
+import { derivativesOf, repoBookOf, publishRepoBook, tradeInvoicesOf } from '../src/engine/ledger/contract-ledger';
+import { setActiveWireWorld } from '../src/engine/ledger/wire';
+import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { issuerSpreadAtOnCurve } from '../src/engine/credit-price';
 import { forEachContract } from '../src/engine2/contracts';
 import { sovereignCouponByBond, weeklyInterestExpenseLocal, decomposeGovernmentSpending } from '../src/domain/government';
@@ -143,7 +145,7 @@ import { mortgageSeverityAtLtv, vintageCurrentLtv, householdBookRwaLocal } from 
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS } from '../src/engine/macro/banking';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../src/domain/market-microstructure';
 import { centralBankAssetsLocal, centralBankFxReservesLocal } from '../src/domain/central-bank';
-import { centralBankBookLocal, centralBankPositions, bankSovereignBookLocal, bankSovereignPositions, bankSovereignFaceByBond } from '../src/engine/sovereign-register';
+import { centralBankBookLocal, centralBankPositions, bankSovereignBookLocal, bankSovereignPositions, bankSovereignFaceByBond, lienFaceLocal } from '../src/engine/sovereign-register';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
 import { unclassifiedReasons } from '../src/engine/simulation/stages/settlement';
 import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
@@ -874,7 +876,19 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
       // collateral, which is exactly why real sovereign auctions rarely fail. "Buyers with no
       // money" now means no cash AND no unencumbered collateral to borrow against.
       const sovLocal = bankSovereignBookLocal(ensureV2(shocked), c.id); // §3.13-BOOK d3b: register rows
-      c.bankBalanceSheet.repoEncumberedCollateralLocal = sovLocal;
+      // §3.13-BOOK d5a: encumbrance is a LIEN the repo book writes on the register, so "no
+      // unencumbered collateral" is a contract — the drained bank has already borrowed against its
+      // whole book at the window.
+      const pledges = Array.from(bankSovereignFaceByBond(ensureV2(shocked), c.id), ([bondId, faceLocal]) => ({ bondId, faceLocal }));
+      if (pledges.length > 0) {
+        setActiveWireWorld(wireWorldOf(ensureV2(shocked), shocked.companies, shocked.institutionalEntities ?? []));
+        try {
+          publishRepoBook(ensureV2(shocked), 'USA', [...repoBookOf(ensureV2(shocked), 'USA'), {
+            id: `USA-REPO-SHOCK-${c.id}`, regionId: 'USA', lender: { kind: 'CENTRAL_BANK', region: 'USA' }, borrowerId: c.id,
+            principalLocal: sovLocal, rateAnnual: shocked.regions.USA?.policyRate ?? 0, struckWeek: shocked.currentWeek, maturityWeek: shocked.currentWeek + 52, collateral: pledges,
+          }]);
+        } finally { setActiveWireWorld(undefined); }
+      }
     }
   });
   // XB1: foreign institutions bid in this auction too, so starving only the DOMESTIC ones no
@@ -2489,15 +2503,15 @@ function runHarness() {
     });
 
     banksOf(state.companies).forEach((c: Company) => {
-      const bs = c.bankBalanceSheet!;
       const sovLocal = bankSovereignBookLocal(ensureV2(state), c.id); // §3.13-BOOK d3b: register rows
       // §7.246: the ONE pledge tolerance (domain/collateral.ts, $1) — this line sat at 1e6 one
       // screen below the unified per-bucket check, the §7.230 split-tolerance shape surviving in
-      // the aggregate.
-      if ((bs.repoEncumberedCollateralLocal ?? 0) > sovLocal + PLEDGE_ROUNDING_TOLERANCE_LOCAL) {
+      // the aggregate. §3.13-BOOK d5a: what is pledged is the register's liens.
+      const lienLocal = lienFaceLocal(ensureV2(state), c.id);
+      if (lienLocal > sovLocal + PLEDGE_ROUNDING_TOLERANCE_LOCAL) {
         violations.push({
           week: w,
-          message: `Bank ${c.ticker} pledged ${(bs.repoEncumberedCollateralLocal / 1e9).toFixed(2)}B of collateral against ${(sovLocal / 1e9).toFixed(2)}B held`
+          message: `Bank ${c.ticker} pledged ${(lienLocal / 1e9).toFixed(2)}B of collateral against ${(sovLocal / 1e9).toFixed(2)}B held`
         });
       }
     });

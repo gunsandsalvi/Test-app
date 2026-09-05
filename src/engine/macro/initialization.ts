@@ -470,7 +470,6 @@ function buildRegion(regionId: RegionId): Region {
     // start opens with an empty book — the same shape the weekly engine produces (§7.4).
     repoLentLocal: 0,
     repoBorrowedLocal: 0,
-    repoEncumberedCollateralLocal: 0,
     businessLoans: [],
     householdLoans: [],
     wholesaleFundingLocal: 0,

@@ -107,7 +107,8 @@ export function sovereignHeldByClass(v2: V2World, state: GameState, regionId: Re
 }
 
 /** One sovereign row of a register book: the bond, its FACE and its VALUE (the mark). */
-export interface SovereignRow { row: number; bondId: InstrumentId; issuerRegion: RegionId; faceLocal: number; valueLocal: number }
+/** §3.13-BOOK d5a: `lienFaceLocal` is the face of the row pledged in repo — bound, not free. */
+export interface SovereignRow { row: number; bondId: InstrumentId; issuerRegion: RegionId; faceLocal: number; valueLocal: number; lienFaceLocal: number }
 
 /**
  * §3.13-BOOK d3a/d3b — A BOOK'S SOVEREIGN ROWS, read off the register. Every reader of the deleted
@@ -122,7 +123,7 @@ export function sovereignRowsOf(v2: V2World, bookId: string): SovereignRow[] {
   if (govRef < 0) return out;
   for (let r = bookHeadOf(v2, bookId); r >= 0; r = H.next[r]) {
     if (H.typeRef[r] !== govRef) continue;
-    out.push({ row: r, bondId: instrumentIdAt(v2, r), issuerRegion: regionOf(v2, H.regionRef[r]) as RegionId, faceLocal: rowUnits(H, r), valueLocal: H.qtyLocal[r] });
+    out.push({ row: r, bondId: instrumentIdAt(v2, r), issuerRegion: regionOf(v2, H.regionRef[r]) as RegionId, faceLocal: rowUnits(H, r), valueLocal: H.qtyLocal[r], lienFaceLocal: H.lienUnits[r] });
   }
   return out;
 }
@@ -148,6 +149,19 @@ export function bankSovereignFaceByBond(v2: V2World, bankId: string): Map<Instru
   const out = new Map<InstrumentId, number>();
   bankSovereignPositions(v2, bankId).forEach((p) => out.set(p.bondId, (out.get(p.bondId) ?? 0) + p.faceLocal));
   return out;
+}
+/** §3.13-BOOK d5a — what a bank has PLEDGED, bond by bond: the liens on its own rows. Every
+ *  unencumbered read (the repo session, 07c, 07f, the reconcile) asks the register, not the book. */
+export function lienFaceByBond(v2: V2World, bankId: string): Map<InstrumentId, number> {
+  const out = new Map<InstrumentId, number>();
+  bankSovereignPositions(v2, bankId).forEach((p) => { if (p.lienFaceLocal > 0) out.set(p.bondId, (out.get(p.bondId) ?? 0) + p.lienFaceLocal); });
+  return out;
+}
+/** The same, summed: the face a bank has pledged across every bond. */
+export function lienFaceLocal(v2: V2World, bankId: string): number {
+  let total = 0;
+  bankSovereignPositions(v2, bankId).forEach((p) => { total += p.lienFaceLocal; });
+  return total;
 }
 /** A bank's own book as `bondId → marked value`, for the yield read that weights by position. */
 export function bankSovereignValueRecord(v2: V2World, bankId: string): Record<string, number> {

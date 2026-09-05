@@ -699,7 +699,6 @@ export function generateInitialCompanies(
             onRrpLendingLocal: 0,
             repoLentLocal: 0,
             repoBorrowedLocal: 0,
-            repoEncumberedCollateralLocal: 0,
             businessLoans: [],
             householdLoans: [],
           };

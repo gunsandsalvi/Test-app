@@ -27,6 +27,7 @@ import { wire, AssetKind, ASSET_KINDS } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { RegionId } from '../../domain/geography';
 import { defect } from '../../domain/defect';
+import { PLEDGE_ROUNDING_TOLERANCE_LOCAL } from '../../domain/collateral';
 import { issuerIdOf } from '../../engine2/tranches';
 import { holdingClassOf } from '../../domain/assets';
 import type { Company } from '../../domain/company';
@@ -265,7 +266,7 @@ function adjustDeskRow(v2: V2World, holderId: string, spec: HoldingSpec, sign: 1
  * answer to one question.
  */
 const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
-  H.qtyLocal[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0);
+  H.qtyLocal[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0) || H.lienUnits[r] > 0; // d5a: a lien keeps an empty row
 
 /**
  * Take from the holder's row(s) of this instrument; a row emptied is unlinked. One walk of the
@@ -280,7 +281,14 @@ const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
  * in the house's net and in the ownership family with no name on it. `retireTranche` defects on
  * exactly this case; so does this.
  */
-function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
+/**
+ * §3.13-BOOK d5a — A ROW UNDER A LIEN CANNOT BE SOLD BELOW IT. `enforceLien` is the transfer's
+ * arm: a sale that would leave fewer units than are pledged defects at the site (the auctions
+ * floor a pledging bank's holding at its pledged face, so this is the guard behind that floor).
+ * A retirement is the other arm: the paper ceased, the lien shrinks to what is left, and the
+ * repo book's collateral call takes it from there.
+ */
+function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien: boolean): void {
   const H = mutableHoldings(v2);
   const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
   let leftLocal = spec.valueLocal; let leftShares = spec.shares ?? Number.NaN;
@@ -302,14 +310,25 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
       // subtracts exactly what the value line does.
       const unitsHere = rowUnits(H, r);
       const takeUnits = H.qtyLocal[r] > 0 ? unitsHere * (takeLocal / H.qtyLocal[r]) : 0;
+      const byShares = !Number.isNaN(leftShares) && !Number.isNaN(H.shares[r]);
+      const takeSh = byShares ? Math.min(leftShares, H.shares[r]) : 0;
+      // A share-counted row's units ARE its shares (`unitsOf` says so on the way in), so it
+      // takes the share line rather than the value proportion — the two agree only while the
+      // row's own price and the instruction's are the same number.
+      const nextUnits = byShares ? H.shares[r] - takeSh : unitsHere - takeUnits;
+      // §3.13-BOOK d5a: the lien is tested BEFORE the row moves — a sale under it defects with
+      // the row untouched; a retirement shrinks the lien to what the paper leaves.
+      if (H.lienUnits[r] > 0) {
+        if (enforceLien && nextUnits < H.lienUnits[r] - Math.max(PLEDGE_ROUNDING_TOLERANCE_LOCAL, 1e-9 * H.lienUnits[r])) {
+          defect(`${holderId} sold ${spec.instrumentType} ${spec.instrumentId} under a lien: ${H.lienUnits[r]} units pledged, ${nextUnits} would be left`);
+        }
+        if (!enforceLien && H.lienUnits[r] > nextUnits) H.lienUnits[r] = Math.max(0, nextUnits);
+      }
       H.qtyLocal[r] -= takeLocal; leftLocal -= takeLocal;
       H.units[r] = unitsHere - takeUnits;
-      if (!Number.isNaN(leftShares) && !Number.isNaN(H.shares[r])) {
+      if (byShares) {
         walkedShares += Math.abs(H.shares[r]);
-        const takeSh = Math.min(leftShares, H.shares[r]); H.shares[r] -= takeSh; leftShares -= takeSh;
-        // A share-counted row's units ARE its shares (`unitsOf` says so on the way in), so it
-        // takes the share line rather than the value proportion — the two agree only while the
-        // row's own price and the instruction's are the same number.
+        H.shares[r] -= takeSh; leftShares -= takeSh;
         H.units[r] = H.shares[r];
       }
     }
@@ -355,7 +374,7 @@ export function transferHolding(v2: V2World, from: PartyRef, to: PartyRef, spec:
   if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const fromId = holderIdOf(v2, from, spec), toId = holderIdOf(v2, to, spec);
   const n = wireHolding(from, to, spec, reason);
-  if (fromId) { if (isDeskBook(fromId)) adjustDeskRow(v2, fromId, spec, -1); else debitRow(v2, fromId, spec); }
+  if (fromId) { if (isDeskBook(fromId)) adjustDeskRow(v2, fromId, spec, -1); else debitRow(v2, fromId, spec, true); }
   if (toId) { if (isDeskBook(toId)) adjustDeskRow(v2, toId, spec, 1); else creditRow(v2, toId, spec); }
   return n;
 }
@@ -414,8 +433,44 @@ export function retireHolding(v2: V2World, holder: PartyRef, issuer: PartyRef, s
   if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const n = wireHolding(holder, issuer, spec, reason);
   const fromId = holderIdOf(v2, holder, spec);
-  if (fromId) { if (isDeskBook(fromId)) adjustDeskRow(v2, fromId, spec, -1); else debitRow(v2, fromId, spec); }
+  if (fromId) { if (isDeskBook(fromId)) adjustDeskRow(v2, fromId, spec, -1); else debitRow(v2, fromId, spec, false); }
   return n;
+}
+
+/**
+ * §3.13-BOOK d5a — THE LIEN ON A POSITION. What of a book's row in one instrument is pledged,
+ * and the one write that sets it: the repo book's publish (`contract-ledger.ts:publishRepoBook`)
+ * writes every borrower's pledged face onto its rows, so the register's liens ARE the book's
+ * pledges, and a resolution moves a lien with the rows it binds (`bank-transfer.ts`).
+ */
+export function lienUnitsOf(v2: V2World, bookId: string, instrumentType: HoldingKind, instrumentId: InstrumentId): number {
+  const H = v2.holdings;
+  const tRef = internType(v2, instrumentType), iRef = internInstrument(v2, instrumentId);
+  for (let r = bookHeadOf(v2, bookId); r >= 0; r = H.next[r]) {
+    if (H.typeRef[r] === tRef && H.instrRef[r] === iRef) return H.lienUnits[r];
+  }
+  return 0;
+}
+
+/** Set the lien on a book's row of one instrument to `units`. A lien above what the book holds is
+ *  an over-pledge, which the repo book's own reconcile calls. */
+export function setLien(v2: V2World, bookId: string, instrumentType: HoldingKind, instrumentId: InstrumentId, issuerRegion: RegionId, units: number): void {
+  if (!(units >= 0) || !Number.isFinite(units)) return defect(`lien of ${units} on ${instrumentId}`);
+  const H = mutableHoldings(v2);
+  const tRef = internType(v2, instrumentType), iRef = internInstrument(v2, instrumentId);
+  for (let r = bookHeadOf(v2, bookId); r >= 0; r = H.next[r]) {
+    if (H.typeRef[r] !== tRef || H.instrRef[r] !== iRef) continue;
+    if (H.lienUnits[r] === units) return;
+    H.lienUnits[r] = units;
+    markBookDirty(v2, bookId);
+    return;
+  }
+  // A lien on paper the book does not hold at all is an over-pledge by the whole face — the
+  // register records it on an EMPTY row, which the reconcile's collateral call empties of its lien
+  // and the next relink then frees. The row's region is the instrument's own.
+  if (!(units > 0)) return;
+  const r = pushBookRow(v2, bookId, { instrumentId, instrumentType, issuerRegion, quantityOrNotionalLocal: 0, units: 0 });
+  H.lienUnits[r] = units;
 }
 
 /**

@@ -147,13 +147,8 @@ export interface BankingSector {
    * issuer's payable are one number seen from two books and cannot drift by the lumpiness.
    */
   sovereignAccruedCouponLocal?: number;
-  /**
-   * Government-bond collateral pledged against `repoBorrowedLocal` + `srfBorrowingLocal`, at the
-   * derived per-bucket haircuts (see computeSovereignRepoHaircuts). Pledged paper cannot
-   * simultaneously be sold — 07c/07f read this as a floor on the pledging bank's holdings and
-   * exclude it from further borrowing capacity.
-   */
-  repoEncumberedCollateralLocal: number;
+  // §3.13-BOOK d5a: what a bank has pledged is the LIENS on its own register rows
+  // (`sovereign-register.ts:lienFaceByBond`), written by the repo book's publish; not a scalar.
   /** HF1 — margin loans this bank has out to hedge funds, derived from the region's
    *  prime-brokerage book. A real asset, consuming the leverage ratio like any other loan. */
   primeBrokerageLoansLocal?: number;

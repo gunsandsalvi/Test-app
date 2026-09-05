@@ -18,13 +18,14 @@ import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, w
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import type { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
-import type { RepoContract } from '../../domain/repo';
+import { type RepoContract, encumberedFaceByBond } from '../../domain/repo';
+import { setLien } from './holdings-ledger';
 import type { SecurityLoan } from '../../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../../domain/prime-brokerage';
 import { bankPartyOf, companyPartyOf } from '../../domain/party';
 import type { TradeInvoice } from '../../domain/trade-invoice';
 import type { LpCommitment } from '../../domain/commitment';
-import type { EntityId } from '../../domain/ids';
+import type { EntityId, InstrumentId } from '../../domain/ids';
 import { partyFromKey, partyKey, type PartyRef } from './party';
 import { partyKeyOf } from '../../engine2/world';
 import { resolvePartyRef } from './wire';
@@ -119,8 +120,18 @@ export function repoBookOf(v2: V2World, regionId: RegionId): RepoContract[] {
   return book;
 }
 
-/** The region's repo book, as the session, a call or a novation leaves it. */
+/** §3.13-BOOK d5a — every borrower's pledged face, by bond, as the book states it. */
+function pledgesByBorrower(book: readonly RepoContract[]): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>();
+  book.forEach((c) => { if (!out.has(c.borrowerId)) out.set(c.borrowerId, encumberedFaceByBond(book as RepoContract[], c.borrowerId)); });
+  return out;
+}
+
+/** The region's repo book, as the session, a call or a novation leaves it. §3.13-BOOK d5a: the
+ *  publish is the one writer of the register's LIENS — every bank the old or the new book names
+ *  has its rows' liens set to exactly what the new book pledges of each bond. */
 export function publishRepoBook(v2: V2World, regionId: RegionId, book: RepoContract[]): void {
+  const before = pledgesByBorrower(repoBookOf(v2, regionId));
   const rows = book.map((c) => {
     if (c.regionId !== regionId) return defect(`repo ${c.id} of ${c.regionId} published on ${regionId}'s book`);
     resolvePartyRef(c.lender, `repo ${c.id} lender`); resolvePartyRef(bankPartyOf(c.borrowerId), `repo ${c.id} borrower`);
@@ -130,6 +141,11 @@ export function publishRepoBook(v2: V2World, regionId: RegionId, book: RepoContr
     return r;
   });
   relinkKindInRegion(v2, 'REPO', regionId, rows);
+  const after = pledgesByBorrower(book);
+  new Set([...before.keys(), ...after.keys()]).forEach((bankId) => {
+    const was = before.get(bankId) ?? new Map<string, number>(), now = after.get(bankId) ?? new Map<string, number>();
+    new Set([...was.keys(), ...now.keys()]).forEach((bondId) => setLien(v2, bankId, 'GOV_BOND', bondId as InstrumentId, regionId, now.get(bondId) ?? 0));
+  });
 }
 
 /**

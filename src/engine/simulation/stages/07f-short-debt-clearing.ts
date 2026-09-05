@@ -32,7 +32,6 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
-import { repoBookOf } from '../../ledger/contract-ledger';
 import { deskRowsOf, deskGrossLocal } from '../../desk-register';
 import { asEntityId } from '../../../domain/ids';
 import { bankCreditPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf, bankPartyOf, companyParty } from '../../../domain/party';
@@ -55,7 +54,6 @@ import { priceFromYield, zeroRateAt } from '../../../domain/pricing';
 import type { PaperTerms } from '../../../domain/pricing';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityLocal } from './repo-clearing';
-import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
 import { centralBankParticipant, bookCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementLocal, institutionSpendableLocal, PartyRef } from './settlement';
@@ -73,7 +71,7 @@ import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { cashOf, bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
 import { commercialPaperTrancheId } from '../../../domain/instrument-keys';
 import { governmentIssuer } from '../../../domain/entity-keys';
-import { forEachSovereignPosition, bankSovereignFaceByBond, bankSovereignBookLocal, sovereignRowsOf } from '../../sovereign-register';
+import { lienFaceByBond, forEachSovereignPosition, bankSovereignFaceByBond, bankSovereignBookLocal, sovereignRowsOf } from '../../sovereign-register';
 import { bankParticipantId, treasuryParticipantId } from '../../../domain/participant-keys';
 import type { EntityId } from '../../../domain/ids';
 import type { Ticker } from '../../../domain/ids';
@@ -234,10 +232,11 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const settledCashLocal = reservesLocal
           + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
         // REPO2: the floor is the face of THIS BILL actually pledged, not a blended share.
-        const encumberedFace = encumberedFaceByBond(repoBookOf(ctx.v2, regionId), bank.id);
+        // §3.13-BOOK d5a: what is pledged is the register's liens.
+        const encumberedFace = lienFaceByBond(ctx.v2, bank.id);
         const fundableLocal = Math.min(
           Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
-            + unencumberedBorrowingCapacityLocal(sheet, heldFaceByBond, repoHaircuts, encumberedFace),
+            + unencumberedBorrowingCapacityLocal(heldFaceByBond, repoHaircuts, encumberedFace),
           leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal, sovLocal + deskLocal)
         );
         const appetiteLocal = sovereignBookCapacityLocal(sheet, reservesLocal, facilityBookLocal, sovLocal, deskLocal);

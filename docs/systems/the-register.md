@@ -59,6 +59,9 @@ Written 2026-09-03 from the domain, code shut.
   (`the-clearing-engine.md`), never a price stored on the holding
 - **D4** REASON — **what did it cost?** — the basis, because a realised gain is a real number and
   somebody is taxed on it
+- **D5** REASON — **what of it is bound?** — a lien on units of a position, because pledged paper
+  can be neither sold nor counted free, and a register that cannot say so lets one unit answer
+  two claims
 
 ### E. CORPORATE ACTIONS AND EVENTS
 - **E1** REASON — a **coupon or dividend** pays to the holders of record, in the instrument's
@@ -115,6 +118,7 @@ checked by `scripts/check-atlas.sh`.
 | D2.a both directions answerable without reconstruction | `src/engine2/holdings.ts:bookRowsOf` | ⚠️ |
 | D3 what is it worth? — quantity × a market price | `src/engine/ledger/holdings-ledger.ts:markBookToMarket` | ✅ |
 | **D4 what did it cost? — the basis** | — | ❌ |
+| D5 a lien binds units of a position: neither sold nor counted free | `src/engine2/holdings.ts:lienUnits` · `src/engine/ledger/holdings-ledger.ts:setLien` · `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | E1 a coupon or dividend pays the holders of record | `src/engine/simulation/stages/shared-helpers.ts:applyHolderInterestAccruals` · `src/engine/columns/holdings-table.ts:buildFromRows` · `src/engine/simulation/stages/register-index.ts:bumpRegister` | ✅ |
 | E2 an amortisation or maturity pays its face | `src/engine/simulation/stages/07f-short-debt-clearing.ts:runShortDebtClearingStage` | ✅ |
 | E3 a default converts the holding into a recovery claim | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |

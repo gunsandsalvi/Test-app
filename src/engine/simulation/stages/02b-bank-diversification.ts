@@ -69,7 +69,6 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     onRrpLendingLocal: bs.onRrpLendingLocal * share,
     repoLentLocal: bs.repoLentLocal * share,
     repoBorrowedLocal: bs.repoBorrowedLocal * share,
-    repoEncumberedCollateralLocal: bs.repoEncumberedCollateralLocal * share,
     businessLoans: [],
     householdLoans: (bs.householdLoans || []).map((pl) => ({ ...pl, principalLocal: pl.principalLocal * share })),
     centralBankLoanLocal: (bs.centralBankLoanLocal ?? 0) * share,
@@ -529,7 +528,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // copy on any sheet.
       repoLentLocal: sumField((s) => s.repoLentLocal ?? 0),
       repoBorrowedLocal: sumField((s) => s.repoBorrowedLocal ?? 0),
-      repoEncumberedCollateralLocal: sumField((s) => s.repoEncumberedCollateralLocal ?? 0),
       // Itemized loans live per bank; the aggregate carries no copy (a flattened region
       // view would be a second ledger). Corporate deposits sum like everything else.
       businessLoans: [],

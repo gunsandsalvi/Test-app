@@ -36,6 +36,14 @@ export interface HoldingStore {
    * position could never be re-marked.
    */
   units: Float64Array;
+  /**
+   * §3.13-BOOK d5a — THE UNITS OF THIS ROW UNDER A LIEN: pledged in repo (the repo book writes it
+   * through `holdings-ledger.ts:setLien` every time it is published). They can be neither SOLD
+   * (a transfer that would leave the row below its lien defects) nor COUNTED FREE (every
+   * unencumbered read subtracts it). 0 = free. A retirement — the paper ceased — shrinks the lien
+   * to what is left, and the repo book's collateral call follows.
+   */
+  lienUnits: Float64Array;
   next: Int32Array;
   freeHead: number;
   used: number;
@@ -86,6 +94,7 @@ export function newHoldingStore(): HoldingStore {
     qtyLocal: new Float64Array(cap),
     shares: new Float64Array(cap),
     units: new Float64Array(cap),
+    lienUnits: new Float64Array(cap),
     next: new Int32Array(cap).fill(-1),
     freeHead: -1,
     used: 0,
@@ -107,7 +116,7 @@ function growHoldings(H: HoldingStore): void {
     const a = newRefColumn<B>(cap); a.set(old); return a;
   };
   H.typeRef = gR(H.typeRef); H.instrRef = gR(H.instrRef); H.regionRef = gR(H.regionRef);
-  H.qtyLocal = gF(H.qtyLocal); H.shares = gF(H.shares); H.units = gF(H.units);
+  H.qtyLocal = gF(H.qtyLocal); H.shares = gF(H.shares); H.units = gF(H.units); H.lienUnits = gF(H.lienUnits);
   const next = new Int32Array(cap).fill(-1); next.set(H.next); H.next = next;
   const mark = new Int32Array(cap); mark.set(H.mark); H.mark = mark;
   H.cap = cap;
@@ -238,6 +247,7 @@ function freeRow(H: HoldingStore, r: number): void {
   H.qtyLocal[r] = 0;
   H.shares[r] = Number.NaN;
   H.units[r] = Number.NaN;
+  H.lienUnits[r] = 0;
   H.instrRef[r] = ABSENT_REF;
   H.typeRef[r] = ABSENT_REF;
   H.next[r] = H.freeHead;
@@ -295,6 +305,8 @@ export function foldRowInto(v2: V2World, keep: number, drop: number): void {
     H.shares[keep] = (Number.isNaN(cur) ? 0 : cur) + sh;
   }
   H.units[keep] = rowUnits(H, keep) + rowUnits(H, drop);
+  // §3.13-BOOK d5a: a lien binds the position, and the position is the two rows together.
+  H.lienUnits[keep] += H.lienUnits[drop];
 }
 
 /**
@@ -371,7 +383,7 @@ export function clearDirtyBooks(v2: V2World): void { mutableHoldings(v2).dirty.c
 export function pruneEmptyRows(v2: V2World, entityId: string): void {
   const H = mutableHoldings(v2); const kept: number[] = [];
   for (let r = bookHeadOf(v2, entityId); r >= 0; r = H.next[r]) {
-    if (H.qtyLocal[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0)) kept.push(r);
+    if (H.qtyLocal[r] !== 0 || (!Number.isNaN(H.shares[r]) && H.shares[r] !== 0) || H.lienUnits[r] > 0) kept.push(r);
   }
   relinkBook(v2, entityId, kept);
 }

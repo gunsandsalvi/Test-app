@@ -1,5 +1,7 @@
 import type { InstrumentId } from './ids';
-import type { Ticker } from './ids';
+// §3.13-BOOK d5a: what a borrower has pledged is read off the REGISTER (`sovereign-register.ts:
+// lienFaceByBond`); the book-side sum is `domain/repo.ts:encumberedFaceByBond`, which the ledger
+// uses to write the liens.
 
 /**
  * §5-STRUCT step 3 — PLEDGED COLLATERAL, AS AN OBJECT.
@@ -29,18 +31,6 @@ export interface CollateralPosition {
   heldByBond: Map<InstrumentId, number>;
 }
 
-/** Total face pledged in one bond across every contract this borrower has open. */
-export function pledgedFaceByBond(
-  contracts: { borrowerId: Ticker; collateral: Pledge[] }[],
-  ticker: string
-): Map<InstrumentId, number> {
-  const out = new Map<InstrumentId, number>();
-  for (const c of contracts) {
-    if (c.borrowerId !== ticker) continue;
-    for (const p of c.collateral) out.set(p.bondId, (out.get(p.bondId) ?? 0) + p.faceLocal);
-  }
-  return out;
-}
 
 /**
  * THE SHORTFALL, with ONE tolerance.

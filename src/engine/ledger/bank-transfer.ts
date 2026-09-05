@@ -10,7 +10,7 @@ import { BankingSector } from '../../domain/banking';
 import type { V2World } from '../../engine2/world';
 import type { EntityId } from '../../domain/ids';
 import { bankPartyOf, bankSecuritiesPartyOf } from '../../domain/party';
-import { transferHolding, type HoldingSpec, type HoldingKind } from './holdings-ledger';
+import { transferHolding, lienUnitsOf, setLien, type HoldingSpec, type HoldingKind } from './holdings-ledger';
 import { deskRowsOf } from '../desk-register';
 import { bankSovereignPositions } from '../sovereign-register';
 import { BankResolutionPlan, mergeHouseholdPool } from '../../domain/bank-resolution';
@@ -31,7 +31,6 @@ export function absorbBankSheet(v2: V2World, acquirerId: EntityId, targetId: Ent
   acquirer.repoBorrowedLocal = (acquirer.repoBorrowedLocal ?? 0) + (target.repoBorrowedLocal ?? 0); target.repoBorrowedLocal = 0;
   acquirer.repoLentLocal = (acquirer.repoLentLocal ?? 0) + (target.repoLentLocal ?? 0); target.repoLentLocal = 0;
   acquirer.onRrpLendingLocal = (acquirer.onRrpLendingLocal ?? 0) + (target.onRrpLendingLocal ?? 0); target.onRrpLendingLocal = 0;
-  acquirer.repoEncumberedCollateralLocal = (acquirer.repoEncumberedCollateralLocal ?? 0) + (target.repoEncumberedCollateralLocal ?? 0); target.repoEncumberedCollateralLocal = 0;
   // The credit books.
   acquirer.businessLoans = [...(acquirer.businessLoans || []), ...(target.businessLoans || [])];
   target.businessLoans = [];
@@ -46,11 +45,17 @@ export function absorbBankSheet(v2: V2World, acquirerId: EntityId, targetId: Ent
   acquirer.primeBrokerageLoansLocal = (acquirer.primeBrokerageLoansLocal ?? 0) + (target.primeBrokerageLoansLocal ?? 0); target.primeBrokerageLoansLocal = 0;
   // The securities books. §3.13-BOOK d3b: the target's own sovereign book is register rows, and
   // it moves row by row, by wire, from the failed bank's book to the assuming bank's.
+  // §3.13-BOOK d5a: a lien moves WITH the rows it binds — released on the failed bank's row so the
+  // transfer is not a sale under it, and re-set on the assuming bank's; the novation that follows
+  // (`rekeyBankLinks`) re-publishes the repo book and finds the register already agreeing.
   bankSovereignPositions(v2, targetId).forEach((p) => {
     if (!(p.faceLocal > 0) && !(p.valueLocal > 0)) return;
+    const lienUnits = lienUnitsOf(v2, targetId, 'GOV_BOND', p.bondId);
+    if (lienUnits > 0) setLien(v2, targetId, 'GOV_BOND', p.bondId, p.issuerRegion, 0);
     transferHolding(v2, bankPartyOf(targetId), bankPartyOf(acquirerId),
       { instrumentType: 'GOV_BOND', instrumentId: p.bondId, issuerRegion: p.issuerRegion, valueLocal: p.valueLocal, units: p.faceLocal },
       'bank resolution: sovereign book assumed');
+    if (lienUnits > 0) setLien(v2, acquirerId, 'GOV_BOND', p.bondId, p.issuerRegion, lienUnitsOf(v2, acquirerId, 'GOV_BOND', p.bondId) + lienUnits);
   });
   acquirer.sovereignAccruedCouponLocal = (acquirer.sovereignAccruedCouponLocal ?? 0) + (target.sovereignAccruedCouponLocal ?? 0); target.sovereignAccruedCouponLocal = 0;
   // §3.13-BOOK d3d: the desks' inventory is register rows on the securities book and moves the

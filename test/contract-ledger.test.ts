@@ -6,8 +6,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
-import { setActiveWireWorld } from '../src/engine/ledger/wire';
+import { setActiveWireWorld, setActiveWireJournal, newWireJournal } from '../src/engine/ledger/wire';
+import { seedLadder } from '../src/engine/ledger/tranche-ledger';
+import { governmentIssuer } from '../src/domain/entity-keys';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
+import { issueHolding, transferHolding, retireHolding, lienUnitsOf } from '../src/engine/ledger/holdings-ledger';
+import { bankPartyOf } from '../src/domain/party';
 import { bookTradeInvoices, tradeInvoicesOf, settleTradeInvoices, commitCapital, lpCommitmentsOf, drawCommitment, returnCommitment, liveObligationPartiesOf, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, publishPrimeBrokerageBook, primeBrokerageBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
 import type { WeeklyStepContext } from '../src/engine/simulation/stages/context';
 import type { DerivativeContract } from '../src/domain/derivatives/contract';
@@ -173,6 +177,40 @@ test('a capital commitment is a row of the contract store: a call draws it, a di
     assert.deepEqual(live[0].a, { kind: 'INSTITUTION', id: 'USA_PEF1' });
     assert.deepEqual(live[1].b, { kind: 'INSTITUTION', id: 'INST-PEN2' });
   } finally {
+    setActiveWireWorld(undefined);
+  }
+});
+
+test('a repo pledge is a lien on the borrower\'s row: it cannot be sold under, it is released with the contract, it dies with the paper', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const bank = asEntityId('USA_BANK1');
+  const bond = asInstrumentId('USA-GOV-2Y-INIT');
+  setActiveWireJournal(newWireJournal(1, 0));
+  setActiveWireWorld(wireWorldOf(v2, [{ id: bank }], []));
+  try {
+    seedLadder(v2, governmentIssuer('USA'), [{ id: bond, principalLocal: 1000, rateType: 'FIXED', couponRate: 0.02, originationWeek: 0, maturityWeek: 104, seniority: 'SENIOR' }]);
+    const spec = (units: number) => ({ instrumentType: 'GOV_BOND' as const, instrumentId: bond, issuerRegion: 'USA' as const, valueLocal: units, units });
+    issueHolding(v2, { kind: 'GOVERNMENT', region: 'USA' }, bankPartyOf(bank), spec(1000), 'seed');
+    const contract: RepoContract = {
+      id: 'USA-REPO-1-0', regionId: 'USA', lender: { kind: 'CENTRAL_BANK', region: 'USA' }, borrowerId: bank,
+      principalLocal: 540, rateAnnual: 0.05, struckWeek: 1, maturityWeek: 2, collateral: [{ bondId: bond, faceLocal: 600 }],
+    };
+    publishRepoBook(v2, 'USA', [contract]);
+    assert.equal(lienUnitsOf(v2, bank, 'GOV_BOND', bond), 600, 'the publish wrote the lien');
+    // Selling what is free is fine; selling into the lien is a defect at the site.
+    transferHolding(v2, bankPartyOf(bank), { kind: 'CLEARING_HOUSE', region: 'USA' }, spec(400), 'sale');
+    assert.throws(() => transferHolding(v2, bankPartyOf(bank), { kind: 'CLEARING_HOUSE', region: 'USA' }, spec(5), 'sale'), /under a lien/);
+    // A call shrinks the pledge; the lien follows the book.
+    publishRepoBook(v2, 'USA', [{ ...contract, principalLocal: 270, collateral: [{ bondId: bond, faceLocal: 300 }] }]);
+    assert.equal(lienUnitsOf(v2, bank, 'GOV_BOND', bond), 300);
+    // The paper matures: the retirement is not a sale, and the lien shrinks to what is left.
+    retireHolding(v2, bankPartyOf(bank), { kind: 'GOVERNMENT', region: 'USA' }, spec(500), 'redemption');
+    assert.equal(lienUnitsOf(v2, bank, 'GOV_BOND', bond), 100);
+    // The contract leaves the book: the lien is released.
+    publishRepoBook(v2, 'USA', []);
+    assert.equal(lienUnitsOf(v2, bank, 'GOV_BOND', bond), 0);
+  } finally {
+    setActiveWireJournal(undefined);
     setActiveWireWorld(undefined);
   }
 });

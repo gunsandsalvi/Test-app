@@ -107,9 +107,9 @@ checked by `scripts/check-atlas.sh`.
 | B2.a a doubted name pays more, or finds no bid | — | ❌ |
 | B2.b VERIFY the strongest-to-weakest spread measures stress | — | ❌ |
 | B3 secured lending prices the collateral | `src/domain/repo.ts:RepoContract` · `src/engine2/obligations.ts:materializeRepo` · `src/engine/ledger/contract-ledger.ts:publishRepoBook` | ✅ |
-| B3.a eligibility is per asset, and something is ineligible | `src/engine/simulation/stages/repo-clearing.ts:collateralCapacityLocal` | ✅ |
+| B3.a eligibility is per asset, and something is ineligible | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` | ✅ |
 | B3.b haircuts by asset and tenor | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
-| B3.c pledged collateral is encumbered and cannot be pledged twice | `src/domain/collateral.ts:overPledgedByBond` | ✅ |
+| B3.c pledged collateral is encumbered and cannot be pledged twice | `src/engine2/holdings.ts:lienUnits` · `src/engine/ledger/holdings-ledger.ts:setLien` · `src/domain/collateral.ts:overPledgedByBond` | ✅ |
 | B4 a rate CLEARS from those schedules meeting | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | B5 non-bank cash is in the same market | `src/engine/simulation/stages/settlement.ts:institutionSpendableLocal` | ✅ |
 | B5.a its alternative is the floor, or bills directly | `src/engine/simulation/stages/money-market-fund.ts:quoteMmfNetYieldAnnual` | ✅ |

@@ -43,7 +43,6 @@
  */
 
 import { bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
-import { repoBookOf } from '../../ledger/contract-ledger';
 import { bankSecuritiesParty, bankPartyOf } from '../../../domain/party';
 
 import { GameState, RegionId, ItemizedHolding } from '../../../types';
@@ -73,14 +72,13 @@ import { sovereignCouponByBond } from '../../../domain/government';
 import { moveSovereignAccrued } from './sovereign-calendar';
 import { defect } from '../../../domain/defect';
 
-import { encumberedFaceByBond } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomLocal, sovereignBookCapacityLocal, liquidityDrivenSovereignFloorLocal } from '../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
 import { facilityBookOf } from '../../../engine2/tranches';
 import { asInstrumentId, type InstrumentId } from '../../../domain/ids';
 import { governmentIssuer } from '../../../domain/entity-keys';
-import { sovereignHeldByBond, centralBankPositions, bankSovereignFaceByBond, bankSovereignBookLocal, sovereignRowsOf } from '../../sovereign-register';
+import { lienFaceByBond, sovereignHeldByBond, centralBankPositions, bankSovereignFaceByBond, bankSovereignBookLocal, sovereignRowsOf } from '../../sovereign-register';
 import { deskGrossLocal } from '../../desk-register';
 
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
@@ -436,7 +434,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const repoHaircuts = computeSovereignRepoHaircuts(reg, (id) => bonds.find((b) => b.id === id)?.years);
     const bankParticipants: ClearingParticipant[] = regionBanks.map((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-      const encumberedFace = encumberedFaceByBond(repoBookOf(ctx.v2, regionId), bank.id);
+      // §3.13-BOOK d5a: what is pledged is the register's liens.
+      const encumberedFace = lienFaceByBond(ctx.v2, bank.id);
       // §3.13-BOOK d3b: what it holds is its register rows' FACE — the auction clears face.
       const currentByBond = new Map<InstrumentId, number>();
       bankSovereignFaceByBond(ctx.v2, bank.id).forEach((faceLocal, id) => {
@@ -466,7 +465,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
       const fundableLocal = Math.min(
         Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
-          + unencumberedBorrowingCapacityLocal(sheet, bankSovereignFaceByBond(ctx.v2, bank.id), repoHaircuts, encumberedFace),
+          + unencumberedBorrowingCapacityLocal(bankSovereignFaceByBond(ctx.v2, bank.id), repoHaircuts, encumberedFace),
         leverageHeadroomLocal(sheet, reservesLocal, facilityBookLocal, sovLocal + deskLocal)
       );
       // REPO2: collateral already pledged cannot simultaneously be sold, and the pledge names

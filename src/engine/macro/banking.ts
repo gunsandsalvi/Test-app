@@ -531,7 +531,6 @@ export function evolveBankingSector(
     onRrpLendingLocal: 0,
     repoLentLocal: survivingRepoLentLocal,
     repoBorrowedLocal: survivingRepoBorrowedLocal,
-    repoEncumberedCollateralLocal: prevBanking.repoEncumberedCollateralLocal ?? 0,
     // §3.13-BOOK d3d: the desks' paper is register rows; the one desk line still on the sheet is
     // the player's derivative use of it (trade.ts), carried through untouched.
     deskDerivativesUseLocal: prevBanking.deskDerivativesUseLocal,

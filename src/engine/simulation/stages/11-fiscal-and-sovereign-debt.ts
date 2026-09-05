@@ -30,7 +30,7 @@ import { deskRowsOf } from '../../desk-register';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { internType, internRegion } from '../../../engine2/world';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
-import { encumberedFaceByBond, repoBorrowedLocal, srfBorrowedLocal } from '../../../domain/repo';
+import { repoBorrowedLocal, srfBorrowedLocal } from '../../../domain/repo';
 import { usdToLocal } from '../../../domain/currency';
 import type { InstrumentId } from '../../../domain/ids';
 import { governmentIssuer } from '../../../domain/entity-keys';
@@ -307,9 +307,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             ...c.bankBalanceSheet,
             repoBorrowedLocal: Math.round(repoBorrowedLocal(book, c.id) - srfBorrowedLocal(book, c.id)),
             srfBorrowingLocal: Math.round(srfBorrowedLocal(book, c.id)),
-            repoEncumberedCollateralLocal: Number(
-              Array.from(encumberedFaceByBond(book, c.id).values()).reduce((a, b) => a + b, 0).toFixed(0)
-            ),
           },
         };
       });

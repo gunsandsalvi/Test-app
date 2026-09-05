@@ -14,7 +14,8 @@ import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId,
 import { materializeBook, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { householdBookId } from '../ledger/holdings-ledger';
 import { EntityIndex, buildEntityIndex } from '../ledger/entity-index';
-import { sovereignHeldByClass, forEachSovereignPosition } from '../sovereign-register';
+import { sovereignHeldByClass, forEachSovereignPosition, lienFaceByBond } from '../sovereign-register';
+import { PLEDGE_ROUNDING_TOLERANCE_LOCAL } from '../../domain/collateral';
 import { holdingClassOf } from '../../domain/assets';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { isTrancheKind } from '../../domain/assets';
@@ -24,7 +25,7 @@ import { asEntityId, asTicker } from '../../domain/ids';
 import { assertNever } from '../../domain/defect';
 import { partyFromKey } from '../ledger/party';
 import type { PartyRef } from '../../domain/party';
-import type { EntityId } from '../../domain/ids';
+import type { EntityId, InstrumentId } from '../../domain/ids';
 
 /** Which of O1's four buckets a ladder row falls in. `BANK_FACILITY` is absent, not zero: it is
  *  on the lending bank's loan book and O4 is the check that tests it there. */
@@ -552,8 +553,36 @@ function o5(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
+/**
+ * O12 — §3.13-BOOK d5a. A LIEN IS WHAT THE REPO BOOK PLEDGED. Per bank and bond, the register's
+ * lien units equal the face the bank's open repo contracts pledge of that bond: the book is the
+ * one writer of the liens, so a gap is a write that bypassed it.
+ */
+function o12(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const v2 = ensureV2(state);
+  const pledgedByBank = new Map<string, Map<string, number>>();
+  REGION_IDS.forEach((r) => repoBookOf(v2, r).forEach((c) => {
+    const byBond = pledgedByBank.get(c.borrowerId) ?? new Map<string, number>();
+    c.collateral.forEach((p) => byBond.set(p.bondId, (byBond.get(p.bondId) ?? 0) + p.faceLocal));
+    pledgedByBank.set(c.borrowerId, byBond);
+  }));
+  let off = 0, offLocal = 0;
+  state.companies.forEach((c) => {
+    if (!c.isBankEntity) return;
+    const liens = lienFaceByBond(v2, c.id);
+    const pledged = pledgedByBank.get(c.id) ?? new Map<string, number>();
+    new Set<string>([...liens.keys(), ...pledged.keys()]).forEach((bondId) => {
+      const gap = Math.abs((liens.get(bondId as InstrumentId) ?? 0) - (pledged.get(bondId) ?? 0));
+      if (gap > PLEDGE_ROUNDING_TOLERANCE_LOCAL) { off++; offLocal += gap; }
+    });
+  });
+  if (off) out.push({ family: 'O', check: 'O12 liens equal pledges', week, usd: offLocal, message: `${off} bank-bond liens (${B(offLocal)}) disagree with the repo book's pledges` });
+  return out;
+}
+
 export function auditOwnership(state: GameState, week: number): AuditFinding[] {
-  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week)];
+  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week)];
 }
 export type { RegionId };
 
