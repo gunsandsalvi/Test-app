@@ -286,6 +286,15 @@ means a fund's P&L cannot separate what it earned from what it was handed by a r
 **§3 step 37-DVP**, . Small on the register (one column, written where a row is credited),
 larger where it lands (the tax base, the P&L split).
 
+**§9.13-BOOK f1 (2026-09-05): the WRITERS now carry it.** Every register row is a chain of lots
+(`holdings.ts:lotUnits` / `lotPriceLocal` / `lotWeek`): a credit lands as a lot at the wire's
+price, a debit consumes first-in-first-out, the clearing write-back moves a rebuilt position's
+lots across itself, a desk's short is a negative lot, and `O14` checks that a row's units are its
+lots' sum. Nothing READS it yet — the basis, the realised gain and the holding period are (f2) —
+so the node stays ❌ until a reader exists; and a credit fill's lot is at the wire's price, which
+is par (`clearedBookDelta`) until the fill wires carry the cleared price.
+
+
 ### ❌ B2.b — THE HELD-EQUALS-ISSUED CHECK FORGIVES 2% OF THE ISSUE
 
 `audit/ownership.ts:59` fires O1 only when `|held − outstanding| > max(5e7, outstanding × 0.02)`,

@@ -17,13 +17,13 @@
  */
 import { V2World, internType, internInstrument, regionOf, typeOf } from '../../engine2/world';
 import { companyParty, bankPartyOf, bankSecuritiesPartyOf } from '../../domain/party';
-import {
+import { adjustLots,
   HoldingStore, mutableHoldings, bookHeadOf, pushBookRow, relinkBook, markBookDirty, pruneEmptyRows, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { ItemizedHolding } from '../../domain/banking';
 import { PartyRef, partyKey, partyFromKey } from './party';
 import { REGION_IDS } from '../../domain/geography';
 import { InstrumentId, EntityId, asEntityId } from '../../domain/ids';
-import { wire, AssetKind, ASSET_KINDS } from './wire';
+import { wire, AssetKind, ASSET_KINDS, activeWireJournal, hasActiveWireJournal } from './wire';
 import { internReason } from '../simulation/stages/settlement';
 import { RegionId } from '../../domain/geography';
 import { defect } from '../../domain/defect';
@@ -197,6 +197,9 @@ function priceOf(spec: HoldingSpec): { quantity: number; priceLocal: number } {
  *  units the caller named, else the value, which is the units at a price of one. */
 const unitsOf = (spec: HoldingSpec): number => spec.shares ?? spec.units ?? spec.valueLocal;
 
+/** §3.13-BOOK f1: the week a lot arrives — the journal's, or the seed's week 0. */
+const lotWeek = (): number => (hasActiveWireJournal() ? activeWireJournal().week : 0);
+
 /** Add to (or open) the holder's row of this instrument. */
 function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
   const H = mutableHoldings(v2);
@@ -209,6 +212,8 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
     H.qtyLocal[r] += spec.valueLocal;
     if (spec.shares !== undefined) H.shares[r] = (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]) + spec.shares;
     H.units[r] = priorUnits + unitsOf(spec);
+    // §3.13-BOOK f1: what arrived is a lot at the wire's price.
+    adjustLots(v2, r, unitsOf(spec), priceOf(spec).priceLocal, lotWeek());
     markBookDirty(v2, holderId);
     return;
   }
@@ -216,7 +221,7 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec): void {
     instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
     quantityOrNotionalLocal: spec.valueLocal, quantityShares: spec.shares,
     units: unitsOf(spec),
-  });
+  }, lotWeek());
 }
 
 /**
@@ -238,6 +243,8 @@ function adjustDeskRow(v2: V2World, holderId: string, spec: HoldingSpec, sign: 1
     H.qtyLocal[r] += dValue;
     if (spec.shares !== undefined) H.shares[r] = (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]) + sign * spec.shares;
     H.units[r] = priorUnits + dUnits;
+    // §3.13-BOOK f1: signed lots — a short is a negative one, and a cover consumes it.
+    adjustLots(v2, r, dUnits, priceOf(spec).priceLocal, lotWeek());
     markBookDirty(v2, holderId);
     const flat = Math.abs(H.qtyLocal[r]) < 1e-6 && Math.abs(H.units[r]) < 1e-9 && (Number.isNaN(H.shares[r]) || Math.abs(H.shares[r]) < 1e-9);
     if (flat) {
@@ -252,7 +259,7 @@ function adjustDeskRow(v2: V2World, holderId: string, spec: HoldingSpec, sign: 1
     instrumentId: spec.instrumentId, instrumentType: spec.instrumentType, issuerRegion: spec.issuerRegion,
     quantityOrNotionalLocal: dValue, quantityShares: spec.shares === undefined ? undefined : sign * spec.shares,
     units: dUnits,
-  });
+  }, lotWeek());
 }
 
 /**
@@ -327,6 +334,8 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien:
       }
       H.qtyLocal[r] -= takeLocal; leftLocal -= takeLocal;
       H.units[r] = unitsHere - takeUnits;
+      // §3.13-BOOK f1: what leaves comes off the oldest lots first.
+      adjustLots(v2, r, nextUnits - unitsHere, priceOf(spec).priceLocal, lotWeek());
       if (byShares) {
         walkedShares += Math.abs(H.shares[r]);
         H.shares[r] -= takeSh; leftShares -= takeSh;

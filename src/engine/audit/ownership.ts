@@ -15,7 +15,7 @@ import { AuditFinding, B, pct, sum } from './types';
 import { ensureV2, entityOf, regionOf, typeRefOf } from '../../engine2/world';
 import { AUDIT_BOOKS_TOLERANCE } from '../../domain/stated';
 import { TR_FACILITY, TR_CP, TR_FLOATING, ladderRowsOf, issuerIdOf, isTrancheId, trancheRowOf, trancheKindOfRow, trancheIdOf } from '../../engine2/tranches';
-import { materializeBook, instrumentIdAt, rowUnits } from '../../engine2/holdings';
+import { materializeBook, instrumentIdAt, rowUnits, rowLotUnits } from '../../engine2/holdings';
 import { householdBookId } from '../ledger/holdings-ledger';
 import { EntityIndex, buildEntityIndex } from '../ledger/entity-index';
 import { sovereignHeldByClass, forEachSovereignPosition, lienFaceByBond } from '../sovereign-register';
@@ -619,8 +619,28 @@ function o13(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
+/**
+ * O14 — §3.13-BOOK f1. A ROW IS ITS LOTS. Every live register row's units equal the sum of the
+ * lots under it: the writers keep the chain, and a row whose chain disagrees is a write that
+ * moved units without moving lots — the invariant the basis reads (f2) stand on.
+ */
+function o14(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const v2 = ensureV2(state);
+  const H = v2.holdings;
+  let off = 0, offUnits = 0;
+  for (let r = 0; r < H.used; r++) {
+    if (H.typeRef[r] < 0) continue;
+    const units = rowUnits(H, r);
+    const gap = Math.abs(rowLotUnits(v2, r) - units);
+    if (gap > 1e-6 * Math.max(1, Math.abs(units))) { off++; offUnits += gap; }
+  }
+  if (off) out.push({ family: 'O', check: 'O14 a row is its lots', week, usd: offUnits, message: `${off} register rows hold units their lots do not account for (${offUnits.toFixed(3)} units in all)` });
+  return out;
+}
+
 export function auditOwnership(state: GameState, week: number): AuditFinding[] {
-  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week), ...o13(state, week)];
+  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week), ...o13(state, week), ...o14(state, week)];
 }
 export type { RegionId };
 

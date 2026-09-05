@@ -513,13 +513,27 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    f. **ONE POSITION BOOK, AS LOTS** — `v2.holdings` and `v2.lots` merge. A fungible asset sums
-       its lots, an identified one addresses them, and **every position gains a basis**, which
-       closes `the-register.md` D4 (❌ today, *no code at all*), unblocks the capital-gains base
-       (`the-treasury.md` C1) and lets `equity.md` E4.a — realised versus unrealised — close.
-       Accrued interest (`holderAccruedInterestLocal` and its sovereign twin, 13f) becomes a
-       receivable beside the lot it accrues on, and the last goods stock outside the goods ledger
-       (`categoryDemand[c].inventoryLevelLocal`, a value with no holder and no units) gets a holder.
+    f. **ONE POSITION BOOK, AS LOTS** — split 2026-09-05 (found writing it: the merge, the basis,
+       the accrual and the goods stock are four writers' worth of work, and the plan itself says
+       writers first). f1 (every register row is a chain of lots the writers keep; `O14` holds
+       the sum) is in §9. What is left, in order:
+    f2. **THE BASIS IS READ.** `basisOf` a row and its lots' holding period; a sale's proceeds
+        against the lots it consumed is the realised gain, the mark against the basis the
+        unrealised — which closes `the-register.md` D4 (❌ today), unblocks the capital-gains base
+        (`the-treasury.md` C1) and lets `equity.md` E4.a close. Two things first, found writing
+        f1: `debitRow` takes units in proportion to the VALUE leaving, not the units the wire
+        names (a sale of 120 face at par out of a row marked at 0.99 takes 121 face), so a
+        realised gain has no quantity until the debit honours the wire; and a credit fill's lot
+        is at the wire's price, which is par (`clearedBookDelta`) until the fill wires carry the
+        cleared price.
+    f3. **THE GOODS LOTS ARE THE SAME TABLE.** `v2.lots` merges into the position book — the firm
+        the holder, the sub-unit the instrument, kind GOOD — and the FIFO kernels read the one
+        table. A fungible asset sums its lots, an identified one addresses them. This one moves
+        the numbers (iteration order).
+    f4. **ACCRUED INTEREST IS A RECEIVABLE BESIDE THE LOT IT ACCRUES ON** (`holderAccruedInterestLocal`
+        and its sovereign twin, 13f).
+    f5. **THE LAST GOODS STOCK OUTSIDE THE GOODS LEDGER GETS A HOLDER** (`categoryDemand[c].inventoryLevelLocal`,
+        a value with no holder and no units).
     g. **PLANT AND HOUSING JOIN** — BLOCKED on step 26 deciding what a unit of plant is. Not a
        cost exclusion: there is no unit to register until that decision is made.
 
@@ -1698,6 +1712,22 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK f1 — A POSITION IS A CHAIN OF LOTS, WRITERS FIRST.** The register gained a lot table
+under its rows (`holdings.ts:lotHead/lotTail`, `lotUnits/lotPriceLocal/lotWeek/lotNext`): every
+credit a ledger operation lands is a lot with the units it brought, the price a unit cost on
+the wire and the journal's week; a debit consumes first-in-first-out (`adjustLots`); a desk's
+short is a negative lot that a cover consumes; a fold joins two chains; a freed row frees its
+lots; the clearing write-back carries a rebuilt position's lots onto the first appended row of
+the same instrument and lands the fill's net as a lot at the fill's price, or consumes it
+(`holdings-store.ts:finalize`); a mid-window delivery (`setRowShares`) does the same. The
+row's `units` is the chain's sum, and `O14` checks every live row for it. Nothing reads the
+chain yet: the basis, the realised gain and the holding period are f2, exactly as the plan's
+writers-first rule says. Three things carried as they are and written into f2: a credit fill's
+lot is at the wire's price, which is par (`clearedBookDelta`); `debitRow` takes units in
+proportion to the value leaving rather than the units the wire names, so the lots follow the
+row's own arithmetic; and a resolution's row moves re-lot at the transfer's mark. Every
+register read is byte-identical. Gates green; no run.
 
 **13-BOOK (e) — THE FOUR TAXONOMIES COLLAPSE INTO THE INDEX'S KIND.** `assets/index.ts:
 InstrumentKind` is the one list — the register's nine kinds, the seven book kinds, the player's

@@ -44,6 +44,23 @@ export interface HoldingStore {
    * to what is left, and the repo book's collateral call follows.
    */
   lienUnits: Float64Array;
+  // ---- §3.13-BOOK f1 — THE LOTS UNDER A ROW. A position is what it is made of: every credit
+  // that landed on the row is a LOT with the units it brought, the price a unit cost and the week
+  // it arrived; a debit consumes them first-in-first-out; a desk's short is a lot with a negative
+  // sign. The row's `units` is the chain's sum (`O14` checks it), and the chain is what a basis, a
+  // realised gain and a holding period are read from — WRITERS FIRST: every writer keeps the chain
+  // here, and the readers take it in (f2). ----
+  /** Per row: the head and tail of its lot chain, -1 = none. */
+  lotHead: Int32Array;
+  lotTail: Int32Array;
+  lotCap: number;
+  lotUsed: number;
+  lotFreeHead: number;
+  /** Per lot: signed units, the price a unit cost (in the instrument's money), the week it arrived. */
+  lotUnits: Float64Array;
+  lotPriceLocal: Float64Array;
+  lotWeek: Int32Array;
+  lotNext: Int32Array;
   next: Int32Array;
   freeHead: number;
   used: number;
@@ -95,6 +112,9 @@ export function newHoldingStore(): HoldingStore {
     shares: new Float64Array(cap),
     units: new Float64Array(cap),
     lienUnits: new Float64Array(cap),
+    lotHead: new Int32Array(cap).fill(-1), lotTail: new Int32Array(cap).fill(-1),
+    lotCap: cap, lotUsed: 0, lotFreeHead: -1,
+    lotUnits: new Float64Array(cap), lotPriceLocal: new Float64Array(cap), lotWeek: new Int32Array(cap), lotNext: new Int32Array(cap).fill(-1),
     next: new Int32Array(cap).fill(-1),
     freeHead: -1,
     used: 0,
@@ -119,7 +139,98 @@ function growHoldings(H: HoldingStore): void {
   H.qtyLocal = gF(H.qtyLocal); H.shares = gF(H.shares); H.units = gF(H.units); H.lienUnits = gF(H.lienUnits);
   const next = new Int32Array(cap).fill(-1); next.set(H.next); H.next = next;
   const mark = new Int32Array(cap); mark.set(H.mark); H.mark = mark;
+  const lh = new Int32Array(cap).fill(-1); lh.set(H.lotHead); H.lotHead = lh;
+  const lt = new Int32Array(cap).fill(-1); lt.set(H.lotTail); H.lotTail = lt;
   H.cap = cap;
+}
+
+function growLots(H: HoldingStore): void {
+  const cap = H.lotCap * 2;
+  const gF = (old: Float64Array) => { const a = new Float64Array(cap); a.set(old); return a; };
+  H.lotUnits = gF(H.lotUnits); H.lotPriceLocal = gF(H.lotPriceLocal);
+  const w = new Int32Array(cap); w.set(H.lotWeek); H.lotWeek = w;
+  const n = new Int32Array(cap).fill(-1); n.set(H.lotNext); H.lotNext = n;
+  H.lotCap = cap;
+}
+
+function allocLot(H: HoldingStore): number {
+  if (H.lotFreeHead >= 0) { const l = H.lotFreeHead; H.lotFreeHead = H.lotNext[l]; H.lotNext[l] = -1; return l; }
+  if (H.lotUsed >= H.lotCap) growLots(H);
+  return H.lotUsed++;
+}
+
+function freeLot(H: HoldingStore, l: number): void {
+  H.lotUnits[l] = 0; H.lotPriceLocal[l] = 0; H.lotWeek[l] = 0;
+  H.lotNext[l] = H.lotFreeHead; H.lotFreeHead = l;
+}
+
+/** A row's whole chain to the free list. */
+function freeLots(H: HoldingStore, r: number): void {
+  for (let l = H.lotHead[r]; l >= 0; ) { const nxt = H.lotNext[l]; freeLot(H, l); l = nxt; }
+  H.lotHead[r] = -1; H.lotTail[r] = -1;
+}
+
+/** §3.13-BOOK f1 — a lot lands at the tail of the row's chain (ledger-internal). */
+export function appendLot(v2: V2World, r: number, units: number, priceLocal: number, week: number): void {
+  if (!(Math.abs(units) > 0) || !Number.isFinite(units)) return;
+  const H = mutableHoldings(v2);
+  const l = allocLot(H);
+  H.lotUnits[l] = units; H.lotPriceLocal[l] = Number.isFinite(priceLocal) ? priceLocal : 0; H.lotWeek[l] = week | 0; H.lotNext[l] = -1;
+  if (H.lotTail[r] >= 0) H.lotNext[H.lotTail[r]] = l; else H.lotHead[r] = l;
+  H.lotTail[r] = l;
+}
+
+/**
+ * §3.13-BOOK f1 — the row's units move by `dUnits`: what opposes the lots already there is taken
+ * from them first-in-first-out (a sale out of a long, a cover out of a short), and what is left
+ * over is a new lot at `priceLocal` (ledger-internal). Dust below the row's own float noise is
+ * dropped rather than kept as a lot of nothing.
+ */
+export function adjustLots(v2: V2World, r: number, dUnits: number, priceLocal: number, week: number): void {
+  if (!(Math.abs(dUnits) > 0) || !Number.isFinite(dUnits)) return;
+  const H = mutableHoldings(v2);
+  let left = dUnits;
+  for (let l = H.lotHead[r]; l >= 0 && left !== 0; ) {
+    const lu = H.lotUnits[l];
+    if (lu === 0 || (lu > 0) === (left > 0)) break;
+    const take = Math.min(Math.abs(lu), Math.abs(left));
+    const remaining = lu + Math.sign(left) * take;
+    left -= Math.sign(left) * take;
+    if (Math.abs(remaining) <= 1e-12 * Math.max(1, Math.abs(lu))) {
+      const nxt = H.lotNext[l];
+      freeLot(H, l);
+      H.lotHead[r] = nxt; if (nxt < 0) H.lotTail[r] = -1;
+      l = nxt;
+    } else {
+      H.lotUnits[l] = remaining;
+    }
+  }
+  if (Math.abs(left) > 1e-9 * Math.max(1, Math.abs(dUnits))) appendLot(v2, r, left, priceLocal, week);
+}
+
+/** §3.13-BOOK f1 — `from`'s chain joins the tail of `to`'s, in order (a rebuild, a fold). */
+export function moveLotsTo(v2: V2World, from: number, to: number): void {
+  const H = mutableHoldings(v2);
+  if (from === to || H.lotHead[from] < 0) return;
+  if (H.lotTail[to] >= 0) H.lotNext[H.lotTail[to]] = H.lotHead[from]; else H.lotHead[to] = H.lotHead[from];
+  H.lotTail[to] = H.lotTail[from];
+  H.lotHead[from] = -1; H.lotTail[from] = -1;
+}
+
+/** The chain's units, summed in lot order — what the row's `units` must equal. */
+export function rowLotUnits(v2: V2World, r: number): number {
+  const H = v2.holdings;
+  let sum = 0;
+  for (let l = H.lotHead[r]; l >= 0; l = H.lotNext[l]) sum += H.lotUnits[l];
+  return sum;
+}
+
+/** The row's lots as objects, in order — for a test or a view; the engine reads the columns. */
+export function rowLotsOf(v2: V2World, r: number): { units: number; priceLocal: number; week: number }[] {
+  const H = v2.holdings;
+  const out: { units: number; priceLocal: number; week: number }[] = [];
+  for (let l = H.lotHead[r]; l >= 0; l = H.lotNext[l]) out.push({ units: H.lotUnits[l], priceLocal: H.lotPriceLocal[l], week: H.lotWeek[l] });
+  return out;
 }
 
 function allocRow(H: HoldingStore): number {
@@ -160,8 +271,9 @@ export function bookRowsOf(v2: V2World, entityId: string): number[] {
   return rows;
 }
 
-/** Append one holding as a row at the tail of the entity's chain; returns the row. */
-export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): number {
+/** Append one holding as a row at the tail of the entity's chain; returns the row. §3.13-BOOK f1:
+ *  the row opens with one lot — its units at the price its value implies, in `week`. */
+export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding, week = 0): number {
   const H = mutableHoldings(v2);
   H.synced.add(entityId);
   H.dirty.add(entityId);
@@ -176,7 +288,15 @@ export function pushBookRow(v2: V2World, entityId: string, h: ItemizedHolding): 
   H.next[r] = -1;
   if (H.tail[slot] >= 0) H.next[H.tail[slot]] = r; else H.head[slot] = r;
   H.tail[slot] = r;
+  openingLot(v2, r, h, week);
   return r;
+}
+
+/** The one lot a row built from an object starts with: its units at the price its value implies. */
+function openingLot(v2: V2World, r: number, h: ItemizedHolding, week: number): void {
+  const units = rowUnits(mutableHoldings(v2), r);
+  if (!(Math.abs(units) > 0)) return;
+  appendLot(v2, r, units, (h.quantityOrNotionalLocal ?? 0) / units, week);
 }
 
 /**
@@ -213,7 +333,7 @@ export function relinkBook(v2: V2World, entityId: string, rows: number[]): void 
 
 /** Allocate and fill a row WITHOUT touching any chain — for writers that assemble a whole
  *  chain themselves and install it with `setBookChain` (the clearing write-back). */
-export function newBookRow(v2: V2World, h: ItemizedHolding): number {
+export function newBookRow(v2: V2World, h: ItemizedHolding, week = 0, withLot = true): number {
   const H = mutableHoldings(v2);
   const r = allocRow(H);
   H.typeRef[r] = internType(v2, h.instrumentType);
@@ -230,6 +350,8 @@ export function newBookRow(v2: V2World, h: ItemizedHolding): number {
   // the value: it was never stored.
   H.units[r] = h.units;
   H.next[r] = -1;
+  // §3.13-BOOK f1: the write-back carries a rebuilt position's lots across itself and says so.
+  if (withLot) openingLot(v2, r, h, week);
   return r;
 }
 
@@ -244,6 +366,7 @@ export function freeBookRow(v2: V2World, r: number): void {
  * its row for the same reason.
  */
 function freeRow(H: HoldingStore, r: number): void {
+  freeLots(H, r);
   H.qtyLocal[r] = 0;
   H.shares[r] = Number.NaN;
   H.units[r] = Number.NaN;
@@ -285,8 +408,10 @@ export function markBookDirty(v2: V2World, entityId: string): void {
  */
 
 /** A share-counted row's whole position, set: shares, the units they are, and the value. */
-export function setRowShares(v2: V2World, entityId: string, r: number, shares: number, pricePerShare: number): void {
+export function setRowShares(v2: V2World, entityId: string, r: number, shares: number, pricePerShare: number, week = 0): void {
   const H = mutableHoldings(v2);
+  // §3.13-BOOK f1: what arrived is a lot at this price; what left came off the oldest lots.
+  adjustLots(v2, r, shares - (Number.isNaN(H.shares[r]) ? 0 : H.shares[r]), pricePerShare, week);
   H.shares[r] = shares;
   H.qtyLocal[r] = shares * pricePerShare;
   // A share-counted row's units ARE its shares (`holdings-ledger.ts:unitsOf`).
@@ -307,6 +432,8 @@ export function foldRowInto(v2: V2World, keep: number, drop: number): void {
   H.units[keep] = rowUnits(H, keep) + rowUnits(H, drop);
   // §3.13-BOOK d5a: a lien binds the position, and the position is the two rows together.
   H.lienUnits[keep] += H.lienUnits[drop];
+  // §3.13-BOOK f1: and so are its lots, the dropped row's after the kept row's.
+  moveLotsTo(v2, drop, keep);
 }
 
 /**

@@ -29,7 +29,8 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
-import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, materializeBook, setRowShares, foldRowInto } from '../../../engine2/holdings';
+import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, materializeBook, setRowShares, foldRowInto, moveLotsTo, adjustLots, rowUnits } from '../../../engine2/holdings';
+import { activeWireJournal, hasActiveWireJournal } from '../../ledger/wire';
 import { V2World } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
@@ -187,7 +188,7 @@ export class HoldingsStore {
         row.units = next;
         // The persistent row is the authority; the delivery lands on it too.
         const rid = slot.rowIds[i];
-        if (rid >= 0) setRowShares(this.v2, entityId, rid, next, pricePerShare);
+        if (rid >= 0) setRowShares(this.v2, entityId, rid, next, pricePerShare, hasActiveWireJournal() ? activeWireJournal().week : 0);
         remaining -= take;
         if (isDust(remaining)) return;
       }
@@ -297,12 +298,37 @@ export class HoldingsStore {
       // Fate of every row is already known, so the chain is rebuilt directly: allocations first
       // (they may reuse earlier frees, never this entity's — its frees come after), then the
       // claimed rows to the free list, then one link pass. No Set anywhere.
+      // §3.13-BOOK f1 — THE LOTS FOLLOW THE POSITION THROUGH THE REBUILD. A claimed row's lots
+      // move onto the first appended row of the same instrument, and the fill's net — what the
+      // book added or took — is a new lot at the fill's price or a first-in-first-out consumption,
+      // exactly the wire `clearedBookDelta` writes. A position the book sold out dies with its
+      // row, lots and all.
+      const week = hasActiveWireJournal() ? activeWireJournal().week : 0;
+      const keyOf = (h: ItemizedHolding): string => `${h.instrumentType}|${h.issuerRegion}|${h.instrumentId}`;
+      const claimedByKey = new Map<string, number[]>();
+      for (let i = 0; i < slot.rows.length; i++) {
+        if (!slot.claimed[i] || slot.rowIds[i] < 0) continue;
+        const k = keyOf(slot.rows[i]);
+        const list = claimedByKey.get(k); if (list) list.push(slot.rowIds[i]); else claimedByKey.set(k, [slot.rowIds[i]]);
+      }
       const ids: number[] = [];
       for (let i = 0; i < slot.rows.length; i++) {
         if (slot.claimed[i]) continue;
-        ids.push(slot.rowIds[i] >= 0 ? slot.rowIds[i] : newBookRow(v2, slot.rows[i]));
+        ids.push(slot.rowIds[i] >= 0 ? slot.rowIds[i] : newBookRow(v2, slot.rows[i], week));
       }
-      for (const r of slot.appended) ids.push(newBookRow(v2, r));
+      const carried = new Set<string>();
+      for (const h of slot.appended) {
+        const k = keyOf(h);
+        const olds = claimedByKey.get(k);
+        if (!olds || carried.has(k)) { ids.push(newBookRow(v2, h, week)); continue; }
+        carried.add(k);
+        const r = newBookRow(v2, h, week, false);
+        let before = 0;
+        for (const old of olds) { before += rowUnits(v2.holdings, old); moveLotsTo(v2, old, r); }
+        const px = markById.get(k) ?? (h.quantityShares !== undefined && h.quantityShares > 0 ? (h.quantityOrNotionalLocal ?? 0) / h.quantityShares : 1);
+        adjustLots(v2, r, rowUnits(v2.holdings, r) - before, px, week);
+        ids.push(r);
+      }
       for (let i = 0; i < slot.rows.length; i++) {
         if (slot.claimed[i] && slot.rowIds[i] >= 0) freeBookRow(v2, slot.rowIds[i]);
       }
