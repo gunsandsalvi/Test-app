@@ -231,7 +231,6 @@ const SRF_SEAT_STEP_BPS = 1;
 
 export interface RepoSessionResult {
   repoRateAnnual: number;
-  sheetByTicker: Map<string, BankingSector>;
   /** GUARD — what a borrower could actually fund this week: its shortfall to the buffer bounded
    *  by its unencumbered collateral. Zero means there was nothing to clear, which is a quiet
    *  week; positive with `clearedVolumeLocal` at zero means a market with a real borrower and real
@@ -243,39 +242,16 @@ export interface RepoSessionResult {
 }
 
 /**
- * One region's weekly money-market session. `sheetByTicker` arrives carrying this week's
- * post-evolution sheets (bank repo maturations already flowed inside evolveBankingSector) and
- * leaves carrying the new overnight positions, cash and encumbrance. Institutional maturation
- * and re-lending happen here, on ctx.updatedInstitutionalEntities.
+ * §3.20-LLR-i — THE OPEN. Last night's contracts mature: principal and the interest each promised,
+ * from the named borrower to the named lender, and the window's parked cash comes back with its
+ * interest. What matured is recorded per borrower, because the part of tonight's need that is
+ * simply ROLLING it is structural funding and belongs at term. The session itself runs at the
+ * CLOSE (`bank-funding-close.ts`), where the week's flows have made the need knowable.
  */
-export function runRegionalRepoSession(
-  regionId: RegionId,
-  reg: Region,
-  banks: { id: EntityId; ticker: Ticker; region: RegionId }[],
-  sheetByTicker: Map<string, BankingSector>,
-  ctx: WeeklyStepContext
-): RepoSessionResult {
+export function openMoneyMarket(regionId: RegionId, reg: Region, ctx: WeeklyStepContext): void {
   const week = ctx.nextWeek;
-  // §3.13-BOOK (c-then-3b): the auction's SEATS are participant ids that embed a ticker
-  // (`participant-keys.ts`), while a contract names its parties by entity id — so the crossing
-  // back is one map, built once, rather than a scan per fill.
-  const bankIdByTicker = new Map(banks.map((b) => [b.ticker, b.id]));
-  const tickerOfBankId = new Map(banks.map((b) => [b.id, b.ticker]));
-  const priorRepoRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
-  const policyBps = reg.policyRate * 10000;
   // The window's interest income this week, remitted by the central-bank stage.
   if (reg.centralBankSheet) reg.centralBankSheet.lastStandingFacilityInterestLocal = 0;
-  const rrpBps = Math.max(0, policyBps - ON_RRP_SPREAD_BPS);
-  const srfBps = policyBps + SRF_SPREAD_BPS;
-  const corridorWidthBps = Math.max(1, srfBps - rrpBps);
-  const onInstrumentId = repoOvernightInstrumentId(regionId);
-  const termInstrumentId = repoTermInstrumentId(regionId);
-  // §3.13-BOOK dII: the two books are declared on the instrument index where they are built.
-  registerBook(ctx.v2, onInstrumentId, 'REPO', currencyOf(regionId));
-  registerBook(ctx.v2, termInstrumentId, 'REPO', currencyOf(regionId));
-  // §3.13-SOV row 3: haircuts are per BOND, off this region's ladder.
-  const haircuts = computeSovereignRepoHaircuts(reg, sovereignTenorResolver(materializeGovLadder(ctx.v2, regionId), ctx.nextWeek));
-
   // ---- REPO1: last week's contracts. What matured has settled (bank legs inside
   // evolveBankingSector, institutional legs below); what has not matured is still outstanding
   // and still encumbers its own collateral. ----
@@ -310,6 +286,47 @@ export function runRegionalRepoSession(
   // matured contracts leave the book NOW, so their liens come off the rows before anyone asks
   // what is free — and the answer is the register's, not a sum over the contracts.
   publishRepoBook(ctx.v2, regionId, carriedBook);
+  const rolled = new Map<EntityId, number>();
+  maturedNow.forEach((c) => rolled.set(c.borrowerId, (rolled.get(c.borrowerId) ?? 0) + c.principalLocal));
+  ctx.repoRolledByBorrower.set(regionId, rolled);
+  returnParkedCash(ctx, regionId);
+}
+
+/**
+ * One region's money-market session, at the CLOSE (§3.20-LLR-i): the banks' live sheets carry
+ * this week's positions and leave carrying the new overnight positions and encumbrance. Institutional maturation
+ * and re-lending happen here, on ctx.updatedInstitutionalEntities.
+ */
+export function runRegionalRepoSession(
+  regionId: RegionId,
+  reg: Region,
+  banks: { id: EntityId; ticker: Ticker; region: RegionId; bankBalanceSheet?: BankingSector }[],
+  ctx: WeeklyStepContext
+): RepoSessionResult {
+  const sheetByTicker = new Map<string, BankingSector>();
+  banks.forEach((b) => { if (b.bankBalanceSheet) sheetByTicker.set(b.ticker, b.bankBalanceSheet); });
+  const week = ctx.nextWeek;
+  // §3.13-BOOK (c-then-3b): the auction's SEATS are participant ids that embed a ticker
+  // (`participant-keys.ts`), while a contract names its parties by entity id — so the crossing
+  // back is one map, built once, rather than a scan per fill.
+  const bankIdByTicker = new Map(banks.map((b) => [b.ticker, b.id]));
+  const tickerOfBankId = new Map(banks.map((b) => [b.id, b.ticker]));
+  const priorRepoRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
+  const policyBps = reg.policyRate * 10000;
+  const rrpBps = Math.max(0, policyBps - ON_RRP_SPREAD_BPS);
+  const srfBps = policyBps + SRF_SPREAD_BPS;
+  const corridorWidthBps = Math.max(1, srfBps - rrpBps);
+  const onInstrumentId = repoOvernightInstrumentId(regionId);
+  const termInstrumentId = repoTermInstrumentId(regionId);
+  // §3.13-BOOK dII: the two books are declared on the instrument index where they are built.
+  registerBook(ctx.v2, onInstrumentId, 'REPO', currencyOf(regionId));
+  registerBook(ctx.v2, termInstrumentId, 'REPO', currencyOf(regionId));
+  // §3.13-SOV row 3: haircuts are per BOND, off this region's ladder.
+  const haircuts = computeSovereignRepoHaircuts(reg, sovereignTenorResolver(materializeGovLadder(ctx.v2, regionId), ctx.nextWeek));
+
+  // §3.20-LLR-i: last night's book matured at the OPEN (`openMoneyMarket`); what stands is the
+  // carried book, whose liens the register already carries.
+  const carriedBook = repoBookOf(ctx.v2, regionId);
   const encumberedByTicker = new Map<Ticker, Map<InstrumentId, number>>();
   banks.forEach((b) => encumberedByTicker.set(b.ticker, lienFaceByBond(ctx.v2, b.id)));
 
@@ -319,8 +336,7 @@ export function runRegionalRepoSession(
   // is structural funding and belongs at term; the increment on top of it is this week's cash
   // dip and belongs overnight. A treasury that funds a permanent book overnight is running the
   // maturity mismatch a funding squeeze is made of, and this is what lets it.
-  const rolledByTicker = new Map<EntityId, number>();
-  maturedNow.forEach((c) => rolledByTicker.set(c.borrowerId, (rolledByTicker.get(c.borrowerId) ?? 0) + c.principalLocal));
+  const rolledByTicker: ReadonlyMap<EntityId, number> = ctx.repoRolledByBorrower.get(regionId) ?? new Map<EntityId, number>();
 
   const needByTicker = new Map<EntityId, { onLocal: number; termLocal: number }>();
   let totalOnNeedLocal = 0;
@@ -351,7 +367,6 @@ export function runRegionalRepoSession(
   // RRP window, the same real posted-rate facility that anchors its reservation below). ----
   // What was parked at the window last week comes back first, so the sleeve below is measured
   // against the whole balance and not against a book that is still a week out the door.
-  returnParkedCash(ctx, regionId);
   const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId && !e.isDefaulted);
   const overnightSleeveByEntity = new Map<string, number>();
   regionEntities.forEach((e) => {
@@ -368,15 +383,13 @@ export function runRegionalRepoSession(
     if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentLocal = Math.round(repoLentLocal(book, { kind: 'CENTRAL_BANK', region: regionId }));
     reg.repoTermRateAnnual = termRateAnnual === undefined ? undefined : Number(termRateAnnual.toFixed(6));
     // Every scalar the sheets carried is now DERIVED from the book — the G2 pattern.
+    // §3.20-LLR-i: the sheets' secured lines are written on the live sheets, from the book.
     banks.forEach((bank) => {
-      const sheet = sheetByTicker.get(bank.ticker);
+      const sheet = bank.bankBalanceSheet;
       if (!sheet) return;
-      sheetByTicker.set(bank.ticker, {
-        ...sheet,
-        repoBorrowedLocal: Math.round((repoBorrowedLocal(book, bank.id) - srfBorrowedLocal(book, bank.id))),
-        srfBorrowingLocal: Math.round(srfBorrowedLocal(book, bank.id)),
-        repoLentLocal: Math.round(repoLentLocal(book, bankParty(bank))),
-      });
+      sheet.repoBorrowedLocal = Math.round((repoBorrowedLocal(book, bank.id) - srfBorrowedLocal(book, bank.id)));
+      sheet.srfBorrowingLocal = Math.round(srfBorrowedLocal(book, bank.id));
+      sheet.repoLentLocal = Math.round(repoLentLocal(book, bankParty(bank)));
     });
     const lentByEntityId = new Map<string, number>();
     book.forEach((c) => {
@@ -386,7 +399,7 @@ export function runRegionalRepoSession(
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) =>
       e.region === regionId ? { ...e, repoLentLocal: Math.round((lentByEntityId.get(e.id) ?? 0)) } : e
     );
-    return { repoRateAnnual: onRateAnnual, sheetByTicker, fundableNeedLocal: totalNeedLocal, clearedVolumeLocal };
+    return { repoRateAnnual: onRateAnnual, fundableNeedLocal: totalNeedLocal, clearedVolumeLocal };
   };
 
   if (!(totalNeedLocal > 0)) {

@@ -100,8 +100,8 @@ checked by `scripts/check-atlas.sh`.
 | A2 a bank holds a position for its own reasons | `src/engine/simulation/stages/bank-lending.ts:operatingCashBufferLocal` | ⚠️ |
 | **A2.a the buffer is a PREFERENCE derived from its own liabilities** | `src/engine/macro/banking.ts:MIN_CASH_BUFFER_RATIO` | ⚠️ |
 | A2.b VERIFY missing it has a cost the bank can feel | — | ❌ |
-| **A3 the need is knowable only AFTER the day's flows** | `src/engine/simulation/stages/repo-clearing.ts:needByTicker` | ⚠️ |
-| **A3.a therefore the market must clear after them** | `src/engine/simulation/stages/02b-bank-diversification.ts:runRegionalRepoSession` | ❌ |
+| **A3 the need is knowable only AFTER the day's flows** | `src/engine/simulation/stages/repo-clearing.ts:needByTicker` | ✅ |
+| **A3.a therefore the market must clear after them** | `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` · `src/engine/simulation/stages/repo-clearing.ts:openMoneyMarket` | ✅ |
 | B1 every bank posts a schedule; who lends is the OUTCOME | `src/engine/simulation/stages/repo-clearing.ts:lenderSchedule` | ✅ |
 | **B2 unsecured lending prices the borrower's name** | `src/engine/simulation/stages/interbank.ts:runInterbankSession` · `src/domain/interbank.ts:InterbankLoan` | ✅ |
 | B2.a a doubted name pays more, or finds no bid | `src/engine/simulation/stages/interbank.ts:runInterbankSession` | ✅ |
@@ -140,24 +140,19 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ A3.a — THE SESSION RUNS AT STAGE 3 OF ~50, AND IT IS THE CAUSE OF EVERYTHING BELOW. KNOWN(20-LLR)
+### ✅ A3 / A3.a — THE SESSION CLEARS AT THE CLOSE
 
-`runRegionalRepoSession` is called from `02b-bank-diversification.ts:413`. Every book that moves
-reserves runs after it — 07b, 07c, 07d, 07e, 07f, the derivatives, stage 08's whole cash walk,
-`settlement` at 308, `overdraft-sweep` at 403, `settlement-close` at 412. So the shortfall the
-session sizes (`shortfallLocal = householdDepositsAt × MIN_CASH_BUFFER_RATIO - settledCashLocal`,
-`repo-clearing.ts:300`) is measured against a Monday-morning balance, and the week's actual drains
-arrive afterwards.
-
-The two comments in the tree contradict each other and the second is right: `02b:407` says "Every
-real flow has posted" and `02b:409` asserts "there is no separate 'facility draw' step to run
-afterwards"; `bank-funding-close.ts`'s header states the truth — "the shortfall is made by the books
-that clear AFTER 02b … **A real treasury funds its day at the end of the day; this is that**" — and
-then puts an unbounded CENTRAL BANK at the close instead of the market.
-
-**Already §3 step 20-LLR**, which states the fix: move the session, do not bound the loan.
-This tree's C5, D4, D6, B7 and E1 rows are all downstream of this one row, and A3.a is the only
-node any of them needs.
+*2026-09-05 (§9.20-LLR-i).* `runRegionalRepoSession` used to be called from `02b` at stage 3 of ~50,
+before every book that moves reserves, so it sized each bank's shortfall against a Monday-morning
+balance and the unbounded central-bank loan at the close was the plug for what it could not see.
+Now the morning keeps only the OPEN — `repo-clearing.ts:openMoneyMarket`: last night's contracts
+mature, the window's parked cash returns, what each borrower rolled is recorded — and the session
+runs inside `bank-funding-close.ts`, after `settlement-close` has settled the week: secured first (the repo books,
+the standing facility as the posted-rate seat at the top of the corridor), then unsecured on the
+name (`interbank.ts`), then the overnight window takes what was left unlent, round by round until
+nothing moves. The need is read on settled reserves plus the legs already posted. C5 and D6 below
+are what is still wrong at that close, and D4 (a bank that fails for liquidity) is what the
+unbounded loan still forecloses; A3.a is no longer the cause of them.
 
 ### ❌ C5 / D6 — THE FACILITY AT THE CLOSE HAS NONE OF BAGEHOT'S FOUR. KNOWN(20-LLR)
 
@@ -170,9 +165,9 @@ the difference is this tree's whole C section:
 | size | bounded by `unencumberedBorrowingCapacityLocal` | the whole shortfall, always |
 | price | `srfBps − 1bp`, a posted rate cleared in the book | policy + 125bp, flat |
 | refusal | a bank with no free paper never becomes a borrower | unreachable |
-| when | stage 3, before the flows | stage 417, after them |
+| when | the close, after the flows (§9.20-LLR-i) | the close, after it |
 
-The disciplined one runs when there is nothing to fund; the undisciplined one runs when there is.
+Since §9.20-LLR-i both run at the close, the disciplined one first; the undisciplined one still takes whatever the disciplined one left.
 That is why C4.b is marked `⚠️` rather than `✅`: the collateral constraint is real and correctly
 implemented, and it is *defeated* — a bank with no eligible paper drops out of `needByTicker`
 entirely, its shortfall becomes invisible to the session, and the close then lends it the whole

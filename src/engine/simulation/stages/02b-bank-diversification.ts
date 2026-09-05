@@ -39,7 +39,7 @@ import { payHoldersCash } from './shared-helpers';
 import {
   evolveBankingSector, computeSovereignBookAnnualYield, savingsToDepositsShare,
 } from '../../macro/banking';
-import { runRegionalRepoSession } from './repo-clearing';
+import { openMoneyMarket } from './repo-clearing';
 import { bankSovereignValueRecord, bankSovereignPositions, bankSovereignBookLocal } from '../../sovereign-register';
 import { maturingAt, repoInterestToMaturityLocal } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
@@ -412,23 +412,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       });
     }
 
-    // The weekly money-market session. Every real flow has posted; banks short of their
-    // buffer now fund against their collateral, surplus banks and institutional idle cash
-    // lend, and the SRF sits in the book as the posted-rate seat of last resort — so there is
-    // no separate "facility draw" step to run afterwards, and the region's overnight rate is
-    // whatever this session cleared.
-    const sheetByTicker = new Map<Ticker, BankingSector>(newSheets.map(({ bank, sheet }) => [bank.ticker, sheet]));
-    const session = runRegionalRepoSession(regionId, reg, banks, sheetByTicker, ctx);
-    reg.repoRateAnnual = Number(session.repoRateAnnual.toFixed(6));
-    // GUARD: what the session had to fund and what it actually lent, so the harness can tell a
-    // quiet week from a dead market — the distinction the corridor assertion cannot make.
-    reg.repoFundableNeedLocal = Math.round(session.fundableNeedLocal);
-    reg.repoClearedVolumeLocal = Math.round(session.clearedVolumeLocal);
-    // The fund's quote for next week's yield-gap decision comes off its post-session book.
+    // §3.20-LLR-i: THE MONEY MARKET'S OPEN. Last night's contracts mature and the window's parked
+    // cash returns; the SESSION runs at the close (`bank-funding-close.ts`), after the week's
+    // flows have made every bank's need knowable — the morning session that sat here saw none
+    // of them, and the unbounded central-bank loan at the close was the plug for that.
+    openMoneyMarket(regionId, reg, ctx);
+    // The fund's quote for this week's yield-gap decision comes off its book after last night's session.
     refreshMmfQuotes(regionId, reg, ctx);
-    newSheets.forEach((entry) => {
-      entry.sheet = session.sheetByTicker.get(entry.bank.ticker) ?? entry.sheet;
-    });
 
     if (reg.centralBankSheet) reg.centralBankSheet.lastLoanInterestLocal = 0;
     // §3.20b: last night's interbank loans repay first — principal between reserve accounts,

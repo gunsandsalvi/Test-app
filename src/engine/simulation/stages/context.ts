@@ -342,6 +342,9 @@ export interface WeeklyStepContext {
    *  money-market session and drawn at the CLOSE — the window is an end-of-day facility, so the
    *  cash is in the institution's hands while its books trade. */
   rrpIntendedByEntity: Map<string, number>;
+  /** §3.20-LLR-i — what each borrower's repo matured at the open, by region: the structural part of
+   *  the close's need (it belongs at term). Written by `openMoneyMarket`, read by the close session. */
+  repoRolledByBorrower: Map<RegionId, Map<import('../../../domain/ids').EntityId, number>>;
   /** The window's posted rate per region, carried from the session that set the corridor to the
    *  close that draws on it. */
   rrpRateAnnualByRegion: Map<string, number>;
@@ -486,6 +489,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     pendingHolderAccrualLocal: new Map(),
     pendingHolderAccrualPayout: new Set(),
     rrpIntendedByEntity: new Map(),
+    repoRolledByBorrower: new Map(),
     rrpRateAnnualByRegion: new Map(),
     pendingAccruedMoves: [],
     tradeInvoiceFxGainLocal: 0,

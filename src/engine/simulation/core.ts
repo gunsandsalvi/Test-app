@@ -11,7 +11,6 @@ import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
 import { runRelativeValueStage } from './stages/relative-value';
 import { runOverdraftSweep } from './stages/overdraft-sweep';
-import { drawReverseRepoAtTheClose } from './stages/repo-clearing';
 import { runDerivativesStage } from './stages/derivatives';
 import { runSecuritiesLendingStage, runBondLendingPass } from './stages/securities-lending';
 import { runEstateResolutionStage } from './stages/estate-resolution';
@@ -404,11 +403,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // margin account's sweep, run against everything the close is about to settle.
   // §5-CLOSE M4: every negative balance — firm, fund, pool — is named credit before the close.
   run('overdraft-sweep', () => runOverdraftSweep(ctx));
-  // THE OVERNIGHT WINDOW, before the close settles and before the banks square up. It is an
-  // end-of-day facility: the non-banks' idle cash goes to the central bank after the week's
-  // books have traded with it, the deposits leave the banks that held it, and the funding close
-  // below is where a bank short of reserves because of that borrows.
-  run('reverse-repo-draw', () => drawReverseRepoAtTheClose(ctx));
   // CASH: the CLOSE. Everything the late stages posted — the insurers, the money fund, the ETFs,
   // the FX desks, the estates, the treasury's redemptions — settles here. A week has two cycles
   // because a day does, and without the second one those stages had nowhere to send a payment.
@@ -417,6 +411,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // §7.339: a bank under prompt corrective action is closed on the week's final sheets and its
   // books go whole to the strongest peer — after the close (an empty journal, every sheet
   // final), before the central bank counts the reserves it just moved.
+  // §3.20-LLR-i: THE MONEY MARKET CLEARS HERE — the repo session with the standing facility as
+  // its ceiling, the unsecured book on the name, the overnight window taking what was left
+  // unlent — after the close has settled, where every bank's need is knowable.
   run('bank-funding-close', () => runBankFundingCloseStage(state, ctx));
   run('bank-resolution', () => runBankResolutionStage(state, ctx));
   for (const f of ['cash', 'isDefaulted', 'defaultedWeek', 'bankResolvedWeek', 'employeeCount', 'grossPPELocal', 'accumulatedDepreciationLocal', 'annualRevenue', 'ebitda', 'ebit', 'bankMarketShare', 'homeBankId', 'creditRating', 'stockPrice', 'marketCap'] as const) syncCompanyField(state, f);

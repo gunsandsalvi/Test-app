@@ -26,26 +26,40 @@ import { bankCashBufferRatioOf } from '../../macro/banking';
 import { WeeklyStepContext } from './context';
 import { pendingSettlementLocal, runSettlementStage } from './settlement';
 import { runInterbankSession } from './interbank';
+import { runRegionalRepoSession, drawReverseRepoAtTheClose } from './repo-clearing';
+import { refreshMmfQuotes } from './money-market-fund';
 import { banksOf } from '../../../domain/company';
 import { RegionId } from '../../../types';
 
-/** A round can leave another bank short (the borrower's settlement drains it); the rounds
- *  converge geometrically and eight is far past the dollar. */
+/** A round can leave another bank short (the borrower's settlement drains it, the window takes
+ *  a depositor's cash); the rounds converge geometrically and eight is far past the dollar. */
 const MAX_ROUNDS = 8;
 
 export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContext): void {
   void state;
   for (let round = 0; round < MAX_ROUNDS; round++) {
     let raisedAny = false;
-    // §3.20b: the market clears per region before the window is asked; a bank's need is read on
-    // settled reserves plus the legs already posted, this round's interbank fills included.
+    // §3.20-LLR-i: THE MONEY MARKET CLEARS HERE, where the week's flows have made the need
+    // knowable. Secured first — the repo session, with the standing facility as the posted-rate
+    // seat at the top of the corridor — then unsecured on the name (§3.20b) for what collateral
+    // could not cover; a bank's need is read on settled reserves plus the legs already posted,
+    // this round's fills included.
     (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
       const reg = ctx.updatedRegions[regionId];
       if (!reg) return;
       const banks = banksOf(ctx.updatedCompanies, regionId).filter((b) => isActiveCompany(b));
       if (banks.length === 0) return;
+      const session = runRegionalRepoSession(regionId, reg, banks, ctx);
+      reg.repoRateAnnual = Number(session.repoRateAnnual.toFixed(6));
+      // GUARD: what the session had to fund and what it actually lent, so the harness can tell
+      // a quiet week from a dead market — the distinction the corridor assertion cannot make.
+      reg.repoFundableNeedLocal = Math.round(session.fundableNeedLocal);
+      reg.repoClearedVolumeLocal = Math.round(session.clearedVolumeLocal);
+      if (session.clearedVolumeLocal > 0) raisedAny = true;
       const unfunded = runInterbankSession(ctx, regionId, reg, banks);
       if ([...unfunded.values()].some((v) => v > 0)) raisedAny = true;
+      // The money fund's quote for next week's yield-gap decision, off its post-session book.
+      refreshMmfQuotes(regionId, reg, ctx);
     });
     const touchedRegions = new Set<RegionId>();
     ctx.updatedCompanies.forEach((bank) => {
@@ -68,6 +82,10 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
       const reg = ctx.updatedRegions[regionId];
       if (reg) syncCentralBankLoanSheets(ctx, regionId, reg, banksOf(ctx.updatedCompanies, regionId));
     });
+    // THE OVERNIGHT WINDOW takes what the session left unlent of the non-banks' idle cash: the
+    // deposits leave the banks that held them, and the next round is where a bank short because
+    // of that borrows — at the market first, then at the window's seat.
+    drawReverseRepoAtTheClose(ctx);
     if (!raisedAny) return;
     runSettlementStage(ctx);
   }
