@@ -49,7 +49,7 @@ export function companyColumns(bank: boolean): PeerColumn<Company>[] {
     { key: 'mcap', label: 'mkt cap', render: (r, w) => (marketCapAt(w.v2, r.obj) > 0 ? money(marketCapAt(w.v2, r.obj), 1) : '—'), value: (r, w) => marketCapAt(w.v2, r.obj) },
     { key: 'revenue', label: 'revenue', render: (r) => money(r.obj.annualRevenue, 1), value: (r) => r.obj.annualRevenue },
     { key: 'margin', label: 'margin', render: (r) => (r.obj.annualRevenue > 0 ? pctLevel(r.obj.ebitda / r.obj.annualRevenue, 0) : '—'), value: (r) => (r.obj.annualRevenue > 0 ? r.obj.ebitda / r.obj.annualRevenue : -9) },
-    { key: 'pe', label: 'p/e', render: (r) => (r.obj.forwardPE > 0 ? num(r.obj.forwardPE, 1) : '—'), value: (r) => r.obj.forwardPE ?? 0 },
+    { key: 'pe', label: 'p/e', render: (r) => (r.obj.forwardPE > 0 ? num(r.obj.forwardPE, 1) : '—'), value: (r) => r.obj.forwardPE },
     { key: 'lev', label: 'lev', render: (r) => ratio(r.obj.leverage), value: (r) => r.obj.leverage },
     { key: 'rating', label: 'rating', render: (r) => r.obj.creditRating, value: (r) => -RATING_CODES.indexOf(r.obj.creditRating) },
     { key: 'heads', label: 'people', render: (r) => count(r.obj.employeeCount), value: (r) => r.obj.employeeCount },

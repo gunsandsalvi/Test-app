@@ -69,16 +69,16 @@ export function recordTape(tape: Tape, state: GameState): void {
     const reg = state.regions[r];
     put(`region:${r}:unemployment`, reg.unemploymentRate);
     put(`region:${r}:policy`, reg.policyRate);
-    put(`region:${r}:10y`, reg.zeroRates?.tenor10Y);
-    put(`region:${r}:2y`, reg.zeroRates?.tenor2Y);
+    put(`region:${r}:10y`, reg.zeroRates.tenor10Y);
+    put(`region:${r}:2y`, reg.zeroRates.tenor2Y);
     put(`region:${r}:inflation`, reg.inflation);
     put(`region:${r}:repo`, reg.repoRateAnnual);
-    put(`region:${r}:gdp`, reg.derivedNominalGdpLocal ?? reg.estimatedNominalGdpLocal);
+    put(`region:${r}:gdp`, reg.derivedNominalGdpLocal);
     put(`region:${r}:wage growth`, reg.wageGrowth);
-    put(`region:${r}:bank nim`, reg.bankingSector?.netInterestMarginPct);
-    put(`region:${r}:bank capital`, reg.bankingSector?.bankCapitalRatio);
+    put(`region:${r}:bank nim`, reg.bankingSector.netInterestMarginPct);
+    put(`region:${r}:bank capital`, reg.bankingSector.bankCapitalRatio);
     put(`region:${r}:household deposits`, householdDepositsOf(ensureV2(state), r));
-    put(`region:${r}:household net worth`, reg.householdState?.netWorthLocal);
+    put(`region:${r}:household net worth`, reg.householdState.netWorthLocal);
     put(`region:${r}:government revenue`, reg.governmentRevenueLocal);
     put(`region:${r}:government outlays`, reg.governmentOutlaysLocal ?? reg.governmentSpendingWeeklyLocal);
     put(`region:${r}:tightness`, reg.laborMarketTightness);
@@ -99,21 +99,21 @@ export function recordTape(tape: Tape, state: GameState): void {
       put(`market:${r}:${su}:demanded`, d.totalUnitsDemandedThisWeek);
       put(`market:${r}:${su}:demand usd`, d.demandLevelAnnualLocal);
     });
-    (reg.smePools ?? []).forEach((p) => {
+    (reg.smePools).forEach((p) => {
       put(`pool:${r}:${p.industry}:revenue`, p.annualRevenueLocal);
       put(`pool:${r}:${p.industry}:margin`, p.marginPct);
       put(`pool:${r}:${p.industry}:employment`, p.employment);
       put(`pool:${r}:${p.industry}:default rate`, p.defaultRateAnnualPct);
       put(`pool:${r}:${p.industry}:cash`, poolCashOf(ensureV2(state), r, p.industry));
     });
-    (reg.householdState?.cohorts ?? []).forEach((c) => {
+    (reg.householdState.cohorts ?? []).forEach((c) => {
       const k = `cohort:${r}:${c.occupation}:${c.tier}`;
       put(`${k}:budget`, c.consumptionBudgetLocal);
       put(`${k}:disposable income`, c.disposableIncomeLocal);
       put(`${k}:employed`, c.employedCount);
       put(`${k}:savings`, c.savingsLocal);
     });
-    Object.entries(reg.occupationPools ?? {}).forEach(([occ, p]) => {
+    Object.entries(reg.occupationPools).forEach(([occ, p]) => {
       put(`occupation:${r}:${occ}:wage index`, p.wageIndex);
       put(`occupation:${r}:${occ}:employed`, p.employed);
       put(`occupation:${r}:${occ}:vacancies`, p.vacancies);

@@ -53,7 +53,7 @@ export const occupation = defineObject<Occupation>({
   overview({ world, ref, obj: o, nav }) {
     const p = o.p;
     const wage = tapeSeries(world, `occupation:${ref.id}:wage index`).values;
-    const cohorts = (world.state.regions[o.region as 'USA']?.householdState?.cohorts ?? []).filter((c) => c.occupation === o.occ);
+    const cohorts = (world.state.regions[o.region as 'USA'].householdState.cohorts ?? []).filter((c) => c.occupation === o.occ);
     const earners = cohorts.reduce((a, c) => a + c.earnerCount, 0);
     return (
       <>

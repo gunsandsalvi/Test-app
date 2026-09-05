@@ -47,7 +47,7 @@ export const centralbank = defineObject<Region>({
     const book = centralBankBookLocal(ensureV2(world.state), asRegionId(ref.id));
     const policy = tapeSeries(world, `region:${ref.id}:policy`).values;
     const banks = banksOf(world.state.companies, asRegionId(ref.id));
-    const atWindow = banks.filter((b) => (b.bankBalanceSheet!.srfBorrowingLocal ?? 0) > 1e6);
+    const atWindow = banks.filter((b) => (b.bankBalanceSheet!.srfBorrowingLocal) > 1e6);
     const reserves = banks.reduce((a, b) => a + bankReservesOf(ensureV2(world.state), b.id), 0);
     return (
       <>

@@ -248,7 +248,7 @@ const prevInsuranceShareByEntity = new Map<string, number>();
 function printInsuranceMarket(state: GameState, week: number): void {
   if (process.env.INS_TRACE !== '1') return;
   REGION_IDS.forEach((r) => {
-    const insurers = (state.institutionalEntities ?? []).filter((e) => e.region === r && e.entityType === 'INSURER' && !e.isDefaulted && e.insurance);
+    const insurers = (state.institutionalEntities).filter((e) => e.region === r && e.entityType === 'INSURER' && !e.isDefaulted && e.insurance);
     if (insurers.length === 0) return;
     const coverTotal = insurers.reduce((a, e) => a + e.insurance!.coverLocal, 0);
     const surplusTotal = insurers.reduce((a, e) => a + Math.max(0, e.equityCapitalLocal), 0);
@@ -260,7 +260,7 @@ function printInsuranceMarket(state: GameState, week: number): void {
       const move = prev === undefined ? '' : ` (${share - prev >= 0 ? '+' : ''}${((share - prev) * 100).toFixed(2)}pp)`;
       return `${e.ticker} cover ${(share * 100).toFixed(1)}%${move} surplus ${(surplusShare * 100).toFixed(1)}% quote ${(e.insurance!.rateAnnual * 10000).toFixed(0)}bp`;
     });
-    const unplaced = state.regions[r]?.insuranceUnplacedCoverLocal ?? 0;
+    const unplaced = state.regions[r].insuranceUnplacedCoverLocal ?? 0;
     console.log(`  [ins-trace] w${week} ${r}: ${parts.join(' | ')}${unplaced > 0 ? ` | unplaced ${(unplaced / 1e9).toFixed(2)}B` : ''}`);
   });
 }
@@ -277,7 +277,7 @@ function printDerivativeMarkets(state: GameState, week: number): void {
     const B = (usd: number) => `${(usd / 1e9).toFixed(2)}B`;
     const oi = classes.map((c) => `${c} ${view.openInterest[c]!.contracts}×${B(view.openInterest[c]!.notionalLocal)}`).join(' ');
     const top = view.members.slice(0, 3).map((m) => `${m.member.id} margin ${B(m.marginLocal)} fund ${B(m.fundLocal)}`).join(' | ');
-    const refused = state.regions[r]?.ccpRefusedNotionalLocal ?? 0;
+    const refused = state.regions[r].ccpRefusedNotionalLocal ?? 0;
     console.log(`  [drv-trace] w${week} ${r}: ${oi} | cash ${B(view.sheet.cashLocal)} margin ${B(view.sheet.marginHeldLocal)} fund ${B(view.sheet.defaultFundLocal)} capital ${B(ccpOwnCapitalLocal(view.sheet))}${refused > 0 ? ` refused ${B(refused)}` : ''} | ${top}`);
   });
 }
@@ -300,7 +300,7 @@ function printOwnershipTraces(state: GameState, week: number): void {
       const cur = heldByIssuer.get(key) ?? { usd: 0, cls: h.instrumentType };
       // §3.13-READ A9: face, like the audit — a trace that measures a different quantity from
       // the check it is meant to explain sends the reader after the spread instead of the defect.
-      cur.usd += h.units ?? h.quantityOrNotionalLocal ?? 0;
+      cur.usd += h.units;
       heldByIssuer.set(key, cur);
     };
     state.institutionalEntities.forEach((e) => { if (!e.isDefaulted) e.itemizedHoldings.forEach(addTrace); });
@@ -310,7 +310,7 @@ function printOwnershipTraces(state: GameState, week: number): void {
       const id = asEntityId(key.split('|')[0]); // the key is `<issuer>|<class>`
       const c = byId.get(id);
       if (!c || v.usd <= 0) return;
-      const ladderLocal = (c.debtTranches ?? [])
+      const ladderLocal = (c.debtTranches)
         .filter((t) => !t.isBankFacility
           && (v.cls === 'COMMERCIAL_PAPER' ? t.isCommercialPaper
             : v.cls === 'CORP_BOND' ? (!t.isCommercialPaper && t.rateType === 'FIXED')
@@ -439,22 +439,22 @@ function checkInstitutionalBookConservation(prevBooks: Map<RegionId, number>, st
 function checkSettlementClosed(state: GameState, week: number) {
   const s = state.lastSettlement;
   if (!s) return;
-  if (Math.abs(s.unresolvedLocal ?? 0) > 1e6) {
+  if (Math.abs(s.unresolvedLocal) > 1e6) {
     violations.push({
       week,
-      message: `settlement left ${((s.unresolvedLocal ?? 0) / 1e9).toFixed(3)}B unresolved — a payment found no account`,
+      message: `settlement left ${((s.unresolvedLocal) / 1e9).toFixed(3)}B unresolved — a payment found no account`,
     });
   }
-  if (Math.abs(s.clearingHouseResidualLocal ?? 0) > 1e6) {
+  if (Math.abs(s.clearingHouseResidualLocal) > 1e6) {
     violations.push({
       week,
-      message: `clearing house left holding ${((s.clearingHouseResidualLocal ?? 0) / 1e9).toFixed(3)}B — a cleared book settled one side only`,
+      message: `clearing house left holding ${((s.clearingHouseResidualLocal) / 1e9).toFixed(3)}B — a cleared book settled one side only`,
     });
   }
-  if (Math.abs(s.centralBankResidualLocal ?? 0) > 1e6) {
+  if (Math.abs(s.centralBankResidualLocal) > 1e6) {
     violations.push({
       week,
-      message: `central bank liabilities moved by ${((s.centralBankResidualLocal ?? 0) / 1e9).toFixed(3)}B outside its own issuance — reserves and the treasury account did not net`,
+      message: `central bank liabilities moved by ${((s.centralBankResidualLocal) / 1e9).toFixed(3)}B outside its own issuance — reserves and the treasury account did not net`,
     });
   }
 }
@@ -473,7 +473,7 @@ function checkGuards(state: GameState, week: number) {
     if (c.isDefaulted || c.mergerAcquired) return;
     (c.productLines || []).forEach((pl: ProductLine) => {
       const key = `${c.region}:${pl.subUnitId}`;
-      shareBySubUnit.set(key, (shareBySubUnit.get(key) ?? 0) + (pl.categoryMarketShare ?? 0));
+      shareBySubUnit.set(key, (shareBySubUnit.get(key) ?? 0) + (pl.categoryMarketShare));
     });
   });
   shareBySubUnit.forEach((share, key) => {
@@ -495,8 +495,8 @@ function checkGuards(state: GameState, week: number) {
     // buffer at the close was not necessarily short when the session ran, and a bank short of
     // its buffer with no unencumbered collateral cannot borrow at any price — a real constraint,
     // not a dead market. `fundableNeedLocal` is what a borrower could actually fund.
-    const needLocal = reg?.repoFundableNeedLocal ?? 0;
-    const clearedLocal = reg?.repoClearedVolumeLocal ?? 0;
+    const needLocal = reg.repoFundableNeedLocal ?? 0;
+    const clearedLocal = reg.repoClearedVolumeLocal ?? 0;
     if (needLocal > 0 && !(clearedLocal > 0)) {
       violations.push({
         week,
@@ -519,7 +519,7 @@ function checkGuards(state: GameState, week: number) {
 
 function checkCentralBankIdentity(state: GameState, week: number) {
   REGION_IDS_SEED_ORDER.forEach((region) => {
-    const cb = state.regions[region]?.centralBankSheet;
+    const cb = state.regions[region].centralBankSheet;
     if (!cb) return;
     // §5-CLOSE: the balance-sheet identity itself is the audit's M1 (`audit/money.ts`), asserted
     // to the dust with no unbacked term; §3.28 deleted the copy that was computed here and
@@ -528,8 +528,8 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     // PUB2b: the book may only move by redemption and by fills against an order it actually
     // placed. A week whose fill exceeds the order is the auction handing the central bank paper
     // it never bid for — the forced-placement failure mode, in the other direction.
-    const orderedLocal = cb.lastOrderPlacedLocal ?? 0;
-    const filledLocal = cb.lastOpenMarketPurchasesLocal ?? 0;
+    const orderedLocal = cb.lastOrderPlacedLocal;
+    const filledLocal = cb.lastOpenMarketPurchasesLocal;
     // §7.246: the `orderedLocal > 0` arm made this VACUOUS in exactly the failure it exists for —
     // a fill against NO order is the purest forced placement, and the guard skipped it.
     if (filledLocal > 0 && filledLocal > orderedLocal * 1.01 + 1e6) {
@@ -578,7 +578,7 @@ function checkLaborMarketIdentity(state: GameState, week: number) {
       .reduce((a, c) => a + c.employeeCount, 0) // §7.246: unclamped (§7.46 L7)
       + reg.smePools.reduce((a, s) => a + s.employment, 0)
       + reg.governmentEmployment;
-    const poolEmployed = Object.values(reg.occupationPools).reduce((a: number, p: OccupationPool) => a + (p.employed ?? 0), 0);
+    const poolEmployed = Object.values(reg.occupationPools).reduce((a: number, p: OccupationPool) => a + (p.employed), 0);
     // Tight band (0.2%): the pools are DERIVED from this exact sum by the end-of-week
     // reconciliation, so only integer rounding across five occupations should separate them.
     // Anything wider means they have started evolving as a second stock again.
@@ -588,7 +588,7 @@ function checkLaborMarketIdentity(state: GameState, week: number) {
         message: `${region}: occupation pools hold ${(poolEmployed / 1e6).toFixed(2)}M against employers' ${(employerHeadcount / 1e6).toFixed(2)}M — employment is being kept in two places`,
       });
     }
-    const laborForce = reg.totalPopulation * (1 - (reg.nonEmployablePct ?? 0.35)) * reg.laborForceParticipation;
+    const laborForce = reg.totalPopulation * (1 - (reg.nonEmployablePct)) * reg.laborForceParticipation;
     const impliedU = laborForce > 0 ? (laborForce - poolEmployed) / laborForce : 0;
     if (Math.abs(impliedU - reg.unemploymentRate) > 0.005) {
       violations.push({
@@ -629,10 +629,10 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
     // be negative was the point. Since the rate is DERIVED from the cohorts' own budgets it is
     // signed, and what must hold is that the published rate is exactly what they add up to.
     const impliedRate = agg > 0 ? sumSavings / agg : 0;
-    if (agg > 0 && Math.abs(impliedRate - (hs.savingsRate ?? 0)) > 1e-3) {
+    if (agg > 0 && Math.abs(impliedRate - (hs.savingsRate)) > 1e-3) {
       violations.push({
         week,
-        message: `${region}: cohort savings imply a rate of ${(impliedRate * 100).toFixed(2)}% but the sector publishes ${(((hs.savingsRate ?? 0)) * 100).toFixed(2)}% — the savings rate is not the cohorts' own measurement`,
+        message: `${region}: cohort savings imply a rate of ${(impliedRate * 100).toFixed(2)}% but the sector publishes ${(((hs.savingsRate)) * 100).toFixed(2)}% — the savings rate is not the cohorts' own measurement`,
       });
     }
     // HH4d: ONE household deposit stock. The household state's line plus the in-flight ETF
@@ -652,12 +652,12 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
     // HH4c: tier net worths are splits of the same marked components — they must sum to the
     // aggregate exactly (loose band only for rounding).
     const wd = reg.wealthDistribution;
-    if ((hs.netWorthLocal ?? 0) !== 0) {
+    if ((hs.netWorthLocal) !== 0) {
       const tierSum = Object.values(wd).reduce((a: number, t: { shareOfNetWorthLocal?: number }) => a + (t.shareOfNetWorthLocal ?? 0), 0);
-      if (Math.abs(tierSum - (hs.netWorthLocal ?? 0)) / Math.max(1, Math.abs(hs.netWorthLocal ?? 1)) > 1e-3) {
+      if (Math.abs(tierSum - (hs.netWorthLocal)) / Math.max(1, Math.abs(hs.netWorthLocal)) > 1e-3) {
         violations.push({
           week,
-          message: `${region}: tier net worths sum to ${(tierSum / 1e9).toFixed(1)}B against an aggregate of ${((hs.netWorthLocal ?? 0) / 1e9).toFixed(1)}B — the tier split is not a partition of the real book`,
+          message: `${region}: tier net worths sum to ${(tierSum / 1e9).toFixed(1)}B against an aggregate of ${((hs.netWorthLocal) / 1e9).toFixed(1)}B — the tier split is not a partition of the real book`,
         });
       }
     }
@@ -673,7 +673,7 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
     const sumEffectiveDs = cohorts.reduce((a, c) => a + c.debtServiceLocal, 0);
     // PUB1c: consumption tax is a wedge inside the budget — the money is in the identity, the
     // purchases are not, so add it back before comparing.
-    const sumConsumptionTax = cohorts.reduce((a, c) => a + (c.consumptionTaxLocal ?? 0), 0);
+    const sumConsumptionTax = cohorts.reduce((a, c) => a + (c.consumptionTaxLocal), 0);
     const expectedBudgets = sumDisposable - sumSavings
       - sumEffectiveDs + (hs.capitalReceiptsAnnualLocal ?? 0) - sumConsumptionTax;
     if (agg > 0 && Math.abs(sumBudgets - expectedBudgets) / agg > 5e-3) {
@@ -689,7 +689,7 @@ function checkBeneficiaryClaimsHaveHolders(state: GameState, week: number) {
   const owedLocal = state.institutionalEntities
     .reduce((sum, e) => sum + ((e as { beneficiaryLiabilityLocal?: number }).beneficiaryLiabilityLocal ?? 0), 0);
   const heldLocal = REGION_IDS_SEED_ORDER
-    .reduce((sum, r) => sum + (state.regions[r]?.householdState?.institutionalClaimsLocal ?? 0), 0);
+    .reduce((sum, r) => sum + (state.regions[r].householdState.institutionalClaimsLocal), 0);
   if (owedLocal <= 0 && heldLocal <= 0) return;
   const gapLocal = Math.abs(owedLocal - heldLocal);
   if (gapLocal / Math.max(1, owedLocal) > 0.001) {
@@ -759,7 +759,7 @@ function checkNaNAndPurity(state: GameState, week: number) {
   });
 
   const idx = state.compositeIndices;
-  if (isNaN(idx.marketBreadth) || isNaN(idx.globalCreditComposite?.value)) {
+  if (isNaN(idx.marketBreadth) || isNaN(idx.globalCreditComposite.value)) {
     violations.push({ week, message: 'NaN/Infinity in composite indices' });
   }
 
@@ -944,11 +944,11 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
       // whole book at the window.
       const pledges = Array.from(bankSovereignFaceByBond(ensureV2(shocked), c.id), ([bondId, faceLocal]) => ({ bondId, faceLocal }));
       if (pledges.length > 0) {
-        setActiveWireWorld(wireWorldOf(ensureV2(shocked), shocked.companies, shocked.institutionalEntities ?? []));
+        setActiveWireWorld(wireWorldOf(ensureV2(shocked), shocked.companies, shocked.institutionalEntities));
         try {
           publishRepoBook(ensureV2(shocked), 'USA', [...repoBookOf(ensureV2(shocked), 'USA'), {
             id: `USA-REPO-SHOCK-${c.id}`, regionId: 'USA', lender: { kind: 'CENTRAL_BANK', region: 'USA' }, borrowerId: c.id,
-            principalLocal: sovLocal, rateAnnual: shocked.regions.USA?.policyRate ?? 0, struckWeek: shocked.currentWeek, maturityWeek: shocked.currentWeek + 52, collateral: pledges,
+            principalLocal: sovLocal, rateAnnual: shocked.regions.USA.policyRate, struckWeek: shocked.currentWeek, maturityWeek: shocked.currentWeek + 52, collateral: pledges,
           }]);
         } finally { setActiveWireWorld(undefined); }
       }
@@ -1009,7 +1009,7 @@ const hhModule: HarnessModule = (() => {
       series.v.push(reg.vacancyRate ?? 0);
       series.tight.push(reg.laborMarketTightness ?? 0);
       series.wage.push(Object.values(pools).reduce((a: number, p: OccupationPool) => a + p.wageGrowthAnnual, 0) / 5);
-      series.netWorth.push(hs.netWorthLocal ?? 0);
+      series.netWorth.push(hs.netWorthLocal);
       series.infl.push(reg.inflation);
       series.consumption.push((hs.cohorts ?? []).reduce((a, c) => a + c.consumptionBudgetLocal, 0));
     },
@@ -1020,14 +1020,14 @@ const hhModule: HarnessModule = (() => {
         const reg = s.regions[r]; const hs = reg.householdState;
         const instLiab = s.institutionalEntities.filter(e => e.region === r && !e.isDefaulted)
           .reduce((a, e) => a + (e.beneficiaryLiabilityLocal ?? 0), 0);
-        const held = hs.institutionalClaimsLocal ?? 0;
+        const held = hs.institutionalClaimsLocal;
         const gap = Math.abs(instLiab - held) / Math.max(1, instLiab);
-        const nwParts = householdDepositsOf(ensureV2(s), r) + (hs.mmfSharesLocal ?? 0) + (hs.equityHoldingsLocal ?? 0)
-          + (hs.housingStockLocal ?? 0)
-          - ((hs.mortgageDebtLocal ?? 0) + (hs.creditCardDebtLocal ?? 0) + (hs.otherConsumerLoanDebtLocal ?? 0));
-        const nwGap = Math.abs(nwParts - (hs.netWorthLocal ?? 0)) / Math.max(1, Math.abs(hs.netWorthLocal ?? 1));
+        const nwParts = householdDepositsOf(ensureV2(s), r) + (hs.mmfSharesLocal ?? 0) + (hs.equityHoldingsLocal)
+          + (hs.housingStockLocal)
+          - ((hs.mortgageDebtLocal) + (hs.creditCardDebtLocal) + (hs.otherConsumerLoanDebtLocal));
+        const nwGap = Math.abs(nwParts - (hs.netWorthLocal)) / Math.max(1, Math.abs(hs.netWorthLocal));
         const tierSum = Object.values(reg.wealthDistribution).reduce((a: number, t: { shareOfNetWorthLocal: number }) => a + t.shareOfNetWorthLocal, 0);
-        const tierGap = Math.abs(tierSum - (hs.netWorthLocal ?? 0)) / Math.max(1, Math.abs(hs.netWorthLocal ?? 1));
+        const tierGap = Math.abs(tierSum - (hs.netWorthLocal)) / Math.max(1, Math.abs(hs.netWorthLocal));
         const bankDeposits = banksOf(s.companies, r)
           .reduce((a, c) => a + householdDepositsAt(ensureV2(s), c.ticker, currencyOf(c.region)), 0);
         const depGap = Math.abs(householdDepositsOf(ensureV2(s), r) - bankDeposits) / Math.max(1, bankDeposits);
@@ -1039,12 +1039,12 @@ const hhModule: HarnessModule = (() => {
         const hDepositsLocal = householdDepositsOf(ensureV2(s), r);
         const dep = Math.max(0, hDepositsLocal + (h.mmfSharesLocal ?? 0));
         const ds = Math.max(0, h.weeklyDebtServiceLocal ?? 0);
-        const cons = Math.max(0, s.regions[r].estimatedHouseholdIncomeLocal) * (1 - (h.savingsRate ?? 0)) / 52;
+        const cons = Math.max(0, s.regions[r].estimatedHouseholdIncomeLocal) * (1 - (h.savingsRate)) / 52;
         const committed = ds + cons;
         // Any forced-selling or buffer rule is a THRESHOLD on this number. If the cash covers
         // hundreds of weeks of outflow, no such threshold can ever be crossed and a rule built on
         // one would be a mechanism that binds on nothing (§7.146, §7.149, §7.159).
-        out.push(`  ${r}: liquid ${B(dep)} vs committed ${B(committed)}/wk = ${(committed > 0 ? dep / committed : 0).toFixed(1)} weeks of cover | savings rate ${pct(h.savingsRate ?? 0)} | income ${B(s.regions[r].estimatedHouseholdIncomeLocal)}`);
+        out.push(`  ${r}: liquid ${B(dep)} vs committed ${B(committed)}/wk = ${(committed > 0 ? dep / committed : 0).toFixed(1)} weeks of cover | savings rate ${pct(h.savingsRate)} | income ${B(s.regions[r].estimatedHouseholdIncomeLocal)}`);
         // HOW FAR IS THE FORCED-SALE THRESHOLD? A household sells only what its deposits above
         // the buffer cannot cover, so the distance is the headroom divided by the weekly gap.
         // Printing it keeps "not firing" an observation about CONDITIONS rather than a mechanism
@@ -1052,27 +1052,27 @@ const hhModule: HarnessModule = (() => {
         const incomeLocal = Math.max(0, s.regions[r].estimatedHouseholdIncomeLocal);
         const floorLocal = (incomeLocal / 52) * 12;
         const headroomLocal = Math.max(0, hDepositsLocal - floorLocal);
-        const gapLocal = Math.max(0, -(incomeLocal * (h.savingsRate ?? 0)) / 52);
+        const gapLocal = Math.max(0, -(incomeLocal * (h.savingsRate)) / 52);
         // What a forced sale could actually REACH. Only fund shares are sellable: household
         // direct equity and private business have no trading channel, so they are wealth the
         // household cannot turn into cash however badly it needs to.
-        const etfRows = h.etfShares ?? [];
+        const etfRows = h.etfShares;
         const sellableLocal = etfRows.reduce((a: number, x) => {
-          const f = s.institutionalEntities?.find((e: InstitutionalEntity) => e.id === x.fundId);
+          const f = s.institutionalEntities.find((e: InstitutionalEntity) => e.id === x.fundId);
           const sh = f ? etfSharesOutstandingOf(ensureV2(s), f.id) : 0;
-          const nav = sh > 0 && f ? ((f.itemizedHoldings ?? []).reduce((b: number, hh: ItemizedHolding) => b + (hh.quantityOrNotionalLocal ?? 0), 0) + Math.max(0, entityCashOf(ensureV2(s), f))) / sh : 0;
-          return a + (x.shares ?? 0) * nav;
+          const nav = sh > 0 && f ? ((f.itemizedHoldings).reduce((b: number, hh: ItemizedHolding) => b + (hh.quantityOrNotionalLocal), 0) + Math.max(0, entityCashOf(ensureV2(s), f))) / sh : 0;
+          return a + (x.shares) * nav;
         }, 0);
         out.push(`      deposit headroom over the buffer ${B(headroomLocal)} vs a ${B(gapLocal)}/wk gap = ${gapLocal > 0 ? (headroomLocal / gapLocal).toFixed(0) : '∞'} weeks before forced selling starts`);
-        out.push(`      sellable (fund shares) ${B(sellableLocal)} of ${B(h.equityHoldingsLocal ?? 0)} total household equity — the rest has no trading channel`);
+        out.push(`      sellable (fund shares) ${B(sellableLocal)} of ${B(h.equityHoldingsLocal)} total household equity — the rest has no trading channel`);
       });
       out.push('--- the mortgage book as a CROSS-SECTION: E[f(LTV)] against f(E[LTV]) ---');
       REGIONS.forEach(r => {
-        const price = Math.max(0, s.regions[r].housingMarket?.medianHomePriceLocal ?? 0);
+        const price = Math.max(0, s.regions[r].housingMarket.medianHomePriceLocal);
         const vs: MortgageVintage[] = [];
         s.companies.forEach(c => {
           if (c.region !== r || !c.bankBalanceSheet) return;
-          (c.bankBalanceSheet!.householdLoans ?? []).forEach((pl: HouseholdLoanPool) => {
+          (c.bankBalanceSheet!.householdLoans).forEach((pl: HouseholdLoanPool) => {
             if (pl.kind === 'MORTGAGE') (pl.vintages ?? []).forEach((v) => vs.push(v));
           });
         });
@@ -1098,15 +1098,15 @@ const hhModule: HarnessModule = (() => {
         // and got 0.34, so no fall short of ~55% moved it off the floor at all.
         const oldStyleLtv = (() => {
           const h = s.regions[r].householdState;
-          const stock = Math.max(0, h.housingStockLocal ?? 0);
-          return stock > 0 ? Math.max(0, h.mortgageDebtLocal ?? 0) / stock : 0;
+          const stock = Math.max(0, h.housingStockLocal);
+          return stock > 0 ? Math.max(0, h.mortgageDebtLocal) / stock : 0;
         })();
         // HSG — does the RATE reach a borrower? Two things it must do: shrink what a household
         // can borrow (affordability), and reach households who already borrowed (resets).
         const reg2 = s.regions[r];
-        const hh = Math.max(1, (reg2.totalPopulation ?? 0) / 2.5);
+        const hh = Math.max(1, (reg2.totalPopulation) / 2.5);
         const wkInc = Math.max(0, reg2.estimatedHouseholdIncomeLocal) / 52 / hh;
-        const mortRate = Math.max(0.005, (reg2.zeroRates?.tenor10Y ?? reg2.policyRate) + 0.017);
+        const mortRate = Math.max(0.005, (reg2.zeroRates.tenor10Y) + 0.017);
         const afford = (rate: number) => {
           const rw = Math.max(0.00001, rate / 52);
           const af = rw / (1 - Math.pow(1 + rw, -30 * 52));
@@ -1138,7 +1138,7 @@ const hhModule: HarnessModule = (() => {
       out.push(`  u range ${pct(Math.min(...series.u))}-${pct(Math.max(...series.u))}   v range ${pct(Math.min(...series.v))}-${pct(Math.max(...series.v))}`);
       const realWage = series.wage.map((x, i) => x - series.infl[i]);
       out.push(`  mean nominal wage growth ${pct(series.wage.reduce((a, x) => a + x, 0) / series.wage.length)}, mean real ${pct(realWage.reduce((a, x) => a + x, 0) / realWage.length)}`);
-      out.push(`  net worth / income (USA): ${((s.regions.USA.householdState.netWorthLocal ?? 0) / s.regions.USA.estimatedHouseholdIncomeLocal).toFixed(2)}x`);
+      out.push(`  net worth / income (USA): ${((s.regions.USA.householdState.netWorthLocal) / s.regions.USA.estimatedHouseholdIncomeLocal).toFixed(2)}x`);
       return out;
     },
     shock(snapshot, rngState, shockWeek, weeks) {
@@ -1194,7 +1194,7 @@ function couponReceipts(s: GameState, region: RegionId) {
     .filter((e: InstitutionalEntity) => e.region === region && !e.isDefaulted)
     .reduce((a: number, e: InstitutionalEntity) => a + e.itemizedHoldings
       .filter((h: ItemizedHolding) => h.instrumentType === 'GOV_BOND' && h.issuerRegion === region)
-      .reduce((x: number, h: ItemizedHolding) => x + ((h.quantityOrNotionalLocal ?? 0) * rate(h.instrumentId)) / 52, 0), 0);
+      .reduce((x: number, h: ItemizedHolding) => x + ((h.quantityOrNotionalLocal) * rate(h.instrumentId)) / 52, 0), 0);
   const central = centralBankPositions(ensureV2(s), region)
     .reduce((a: number, p) => a + (p.faceLocal * (cb[p.bondId] ?? 0)) / 52, 0);
   const paid = weeklyInterestExpenseLocal(materializeGovLadder(ensureV2(s), region));
@@ -1228,7 +1228,7 @@ const pubModule: HarnessModule = (() => {
       series.revenue.push(reg.governmentRevenueLocal);
       series.outlays.push(reg.governmentOutlaysLocal ?? 0);
       series.cmb.push(reg.cashBridgeBillIssuanceLocal ?? 0);
-      series.debtGdp.push(reg.debtToGdpPctBottomUp ?? 0);
+      series.debtGdp.push(reg.debtToGdpPctBottomUp);
       const cbCoupon = couponReceipts(s, 'USA').central * 52;
       const cbAssetsLocal = cb ? centralBankAssetsLocal(centralBankSovereignAssetsLocal(ensureV2(s), 'USA'), cb, waysAndMeansOf(ensureV2(s), 'USA')) : 0;
       series.portYield.push(cbAssetsLocal > 0 ? cbCoupon / cbAssetsLocal : 0);
@@ -1296,7 +1296,7 @@ const pubModule: HarnessModule = (() => {
         setRngState(rngState);
         let x = clone(st);
         if (shocked) {
-          materializeGovLadder(ensureV2(x), 'USA').forEach((t: GovDebtTranche) => { t.couponRate = (t.couponRate ?? 0) * 4 + 0.04; });
+          materializeGovLadder(ensureV2(x), 'USA').forEach((t: GovDebtTranche) => { t.couponRate = (t.couponRate) * 4 + 0.04; });
         }
         const o = { interest: [] as number[], proc: [] as number[], transfers: [] as number[], debt: [] as number[] };
         for (let i = 0; i < horizon; i++) {
@@ -1306,7 +1306,7 @@ const pubModule: HarnessModule = (() => {
             GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore);
           o.interest.push(dec.interestLocal); o.transfers.push(dec.transfersLocal);
           o.proc.push(reg.governmentProcurementSpentLocal ?? 0);
-          o.debt.push(reg.debtToGdpPctBottomUp ?? 0);
+          o.debt.push(reg.debtToGdpPctBottomUp);
         }
         return o;
       };
@@ -1333,12 +1333,12 @@ const xbModule: HarnessModule = (() => {
     report(s) {
       const out: string[] = [];
       out.push('--- trade reconciles to who bought from whom ---');
-      const totX = REGIONS.reduce((a, r) => a + (s.regions[r].exportsLocal ?? 0), 0);
-      const totM = REGIONS.reduce((a, r) => a + (s.regions[r].importsLocal ?? 0), 0);
+      const totX = REGIONS.reduce((a, r) => a + (s.regions[r].exportsLocal), 0);
+      const totM = REGIONS.reduce((a, r) => a + (s.regions[r].importsLocal), 0);
       out.push(`  world exports ${B(totX)}  imports ${B(totM)}  gap ${pct(Math.abs(totX - totM) / Math.max(1, totX))}`);
       REGIONS.forEach(r => {
         const reg = s.regions[r];
-        out.push(`  ${r.padEnd(4)} X ${B(reg.exportsLocal ?? 0)}  M ${B(reg.importsLocal ?? 0)}  balance ${B(reg.tradeBalance ?? 0)}`);
+        out.push(`  ${r.padEnd(4)} X ${B(reg.exportsLocal)}  M ${B(reg.importsLocal)}  balance ${B(reg.tradeBalance)}`);
       });
       out.push('--- trade share against the physics that should drive it ---');
       const density: number[] = []; const imported: number[] = [];
@@ -1357,7 +1357,7 @@ const xbModule: HarnessModule = (() => {
       const carriers = s.companies.filter(isCarrier);
       const alive = carriers.filter(c => isActiveCompany(c));
       out.push(`  carriers ${alive.length} alive of ${carriers.length}   fleet ${carriers.reduce((a, c) => a + (c.carrierFleet?.assets.length ?? 0), 0)} assets`);
-      out.push(`  logistics revenue ${B(carriers.reduce((a, c) => a + c.annualRevenue, 0))} = ${pct(carriers.reduce((a, c) => a + c.annualRevenue, 0) / Math.max(1, REGIONS.reduce((a, r) => a + (s.regions[r].derivedNominalGdpLocal ?? 0), 0)))} of world GDP [real: 5-6%]`);
+      out.push(`  logistics revenue ${B(carriers.reduce((a, c) => a + c.annualRevenue, 0))} = ${pct(carriers.reduce((a, c) => a + c.annualRevenue, 0) / Math.max(1, REGIONS.reduce((a, r) => a + (s.regions[r].derivedNominalGdpLocal), 0)))} of world GDP [real: 5-6%]`);
       const rateStart = history[0]?.rates ?? {}; const rateEnd = history[history.length - 1]?.rates ?? {};
       Object.keys(rateEnd).sort().slice(0, 8).forEach(k => {
         const [from, to] = k.split('>') as [RegionId, RegionId];
@@ -1391,7 +1391,7 @@ const xbModule: HarnessModule = (() => {
     if (overdraftLocal > 0) out.push(`  institutions overdrawn (money spent that was not there): ${B(overdraftLocal)}`);
   }
 
-      const inTransit = s.goodsInTransit ?? [];
+      const inTransit = s.goodsInTransit;
       out.push(`  consignments in transit ${inTransit.length}  value ${B(inTransit.reduce((a, sh) => a + sh.units * sh.landedCostPerUnit, 0))}; in-place goods ever imported: ${inTransit.filter(sh => deliveryModeOf(sh.subUnitId) === 'IN_PLACE').length} (must be 0)`);
       REGIONS.forEach(r => {
         const fx = getFxToUsd(s.fxPairs, r);
@@ -1517,7 +1517,7 @@ const indModule: HarnessModule = (() => {
     // mechanism that does not exist — and deleting it would flatten the income distribution
     // rather than derive it (rule 2's caveat).
     {
-      const wi = s.companies.filter(c => isActiveCompany(c) && (c.employeeCount ?? 0) > 0)
+      const wi = s.companies.filter(c => isActiveCompany(c) && (c.employeeCount) > 0)
         .map(c => c.offeredWageIndex ?? 1).sort((a, b) => a - b);
       if (wi.length > 2) {
         const q = (f: number) => wi[Math.min(wi.length - 1, Math.floor(f * wi.length))];
@@ -1526,7 +1526,7 @@ const indModule: HarnessModule = (() => {
         // Where rent-sharing is HEADING: the equilibrium premium each firm's own surplus implies,
         // which is what the slow pull converges to. If the targets are flat the mechanism cannot
         // produce dispersion however long it runs; if they are wide, only the speed is at issue.
-        const tgt = s.companies.filter(c => isActiveCompany(c) && (c.employeeCount ?? 0) > 0 && c.annualRevenue > 0)
+        const tgt = s.companies.filter(c => isActiveCompany(c) && (c.employeeCount) > 0 && c.annualRevenue > 0)
           .map(c => 1 + 0.12 * ((c.annualRevenue - Math.max(0, c.annualRevenue - c.ebitda)) / Math.max(1, c.employeeCount) / Math.max(1, (c.annualRevenue * 0.3) / Math.max(1, c.employeeCount)) - 1))
           .sort((a, b) => a - b);
         if (tgt.length > 2) {
@@ -1537,13 +1537,13 @@ const indModule: HarnessModule = (() => {
       // And where the top tier's income actually comes from: if it is capital rather than wages,
       // the 13x wage multiplier is standing in for concentration that belongs elsewhere.
       REGIONS.slice(0, 1).forEach(r => {
-        const co = s.regions[r].householdState?.cohorts ?? [];
+        const co = s.regions[r].householdState.cohorts ?? [];
         if (co.length === 0) return;
         (['BOTTOM_50', 'NEXT_40', 'TOP_9', 'TOP_1'] as const).forEach(t => {
           const rows = co.filter(c => c.tier === t);
-          const wage = rows.reduce((a, c) => a + (c.wageIncomeLocal ?? 0), 0);
-          const cap = rows.reduce((a, c) => a + (c.capitalIncomeLocal ?? 0), 0);
-          const tr = rows.reduce((a, c) => a + (c.transferIncomeLocal ?? 0) + (c.unemploymentBenefitsLocal ?? 0), 0);
+          const wage = rows.reduce((a, c) => a + (c.wageIncomeLocal), 0);
+          const cap = rows.reduce((a, c) => a + (c.capitalIncomeLocal), 0);
+          const tr = rows.reduce((a, c) => a + (c.transferIncomeLocal) + (c.unemploymentBenefitsLocal), 0);
           const tot = wage + cap + tr;
           if (tot <= 0) return;
           out.push(`  ${r} ${t.padEnd(10)}: wages ${pct(wage / tot)}  capital ${pct(cap / tot)}  transfers ${pct(tr / tot)}`);
@@ -1565,7 +1565,7 @@ const indModule: HarnessModule = (() => {
         return out2;
       };
       // (1) SME pool leverage — the default integral, which is NONLINEAR (a coverage threshold).
-      const pools = s.regions.USA.smePools ?? [];
+      const pools = s.regions.USA.smePools;
       let fine = 0, coarse = 0, n = 0;
       pools.forEach(p2 => {
         const st = p2.strata ?? [];
@@ -1582,7 +1582,7 @@ const indModule: HarnessModule = (() => {
       if (n > 0) out.push(`  SME leverage (K=20 -> 10), NONLINEAR: ${(fine / n).toFixed(5)} vs ${(coarse / n).toFixed(5)}  gap ${(Math.abs(fine - coarse) / Math.max(1e-9, fine) * 100).toFixed(2)}%`);
       // (2) Tenure — the experience premium is AFFINE in tenure, so E[f(x)] = f(E[x]) EXACTLY and
       // coarsening must change nothing. A control: it shows the test can detect the difference.
-      const st2 = s.regions.USA.occupationPools?.GENERAL?.tenureStrata ?? [];
+      const st2 = s.regions.USA.occupationPools.GENERAL.tenureStrata ?? [];
       if (st2.length >= 4) {
         const g = (t: number) => 1 + 0.02 * t;
         const w2 = st2.reduce((a, x) => a + x.weight, 0) || 1;
@@ -1597,12 +1597,12 @@ const indModule: HarnessModule = (() => {
       const vs2: MortgageVintage[] = [];
       s.companies.forEach(c => {
         if (c.region !== 'USA' || !c.bankBalanceSheet) return;
-        (c.bankBalanceSheet!.householdLoans ?? []).forEach((pl: HouseholdLoanPool) => {
+        (c.bankBalanceSheet!.householdLoans).forEach((pl: HouseholdLoanPool) => {
           if (pl.kind === 'MORTGAGE') (pl.vintages ?? []).forEach((v) => vs2.push(v));
         });
       });
       if (vs2.length >= 4) {
-        const price = Math.max(1, s.regions.USA.housingMarket?.medianHomePriceLocal ?? 1);
+        const price = Math.max(1, s.regions.USA.housingMarket.medianHomePriceLocal);
         const ltv = (v: MortgageVintage) => vintageCurrentLtv(v, price);
         const sev = mortgageSeverityAtLtv;
         const sorted = vs2.slice().sort((a, b) => ltv(a) - ltv(b));
@@ -1621,12 +1621,12 @@ const indModule: HarnessModule = (() => {
     out.push('--- DIST 1(b): the EXPERIENCE cross-section, and the wage spread it produces ---');
     {
       const reg = s.regions.USA;
-      const occs = Object.keys(reg.occupationPools ?? {}) as OccupationType[];
+      const occs = Object.keys(reg.occupationPools) as OccupationType[];
       // The combined within-occupation spread: a worker's wage is its firm's premium times its
       // own experience premium. Both are outcomes now; neither existed a session ago.
       const allW: number[] = [];
       occs.forEach(o => {
-        const st = reg.occupationPools[o]?.tenureStrata ?? [];
+        const st = reg.occupationPools[o].tenureStrata ?? [];
         if (st.length === 0) return;
         st.forEach(x => { for (let n = 0; n < Math.round(x.weight * 1000); n++) allW.push(1 + 0.02 * x.tenureYears); });
       });
@@ -1634,7 +1634,7 @@ const indModule: HarnessModule = (() => {
         allW.sort((a, b) => a - b);
         const q = (f: number) => allW[Math.min(allW.length - 1, Math.floor(f * allW.length))];
         out.push(`  experience premium across the workforce: p10 ${q(0.1).toFixed(3)}  p50 ${q(0.5).toFixed(3)}  p90 ${q(0.9).toFixed(3)}  p99 ${q(0.99).toFixed(3)} (p99/p10 ${(q(0.99) / Math.max(0.001, q(0.1))).toFixed(2)}x)`);
-        const st0 = reg.occupationPools[occs[0]]?.tenureStrata ?? [];
+        const st0 = reg.occupationPools[occs[0]].tenureStrata ?? [];
         const wsum = st0.reduce((a, x) => a + x.weight, 0);
         const meanTen = st0.reduce((a, x) => a + x.weight * x.tenureYears, 0) / Math.max(1e-9, wsum);
         out.push(`  ${occs[0]}: ${st0.length} tenure cohorts, weights sum ${wsum.toFixed(4)} [must be 1], mean tenure ${meanTen.toFixed(1)}y`);
@@ -1643,7 +1643,7 @@ const indModule: HarnessModule = (() => {
 
     out.push('--- DIST/CRD: the credit tiers, and whether they can move BOTH ways ---');
     REGIONS.forEach(r => {
-      const books = s.regions[r].householdState.creditTierBooks ?? [];
+      const books = s.regions[r].householdState.creditTierBooks;
       if (books.length === 0) return;
       const row = (t: string) => books.find(b => b.tier === t);
       const f = (t: string) => (row(t)?.shareOfHouseholds ?? 0);
@@ -1655,7 +1655,7 @@ const indModule: HarnessModule = (() => {
 
     out.push('--- DIST: the SME pools, and what share of each cannot service its debt ---');
     REGIONS.forEach(r => {
-      const pools = s.regions[r].smePools ?? [];
+      const pools = s.regions[r].smePools;
       if (pools.length === 0) return;
       const shares = pools.map(p => p.distressedFirmShare ?? 0).sort((a, b) => a - b);
       // §5-WIRES A3.3: a pool's cash is its rows at the region's banks, not a field on the pool.
@@ -1680,15 +1680,15 @@ const indModule: HarnessModule = (() => {
       const ebitda = firms.reduce((a, c) => a + c.ebitda, 0);
       const inputs = firms.reduce((a, c) => a + (c.lastWeekPurchasesLocal ?? 0) * 52, 0);
       const netPpe = firms.reduce((a, c) => a + plantNetLocal(c.plant, s.currentWeek), 0);
-      const coc = Math.max(0, (s.regions[r].zeroRates?.tenor10Y ?? s.regions[r].policyRate));
+      const coc = Math.max(0, (s.regions[r].zeroRates.tenor10Y));
       const below = firms.filter(c => {
         const np = plantNetLocal(c.plant, s.currentWeek);
-        return c.ebitda < np * (coc + (c.beta ?? 1) * 0.05);
+        return c.ebitda < np * (coc + (c.beta) * 0.05);
       }).length;
       // CAP — DOES CAPEX COVER DEPRECIATION? The number IND13's stock exposed, measured at the
       // FLOW so it is not hidden behind the commissioning lead and the maintenance EMA.
       const dep = firms.reduce((a, c) => a + plantDepreciationAnnualLocal(c.plant, s.currentWeek), 0);
-      const capexA = firms.reduce((a, c) => a + (c.capex ?? 0), 0);
+      const capexA = firms.reduce((a, c) => a + (c.capex), 0);
       out.push(`  ${r}: capex ${B(capexA)}/yr vs depreciation ${B(dep)}/yr = ${(dep > 0 ? capexA / dep : 0).toFixed(2)}x [1.0x replaces the stock]`);
       // CAP — WHERE THE CAPEX BIDS DIE. The five capex weights sum to 1, so the bids ARE the
       // capex figure; if deliveries are a fraction of it, the capital-goods sector cannot make
@@ -1699,10 +1699,10 @@ const indModule: HarnessModule = (() => {
         // solve; the firms bid their OWN capex figure. If those disagree the sector was built to
         // supply one number and asked for another (rule 4).
         const capexCats = [...VIEW_CAPITAL_GOOD_IDS]; // §7.246: the registry's list, not a copy
-        const seededLocal = capexCats.reduce((a, su) => a + ((s.regions[r].categoryDemand?.[su]?.demandLevelAnnualLocal) ?? 0), 0);
+        const seededLocal = capexCats.reduce((a, su) => a + ((s.regions[r].categoryDemand[su]?.demandLevelAnnualLocal) ?? 0), 0);
         out.push(`      capex industries sized for ${B(seededLocal)}/yr of demand; firms bid ${B(capexA)}/yr = ${(seededLocal > 0 ? capexA / seededLocal : 0).toFixed(2)}x what was built`);
         capexCats.forEach(su => {
-          const cd = s.regions[r].categoryDemand?.[su];
+          const cd = s.regions[r].categoryDemand[su];
           if (!cd) return;
           const d = cd.totalUnitsDemandedThisWeek ?? 0;
           const sup = cd.totalUnitsSuppliedThisWeek ?? 0;
@@ -1740,7 +1740,7 @@ const indModule: HarnessModule = (() => {
     const prepaidBySupplier = new Map<string, number>();
     let prepaidTotalLocal = 0;
     [...allContracts(s).values()].forEach(c => {
-      const v = c.prepaidLocal ?? 0;
+      const v = c.prepaidLocal;
       if (!(v > 0)) return;
       prepaidTotalLocal += v;
       prepaidBySupplier.set(c.supplierCompanyId, (prepaidBySupplier.get(c.supplierCompanyId) ?? 0) + v);
@@ -1752,8 +1752,8 @@ const indModule: HarnessModule = (() => {
       const firms = s.companies.filter(c => {
         if (!isActiveCompany(c) || !(c.annualRevenue > 0)) return false;
         const lines = c.productLines ?? [];
-        const w = lines.reduce((a: number, l: ProductLine) => a + (l.revenueShare ?? 0), 0);
-        const lead = w > 0 ? lines.reduce((a: number, l: ProductLine) => a + (l.revenueShare ?? 0) * productionLeadWeeksOf(l.subUnitId), 0) / w : 0;
+        const w = lines.reduce((a: number, l: ProductLine) => a + (l.revenueShare), 0);
+        const lead = w > 0 ? lines.reduce((a: number, l: ProductLine) => a + (l.revenueShare) * productionLeadWeeksOf(l.subUnitId), 0) / w : 0;
         return lead >= b.lo && lead < b.hi;
       });
       if (firms.length === 0) return;
@@ -1834,8 +1834,8 @@ const indModule: HarnessModule = (() => {
     // carry visibly more trade credit against its own sales.
     const leadOf = (c: Company) => {
       const lines = c.productLines ?? [];
-      const w = lines.reduce((a: number, l: ProductLine) => a + (l.revenueShare ?? 0), 0);
-      return w > 0 ? lines.reduce((a: number, l: ProductLine) => a + (l.revenueShare ?? 0) * productionLeadWeeksOf(l.subUnitId), 0) / w : 0;
+      const w = lines.reduce((a: number, l: ProductLine) => a + (l.revenueShare), 0);
+      return w > 0 ? lines.reduce((a: number, l: ProductLine) => a + (l.revenueShare) * productionLeadWeeksOf(l.subUnitId), 0) / w : 0;
     };
     const buckets: { label: string; test: (n: number) => boolean }[] = [
       { label: 'lead 0wk   ', test: n => n < 0.5 },
@@ -1852,18 +1852,18 @@ const indModule: HarnessModule = (() => {
 
     out.push('--- IND11: the backlog is a stock, and it is two-sided ---');
     const contracts = [...allContracts(s).values()];
-    const owed = contracts.filter(c => (c.backlogUnits ?? 0) > 0.0001);
-    const weeklyObligation = contracts.reduce((a, c) => a + (c.quantityUnitsPerWeek ?? 0), 0);
-    const backlogUnits = contracts.reduce((a, c) => a + (c.backlogUnits ?? 0), 0);
-    const backlogLocal = contracts.reduce((a, c) => a + (c.backlogUnits ?? 0) * (c.priceLocal ?? 0), 0);
-    const indexed = contracts.filter(c => (c.escalationBaseLocal ?? 0) > 0).length;
-    const short = contracts.filter(c => (c.shortWeeks ?? 0) > 0);
+    const owed = contracts.filter(c => (c.backlogUnits) > 0.0001);
+    const weeklyObligation = contracts.reduce((a, c) => a + (c.quantityUnitsPerWeek), 0);
+    const backlogUnits = contracts.reduce((a, c) => a + (c.backlogUnits), 0);
+    const backlogLocal = contracts.reduce((a, c) => a + (c.backlogUnits) * (c.priceLocal), 0);
+    const indexed = contracts.filter(c => (c.escalationBaseLocal) > 0).length;
+    const short = contracts.filter(c => (c.shortWeeks) > 0);
     out.push(`  ${contracts.length} live contracts, ${owed.length} of them owing units (${pct(contracts.length ? owed.length / contracts.length : 0)})`);
     out.push(`  backlog outstanding ${backlogUnits.toFixed(0)} units / ${B(backlogLocal)}`);
     // IND10's remaining verify: quoted delivery IS the backlog divided by the rate that works it
     // off, so it lengthens exactly when a seller falls behind.
     out.push(`  implied quoted delivery across every contract: ${(weeklyObligation > 0 ? backlogUnits / weeklyObligation : 0).toFixed(2)} weeks of obligation`);
-    out.push(`  under-delivering: ${short.length} contracts on the non-performance clock, worst streak ${short.reduce((a, c) => Math.max(a, c.shortWeeks ?? 0), 0)} weeks`);
+    out.push(`  under-delivering: ${short.length} contracts on the non-performance clock, worst streak ${short.reduce((a, c) => Math.max(a, c.shortWeeks), 0)} weeks`);
     out.push(`  indexed to the market: ${indexed} of ${contracts.length} (${pct(contracts.length ? indexed / contracts.length : 0)})`);
     return out;
   },
@@ -1929,12 +1929,12 @@ const fpModule: HarnessModule = {
     // change (§5-WIRES W2: two trees, first row that differs, then the stage).
     if (process.env.REGISTER_DUMP && w === (Number(process.env.STATE_DUMP_WEEK) || 1)) {
       const lines: string[] = [];
-      (state.institutionalEntities ?? []).forEach((e) => {
+      (state.institutionalEntities).forEach((e) => {
         const agg = new Map<string, [number, number]>();
         e.itemizedHoldings.forEach((h) => {
           const k = `${e.id}\t${h.instrumentType}\t${h.instrumentId}`;
           const cur = agg.get(k) ?? [0, 0];
-          cur[0] += h.quantityOrNotionalLocal ?? 0; cur[1] += h.quantityShares ?? 0;
+          cur[0] += h.quantityOrNotionalLocal; cur[1] += h.quantityShares ?? 0;
           agg.set(k, cur);
         });
         agg.forEach((v, k) => lines.push(`${k}\t${v[0].toFixed(2)}\t${v[1].toFixed(4)}`));
@@ -2023,7 +2023,7 @@ const bookTraceModule: HarnessModule = {
         e.itemizedHoldings.forEach((h) => {
           if (h.issuerRegion !== region) return;
           if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN' || h.instrumentType === 'COMMERCIAL_PAPER') {
-            const usd = h.quantityOrNotionalLocal ?? 0;
+            const usd = h.quantityOrNotionalLocal;
             creditHeldLocal += usd;
             // instrumentId IS the issuer's company.id for the credit classes (domain/banking.ts).
             if (issuerAliveById.get(h.instrumentId) === false) heldOnDeadIssuerLocal += usd;
@@ -2066,8 +2066,8 @@ const spiralModule: HarnessModule = {
             const l = (c.productLines || []).find((x) => x.subUnitId === focus);
             return a + (l?.weeklyCapacityUnits ?? 0);
           }, 0);
-          const staffed = sup.reduce((a, c) => a + ((c.baselineEmployeeCount ?? 0) > 0
-            ? Math.min(1, (c.employeeCount ?? 0) / c.baselineEmployeeCount!) : 1), 0);
+          const staffed = sup.reduce((a, c) => a + ((c.baselineEmployeeCount) > 0
+            ? Math.min(1, (c.employeeCount) / c.baselineEmployeeCount!) : 1), 0);
           const cd = state.regions[region].categoryDemand[focus];
           console.log(`  [pxf] w${w} ${region} ${focus} sup${sup.length}`
             + ` cap${(cap / 1e6).toFixed(2)}M staffedAvg${sup.length ? (staffed / sup.length).toFixed(2) : '-'}`
@@ -2109,13 +2109,13 @@ const spiralModule: HarnessModule = {
       const alive = carriers.filter((c) => isActiveCompany(c));
       const line = carriers.slice(0, 12).map((c) => {
         const flag = isActiveCompany(c) ? '' : '✝';
-        return `${c.ticker}${flag} cash${(cashOf(ensureV2(state), c) / 1e6).toFixed(0)}M rev${((c.annualRevenue ?? 0) / 1e6).toFixed(0)}M ni${((c.netIncome ?? 0) / 1e6).toFixed(1)}M`;
+        return `${c.ticker}${flag} cash${(cashOf(ensureV2(state), c) / 1e6).toFixed(0)}M rev${((c.annualRevenue) / 1e6).toFixed(0)}M ni${((c.netIncome) / 1e6).toFixed(1)}M`;
       }).join(' | ');
       console.log(`  [car] w${w} alive ${alive.length}/${carriers.length} :: ${line}`);
       const ledgerTicker = process.env.CARRIER_LEDGER;
       if (ledgerTicker) {
         const c = carriers.find((x) => x.ticker === ledgerTicker);
-        const rows = ((c as unknown as { lastCashLedger?: { label: string; amountLocal: number }[] })?.lastCashLedger ?? [])
+        const rows = ((c as unknown as { lastCashLedger?: { label: string; amountLocal: number }[] }).lastCashLedger ?? [])
           .filter((r) => Math.abs(r.amountLocal) > 1e6)
           .map((r) => `${r.label} ${(r.amountLocal / 1e6).toFixed(1)}M`);
         console.log(`  [car-ledger] w${w} ${ledgerTicker} :: ${rows.join(' | ')}`);
@@ -2144,7 +2144,7 @@ const spiralModule: HarnessModule = {
     if (!SPIRAL) return;
     REGION_IDS_SEED_ORDER.forEach((region) => {
       const r = state.regions[region];
-      const smeEmployment = r.smePools.reduce((a, s) => a + (s.employment ?? 0), 0);
+      const smeEmployment = r.smePools.reduce((a, s) => a + (s.employment), 0);
       const poolCashNeg = r.smePools.filter((s) => poolCashOf(ensureV2(state), region, s.industry) < 0).length;
       const gov = governmentOf(region, r, materializeGovLadder(ensureV2(state), region));
       const { overrunLocal } = gov.overrun();
@@ -2152,14 +2152,14 @@ const spiralModule: HarnessModule = {
         + ` u ${(r.unemploymentRate * 100).toFixed(1)}`
         + ` pi ${(r.inflation * 100).toFixed(0)}`
         + ` pol ${(r.policyRate * 100).toFixed(1)}`
-        + ` wageIdxG ${(r.occupationPools?.GENERAL?.wageIndex ?? 0).toFixed(3)}`
+        + ` wageIdxG ${(r.occupationPools.GENERAL.wageIndex).toFixed(3)}`
         + ` | outlays ${((r.governmentOutlaysLocal ?? 0) / 1e9).toFixed(2)}B`
         + ` overrun ${(overrunLocal / 1e9).toFixed(2)}B`
         + ` transfers ${((r.governmentTransfersWeeklyLocal ?? 0) / 1e9).toFixed(2)}B`
         + ` payrollGov ${((r.governmentPayrollWeeklyLocal ?? 0) / 1e9).toFixed(2)}B`
         + ` tga ${(treasuryAccountOf(ensureV2(state), r.id as RegionId) / 1e9).toFixed(1)}B`
         + ` | smeEmp ${(smeEmployment / 1e6).toFixed(2)}M poolNeg ${poolCashNeg}`
-        + ` govEmp ${((r.governmentEmployment ?? 0) / 1e6).toFixed(2)}M`
+        + ` govEmp ${((r.governmentEmployment) / 1e6).toFixed(2)}M`
         + ` | fx ${(state.fxPairs.find((p) => p.base === region && p.quote === 'USA')?.rate ?? 1).toFixed(3)}`);
     });
   },
@@ -2173,13 +2173,13 @@ const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule, fpMo
 // =============================================================================================
 function weekLine(s: GameState, w: number, newViol: number, totalViol: number, ms: number): string {
   const r = s.regions;
-  const u = (id: RegionId) => ((r[id]?.unemploymentRate ?? 0) * 100).toFixed(1);
-  const gdp = r.USA.derivedNominalGdpLocal ?? 0;
+  const u = (id: RegionId) => ((r[id].unemploymentRate) * 100).toFixed(1);
+  const gdp = r.USA.derivedNominalGdpLocal;
   return `w${String(w).padStart(3)} | viol +${String(newViol).padStart(2)} S${String(totalViol).padStart(4)}`
     + ` | u ${u('USA')}/${u('EUR')}/${u('UK')}/${u('JPN')}`
-    + ` | pi ${((r.USA.inflation ?? 0) * 100).toFixed(2)}`
+    + ` | pi ${((r.USA.inflation) * 100).toFixed(2)}`
     + ` | GDP ${(gdp / 1e12).toFixed(2)}T`
-    + ` | 10Y ${((r.USA.zeroRates?.tenor10Y ?? 0) * 100).toFixed(2)}`
+    + ` | 10Y ${((r.USA.zeroRates.tenor10Y) * 100).toFixed(2)}`
     + ` | ${String(ms).padStart(4)}ms`;
 }
 
@@ -2310,10 +2310,10 @@ function runHarness() {
        // advanceWeeklyStep gates meetings on nextWeek (= w + 1, since state.currentWeek === w
        // going into this call), not on the harness's own loop index w.
        if ((w + 1) % 13 !== 0 && w > 1) {
-         if (preState.regions[rId as RegionId]?.policyRate !== state.regions[rId as RegionId]?.policyRate) {
+         if (preState.regions[rId as RegionId].policyRate !== state.regions[rId as RegionId].policyRate) {
            violations.push({
              week: w,
-             message: `Policy rate changed on non-meeting week ${w} for region ${rId}: ${preState.regions[rId as RegionId]?.policyRate} -> ${state.regions[rId as RegionId]?.policyRate}`
+             message: `Policy rate changed on non-meeting week ${w} for region ${rId}: ${preState.regions[rId as RegionId].policyRate} -> ${state.regions[rId as RegionId].policyRate}`
            });
          }
        }
@@ -2376,9 +2376,9 @@ function runHarness() {
         // books (stages/settlement.ts), so the line has real reserves behind it and excluding it
         // would leave the ASSET unmatched — the mirror of the error this comment used to record.
         // HH4d: wholesale funding is a real liability line split out of the deposit label.
-        lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.ccpLocal + lines.smeLocal + (bs.centralBankLoanLocal ?? 0) + bs.bankEquityLocal + (bs.srfBorrowingLocal ?? 0) + (bs.repoBorrowedLocal ?? 0)
+        lines.householdLocal + lines.corporateLocal + lines.institutionalLocal + lines.ccpLocal + lines.smeLocal + (bs.centralBankLoanLocal ?? 0) + bs.bankEquityLocal + (bs.srfBorrowingLocal) + (bs.repoBorrowedLocal)
         - businessLoanBookOf(bs, facilityBookLocal) - consumerLoanBookOf(bs) - sovLocal - reservesLocal
-        - (bs.repoLentLocal ?? 0) - (bs.onRrpLendingLocal ?? 0)
+        - (bs.repoLentLocal) - (bs.onRrpLendingLocal)
         // CAL: a sovereign coupon earned and not yet paid is this bank's asset against the
         // treasury, and the treasury carries the same balance as its payable.
         - (bs.sovereignAccruedCouponLocal ?? 0)
@@ -2430,7 +2430,7 @@ function runHarness() {
     // carrying against it. If this ever trips, the calendar has two writers again — find the
     // second one, never reconcile the difference.
     REGION_IDS.forEach((regionId) => {
-      const reg = state.regions?.[regionId];
+      const reg = state.regions[regionId];
       const bankHeldLocal = banksOf(state.companies, regionId)
         .reduce((a: number, c: Company) => a + (c.bankBalanceSheet!.sovereignAccruedCouponLocal ?? 0), 0);
       if (bankHeldLocal - (reg.sovereignCouponPayableLocal ?? 0) > 5e6) {
@@ -2474,7 +2474,7 @@ function runHarness() {
       if (cashLocal < -1e6) {
         violations.push({
           week: w,
-          message: `${e.ticker ?? e.id} is overdrawn by ${(-cashLocal / 1e9).toFixed(2)}B — a fund spending money it does not have [id ${e.id} ${e.entityType} ${e.region}]`,
+          message: `${e.ticker} is overdrawn by ${(-cashLocal / 1e9).toFixed(2)}B — a fund spending money it does not have [id ${e.id} ${e.entityType} ${e.region}]`,
         });
       }
     });
@@ -2493,7 +2493,7 @@ function runHarness() {
       book.forEach((c) => {
         borrowedBy.set(c.borrowerId, (borrowedBy.get(c.borrowerId) ?? 0) + c.principalLocal);
         const byBond = pledgedBy.get(c.borrowerId) ?? new Map<string, number>();
-        (c.collateral ?? []).forEach((p) => byBond.set(p.bondId, (byBond.get(p.bondId) ?? 0) + p.faceLocal));
+        (c.collateral).forEach((p) => byBond.set(p.bondId, (byBond.get(p.bondId) ?? 0) + p.faceLocal));
         pledgedBy.set(c.borrowerId, byBond);
         if (!(c.principalLocal >= 0) || !(c.maturityWeek > c.struckWeek)) {
           violations.push({ week: w, message: `${regionId} repo contract ${c.id} is malformed (principal ${c.principalLocal}, ${c.struckWeek}->${c.maturityWeek})` });
@@ -2505,7 +2505,7 @@ function runHarness() {
       banksOf(state.companies, regionId).forEach((c: Company) => {
         const bs = c.bankBalanceSheet!;
         const derivedLocal = borrowedBy.get(c.id) ?? 0;
-        const sheetLocal = (bs.repoBorrowedLocal ?? 0) + (bs.srfBorrowingLocal ?? 0);
+        const sheetLocal = (bs.repoBorrowedLocal) + (bs.srfBorrowingLocal);
         if (Math.abs(derivedLocal - sheetLocal) > 5e6) {
           violations.push({ week: w, message: `Bank ${c.ticker} secured borrowing ${(sheetLocal / 1e9).toFixed(2)}B disagrees with its ${(derivedLocal / 1e9).toFixed(2)}B of repo contracts` });
         }

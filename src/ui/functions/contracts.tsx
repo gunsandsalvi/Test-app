@@ -29,7 +29,7 @@ export const contracts: FunctionModule = {
     mine = [...new Map(mine.map((k) => [k.id, k])).values()];
     const classes = [...new Set(mine.map((k) => k.classId))];
     const tabs = ['all', ...classes.map(classWord)];
-    const active = tabs.includes(args.tab ?? '') ? args.tab! : 'all';
+    const active = tabs.includes(args.tab) ? args.tab! : 'all';
     const shown = mine.filter((k) => active === 'all' || classWord(k.classId) === active).sort((a, b) => b.notional - a.notional);
     const notional = shown.reduce((a, k) => a + k.notional, 0);
     const settled = shown.reduce((a, k) => a + (k.settledMarkLocal ?? 0), 0);

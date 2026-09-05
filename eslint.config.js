@@ -14,9 +14,9 @@
 //                          owns, and are declared safe rather than `void`ed 296 times.
 //   no-unnecessary-condition  §7.234 found `if (accExpected > 0)` guarding a value that was always
 //                          0, and a check that had never fired in the life of the file; §3.28's NaN
-//                          passed every `>` the same way. A WARNING under the gate's
-//                          `--max-warnings` — THE RATCHET, struck at the honest count (§4), may
-//                          fall and never rise; §3.29-iii/iv pay it.
+//                          passed every `>` the same way. An ERROR: §9.29-iii/iv paid the 1,565 it
+//                          found — 331 dead guards and 1,234 defensive reads — by deleting what
+//                          the types excluded and by making sixteen sparse stores say so.
 //   eqeqeq / no-fallthrough   the switch-heavy dispatch §7.229 counted at 75 sites.
 //
 // §3.29-ii: both type-aware rules were named here and configured nowhere — no `parserOptions.
@@ -40,7 +40,7 @@ export default tseslint.config(
       '@typescript-eslint/no-floating-promises': ['error', {
         allowForKnownSafeCalls: [{ from: 'package', package: 'node:test', name: ['test', 'describe', 'it'] }],
       }],
-      '@typescript-eslint/no-unnecessary-condition': 'warn',
+      '@typescript-eslint/no-unnecessary-condition': 'error',
       // THE RATCHET. 77 today; this may fall and never rise. When it reaches zero, make it an error.
       '@typescript-eslint/no-explicit-any': 'warn',
       // Real defects, not style.

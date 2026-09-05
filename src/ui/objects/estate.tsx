@@ -12,14 +12,14 @@ export const estate = defineObject<Estate>({
   type: 'estate',
   words: ['estate', 'estates'],
   searchable: true,
-  find: (world, id) => (world.state.estates ?? []).find((e) => e.companyId === id || e.ticker === id),
-  list: (world) => (world.state.estates ?? []).map((e) => ({ id: e.companyId, obj: e })),
+  find: (world, id) => (world.state.estates).find((e) => e.companyId === id || e.ticker === id),
+  list: (world) => (world.state.estates).map((e) => ({ id: e.companyId, obj: e })),
   label: (_w, _id, e) => ({ ticker: `${e.ticker} estate`, name: `the estate of ${e.ticker}`, kind: e.closedWeek !== undefined ? 'estate, closed' : 'estate, in workout', region: e.regionId }),
   keywords: (_w, _id, e) => [e.ticker.toLowerCase(), 'estate', 'workout', 'bankruptcy', e.regionId.toLowerCase()],
-  parse: (world, phrase) => { const m = phrase.trim().toLowerCase().match(/^([a-z0-9_]+) estate$/); return m ? (world.state.estates ?? []).find((e) => e.ticker.toLowerCase() === m[1])?.companyId : undefined; },
+  parse: (world, phrase) => { const m = phrase.trim().toLowerCase().match(/^([a-z0-9_]+) estate$/); return m ? (world.state.estates).find((e) => e.ticker.toLowerCase() === m[1])?.companyId : undefined; },
   headline: (_w, _id, e) => ({ value: money(e.distributedLocal), sub: 'distributed' }),
   peers: {
-    groups: (world) => [{ name: 'all estates', ids: (world.state.estates ?? []).map((e) => e.companyId) }],
+    groups: (world) => [{ name: 'all estates', ids: (world.state.estates).map((e) => e.companyId) }],
     defaultSort: 'owed',
     columns: [
       { key: 'name', label: 'estate', render: (r, _w, nav) => <Link to={{ type: 'estate', id: r.id }} nav={nav}>{r.obj.ticker}</Link>, value: (r) => r.obj.ticker },

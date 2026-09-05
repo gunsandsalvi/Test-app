@@ -37,7 +37,7 @@ export const firms: FunctionModule = {
   name: 'firms', appliesTo: ['region'], blurb: 'the firms here', argKey: 'tab',
   render: ({ world, ref, args, nav }) => {
     const tabs = ['listed', 'private', 'defaulted'];
-    const active = tabs.includes(args.tab ?? '') ? args.tab! : 'listed';
+    const active = tabs.includes(args.tab) ? args.tab! : 'listed';
     const all = world.state.companies.filter((c) => c.region === ref.id && !c.isBankEntity);
     const ids = (active === 'listed' ? all.filter((c) => isActiveCompany(c) && c.listingStatus !== 'PRIVATE')
       : active === 'private' ? all.filter((c) => isActiveCompany(c) && c.listingStatus === 'PRIVATE')
@@ -55,7 +55,7 @@ export const funds: FunctionModule = {
     const live = world.state.institutionalEntities.filter((e) => e.region === ref.id && !e.isDefaulted);
     const kinds = [...new Set(live.map((e) => e.entityType))].sort();
     const tabs = ['all', ...kinds.map((k) => k.toLowerCase().replace(/_/g, ' '))];
-    const active = tabs.includes(args.tab ?? '') ? args.tab! : 'all';
+    const active = tabs.includes(args.tab) ? args.tab! : 'all';
     const ids = live.filter((e) => active === 'all' || e.entityType.toLowerCase().replace(/_/g, ' ') === active).map((e) => e.id);
     return (<>
       <Tabs items={tabs} active={active} onPick={(t) => nav.go('funds', { tab: t })} />
@@ -70,7 +70,7 @@ export const labour: FunctionModule = {
     const r = regionOf(world, ref.id);
     if (!r) return null;
     const tabs = ['occupations', 'cohorts'];
-    const active = tabs.includes(args.tab ?? '') ? args.tab! : 'occupations';
+    const active = tabs.includes(args.tab) ? args.tab! : 'occupations';
     return (<>
       <Card style={{ padding: '2px 0' }}>
         <KV k="unemployment" hint={`nairu ${pctLevel(r.nairu)} · ${r.weeksAboveNairu > 0 ? `above it ${r.weeksAboveNairu} weeks` : 'at or under it'}`} v={pctLevel(r.unemploymentRate)} />

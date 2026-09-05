@@ -9,7 +9,7 @@ import { REGION_IDS } from '../../domain/geography';
 import { ObjectHeader, FunctionTiles, AllRow, RegionLink, taped } from './common';
 
 export const TENORS = ['3M', '2Y', '5Y', '10Y', '30Y'] as const;
-export const tenorRate = (r: Region, t: string): number | undefined => r.zeroRates?.[`tenor${t}` as keyof Region['zeroRates']];
+export const tenorRate = (r: Region, t: string): number | undefined => r.zeroRates[`tenor${t}` as keyof Region['zeroRates']];
 
 export const curve = defineObject<Region>({
   type: 'curve',
@@ -20,7 +20,7 @@ export const curve = defineObject<Region>({
   label: (_w, id) => ({ ticker: `${id} curve`, name: `${id} sovereign curve`, kind: 'sovereign curve', region: id }),
   keywords: (_w, id) => [id.toLowerCase(), 'curve', 'yields', 'rates', 'sovereign'],
   parse: (world, phrase) => { const p = phrase.trim().toLowerCase(); const m = p.match(/^([a-z]+) (curve|yields|rates)$/); return m && Object.hasOwn(world.state.regions, m[1].toUpperCase()) ? m[1].toUpperCase() : undefined; },
-  headline: (_w, _id, r) => ({ value: pctLevel(r.zeroRates?.tenor10Y, 2), sub: '10y' }),
+  headline: (_w, _id, r) => ({ value: pctLevel(r.zeroRates.tenor10Y, 2), sub: '10y' }),
   series: (world, id) => [
     ...TENORS.map((t) => taped(world, `curve:${id}:${t}`, t.toLowerCase(), 'zero yield', (v) => pctLevel(v, 2))),
     taped(world, `region:${id}:policy`, 'policy', 'rate', (v) => pctLevel(v, 2)),
@@ -32,14 +32,14 @@ export const curve = defineObject<Region>({
     columns: [
       { key: 'name', label: 'curve', width: 0.8, render: (r, _w, nav) => <Link to={{ type: 'curve', id: r.id }} nav={nav}>{r.id}</Link>, value: (r) => r.id },
       { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRate, 2), value: (r) => r.obj.policyRate },
-      { key: '2y', label: '2y', render: (r) => pctLevel(r.obj.zeroRates?.tenor2Y, 2), value: (r) => r.obj.zeroRates?.tenor2Y ?? 0 },
-      { key: '10y', label: '10y', render: (r) => pctLevel(r.obj.zeroRates?.tenor10Y, 2), value: (r) => r.obj.zeroRates?.tenor10Y ?? 0 },
-      { key: '30y', label: '30y', render: (r) => pctLevel(r.obj.zeroRates?.tenor30Y, 2), value: (r) => r.obj.zeroRates?.tenor30Y ?? 0 },
-      { key: 'slope', label: '2s10s', render: (r) => `${Math.round(((r.obj.zeroRates?.tenor10Y ?? 0) - (r.obj.zeroRates?.tenor2Y ?? 0)) * 10_000)}bp`, value: (r) => (r.obj.zeroRates?.tenor10Y ?? 0) - (r.obj.zeroRates?.tenor2Y ?? 0) },
+      { key: '2y', label: '2y', render: (r) => pctLevel(r.obj.zeroRates.tenor2Y, 2), value: (r) => r.obj.zeroRates.tenor2Y },
+      { key: '10y', label: '10y', render: (r) => pctLevel(r.obj.zeroRates.tenor10Y, 2), value: (r) => r.obj.zeroRates.tenor10Y },
+      { key: '30y', label: '30y', render: (r) => pctLevel(r.obj.zeroRates.tenor30Y, 2), value: (r) => r.obj.zeroRates.tenor30Y },
+      { key: 'slope', label: '2s10s', render: (r) => `${Math.round(((r.obj.zeroRates.tenor10Y) - (r.obj.zeroRates.tenor2Y)) * 10_000)}bp`, value: (r) => (r.obj.zeroRates.tenor10Y) - (r.obj.zeroRates.tenor2Y) },
     ],
   },
   overview({ world, ref, obj: r, nav }) {
-    const slope = (r.zeroRates?.tenor10Y ?? 0) - (r.zeroRates?.tenor2Y ?? 0);
+    const slope = (r.zeroRates.tenor10Y) - (r.zeroRates.tenor2Y);
     const ten = tapeSeries(world, `curve:${ref.id}:10Y`).values;
     const prev = ten[ten.length - 2];
     return (
@@ -47,7 +47,7 @@ export const curve = defineObject<Region>({
         <ObjectHeader name={`${r.name} sovereign curve`} sub={<><RegionLink id={ref.id} nav={nav} /> · {r.centralBank} · sovereign {r.sovereignRating} · {slope < 0 ? 'inverted' : 'upward sloping'}</>} />
         <StatGrid>
           <Stat label="policy" value={pctLevel(r.policyRate, 2)} sub={`neutral ${pctLevel(r.neutralRate, 2)}`} />
-          <Stat label="10y" value={pctLevel(r.zeroRates?.tenor10Y, 2)} sub={Number.isFinite(prev) ? `${pct((r.zeroRates?.tenor10Y ?? 0) - prev, 2)} this week` : ''} />
+          <Stat label="10y" value={pctLevel(r.zeroRates.tenor10Y, 2)} sub={Number.isFinite(prev) ? `${pct((r.zeroRates.tenor10Y) - prev, 2)} this week` : ''} />
           <Stat label="2s10s" value={pct(slope, 2)} sub="slope" neg={slope < 0} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
@@ -64,7 +64,7 @@ export const curve = defineObject<Region>({
           { fn: 'ladder', sub: 'the sovereign tranches' },
           { fn: 'peers', sub: 'the four curves' },
         ]} />
-        <AllRow fields={Object.keys(r.zeroRates ?? {}).length + 3} nav={nav} />
+        <AllRow fields={Object.keys(r.zeroRates).length + 3} nav={nav} />
       </>
     );
   },

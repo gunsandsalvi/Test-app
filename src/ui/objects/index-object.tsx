@@ -37,7 +37,7 @@ export const index = defineObject<MarketIndex>({
     const rows = [...x.constituents].sort((a, b) => b.weight - a.weight);
     return (
       <>
-        <ObjectHeader name={words(x.id)} sub={<>market index · {count(x.constituents.length)} names · tracked by {trackers.length ? trackers.map((e, i) => <span key={e.id}>{i ? ', ' : ''}<Link to={{ type: 'institution', id: e.id }} nav={nav}>{e.ticker ?? e.id}</Link></span>) : 'no fund'}</>} />
+        <ObjectHeader name={words(x.id)} sub={<>market index · {count(x.constituents.length)} names · tracked by {trackers.length ? trackers.map((e, i) => <span key={e.id}>{i ? ', ' : ''}<Link to={{ type: 'institution', id: e.id }} nav={nav}>{e.ticker}</Link></span>) : 'no fund'}</>} />
         <StatGrid>
           <Stat label="names" value={count(x.constituents.length)} sub="constituents" />
           <Stat label="top weight" value={pctLevel(rows[0]?.weight ?? 0, 1)} sub={rows[0] ? instrumentName(world, rows[0].instrumentId) : ''} />

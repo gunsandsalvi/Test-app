@@ -72,7 +72,7 @@ export const all: FunctionModule = {
 function AllView({ world, refv, args, nav }: { world: import('../world').World; refv: import('../world').ObjectRef; args: Record<string, string>; nav: import('../ui').Nav }) {
   const [filter, setFilter] = useState('');
   const root = objectOf(world, refv);
-  const path = (args.path ?? '').split('.').filter(Boolean);
+  const path = (args.path).split('.').filter(Boolean);
   const node = walk(root, path);
   if (node === undefined || node === null) return <Card style={{ padding: 14, color: T.muted }}>nothing at <Num>{args.path || '(root)'}</Num> — the field is empty this week.</Card>;
 

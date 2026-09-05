@@ -11,8 +11,8 @@ type FxPair = import('../../types').GameState['fxPairs'][number];
  *  banks pay to borrow the base money for a term (`Region.xcsBasisBps`), and the FORWARD basis a
  *  quote-region holder pays to hedge it, the funding basis plus the desks' charge
  *  (`Region.crossCurrencyBasisBps`). Undefined until a book has printed. */
-const fundingBasisOf = (world: import('../world').World, p: FxPair): number | undefined => world.state.regions[p.quote as 'USA']?.xcsBasisBps?.[p.base];
-const forwardBasisOf = (world: import('../world').World, p: FxPair): number | undefined => world.state.regions[p.quote as 'USA']?.crossCurrencyBasisBps?.[p.base];
+const fundingBasisOf = (world: import('../world').World, p: FxPair): number | undefined => world.state.regions[p.quote as 'USA'].xcsBasisBps?.[p.base];
+const forwardBasisOf = (world: import('../world').World, p: FxPair): number | undefined => world.state.regions[p.quote as 'USA'].crossCurrencyBasisBps?.[p.base];
 
 /** §3.15-iii: `change1W` is an ABSOLUTE move in the rate; the move shown is that over the prior rate. */
 const weeklyMove = (p: FxPair): number | undefined => { const prior = p.rate - p.change1W; return prior > 0 ? p.change1W / prior : undefined; };
@@ -27,7 +27,7 @@ export const fx = defineObject<FxPair>({
   keywords: (_w, _id, p) => [p.pair.toLowerCase(), p.pair.toLowerCase().replace('/', ''), p.pair.toLowerCase().replace('/', ' '), 'fx', 'currency'],
   parse: (world, phrase) => { const p = phrase.trim().toLowerCase().replace(/[\s/]+/g, ''); return world.state.fxPairs.find((x) => x.pair.toLowerCase().replace('/', '') === p)?.pair; },
   headline: (_w, _id, p) => ({ value: num(p.rate, 4), sub: p.pair }),
-  series: (world, _id, p) => [ringed(world, p.historicalRates ?? [], 'rate', `${p.quote} per ${p.base}`, (v) => num(v, 4))],
+  series: (world, _id, p) => [ringed(world, p.historicalRates, 'rate', `${p.quote} per ${p.base}`, (v) => num(v, 4))],
   peers: {
     groups: (world) => [{ name: 'all pairs', ids: world.state.fxPairs.map((p) => p.pair) }],
     defaultSort: 'move',
@@ -44,14 +44,14 @@ export const fx = defineObject<FxPair>({
       <>
         <ObjectHeader name={p.pair} sub={<>currency pair · <RegionLink id={p.base} nav={nav} /> against <RegionLink id={p.quote} nav={nav} /></>} />
         <StatGrid>
-          <Stat label="rate" value={num(p.rate, 4)} sub={<ChangeSub series={p.historicalRates ?? []} />} />
+          <Stat label="rate" value={num(p.rate, 4)} sub={<ChangeSub series={p.historicalRates} />} />
           <Stat label="1 week" value={pct(weeklyMove(p), 2)} sub={`move · ${num(p.change1W, 4)} in the rate`} neg={p.change1W < 0} />
           <Stat label="funding basis" value={`${bps(fundingBasisOf(world, p))}bp`} sub={`${p.quote} banks borrowing ${p.base} money`} />
           <Stat label="forward basis" value={`${bps(forwardBasisOf(world, p))}bp`} sub={`a ${p.quote} holder hedging ${p.base}`} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="illiquidity" hint="the dealer's measure" v={ill !== undefined ? num(ill, 3) : '—'} />
-          <KV k="policy rates" hint={`${p.base} · ${p.quote}`} v={`${pctLevel(world.state.regions[p.base as 'USA']?.policyRate, 2)} · ${pctLevel(world.state.regions[p.quote as 'USA']?.policyRate, 2)}`} />
+          <KV k="policy rates" hint={`${p.base} · ${p.quote}`} v={`${pctLevel(world.state.regions[p.base as 'USA'].policyRate, 2)} · ${pctLevel(world.state.regions[p.quote as 'USA'].policyRate, 2)}`} />
         </Card>
         <FunctionTiles nav={nav} tiles={[
           { fn: 'chart', sub: 'the rate' },

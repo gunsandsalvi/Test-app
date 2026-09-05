@@ -43,8 +43,8 @@ export const links: FunctionModule = {
       const managed = (c.managesEntityIds ?? []).filter((id) => institutionOf(world, id)).map((id) => ({ ref: { type: 'institution' as const, id } }));
       const lines = bankLinesTo(world, c.id);
       const contracts = contractsOf(world, { kind: c.isBankEntity ? 'BANK' : 'COMPANY', key: c.ticker });
-      const estate = (world.state.estates ?? []).find((e) => e.companyId === c.id);
-      const offerings = (world.state.primaryOfferings ?? []).filter((o) => o.issuerId === c.id || o.leadBankId === c.id);
+      const estate = (world.state.estates).find((e) => e.companyId === c.id);
+      const offerings = (world.state.primaryOfferings).filter((o) => o.issuerId === c.id || o.leadBankId === c.id);
       const clients = c.isBankEntity ? world.state.companies.filter((x) => x.homeBankId === c.id && isActiveCompany(x)) : [];
       const fundClients = c.isBankEntity ? world.state.institutionalEntities.filter((e) => e.homeBankId === c.id && !e.isDefaulted) : [];
       return (<>
@@ -103,9 +103,9 @@ export const links: FunctionModule = {
     const r = regionOf(world, ref.id);
     if (!r) return null;
     const banks = banksOf(world.state.companies, r.id).map((c) => ({ ref: { type: 'company' as const, id: c.id }, v: money(c.bankBalanceSheet ? stateDepositLines(world.state, c).householdLocal : undefined) }));
-    const lanes = Object.keys(world.state.freightRatePerTonneLaneMoneyByLane ?? {}).filter((k) => k.startsWith(r.id + '>') || k.endsWith('>' + r.id)).map((k) => ({ ref: { type: 'lane' as const, id: k } }));
+    const lanes = Object.keys(world.state.freightRatePerTonneLaneMoneyByLane).filter((k) => k.startsWith(r.id + '>') || k.endsWith('>' + r.id)).map((k) => ({ ref: { type: 'lane' as const, id: k } }));
     const pairs = world.state.fxPairs.filter((p) => p.pair.includes(r.currency)).map((p) => ({ ref: { type: 'fx' as const, id: p.pair } }));
-    const indexes = (world.state.marketIndexes ?? []).filter((x) => x.id.startsWith(r.id)).map((x) => ({ ref: { type: 'index' as const, id: x.id } }));
+    const indexes = (world.state.marketIndexes).filter((x) => x.id.startsWith(r.id)).map((x) => ({ ref: { type: 'index' as const, id: x.id } }));
     return (<>
       <Refs title="the institutions" world={world} nav={nav} refs={[
         { ref: { type: 'centralbank', id: r.id }, hint: 'central bank' },
@@ -119,7 +119,7 @@ export const links: FunctionModule = {
         <KV k="funds" v={count(world.state.institutionalEntities.filter((e) => e.region === r.id && !e.isDefaulted).length)} onTap={() => nav.go('funds')} />
         <KV k="firms" v={count(world.state.companies.filter((c) => c.region === r.id && !c.isBankEntity && isActiveCompany(c)).length)} onTap={() => nav.go('firms')} />
         <KV k="markets" v={count(Object.keys(r.categoryDemand).length)} onTap={() => nav.go('markets')} />
-        <KV k="estates" v={count((world.state.estates ?? []).filter((e) => e.regionId === r.id).length)} />
+        <KV k="estates" v={count((world.state.estates).filter((e) => e.regionId === r.id).length)} />
       </Card>
     </>);
   },

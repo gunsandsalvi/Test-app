@@ -30,7 +30,7 @@ export function Screener({ world, nav, type, ids, columns, sort: initialSort, su
 }) {
   const m = moduleOf(type);
   const cols = (columns ?? columnsFor(world, type)).filter((c) => !hide?.includes(c.key));
-  const [sort, setSort] = useState(initialSort ?? m.peers?.defaultSort ?? cols[1]?.key ?? 'name');
+  const [sort, setSort] = useState(initialSort ?? m.peers?.defaultSort ?? cols.at(1)?.key ?? 'name');
   const [asc, setAsc] = useState(false);
   const rows = ids.map((id) => ({ id, obj: m.find(world, id) })).filter((r) => r.obj !== undefined) as { id: string; obj: unknown }[];
   const col = cols.find((c) => c.key === sort) ?? cols.at(1) ?? cols.at(0);

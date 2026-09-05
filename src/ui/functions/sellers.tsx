@@ -16,9 +16,9 @@ export const sellers: FunctionModule = {
   render({ world, ref, nav }) {
     const { region, subUnitId } = splitMarketId(ref.id);
     const rows = sellersOf(world, region, subUnitId);
-    const named = rows.reduce((a, r) => a + (r.line.categoryMarketShare ?? 0), 0);
+    const named = rows.reduce((a, r) => a + (r.line.categoryMarketShare), 0);
     const ind = industryOfSubUnit(subUnitId);
-    const pool = ind ? regionOf(world, region)?.smePools?.find((p) => p.industry === ind) : undefined;
+    const pool = ind ? regionOf(world, region)?.smePools.find((p) => p.industry === ind) : undefined;
     const poolSales = pool?.salesDerivedAnnualRevenueUSDBySubUnit?.[subUnitId];
     const foreign = world.state.companies.filter((c) => c.region !== region && !c.isDefaulted && (c.productLines ?? []).some((l) => l.subUnitId === subUnitId)).length;
     return (<>

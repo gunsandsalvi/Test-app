@@ -94,7 +94,7 @@ export const ladder: FunctionModule = {
     })).sort((a, b) => a.maturityWeek - b.maturityWeek);
     const total = rows.reduce((a, x) => a + x.principalLocal, 0);
     const interest = rows.reduce((a, x) => a + x.principalLocal * x.rate, 0);
-    const gdp = r.derivedNominalGdpLocal ?? r.estimatedNominalGdpLocal ?? 0;
+    const gdp = r.derivedNominalGdpLocal;
     const byTenor = new Map<string, number>();
     rows.forEach((x) => byTenor.set(x.kind, (byTenor.get(x.kind) ?? 0) + x.principalLocal));
     if (rows.length === 0) return <Card style={{ padding: 14, color: T.muted }}>the {r.id} treasury has no tranches outstanding.</Card>;

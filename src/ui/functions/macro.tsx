@@ -29,7 +29,7 @@ export const macro: FunctionModule = {
     const sub = (k: string) => { const s = tape(k); return s.filter(Number.isFinite).length > WEEKS_PER_MONTH ? <ChangeSub series={s} /> : undefined; };
     const hs = r.householdState; const bs = r.bankingSector; const hm = r.housingMarket;
     const books = regionLoanBooksLocal(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted), (b) => facilityBookOf(ensureV2(world.state), b.id));
-    const gdp = r.derivedNominalGdpLocal ?? r.estimatedNominalGdpLocal ?? 0;
+    const gdp = r.derivedNominalGdpLocal;
     return (<>
       <SectionLabel>activity</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
@@ -44,7 +44,7 @@ export const macro: FunctionModule = {
         <KV k="price level" hint="seed = 100" v={num(r.consumerPriceIndex, 1)} />
         <KV k="target" hint={r.centralBank} v={pctLevel(r.targetInflation)} />
         <KV k="expected" hint="the market's" v={pctLevel(r.expectedInflation)} />
-        <KV k="house prices" hint={`index ${num(hm?.priceIndex, 2)}`} v={money(hm?.medianHomePriceLocal, 2)} />
+        <KV k="house prices" hint={`index ${num(hm.priceIndex, 2)}`} v={money(hm.medianHomePriceLocal, 2)} />
       </Card>
       <SectionLabel>labour</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
@@ -57,10 +57,10 @@ export const macro: FunctionModule = {
       <SectionLabel>money</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
         <KV k="policy rate" hint={sub('policy')} v={pctLevel(r.policyRate, 2)} />
-        <KV k="2y · 10y" hint={`2s10s ${pct((r.zeroRates?.tenor10Y ?? 0) - (r.zeroRates?.tenor2Y ?? 0), 2)}`} v={`${pctLevel(r.zeroRates?.tenor2Y, 2)} · ${pctLevel(r.zeroRates?.tenor10Y, 2)}`} />
+        <KV k="2y · 10y" hint={`2s10s ${pct((r.zeroRates.tenor10Y) - (r.zeroRates.tenor2Y), 2)}`} v={`${pctLevel(r.zeroRates.tenor2Y, 2)} · ${pctLevel(r.zeroRates.tenor10Y, 2)}`} />
         <KV k="overnight repo" v={pctLevel(r.repoRateAnnual, 2)} />
-        <KV k="m2" v={money(bs?.moneySupplyM2Local)} />
-        <KV k="credit conditions" hint="−1 loose · +1 tight" v={num(bs?.creditConditionsIndex, 2)} />
+        <KV k="m2" v={money(bs.moneySupplyM2Local)} />
+        <KV k="credit conditions" hint="−1 loose · +1 tight" v={num(bs.creditConditionsIndex, 2)} />
         <KV k="the curve" v={<Link to={{ type: 'curve', id: r.id }} nav={nav}>{r.id} curve</Link>} />
       </Card>
       <SectionLabel>external</SectionLabel>
@@ -75,18 +75,18 @@ export const macro: FunctionModule = {
       <SectionLabel>households</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
         <KV k="deposits" hint={sub('household deposits')} v={money(householdDepositsOf(ensureV2(world.state), ref.id as RegionId))} />
-        <KV k="net worth" hint={sub('household net worth')} v={money(hs?.netWorthLocal)} />
-        <KV k="debt to income" v={ratio(hs?.householdDebtToIncomeRatio, 2)} />
-        <KV k="savings rate" v={pctLevel(hs?.savingsRate)} />
+        <KV k="net worth" hint={sub('household net worth')} v={money(hs.netWorthLocal)} />
+        <KV k="debt to income" v={ratio(hs.householdDebtToIncomeRatio, 2)} />
+        <KV k="savings rate" v={pctLevel(hs.savingsRate)} />
         <KV k="home ownership" hint={sub('a read of the dwelling register')} v={pctLevel(ownershipRateOf(hm, r.totalPopulation), 0)} />
       </Card>
       <SectionLabel>banks</SectionLabel>
       <Card style={{ padding: '2px 0' }}>
-        <KV k="capital ratio" hint={sub('bank capital')} v={pctLevel(bs?.bankCapitalRatio, 2)} />
-        <KV k="net interest margin" hint={sub('bank nim')} v={pctLevel(bs?.netInterestMarginPct, 2)} />
+        <KV k="capital ratio" hint={sub('bank capital')} v={pctLevel(bs.bankCapitalRatio, 2)} />
+        <KV k="net interest margin" hint={sub('bank nim')} v={pctLevel(bs.netInterestMarginPct, 2)} />
         <KV k="loans" hint="business · household" v={`${money(books.businessLoanLocal)} · ${money(books.consumerLoanLocal)}`} />
         <KV k="reserves at the central bank" v={money(world.state.companies.reduce((a, c) => a + (c.isBankEntity && c.bankBalanceSheet && c.region === r.id ? bankReservesOf(ensureV2(world.state), c.id) : 0), 0))} />
-        <KV k="at the window" v={money(bs?.srfBorrowingLocal)} />
+        <KV k="at the window" v={money(bs.srfBorrowingLocal)} />
         <KV k="the banks" v={<Link to={ref} fn="banks" nav={nav}>{count(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted).length)} banks</Link>} />
       </Card>
       <SectionLabel>treasury</SectionLabel>

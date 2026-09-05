@@ -33,7 +33,7 @@ export function sellersOf(world: World, region: string, subUnitId: string) {
   return world.state.companies
     .filter((c) => c.region === region && isActiveCompany(c) && (c.productLines ?? []).some((l) => l.subUnitId === subUnitId))
     .map((c) => { const l = c.productLines!.find((x) => x.subUnitId === subUnitId)!; return { c, line: l }; })
-    .sort((a, b) => (b.line.categoryMarketShare ?? 0) - (a.line.categoryMarketShare ?? 0));
+    .sort((a, b) => (b.line.categoryMarketShare) - (a.line.categoryMarketShare));
 }
 
 export const market = defineObject<Market>({
@@ -65,10 +65,10 @@ export const market = defineObject<Market>({
   peers: {
     groups: (world, _id, m) => {
       const ind = industryOfSubUnit(m.subUnitId);
-      const inRegion = Object.keys(world.state.regions[m.region as 'USA']?.categoryDemand ?? {});
+      const inRegion = Object.keys(world.state.regions[m.region as 'USA'].categoryDemand);
       return [
         { name: `${m.region} · ${words(ind ?? '')}`, ids: inRegion.filter((su) => industryOfSubUnit(su) === ind).map((su) => marketId(m.region, su)) },
-        { name: `${words(m.subUnitId)} everywhere`, ids: REGION_IDS.filter((r) => world.state.regions[r]?.categoryDemand[m.subUnitId as 'apparel_retail']).map((r) => marketId(r, m.subUnitId)) },
+        { name: `${words(m.subUnitId)} everywhere`, ids: REGION_IDS.filter((r) => world.state.regions[r].categoryDemand[m.subUnitId as 'apparel_retail']).map((r) => marketId(r, m.subUnitId)) },
         { name: `all of ${m.region}`, ids: inRegion.map((su) => marketId(m.region, su)) },
       ];
     },
@@ -97,7 +97,7 @@ export const market = defineObject<Market>({
     const recipe = Object.entries(CATEGORY_INPUT_REQUIREMENTS[m.subUnitId] ?? {});
     const recipeWeight = recipe.reduce((s, [, w]) => s + (w ?? 0), 0);
     const inputPriceIndex = recipeWeight > 0
-      ? recipe.reduce((s, [cat, w]) => s + (w ?? 0) * (world.state.regions[m.region as RegionId]?.categoryDemand[cat]?.clearedInputPriceIndex ?? 1), 0) / recipeWeight
+      ? recipe.reduce((s, [cat, w]) => s + (w ?? 0) * (world.state.regions[m.region as RegionId].categoryDemand[cat]?.clearedInputPriceIndex ?? 1), 0) / recipeWeight
       : undefined;
     const tier = categoryPriceTier(m.subUnitId);
     return (

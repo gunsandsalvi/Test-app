@@ -12,14 +12,14 @@ export const offering = defineObject<PrimaryOffering>({
   type: 'offering',
   words: ['offering', 'offerings'],
   searchable: false,
-  find: (world, id) => (world.state.primaryOfferings ?? []).find((o) => o.id === id),
-  list: (world) => (world.state.primaryOfferings ?? []).map((o) => ({ id: o.id, obj: o })),
+  find: (world, id) => (world.state.primaryOfferings).find((o) => o.id === id),
+  list: (world) => (world.state.primaryOfferings).map((o) => ({ id: o.id, obj: o })),
   label: (_w, id, o) => ({ ticker: id, name: `${o.issuerTicker} ${words(o.instrumentType)} · ${money(o.sizeLocal)}`, kind: 'primary offering', region: o.region }),
   headline: (_w, _id, o) => ({ value: money(o.sizeLocal), sub: words(o.instrumentType) }),
   peers: {
     groups: (world, _id, o) => [
-      { name: `${o.region} pipeline`, ids: (world.state.primaryOfferings ?? []).filter((x) => x.region === o.region).map((x) => x.id) },
-      { name: 'the whole pipeline', ids: (world.state.primaryOfferings ?? []).map((x) => x.id) },
+      { name: `${o.region} pipeline`, ids: (world.state.primaryOfferings).filter((x) => x.region === o.region).map((x) => x.id) },
+      { name: 'the whole pipeline', ids: (world.state.primaryOfferings).map((x) => x.id) },
     ],
     defaultSort: 'size',
     columns: [
@@ -27,7 +27,7 @@ export const offering = defineObject<PrimaryOffering>({
       { key: 'type', label: 'paper', render: (r) => words(r.obj.instrumentType), value: (r) => r.obj.instrumentType },
       { key: 'size', label: 'size', render: (r) => money(r.obj.sizeLocal), value: (r) => r.obj.sizeLocal },
       { key: 'walk', label: 'walk-away', render: (r) => bps(r.obj.walkAwayStat), value: (r) => r.obj.walkAwayStat },
-      { key: 'lead', label: 'lead', render: (r, world, nav) => { const b = world.state.companies.find((x) => x.id === r.obj.leadBankId); return b ? <Link to={{ type: 'company', id: b.id }} nav={nav}>{b.ticker}</Link> : r.obj.leadBankId ?? '—'; }, value: (r) => r.obj.leadBankId ?? '' },
+      { key: 'lead', label: 'lead', render: (r, world, nav) => { const b = world.state.companies.find((x) => x.id === r.obj.leadBankId); return b ? <Link to={{ type: 'company', id: b.id }} nav={nav}>{b.ticker}</Link> : r.obj.leadBankId; }, value: (r) => r.obj.leadBankId },
     ],
   },
   overview({ world, obj: o, nav }) {
@@ -39,7 +39,7 @@ export const offering = defineObject<PrimaryOffering>({
         <StatGrid>
           <Stat label="size" value={money(o.sizeLocal)} sub={words(o.rateType ?? '')} />
           <Stat label="walk-away" value={`${bps(o.walkAwayStat)}bp`} sub="the issuer's own arithmetic" />
-          <Stat label="lead bank" value={lead ? lead.ticker : o.leadBankId ?? '—'} sub="underwrites" />
+          <Stat label="lead bank" value={lead ? lead.ticker : o.leadBankId} sub="underwrites" />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="issuer" v={issuer ? <Link to={{ type: 'company', id: issuer.id }} nav={nav}>{issuer.name}</Link> : o.issuerTicker} />

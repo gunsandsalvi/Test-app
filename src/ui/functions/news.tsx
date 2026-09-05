@@ -35,7 +35,7 @@ function Linked({ text, world, nav }: { text: string; world: World; nav: Nav }) 
 
 /** The stories for an object (undefined = the whole world), newest week first, material first within a week. */
 export function storiesFor(world: World, ref?: ObjectRef, limit = 60): NewsItem[] {
-  const feed = world.state.newsFeed ?? [];
+  const feed = world.state.newsFeed;
   const mine = ref ? feed.filter((n) => storyMentions(world, ref, n)) : feed;
   return [...mine].sort((a, b) => b.week - a.week || (b.materialityLocal ?? 0) - (a.materialityLocal ?? 0) || Number(b.urgent) - Number(a.urgent)).slice(0, limit);
 }

@@ -20,7 +20,7 @@ export const peers: FunctionModule = {
     if (obj === undefined || !m.peers) return <Card style={{ padding: 14, color: T.muted }}>no peers for this kind.</Card>;
     const groups = m.peers.groups(world, ref.id, obj).filter((g) => g.ids.length > 0);
     if (groups.length === 0) return <Card style={{ padding: 14, color: T.muted }}>no cohort holds this object this week.</Card>;
-    const wanted = (args.tab ?? '').toLowerCase();
+    const wanted = (args.tab).toLowerCase();
     const active = groups.find((g) => g.name.toLowerCase() === wanted) ?? groups.find((g) => g.name.toLowerCase().includes(wanted) && wanted) ?? groups[0];
     const columns = typeof m.peers.columns === 'function' ? m.peers.columns(world, ref.id, obj) : m.peers.columns;
     return (<>

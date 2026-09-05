@@ -25,9 +25,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      # Types AND lint. `strict: true` is on (§7.234). The lint's `--max-warnings` is THE RATCHET
-      # (§4): the `no-unnecessary-condition` backlog §9.29-ii turned on, may fall and never rise;
-      # every other rule stands at zero.
+      # Types AND lint. `strict: true` is on (§7.234) and the lint is `--max-warnings 0`: the
+      # type-aware backlog §9.29-ii turned on was paid by §9.29-iii/iv, so any warning fails the build.
       - run: npm run lint
       # The architectural ratchets (and check-atlas). Each budget may fall and never rise.
       - run: npm run hygiene

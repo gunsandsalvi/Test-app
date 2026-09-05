@@ -18,7 +18,7 @@ export const institution = defineObject<InstitutionalEntity>({
   searchable: true,
   find: institutionOf,
   list: (world) => world.state.institutionalEntities.map((e) => ({ id: e.id, obj: e })),
-  label: (_w, id, e) => ({ ticker: e.ticker ?? id, name: e.name, kind: words(e.entityType) + (e.hedgeFundStrategy ? ` · ${words(e.hedgeFundStrategy)}` : ''), region: e.region }),
+  label: (_w, id, e) => ({ ticker: e.ticker, name: e.name, kind: words(e.entityType) + (e.hedgeFundStrategy ? ` · ${words(e.hedgeFundStrategy)}` : ''), region: e.region }),
   keywords: (_w, _id, e) => [words(e.entityType), e.region.toLowerCase(), ...(e.hedgeFundStrategy ? [words(e.hedgeFundStrategy)] : [])],
   headline: (w, _id, e) => ({ value: money(institutionTotalAssetsFromState(w.state, e)), sub: 'assets', neg: entityCashOf(ensureV2(w.state), e) < 0 }),
   series: (world, id) => [
@@ -39,7 +39,7 @@ export const institution = defineObject<InstitutionalEntity>({
     },
     defaultSort: 'assets',
     columns: [
-      { key: 'name', label: 'name', render: (r, _w, nav) => <Link to={{ type: 'institution', id: r.id }} nav={nav}>{r.obj.ticker ?? r.id}</Link>, value: (r) => r.obj.ticker ?? r.id },
+      { key: 'name', label: 'name', render: (r, _w, nav) => <Link to={{ type: 'institution', id: r.id }} nav={nav}>{r.obj.ticker}</Link>, value: (r) => r.obj.ticker },
       { key: 'kind', label: 'kind', width: 1.3, render: (r) => words(r.obj.entityType), value: (r) => r.obj.entityType },
       { key: 'assets', label: 'assets', render: (r, w) => money(institutionTotalAssetsFromState(w.state, r.obj)), value: (r, w) => institutionTotalAssetsFromState(w.state, r.obj) },
       { key: 'cash', label: 'cash', render: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? pctLevel(entityCashOf(ensureV2(w.state), r.obj) / t, 0) : '—'; }, value: (r, w) => { const t = institutionTotalAssetsFromState(w.state, r.obj); return t > 0 ? entityCashOf(ensureV2(w.state), r.obj) / t : 0; } },
@@ -82,7 +82,7 @@ export const institution = defineObject<InstitutionalEntity>({
           {e.stockPrice > 0 ? <KV k="price per share" v={num(e.stockPrice)} /> : null}
           {e.primeBrokerageAvailableLocal !== undefined ? <KV k="prime brokerage line" v={money(e.primeBrokerageAvailableLocal)} /> : null}
           {e.etf ? <KV k="tracks" v={<Link to={{ type: 'index', id: e.etf.indexId }} nav={nav}>{e.etf.indexId}</Link>} /> : null}
-          {e.peFund ? <KV k="portfolio companies" v={count(e.peFund.portfolioCompanyIds?.length ?? 0)} onTap={() => nav.go('links')} /> : null}
+          {e.peFund ? <KV k="portfolio companies" v={count(e.peFund.portfolioCompanyIds.length)} onTap={() => nav.go('links')} /> : null}
         </Card>
         {(
           <Card style={{ padding: '2px 0' }}>

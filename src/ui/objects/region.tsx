@@ -24,7 +24,7 @@ export const region = defineObject<Region>({
   headline: (_w, _id, r) => ({ value: pctLevel(r.unemploymentRate), sub: 'unemployment', neg: r.unemploymentRate > r.nairu }),
   series: (world, id, r) => [
     taped(world, `region:${id}:unemployment`, 'unemployment', 'share of the labour force', (v) => pctLevel(v)),
-    ringed(world, r.cpiHistory ?? [], 'cpi', 'index, seed = 100', (v) => num(v, 1)),
+    ringed(world, r.cpiHistory, 'cpi', 'index, seed = 100', (v) => num(v, 1)),
     taped(world, `region:${id}:inflation`, 'inflation', 'annualised', (v) => pctLevel(v)),
     taped(world, `region:${id}:gdp`, 'gdp', 'USD, annualised', (v) => money(v)),
     taped(world, `region:${id}:policy`, 'policy rate', 'rate', (v) => pctLevel(v, 2)),
@@ -48,20 +48,20 @@ export const region = defineObject<Region>({
       { key: 'u', label: 'u', render: (r) => pctLevel(r.obj.unemploymentRate), value: (r) => r.obj.unemploymentRate },
       { key: 'infl', label: 'inflation', render: (r) => pctLevel(r.obj.inflation), value: (r) => r.obj.inflation },
       { key: 'policy', label: 'policy', render: (r) => pctLevel(r.obj.policyRate, 2), value: (r) => r.obj.policyRate },
-      { key: '10y', label: '10y', render: (r) => pctLevel(r.obj.zeroRates?.tenor10Y, 2), value: (r) => r.obj.zeroRates?.tenor10Y ?? 0 },
-      { key: 'gdp', label: 'gdp', render: (r) => money(r.obj.derivedNominalGdpLocal ?? r.obj.estimatedNominalGdpLocal), value: (r) => r.obj.derivedNominalGdpLocal ?? r.obj.estimatedNominalGdpLocal ?? 0 },
+      { key: '10y', label: '10y', render: (r) => pctLevel(r.obj.zeroRates.tenor10Y, 2), value: (r) => r.obj.zeroRates.tenor10Y },
+      { key: 'gdp', label: 'gdp', render: (r) => money(r.obj.derivedNominalGdpLocal), value: (r) => r.obj.derivedNominalGdpLocal },
     ],
   },
   overview({ world, obj: r, nav }) {
     const u = tapeSeries(world, `region:${r.id}:unemployment`).values;
-    const cpi = r.cpiHistory ?? [];
+    const cpi = r.cpiHistory;
     const gdp = tapeSeries(world, `region:${r.id}:gdp`).values;
     const banks = banksOf(world.state.companies, r.id);
     const firms = world.state.companies.filter((c) => c.region === r.id && isActiveCompany(c) && !c.isBankEntity);
     const funds = world.state.institutionalEntities.filter((e) => e.region === r.id && !e.isDefaulted);
     const markets = Object.keys(r.categoryDemand).length;
-    const pools = (r.smePools ?? []).length;
-    const cohorts = (r.householdState?.cohorts ?? []).length;
+    const pools = (r.smePools).length;
+    const cohorts = (r.householdState.cohorts ?? []).length;
     const weather = r.weather.severity !== 'Normal' ? `${r.weather.type.toLowerCase()}, ${r.weather.severity.toLowerCase()}` : undefined;
     return (
       <>
@@ -69,14 +69,14 @@ export const region = defineObject<Region>({
         <StatGrid>
           <Stat label="unemployment" value={pctLevel(r.unemploymentRate)} sub={u.length > 1 ? <ChangeSub series={u} /> : `nairu ${pctLevel(r.nairu)}`} neg={r.unemploymentRate > r.nairu} />
           <Stat label="inflation" value={pctLevel(r.inflation)} sub={`core ${pctLevel(r.coreInflation)}`} neg={r.inflation > 0.1} />
-          <Stat label="policy rate" value={pctLevel(r.policyRate, 2)} sub={`10y ${pctLevel(r.zeroRates?.tenor10Y, 2)} · 2y ${pctLevel(r.zeroRates?.tenor2Y, 2)}`} />
+          <Stat label="policy rate" value={pctLevel(r.policyRate, 2)} sub={`10y ${pctLevel(r.zeroRates.tenor10Y, 2)} · 2y ${pctLevel(r.zeroRates.tenor2Y, 2)}`} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
-          <KV k="gdp, annualised" hint={gdp.filter(Number.isFinite).length > 1 ? <ChangeSub series={gdp} /> : undefined} v={money(r.derivedNominalGdpLocal ?? r.estimatedNominalGdpLocal)} />
+          <KV k="gdp, annualised" hint={gdp.filter(Number.isFinite).length > 1 ? <ChangeSub series={gdp} /> : undefined} v={money(r.derivedNominalGdpLocal)} />
           <KV k="price level" hint={cpi.length > 1 ? <ChangeSub series={cpi} /> : 'seed = 100'} v={num(r.consumerPriceIndex, 1)} />
           <KV k="labour market" hint="tightness · wage growth" v={`${num(r.laborMarketTightness, 2)} · ${pctLevel(r.wageGrowth)}`} />
-          <KV k="banks" hint="capital · margin" v={`${pctLevel(r.bankingSector?.bankCapitalRatio, 1)} · ${pctLevel(r.bankingSector?.netInterestMarginPct, 2)}`} onTap={() => nav.go('banks')} />
-          <KV k="households" hint="deposits · net worth" v={`${money(householdDepositsOf(ensureV2(world.state), r.id as RegionId))} · ${money(r.householdState?.netWorthLocal)}`} onTap={() => nav.go('statements', { tab: 'households' })} />
+          <KV k="banks" hint="capital · margin" v={`${pctLevel(r.bankingSector.bankCapitalRatio, 1)} · ${pctLevel(r.bankingSector.netInterestMarginPct, 2)}`} onTap={() => nav.go('banks')} />
+          <KV k="households" hint="deposits · net worth" v={`${money(householdDepositsOf(ensureV2(world.state), r.id as RegionId))} · ${money(r.householdState.netWorthLocal)}`} onTap={() => nav.go('statements', { tab: 'households' })} />
           <KV k="treasury" hint="revenue · outlays, weekly" v={`${money(r.governmentRevenueLocal)} · ${money(r.governmentOutlaysLocal ?? r.governmentSpendingWeeklyLocal)}`} onTap={() => nav.go('statements', { tab: 'treasury' })} />
           <KV k="population" v={count(Math.round(r.totalPopulation))} />
         </Card>
@@ -89,7 +89,7 @@ export const region = defineObject<Region>({
           { fn: 'statements', sub: 'national accounts · treasury' },
           { fn: 'ladder', sub: `${materializeGovLadder(ensureV2(world.state), r.id).length} sovereign tranches` },
           { fn: 'holders', sub: 'who holds the sovereign' },
-          { fn: 'labour', sub: `${cohorts} cohorts · ${Object.keys(r.occupationPools ?? {}).length} occupations` },
+          { fn: 'labour', sub: `${cohorts} cohorts · ${Object.keys(r.occupationPools).length} occupations` },
           { fn: 'pools', sub: `${pools} small-business pools` },
           { fn: 'banks', sub: `${banks.length} banks` },
           { fn: 'firms', sub: `${firms.length} firms` },

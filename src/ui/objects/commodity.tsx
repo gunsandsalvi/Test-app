@@ -28,7 +28,7 @@ export const commodity = defineObject<Commodity>({
     return byWord.length === 1 ? byWord[0].id : undefined;
   },
   headline: (_w, _id, c) => ({ value: num(c.spotPrice), sub: c.unit }),
-  series: (world, _id, c) => [ringed(world, c.historicalPrices ?? [], 'spot', c.unit, (v) => num(v))],
+  series: (world, _id, c) => [ringed(world, c.historicalPrices, 'spot', c.unit, (v) => num(v))],
   peers: {
     groups: (world) => [{ name: 'all commodities', ids: world.state.commodities.map((c) => c.id) }],
     defaultSort: 'move',
@@ -45,7 +45,7 @@ export const commodity = defineObject<Commodity>({
     ],
   },
   overview({ obj: c, nav }) {
-    const hist = c.historicalPrices ?? [];
+    const hist = c.historicalPrices;
     return (
       <>
         <ObjectHeader name={c.name} sub={<>commodity · {c.category.toLowerCase()} · priced in {c.unit}</>} />

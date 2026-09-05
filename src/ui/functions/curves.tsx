@@ -47,12 +47,12 @@ export const curves: FunctionModule = {
     if (!r) return null;
     const back = (t: string, weeks: number) => { const s = tapeSeries(world, `curve:${r.id}:${t}`).values; return s[s.length - 1 - weeks]; };
     const today = TENORS.map((t) => ({ t, v: tenorRate(r, t) ?? NaN }));
-    const month = TENORS.map((t) => ({ t, v: back(t, WEEKS_PER_MONTH) ?? NaN }));
-    const year = TENORS.map((t) => ({ t, v: back(t, WEEKS_PER_YEAR) ?? NaN }));
+    const month = TENORS.map((t) => ({ t, v: back(t, WEEKS_PER_MONTH) }));
+    const year = TENORS.map((t) => ({ t, v: back(t, WEEKS_PER_YEAR) }));
     const shapes = [{ name: 'today', points: today }];
     if (month.some((p) => Number.isFinite(p.v))) shapes.push({ name: 'a month ago', points: month, dim: true } as never);
     if (year.some((p) => Number.isFinite(p.v))) shapes.push({ name: 'a year ago', points: year, dim: true } as never);
-    const slope = (r.zeroRates?.tenor10Y ?? 0) - (r.zeroRates?.tenor2Y ?? 0);
+    const slope = (r.zeroRates.tenor10Y) - (r.zeroRates.tenor2Y);
     const swaps: Partial<Record<string, number>> = r.swapSpreadBpsByTenor ?? {}; // per tenor the swap book has printed
     return (<>
       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>

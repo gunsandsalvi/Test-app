@@ -60,7 +60,7 @@ export const chart: FunctionModule = {
 function ChartView({ world, refv, args, nav }: { world: World; refv: ObjectRef; args: Record<string, string>; nav: Nav }) {
   const all = seriesFor(world, refv);
   const names = all.map((s) => s.name);
-  const wanted = (args.series ?? '').toLowerCase();
+  const wanted = (args.series).toLowerCase();
   const active = names.includes(wanted) ? wanted : names.find((n) => n.startsWith(wanted)) ?? names[0];
   const s = all.find((x) => x.name === active);
   const [scrub, setScrub] = useState<number | undefined>(undefined);

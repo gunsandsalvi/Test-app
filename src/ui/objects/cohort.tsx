@@ -14,7 +14,7 @@ const TIER_WORDS: Record<string, string> = { BOTTOM_50: 'the bottom half', NEXT_
 
 function cohortOf(world: World, id: string): Cohort | undefined {
   const [region, occ, tier] = id.split(':');
-  const c = regionOf(world, region)?.householdState?.cohorts?.find((x) => x.occupation === occ && x.tier === tier);
+  const c = regionOf(world, region)?.householdState.cohorts?.find((x) => x.occupation === occ && x.tier === tier);
   return c ? { region, c } : undefined;
 }
 
@@ -23,7 +23,7 @@ export const cohort = defineObject<Cohort>({
   words: ['cohort', 'cohorts'],
   searchable: true,
   find: cohortOf,
-  list: (world) => REGION_IDS.flatMap((r) => (world.state.regions[r]?.householdState?.cohorts ?? []).map((c) => ({ id: cohortId(r, c.occupation, c.tier), obj: { region: r, c } }))),
+  list: (world) => REGION_IDS.flatMap((r) => (world.state.regions[r].householdState.cohorts ?? []).map((c) => ({ id: cohortId(r, c.occupation, c.tier), obj: { region: r, c } }))),
   label: (_w, _id, x) => ({ ticker: `${x.region} ${words(x.c.occupation)} · ${TIER_WORDS[x.c.tier] ?? words(x.c.tier)}`, name: `${words(x.c.occupation)} households in ${TIER_WORDS[x.c.tier] ?? words(x.c.tier)}, ${x.region}`, kind: 'household cohort', region: x.region }),
   keywords: (_w, _id, x) => [x.region.toLowerCase(), words(x.c.occupation), words(x.c.tier), 'household', 'households'],
   headline: (_w, _id, x) => ({ value: pctLevel(x.c.earnerCount > 0 ? 1 - x.c.employedCount / x.c.earnerCount : 0), sub: 'out of work' }),
@@ -35,8 +35,8 @@ export const cohort = defineObject<Cohort>({
   ],
   peers: {
     groups: (world, _id, x) => [
-      { name: `${x.region} cohorts`, ids: (world.state.regions[x.region as 'USA']?.householdState?.cohorts ?? []).map((c) => cohortId(x.region, c.occupation, c.tier)) },
-      { name: `${words(x.c.occupation)} everywhere`, ids: REGION_IDS.flatMap((r) => (world.state.regions[r]?.householdState?.cohorts ?? []).filter((c) => c.occupation === x.c.occupation).map((c) => cohortId(r, c.occupation, c.tier))) },
+      { name: `${x.region} cohorts`, ids: (world.state.regions[x.region as 'USA'].householdState.cohorts ?? []).map((c) => cohortId(x.region, c.occupation, c.tier)) },
+      { name: `${words(x.c.occupation)} everywhere`, ids: REGION_IDS.flatMap((r) => (world.state.regions[r].householdState.cohorts ?? []).filter((c) => c.occupation === x.c.occupation).map((c) => cohortId(r, c.occupation, c.tier))) },
     ],
     defaultSort: 'earners',
     columns: [

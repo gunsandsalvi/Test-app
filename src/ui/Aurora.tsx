@@ -121,7 +121,7 @@ export default function Aurora() {
   // screen) and the bar alone moves up by the keyboard's height, off the visual viewport.
   const keyboard = useVisualViewport();
 
-  useEffect(() => { if (webWorkersAvailable()) setClearingWorkersWeb(navigator.hardwareConcurrency ?? 2); }, []);
+  useEffect(() => { if (webWorkersAvailable()) setClearingWorkersWeb(navigator.hardwareConcurrency); }, []);
 
   // ---- the clock ----
   const stepOnce = useCallback(() => {

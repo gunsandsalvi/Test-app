@@ -12,19 +12,19 @@ interface Lane { from: string; to: string; ratePerTonne: number; inTransitUnits:
 
 function lanesOf(world: World): Map<string, Lane> {
   const out = new Map<string, Lane>();
-  Object.entries(world.state.freightRatePerTonneLaneMoneyByLane ?? {}).forEach(([key, rate]) => {
+  Object.entries(world.state.freightRatePerTonneLaneMoneyByLane).forEach(([key, rate]) => {
     const [from, to] = key.split('>');
     out.set(key, { from, to, ratePerTonne: Number(rate) || 0, inTransitUnits: 0, shipments: 0, invoicesLocal: 0 });
   });
   const region = new Map<string, string>();
   world.state.companies.forEach((c) => region.set(c.ticker, c.region));
-  (world.state.goodsInTransit ?? []).forEach((g) => {
+  (world.state.goodsInTransit).forEach((g) => {
     const from = region.get(String(g.sellerKey).replace(/^.*:/, '')) ?? String(g.sellerKey).slice(0, 3);
     const to = region.get(g.buyerId) ?? '?';
     const l = out.get(`${from}>${to}`);
     if (l) { l.inTransitUnits += g.units; l.shipments++; }
   });
-  tradeInvoicesOf(ensureV2(world.state)).forEach((inv) => { const l = out.get(`${inv.sellerRegion}>${inv.buyerRegion}`); if (l) l.invoicesLocal += inv.amountCurrency * (inv.bookedUsdPerCurrency ?? 1); });
+  tradeInvoicesOf(ensureV2(world.state)).forEach((inv) => { const l = out.get(`${inv.sellerRegion}>${inv.buyerRegion}`); if (l) l.invoicesLocal += inv.amountCurrency * (inv.bookedUsdPerCurrency); });
   return out;
 }
 

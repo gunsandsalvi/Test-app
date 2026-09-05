@@ -24,7 +24,8 @@ const ORDER: FunctionModule[] = [
   markets, labour, pools, banks, firms, funds, links, contracts, derivatives, peers, all,
 ];
 
-export const FUNCTIONS: Record<string, FunctionModule> = Object.fromEntries(ORDER.map((f) => [f.name, f]));
+/** Keyed by the function's name and SPARSE — a name typed at the command bar may be nobody's. */
+export const FUNCTIONS: Partial<Record<string, FunctionModule>> = Object.fromEntries(ORDER.map((f) => [f.name, f]));
 export function functionsFor(type: ObjectType): FunctionModule[] {
   return ORDER.filter((f) => f.appliesTo.includes(type));
 }

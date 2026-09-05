@@ -69,7 +69,7 @@ export function quoteOfInstrument(world: World, instrumentId: string): PaperQuot
   try { issuerId = issuerIdOf(v2, instrumentId); } catch { return undefined; }
   const regionId = regionOfGovernmentEntity(issuerId) ?? companyOf(world, issuerId)?.region;
   const reg = regionId ? regionOf(world, regionId) : undefined;
-  return paperQuoteOf(v2, instrumentId, reg?.zeroRates ? { zeroRates: reg.zeroRates, policyRate: reg.policyRate ?? 0 } : undefined, world.state.currentWeek);
+  return paperQuoteOf(v2, instrumentId, reg?.zeroRates ? { zeroRates: reg.zeroRates, policyRate: reg.policyRate } : undefined, world.state.currentWeek);
 }
 /** "98.50" — a price per hundred of face; "—" where no market has printed one. */
 export const priceWord = (q: PaperQuote | undefined): string => (q ? (q.pricePerFace * 100).toFixed(2) : '—');

@@ -152,7 +152,7 @@ export const holders: FunctionModule = {
   blurb: 'who holds it',
   argKey: 'tab',
   render({ world, ref, args, nav }) {
-    if (ref.type === 'company') return <CompanyHolders world={world} id={ref.id} nav={nav} tab={args.tab ?? ''} />;
+    if (ref.type === 'company') return <CompanyHolders world={world} id={ref.id} nav={nav} tab={args.tab} />;
     if (ref.type === 'institution') return <InstitutionHoldings world={world} id={ref.id} nav={nav} />;
     return <RegionHolders world={world} id={ref.id} nav={nav} />;
   },

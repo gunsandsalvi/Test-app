@@ -19,7 +19,7 @@ export const poolId = (region: string, industry: string): string => `${region}:$
 function poolOf(world: World, id: string): Pool | undefined {
   const i = id.indexOf(':');
   const region = id.slice(0, i); const industry = id.slice(i + 1);
-  const p = regionOf(world, region)?.smePools?.find((x) => x.industry === industry);
+  const p = regionOf(world, region)?.smePools.find((x) => x.industry === industry);
   return p ? { region, pool: p } : undefined;
 }
 
@@ -28,7 +28,7 @@ export const pool = defineObject<Pool>({
   words: ['pool', 'pools'],
   searchable: true,
   find: poolOf,
-  list: (world) => REGION_IDS.flatMap((r) => (world.state.regions[r]?.smePools ?? []).map((p) => ({ id: poolId(r, p.industry), obj: { region: r, pool: p } }))),
+  list: (world) => REGION_IDS.flatMap((r) => (world.state.regions[r].smePools).map((p) => ({ id: poolId(r, p.industry), obj: { region: r, pool: p } }))),
   label: (_w, _id, p) => ({ ticker: `${p.region} ${words(p.pool.industry)} pool`, name: `${words(p.pool.industry)} small businesses, ${p.region}`, kind: 'small-business pool', region: p.region }),
   keywords: (_w, _id, p) => [p.region.toLowerCase(), words(p.pool.industry), 'sme', 'small business'],
   parse: (world, phrase) => {
@@ -37,7 +37,7 @@ export const pool = defineObject<Pool>({
       const rl = r.toLowerCase();
       if (!p.startsWith(rl + ' ')) continue;
       const rest = p.slice(rl.length + 1);
-      const pools = world.state.regions[r]?.smePools ?? [];
+      const pools = world.state.regions[r].smePools;
       const hit = pools.find((x) => words(x.industry) === rest || x.industry.toLowerCase() === rest) ?? (pools.filter((x) => words(x.industry).endsWith(' ' + rest) || words(x.industry).startsWith(rest + ' ')).length === 1 ? pools.find((x) => words(x.industry).endsWith(' ' + rest) || words(x.industry).startsWith(rest + ' ')) : undefined);
       if (hit) return poolId(r, hit.industry);
     }
@@ -53,8 +53,8 @@ export const pool = defineObject<Pool>({
   ],
   peers: {
     groups: (world, _id, p) => [
-      { name: `${p.region} pools`, ids: (world.state.regions[p.region as 'USA']?.smePools ?? []).map((x) => poolId(p.region, x.industry)) },
-      { name: `${words(p.pool.industry)} everywhere`, ids: REGION_IDS.filter((r) => world.state.regions[r]?.smePools?.some((x) => x.industry === p.pool.industry)).map((r) => poolId(r, p.pool.industry)) },
+      { name: `${p.region} pools`, ids: (world.state.regions[p.region as 'USA'].smePools).map((x) => poolId(p.region, x.industry)) },
+      { name: `${words(p.pool.industry)} everywhere`, ids: REGION_IDS.filter((r) => world.state.regions[r].smePools.some((x) => x.industry === p.pool.industry)).map((r) => poolId(r, p.pool.industry)) },
     ],
     defaultSort: 'revenue',
     columns: [
@@ -69,7 +69,7 @@ export const pool = defineObject<Pool>({
   overview({ world, ref, obj: p, nav }) {
     const s = p.pool;
     const rev = tapeSeries(world, `pool:${ref.id}:revenue`).values;
-    const subUnits = INDUSTRY_REGISTRY[s.industry as keyof typeof INDUSTRY_REGISTRY]?.subUnits ?? [];
+    const subUnits = Object.hasOwn(INDUSTRY_REGISTRY, s.industry) ? INDUSTRY_REGISTRY[s.industry as keyof typeof INDUSTRY_REGISTRY].subUnits : [];
     const sales = s.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
     const named = world.state.companies.filter((c) => c.region === p.region && c.listingStatus === 'PRIVATE' && c.smePoolIndustry === s.industry && !c.isDefaulted);
     return (
@@ -78,7 +78,7 @@ export const pool = defineObject<Pool>({
         <StatGrid>
           <Stat label="revenue" value={money(s.annualRevenueLocal)} sub={<ChangeSub series={rev} />} />
           <Stat label="margin" value={pctLevel(s.marginPct)} sub="measured on receipts" neg={s.marginPct < 0} />
-          <Stat label="default rate" value={pctLevel(s.defaultRateAnnualPct, 1)} sub={`${pctLevel(s.distressedFirmShare ?? 0, 0)} distressed`} neg={(s.defaultRateAnnualPct ?? 0) > 0.05} />
+          <Stat label="default rate" value={pctLevel(s.defaultRateAnnualPct, 1)} sub={`${pctLevel(s.distressedFirmShare ?? 0, 0)} distressed`} neg={(s.defaultRateAnnualPct) > 0.05} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="debt" hint={`${((s.blendedMarginBps ?? 0)).toFixed(0)}bp over policy`} v={money(s.debtLocal)} />
