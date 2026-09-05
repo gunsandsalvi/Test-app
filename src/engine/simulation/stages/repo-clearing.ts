@@ -59,7 +59,7 @@ import {
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay, PartyRef, pendingSettlementLocal, institutionSpendableLocal } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, takePrint } from './financial-clearing-engine';
-import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
+import { ON_RRP_SPREAD_BPS, MIN_CASH_BUFFER_RATIO, repoCorridorBps } from '../../macro/banking';
 
 import { repoOvernightInstrumentId, repoTermInstrumentId } from '../../../domain/instrument-keys';
 import { registerBook } from '../../ledger/instrument-ledger';
@@ -318,8 +318,7 @@ export function runRegionalRepoSession(
   const tickerOfBankId = new Map(banks.map((b) => [b.id, b.ticker]));
   const priorRepoRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
   const policyBps = reg.policyRate * 10000;
-  const rrpBps = Math.max(0, policyBps - ON_RRP_SPREAD_BPS);
-  const srfBps = policyBps + SRF_SPREAD_BPS;
+  const { floorBps: rrpBps, ceilingBps: srfBps } = repoCorridorBps(reg.policyRate);
   const corridorWidthBps = Math.max(1, srfBps - rrpBps);
   const onInstrumentId = repoOvernightInstrumentId(regionId);
   const termInstrumentId = repoTermInstrumentId(regionId);

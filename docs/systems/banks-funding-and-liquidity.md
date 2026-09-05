@@ -185,7 +185,7 @@ charges the central-bank loan at the bank's OWN cleared bond spread —
 `wholesaleInterestLocal = wholesaleLocal × (policyRate + ownWholesaleSpreadBps/10000)/52`
 (`macro/banking.ts:349`) — but that number is only ever fed to the NIM statistic; the equity line is
 never debited by it. The money actually paid is `02b:464`:
-`centralBankLoanLocal × (policyRate + (SRF_SPREAD_BPS + CENTRAL_BANK_LOAN_PENALTY_BPS)/10000)/52` —
+`centralBankLoanLocal × ((repoCorridorBps(policyRate).ceilingBps + CENTRAL_BANK_LOAN_PENALTY_BPS)/10000)/52` —
 policy + 125bp, identical for a sound bank and a breaching one. **Two rates on one liability, one
 of which is measured and one of which is paid.** A bank whose spread blows out feels it in a
 printed margin and nowhere else.

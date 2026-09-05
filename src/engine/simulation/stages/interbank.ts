@@ -33,7 +33,7 @@ import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 import { bankParty, bankSecuritiesParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { pay, pendingSettlementLocal } from './settlement';
-import { bankCashBufferRatioOf, SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS } from '../../macro/banking';
+import { bankCashBufferRatioOf, repoCorridorBps } from '../../macro/banking';
 import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, takePrint } from './financial-clearing-engine';
 import { interbankInstrumentId } from '../../../domain/instrument-keys';
@@ -80,7 +80,8 @@ export function runInterbankSession(ctx: WeeklyStepContext, regionId: RegionId, 
   borrowers.forEach((b) => unfunded.set(b.bank.id, b.needLocal));
   if (borrowers.length === 0 || surplusByLender.size === 0) return { unfunded, struckLocal: 0 };
   const policyBps = reg.policyRate * 10000;
-  const corridorWidthBps = Math.max(1, SRF_SPREAD_BPS + ON_RRP_SPREAD_BPS);
+  const corridor = repoCorridorBps(reg.policyRate);
+  const corridorWidthBps = Math.max(1, corridor.ceilingBps - corridor.floorBps);
   const bankById = new Map(banks.map((b) => [b.id, b]));
   const book = [...interbankBookOf(ctx.v2, regionId)];
   let struckLocal = 0, struckRateWeighted = 0;

@@ -19,7 +19,8 @@ import { materializeGovLadder, ladderRowsOf, TR_SUBORDINATED, TR_CP, TR_FACILITY
 import { STANDARD_CORP_TENOR_YEARS } from '../../domain/primary-market';
 import { CDS_BENCHMARK_TENOR, CDS_TENOR_YEARS } from '../../domain/derivatives/classes/cds';
 import { spreadBpsFromPrice, SPREAD_SOLVE_RESOLUTION_BPS } from '../../domain/pricing/bond';
-import { creditRecoveryRate } from '../../domain/bank-pricing';
+import { creditRecoveryRate, BANK_MIN_CAPITAL_RATIO } from '../../domain/bank-pricing';
+import { repoCorridorBps } from '../macro/banking';
 import { clearedPriceOf } from '../../engine2/prices';
 import { asInstrumentId } from '../../domain/ids';
 
@@ -173,7 +174,18 @@ function p3(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
-/** X1 — the curve: forward rates non-negative, repo inside the corridor, deposits below policy, a solvent bank's margin positive. */
+/**
+ * X1 — the curve: forward rates non-negative, repo inside the corridor, a solvent bank's margin
+ * positive.
+ *
+ * §3.27-iii-b: the corridor is the posted facilities' own (`macro/banking.ts:repoCorridorBps`, the
+ * one owner every book quotes inside), not `policy ± 150bp`; solvency is the floor the bank's own
+ * pricing means (`BANK_MIN_CAPITAL_RATIO`), not `> 0.08`. "Deposits pay below policy" left the
+ * audit for §6: the mechanism (`evolveBankingSector`) pays up to the cheaper of the bank's own
+ * wholesale cost and the money fund's yield on the contested share, and it sets that rate before
+ * the fund re-quotes and the central bank moves — so above policy is a stressed bank buying
+ * funding, a number to watch and never an identity to assert.
+ */
 function x1(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   REGION_IDS.forEach((r) => {
@@ -185,13 +197,12 @@ function x1(state: GameState, week: number): AuditFinding[] {
       const fwd = (r1 * t1 - r0 * t0) / (t1 - t0);
       if (fwd < -floatDust(Math.abs(r1 * t1) + Math.abs(r0 * t0), 4) / (t1 - t0)) out.push({ family: 'X', check: 'X1 forward rates non-negative', week, usd: fwd, message: `${r}: the ${t0}y→${t1}y forward is ${pct(fwd)}` });
     }
-    const repo = reg.repoRateAnnual ?? reg.policyRate;
-    if (repo > reg.policyRate + 0.015 || repo < reg.policyRate - 0.015) out.push({ family: 'X', check: 'X1 repo inside the corridor', week, usd: repo - reg.policyRate, message: `${r}: repo ${pct(repo)} against policy ${pct(reg.policyRate)}` });
+    const repoBps = (reg.repoRateAnnual ?? reg.policyRate) * 10000;
+    const { floorBps, ceilingBps } = repoCorridorBps(reg.policyRate);
+    if (repoBps > ceilingBps + floatDust(Math.abs(repoBps) + Math.abs(ceilingBps), 2) || repoBps < floorBps - floatDust(Math.abs(repoBps) + Math.abs(floorBps), 2)) out.push({ family: 'X', check: 'X1 repo inside the corridor', week, usd: repoBps / 10000 - reg.policyRate, message: `${r}: repo ${pct(repoBps / 10000)} outside the corridor [${pct(floorBps / 10000)}, ${pct(ceilingBps / 10000)}] the facilities post around policy ${pct(reg.policyRate)}` });
     const banks = banksOf(state.companies, r);
-    const negNim = banks.filter((b) => b.bankBalanceSheet!.bankCapitalRatio > 0.08 && b.bankBalanceSheet!.netInterestMarginPct < 0);
-    if (negNim.length) out.push({ family: 'X', check: 'X1 a solvent bank earns a margin', week, usd: negNim.length, message: `${r}: ${negNim.map((b) => b.ticker).join(' ')} run a negative margin while solvent` });
-    const highDep = banks.filter((b) => (b.bankBalanceSheet!.depositRateAnnual ?? 0) > reg.policyRate + 0.005);
-    if (highDep.length) out.push({ family: 'X', check: 'X1 deposits pay below policy', week, usd: highDep.length, message: `${r}: ${highDep.map((b) => b.ticker).join(' ')} pay depositors above the policy rate` });
+    const negNim = banks.filter((b) => b.bankBalanceSheet!.bankCapitalRatio >= BANK_MIN_CAPITAL_RATIO && b.bankBalanceSheet!.netInterestMarginPct < 0);
+    if (negNim.length) out.push({ family: 'X', check: 'X1 a solvent bank earns a margin', week, usd: negNim.length, message: `${r}: ${negNim.map((b) => b.ticker).join(' ')} run a negative margin at or above the ${pct(BANK_MIN_CAPITAL_RATIO)} capital floor` });
   });
   return out;
 }

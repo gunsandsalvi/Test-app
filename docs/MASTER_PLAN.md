@@ -553,17 +553,6 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-27-iii-b. **X1 reads the corridor, the alternative and the floor it claims.** *(rule 10 split of
-    "the prices family measures what it claims".)* `prices.ts` X1 holds repo to `policy ± 150bp`
-    where the corridor is the posted SRF ceiling and ON RRP floor (`macro/banking.ts:
-    SRF_SPREAD_BPS`/`ON_RRP_SPREAD_BPS`, which `repo-clearing.ts` and `interbank.ts` each rebuild):
-    one owner `repoCorridorOf(policyRate)`, read by both stages and the check, and the band is dust.
-    "Deposits pay below policy" forgives 50bp where the mechanism (`macro/banking.ts:depositRate`)
-    pays up to the depositor's ALTERNATIVE — `min(policy + the bank's wholesale spread, the money
-    fund's yield)` — on the contested share: below policy is not what the mechanism promises, so
-    the line either reads the identity the mechanism does keep or leaves the audit for §6. "A
-    solvent bank earns a margin" states solvency as `> 0.08` where
-    `bank-pricing.ts:BANK_MIN_CAPITAL_RATIO` is the floor it means. the-audit B4 re-marked.
 27-iii-c. **X2 reads the wedge and the carry.** `prices.ts` X2 tests the same good across regions
     against a fixed 2.5× and fires only past a 25% quota, where the wedge is the freight on the
     cheapest-to-dearest lane (`state.freightRatePerTonneLaneMoneyByLane × unitMassTonnes`, converted
@@ -1339,6 +1328,7 @@ move into registries; lookups stay (rule 15).
 | TGA over a quarter; occupational mismatch; top-down vs bottom-up household income; the private tier that sells nothing; loan-book Spearman noise | Watch the TGA's LEVEL not its shape; mismatch is composition outrunning retraining; `estimatedHouseholdIncomeUSD` is still the anchor; ~300 seeded private firms per region carry `productLines: []`; Spearman 0.26–0.76 at 23–32 names — re-measure as the universe grows. |
 | Sovereign price elasticity to a size-only bidder | The books ARE thin, which is consistent with the equity tail the parked SCALE project owns. Measure; do not tune the depth. |
 | The insurance market (§9.16b) — `INS_TRACE=1` | Two things 16b asked to see and rule 11 forbids running for: each region's insurers' COVER shares move week to week (a share that never moves is a market that is not one), and an insurer whose surplus is gone loses book before it loses its licence (its cover share falls below its surplus share, toward zero, as its renewals go elsewhere). The trace prints each insurer's cover share and its weekly move, its surplus share, its quote in bp, and the cover nobody could write. Measure; do not tune the quote. |
+| Banks paying depositors above policy | The mechanism (`evolveBankingSector`) pays up to the cheaper of the bank's own wholesale cost (`policy + its cleared spread`) and the money fund's yield, on the contested share of its base, and sets it before the fund re-quotes and the central bank moves. Above policy is a stressed bank buying funding, not a defect: count the banks and the weeks (§9.27-iii-b took the line out of the audit); never band it. |
 | The two credit-ETF dust singles | 0.01B, standing since well before the wires campaign. Likeliest an in-kind slice edge, or pending-settlement timing at a boundary. May already be closed by the wires and no-caps work — re-measure before treating it as open. |
 
 | The clearing house's refusals (§9.17-v-i) — `Region.ccpRefusedNotionalLocal`, printed by `DRV_TRACE=1` (§9.17-v-ii) | What the four markets struck beyond what their members could margin, cut at the house. Non-zero is a market sizing its demand to the wrong constraint (17-v-iii); a member cut every week is one living at its limit. Measure; do not raise the limit. |
@@ -1361,6 +1351,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**27-iii-b — X1 READS THE CORRIDOR AND THE FLOOR IT CLAIMS.** X1 held repo to `policy ± 150bp` where
+  the corridor is the two posted facilities' — the RRP window's floor, never below zero, and the
+  standing facility's ceiling — which `repo-clearing.ts`, `interbank.ts`, `money-market-fund.ts` and
+  `central-bank-loans.ts` each rebuilt from the spreads. One owner now, `macro/banking.ts:
+  repoCorridorBps(policyRate)`, read by the four and by the check, which forgives dust. "A solvent
+  bank earns a margin" said solvent as `> 0.08`; it reads `bank-pricing.ts:BANK_MIN_CAPITAL_RATIO`.
+  "Deposits pay below policy" (50bp forgiven) left the audit for §6: `evolveBankingSector` pays up
+  to `min(policy + the bank's own cleared spread, the money fund's yield)` on the contested share,
+  and sets it at stage 02b before the fund re-quotes (387) and the central bank moves (420), so
+  the line was a regularity no mechanism keeps at the hour the audit reads — a number to count,
+  never an identity. money-market C3 ⚠️→✅ (`prices.ts:x1`); the-audit B4 stays ⚠️ for 27-iii-c.
+  Gates green; no run (rule 11).
 
 **27-iii-a — P1 AND P2 READ THE MECHANISMS THAT SET THEM.** P1 compared a paper coupon over POLICY
   and a facility margin over policy against a bond spread over the CURVE, so a steep curve read as a

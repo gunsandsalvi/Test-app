@@ -43,6 +43,15 @@ export const SRF_SPREAD_BPS = 25;
  * bank has no business at the RRP window) — it is the NON-bank cash floor: the WS6 lenders'
  * outside option, and WS7's money funds are its real users. */
 export const ON_RRP_SPREAD_BPS = 20;
+/** THE CORRIDOR the two posted facilities make around policy, in bps: the RRP window is its floor
+ *  (never below zero — the window cannot pay a negative rate) and the standing repo facility its
+ *  ceiling. One owner for every book that quotes inside it (the repo and interbank sessions, the
+ *  money fund's floor, the window's penalty rate) and for the audit that holds the print to it
+ *  (§3.27-iii-b): the band X1 forgives is the corridor itself, and dust. */
+export function repoCorridorBps(policyRate: number): { floorBps: number; ceilingBps: number } {
+  const policyBps = policyRate * 10000;
+  return { floorBps: Math.max(0, policyBps - ON_RRP_SPREAD_BPS), ceilingBps: policyBps + SRF_SPREAD_BPS };
+}
 /**
  * Share of a household's weekly saving that reaches a BANK DEPOSIT rather than any other
  * destination. One owner: it was a bare `0.3` in two files (here, sizing the funding-pressure

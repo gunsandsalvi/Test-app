@@ -119,7 +119,7 @@ checked by `scripts/check-atlas.sh`.
 | C1 a floor: the CB pays on reserves, or takes cash at a window | `src/engine/simulation/stages/repo-clearing.ts:parkUnlentSleevesAtTheWindow` | ✅ |
 | C1.a cash parked there LEAVES the banking system | `src/engine/simulation/stages/repo-clearing.ts:drawReverseRepoAtTheClose` | ✅ |
 | C2 a ceiling: a standing facility that lends | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
-| C3 VERIFY the market rate sits inside the corridor | `src/engine/audit/prices.ts:repo` | ⚠️ |
+| C3 VERIFY the market rate sits inside the corridor | `src/engine/audit/prices.ts:x1` · `src/engine/macro/banking.ts:repoCorridorBps` | ✅ |
 | C4 the facility is collateralised and priced above the market | `src/engine/simulation/stages/repo-clearing.ts:SRF_SEAT_STEP_BPS` | ✅ |
 | C4.a so a bank prefers the market; drawing is information | `src/domain/repo.ts:srfBorrowedLocal` | ✅ |
 | C4.b a bank out of eligible collateral CANNOT DRAW | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` | ✅ |
@@ -288,4 +288,4 @@ policy + 125bp and nothing else. B6.a's term/overnight spread exists as two prin
 ### Also marked, briefly
 
 - **A2 ⚠️ / A3 ⚠️** — the position is held for a buffer that is a constant (A2.a), and the need is sized at stage 3 before the flows (A3.a).
-- **C3 ⚠️** — `X1` asserts the print inside ±150bp of policy; the width is a stated band, not a measured one.
+- **C3 ✅** — *2026-09-05 (§9.27-iii-b):* `X1` holds the print inside the corridor the facilities post (`repoCorridorBps`, the one owner the repo and interbank sessions, the money fund's floor and the window's penalty all read) and forgives dust; the ±150bp band is gone.

@@ -19,16 +19,16 @@ import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 import { bankParty, bankSecuritiesParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { pay } from './settlement';
-import { bankCashBufferRatioOf, SRF_SPREAD_BPS } from '../../macro/banking';
+import { bankCashBufferRatioOf, repoCorridorBps } from '../../macro/banking';
 
 /** The penalty over the standing-facility rate an unsecured central-bank loan carries. */
 export const CENTRAL_BANK_LOAN_PENALTY_BPS = 100;
 
 type Bank = { id: EntityId; ticker: Ticker; region: RegionId; management?: import('../../../domain/preferences').Preferences; bankBalanceSheet?: BankingSector };
 
-/** The window's unsecured rate this week: policy, the facility spread, the penalty. */
+/** The window's unsecured rate this week: the top of the corridor, plus the penalty. */
 export const centralBankLoanRateAnnual = (reg: Pick<Region, 'policyRate'>): number =>
-  Number((reg.policyRate + (SRF_SPREAD_BPS + CENTRAL_BANK_LOAN_PENALTY_BPS) / 10000).toFixed(6));
+  Number(((repoCorridorBps(reg.policyRate).ceilingBps + CENTRAL_BANK_LOAN_PENALTY_BPS) / 10000).toFixed(6));
 
 /** The sheets' derived lines, from the book — the one writer of both. */
 export function syncCentralBankLoanSheets(ctx: WeeklyStepContext, regionId: RegionId, reg: Region, banks: readonly Bank[]): void {

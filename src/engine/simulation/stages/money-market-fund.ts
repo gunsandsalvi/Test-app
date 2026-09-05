@@ -37,7 +37,7 @@ import { materializeGovLadder } from '../../../engine2/tranches';
 import { GovDebtTrancheView } from '../../../domain/region-macro';
 import { Company, InstitutionalEntity, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
-import { computeSovereignBookAnnualYield, ON_RRP_SPREAD_BPS } from '../../macro/banking';
+import { computeSovereignBookAnnualYield, repoCorridorBps } from '../../macro/banking';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { institutionTotalAssetsLocal } from './institutional-balance-sheet';
@@ -61,7 +61,7 @@ export function findRegionMmf(entities: InstitutionalEntity[], regionId: RegionI
  * quote, and the reason the market can bootstrap itself when that beats the deposit rate.
  */
 function quoteMmfNetYieldAnnual(v2: V2World, entity: InstitutionalEntity, cashLocal: number, reg: Region, week: number, govLadder: GovDebtTrancheView[]): number {
-  const rrpRateAnnual = Math.max(0, reg.policyRate - ON_RRP_SPREAD_BPS / 10000);
+  const rrpRateAnnual = repoCorridorBps(reg.policyRate).floorBps / 10000;
   const repoRateAnnual = reg.repoRateAnnual ?? rrpRateAnnual;
 
   // §3.13-SOV row 3: a holding is a bill because the LADDER says the bond it names is one —
