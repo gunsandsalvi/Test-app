@@ -15,13 +15,14 @@ import { macro } from './macro';
 import { markets, pools, labour, banks, firms, funds, books } from './lists';
 import { links } from './links';
 import { contracts } from './contracts';
+import { derivatives } from './derivatives';
 import { diag } from './diag';
 import { peers } from './peers';
 import { all } from './all';
 
 const ORDER: FunctionModule[] = [
   overview, news, macro, chart, statements, ladder, curves, holders, holdings, lines, sellers,
-  markets, labour, pools, banks, firms, funds, books, links, contracts, diag, peers, all,
+  markets, labour, pools, banks, firms, funds, books, links, contracts, derivatives, diag, peers, all,
 ];
 
 export const FUNCTIONS: Record<string, FunctionModule> = Object.fromEntries(ORDER.map((f) => [f.name, f]));

@@ -107,7 +107,7 @@ checked by `scripts/check-atlas.sh`.
 | C1.a netting is per counterparty pair | — | ❌ |
 | **C2 cleared: a CCP becomes buyer to the seller and seller to the buyer** | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` · `src/engine/simulation/stages/derivative-lifecycle.ts:postInitialMargin` | ✅ |
 | C2.a it concentrates the risk in a named party | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` · `src/engine/audit/ownership.ts:o15` | ✅ |
-| C3 the CCP is a real entity with a balance sheet | `src/domain/clearing-house.ts:CcpSheet` · `src/engine/ledger/contract-ledger.ts:ccpFundOf` · `src/engine/simulation/stages/derivatives.ts:trueUpDefaultFunds` | ✅ |
+| C3 the CCP is a real entity with a balance sheet | `src/domain/clearing-house.ts:CcpSheet` · `src/engine/ledger/contract-ledger.ts:ccpFundOf` · `src/engine/simulation/stages/derivatives.ts:trueUpDefaultFunds` · `src/engine/ledger/contract-ledger.ts:houseViewOf` · `src/ui/functions/derivatives.tsx:derivatives` | ✅ |
 | **C4 a stated default waterfall, in order** | `src/domain/clearing-house.ts:runWaterfall` · `src/engine/simulation/stages/derivative-lifecycle.ts:resolveMemberDefault` | ✅ |
 | C4.a a member's loss can come from another member's default | `src/domain/clearing-house.ts:writeDownSurvivors` | ✅ |
 | **C5 FORBID the CCP is not a guarantor of last resort** | `src/domain/clearing-house.ts:WaterfallRound` · `src/domain/clearing-house.ts:memberMarginLimitLocal` · `src/engine/audit/ownership.ts:o15` | ⚠️ |
@@ -210,6 +210,12 @@ every market strikes through `admitToHouse` (the FX market per holder, where its
 per-holder budget stood) — and what was cut is `Region.ccpRefusedNotionalLocal`, a §6 measure.
 What the markets do not yet do is SIZE their demand to the limit, so a cut is the house's
 correction after the print rather than the desk's own restraint before it (17-v-iii).*
+
+*2026-09-05 (§9.17-v-ii). The market view: `contract-ledger.ts:houseViewOf` reads one house's open
+interest by class, its sheet, and every member with the margin and fund it has at the house and
+its gross and net position per class (the class's first role long, the other side short); the
+region's `derivatives` function shows it and `DRV_TRACE=1` prints it, the week's refusals and
+the latest waterfall beside.*
 
 ### ✅ E2 / E3 / ⚠️ E4 — A DEAD MEMBER'S CLOSE-OUT IS THE HOUSE'S CLAIM, RANKED, AND ITS LOSS IS NAMED
 

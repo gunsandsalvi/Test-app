@@ -15,7 +15,7 @@ import { admitToHouse } from '../src/engine/simulation/stages/derivative-lifecyc
 import { openAccount, reserveRowOf, setHomeCurrency } from '../src/engine/ledger/accounts';
 import { trueUpDefaultFunds } from '../src/engine/simulation/stages/derivatives';
 import { openSectorRow, ccpCashOf, ccpDepositsAt, depositLinesAt } from '../src/engine/ledger/accounts';
-import { keepDerivatives, strikeDerivatives, ccpSheetAt, memberMarginPostedLocal, bankMarginAtHouseLocal, bankAtHouseLocal, ccpFundOf, ccpFundLocal, publishCcpFund, membersOfHouse } from '../src/engine/ledger/contract-ledger';
+import { houseViewOf, keepDerivatives, strikeDerivatives, ccpSheetAt, memberMarginPostedLocal, bankMarginAtHouseLocal, bankAtHouseLocal, ccpFundOf, ccpFundLocal, publishCcpFund, membersOfHouse } from '../src/engine/ledger/contract-ledger';
 import { newPaymentJournal, reasonText } from '../src/engine/simulation/stages/settlement';
 import { newWireJournal, setActiveWireJournal } from '../src/engine/ledger/wire';
 import { partyOf } from '../src/engine/ledger/party';
@@ -258,6 +258,32 @@ test('§3.17-v-i: the house admits a strike against each member\'s remaining cap
     assert.ok(Math.abs(reg.ccpRefusedNotionalLocal - 1.5e6) < 1e-6, 'half of the second and all of the third were refused');
   } finally {
     setActiveWireJournal(undefined);
+    setActiveWireWorld(undefined);
+  }
+});
+
+test('§3.17-v-ii: the market view — open interest by class, and each member\'s margin, fund and net position', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const dealer = asEntityId('USA_BANK1');
+  const a = { kind: 'INSTITUTION' as const, id: asEntityId('INST-A') };
+  const b = { kind: 'BANK' as const, id: dealer };
+  setActiveWireWorld(wireWorldOf(v2, [{ id: dealer }], [{ id: a.id }]));
+  try {
+    const base = { regionId: 'USA' as const, currency: 'USD' as const, strike: 1, termKey: '', settledMarkLocal: 0, struckWeek: 1, maturityWeek: 14 };
+    strikeDerivatives({ v2 } as unknown as WeeklyStepContext, [
+      { ...base, id: 'f1', classId: 'FX_FORWARD', a, b, notional: 300, initialMarginLocal: 6, reference: { kind: 'REGION', regionId: 'EUR' } },
+      { ...base, id: 'f2', classId: 'FX_FORWARD', a: b, b: a, notional: 100, initialMarginLocal: 2, reference: { kind: 'REGION', regionId: 'EUR' } },
+      { ...base, id: 's1', classId: 'IRS', a, b, notional: 1000, initialMarginLocal: 10, reference: { kind: 'RATE' }, termKey: 's5' },
+    ]);
+    publishCcpFund(v2, 'USA', [{ regionId: 'USA', member: b, amountLocal: 7 }]);
+    const view = houseViewOf(v2, 'USA');
+    assert.deepEqual(view.openInterest, { FX_FORWARD: { contracts: 2, notionalLocal: 400 }, IRS: { contracts: 1, notionalLocal: 1000 } });
+    assert.equal(view.sheet.marginHeldLocal, 36, 'both members of every contract');
+    assert.deepEqual(view.members.map((m) => [m.member.id, m.marginLocal, m.fundLocal]), [[a.id, 18, 0], [dealer, 18, 7]]);
+    assert.deepEqual(view.members[0].byClass, { FX_FORWARD: { contracts: 2, grossLocal: 400, netLocal: 200 }, IRS: { contracts: 1, grossLocal: 1000, netLocal: 1000 } });
+    assert.deepEqual(view.members[1].byClass.FX_FORWARD, { contracts: 2, grossLocal: 400, netLocal: -200 }, 'the dealer is short what the fund is long');
+    assert.deepEqual(houseViewOf(v2, 'EUR').members, []);
+  } finally {
     setActiveWireWorld(undefined);
   }
 });

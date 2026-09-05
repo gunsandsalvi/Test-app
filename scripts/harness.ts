@@ -131,7 +131,9 @@ import { ensureV2 } from '../src/engine2/world';
 import { segmentStockLocal } from '../src/engine/ledger/goods-ledger';
 import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
 import { issuedSharesOf, etfSharesOutstandingOf } from '../src/engine2/instruments';
-import { derivativesOf, repoBookOf, publishRepoBook, tradeInvoicesOf, bankAtHouseLocal } from '../src/engine/ledger/contract-ledger';
+import { derivativesOf, repoBookOf, publishRepoBook, tradeInvoicesOf, bankAtHouseLocal, houseViewOf } from '../src/engine/ledger/contract-ledger';
+import { ccpOwnCapitalLocal } from '../src/domain/clearing-house';
+import type { DerivativeClassId } from '../src/domain/derivatives/contract';
 import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { issuerSpreadAtOnCurve } from '../src/engine/credit-price';
@@ -261,6 +263,23 @@ function printInsuranceMarket(state: GameState, week: number): void {
     });
     const unplaced = state.regions[r]?.insuranceUnplacedCoverLocal ?? 0;
     console.log(`  [ins-trace] w${week} ${r}: ${parts.join(' | ')}${unplaced > 0 ? ` | unplaced ${(unplaced / 1e9).toFixed(2)}B` : ''}`);
+  });
+}
+
+/** §3.17-v-ii — the derivative markets overall: per house, open interest by class, the sheet, the
+ *  week's refusals and the members carrying the most margin. A measure (`DRV_TRACE=1`), never a check. */
+function printDerivativeMarkets(state: GameState, week: number): void {
+  if (process.env.DRV_TRACE !== '1') return;
+  const v2 = ensureV2(state);
+  REGION_IDS.forEach((r) => {
+    const view = houseViewOf(v2, r);
+    const classes = (Object.keys(view.openInterest) as DerivativeClassId[]);
+    if (classes.length === 0 && view.members.length === 0) return;
+    const B = (usd: number) => `${(usd / 1e9).toFixed(2)}B`;
+    const oi = classes.map((c) => `${c} ${view.openInterest[c]!.contracts}×${B(view.openInterest[c]!.notionalLocal)}`).join(' ');
+    const top = view.members.slice(0, 3).map((m) => `${m.member.id} margin ${B(m.marginLocal)} fund ${B(m.fundLocal)}`).join(' | ');
+    const refused = state.regions[r]?.ccpRefusedNotionalLocal ?? 0;
+    console.log(`  [drv-trace] w${week} ${r}: ${oi} | cash ${B(view.sheet.cashLocal)} margin ${B(view.sheet.marginHeldLocal)} fund ${B(view.sheet.defaultFundLocal)} capital ${B(ccpOwnCapitalLocal(view.sheet))}${refused > 0 ? ` refused ${B(refused)}` : ''} | ${top}`);
   });
 }
 
@@ -2353,6 +2372,7 @@ function runHarness() {
     checkCentralBankIdentity(state, w);
     printOwnershipTraces(state, w); // the CHECK is the audit's O1, run below
     printInsuranceMarket(state, w); // §3.16b-iii: a measure, never a check
+    printDerivativeMarkets(state, w); // §3.17-v-ii: a measure, never a check
     checkBeneficiaryClaimsHaveHolders(state, w);
     checkSettlementClosed(state, w);
     checkGuards(state, w);

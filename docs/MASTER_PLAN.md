@@ -552,11 +552,8 @@ written from here):
     margin is the reference's own move) and 17-iii (variation margin is the mark, for every
     class) are in §9. What is left, in order:
 17-v. **CAPACITY IS A CLEARING-MEMBER LIMIT (rule 5), and the market view** — split 2026-09-05,
-    one commit each; 17-v-i (the limit, at the strike) is in §9. What is left, in order:
-17-v-ii. **THE MARKET VIEW:** open interest, margin held and net position per member, by class
-    and by house — the "stats on the derivative markets overall" the user asked for. One read
-    (`contract-ledger.ts`, off the store and the fund rows) that the region's UI shows as a
-    function and the harness prints (`DRV_TRACE=1`), the week's refusals included.
+    one commit each; 17-v-i (the limit, at the strike) and 17-v-ii (the market view) are in §9.
+    What is left:
 17-v-iii. **THE MARKETS SIZE TO THE LIMIT.** Each of the four markets caps a party's demand and
     a desk's supply at the member's remaining capacity through the class's margin rate BEFORE
     the print, so the house's cut at the strike (17-v-i) is the exception it should be rather
@@ -1611,7 +1608,7 @@ move into registries; lookups stay (rule 15).
 | The insurance market (§9.16b) — `INS_TRACE=1` | Two things 16b asked to see and rule 11 forbids running for: each region's insurers' COVER shares move week to week (a share that never moves is a market that is not one), and an insurer whose surplus is gone loses book before it loses its licence (its cover share falls below its surplus share, toward zero, as its renewals go elsewhere). The trace prints each insurer's cover share and its weekly move, its surplus share, its quote in bp, and the cover nobody could write. Measure; do not tune the quote. |
 | The two credit-ETF dust singles | 0.01B, standing since well before the wires campaign. Likeliest an in-kind slice edge, or pending-settlement timing at a boundary. May already be closed by the wires and no-caps work — re-measure before treating it as open. |
 
-| The clearing house's refusals (§9.17-v-i) — `Region.ccpRefusedNotionalLocal` | What the four markets struck beyond what their members could margin, cut at the house. Non-zero is a market sizing its demand to the wrong constraint (17-v-iii); a member cut every week is one living at its limit. Measure; do not raise the limit. |
+| The clearing house's refusals (§9.17-v-i) — `Region.ccpRefusedNotionalLocal`, printed by `DRV_TRACE=1` (§9.17-v-ii) | What the four markets struck beyond what their members could margin, cut at the house. Non-zero is a market sizing its demand to the wrong constraint (17-v-iii); a member cut every week is one living at its limit. Measure; do not raise the limit. |
 
 ## 8. THE APPENDICES — the two records that are not the plan
 
@@ -1631,6 +1628,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17-v-ii — THE MARKET VIEW.** The "stats on the derivative markets overall": one read,
+`contract-ledger.ts:houseViewOf(v2, region)` — the house's open interest per class (contracts,
+notional), its sheet (`ccpSheetAt`), and every member with the margin and fund it has at the
+house and, per class, its contracts, gross and NET position, the class's first role (pays fixed,
+buys protection, long the future, hedger) counted long and the other side short so a member on
+both sides nets; members largest margin first. The region's new `derivatives` function
+(`ui/functions/derivatives.tsx`, a tile on the region object) shows the sheet with own capital,
+the week's refusals and the latest waterfall, open interest by class, and the members table with
+net / gross per class; the harness prints the same per house under `DRV_TRACE=1`
+(`printDerivativeMarkets`), a measure beside `INS_TRACE`. `test/ccp.test.ts`: two forwards
+either way round and a swap — open interest by class, margin held both sides, each member's
+margin, fund and net per class, the dealer short what the fund is long. Gates green; no run.
 
 **17-v-i — CAPACITY IS A CLEARING-MEMBER LIMIT, AT THE STRIKE.** The house limits every member
 alike: it may carry at the houses no more initial margin than its liquid cash could re-margin

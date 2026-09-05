@@ -17,7 +17,7 @@ import type { V2World } from '../../engine2/world';
 import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeCcpFundRow, writeCcpFundAmount, materializeCcpFund, ccpFundIdOf, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
-import { derivativePartyKey, type DerivativeContract, type DerivativeParty } from '../../domain/derivatives/contract';
+import { derivativePartyKey, type DerivativeClassId, type DerivativeContract, type DerivativeParty } from '../../domain/derivatives/contract';
 import { type RepoContract, encumberedFaceByBond } from '../../domain/repo';
 import { setLien } from './holdings-ledger';
 import { setAccountLien, ccpCashOf, obligationCurrencyOf } from './accounts';
@@ -106,6 +106,54 @@ export function membersOfHouse(v2: V2World, region: RegionId): Map<string, { mem
     });
   });
   return out;
+}
+
+/**
+ * §3.17-v-ii — THE MARKET VIEW: what a house clears and who carries it. Open interest per class
+ * (contracts and notional, in the house's money), the house's sheet, and every member with the
+ * margin and fund it has at the house and, per class, its gross and its NET position — the
+ * class's first role (pays fixed, buys protection, long, hedger) counted long and the other
+ * short, so a member on both sides of a class nets. One read off the store and the fund rows;
+ * the region's UI shows it as a function and the harness prints it (`DRV_TRACE=1`).
+ */
+export interface HouseClassView { contracts: number; notionalLocal: number }
+export interface HouseMemberClassView { contracts: number; grossLocal: number; netLocal: number }
+export interface HouseMemberView {
+  member: DerivativeParty;
+  marginLocal: number;
+  fundLocal: number;
+  byClass: Partial<Record<DerivativeClassId, HouseMemberClassView>>;
+}
+export interface HouseView {
+  regionId: RegionId;
+  sheet: CcpSheet;
+  openInterest: Partial<Record<DerivativeClassId, HouseClassView>>;
+  /** Members largest margin first. */
+  members: HouseMemberView[];
+}
+export function houseViewOf(v2: V2World, region: RegionId): HouseView {
+  const openInterest: Partial<Record<DerivativeClassId, HouseClassView>> = {};
+  const byKey = new Map<string, HouseMemberView>();
+  const memberOf = (p: DerivativeParty): HouseMemberView => {
+    const key = derivativePartyKey(p);
+    let m = byKey.get(key);
+    if (!m) { m = { member: p, marginLocal: 0, fundLocal: 0, byClass: {} }; byKey.set(key, m); }
+    return m;
+  };
+  derivativesOf(v2).forEach((c) => {
+    if (ccpOfContract(c).region !== region) return;
+    const oi = openInterest[c.classId] ?? (openInterest[c.classId] = { contracts: 0, notionalLocal: 0 });
+    oi.contracts += 1; oi.notionalLocal += c.notional;
+    ([['a', 1], ['b', -1]] as const).forEach(([side, sign]) => {
+      const m = memberOf(c[side]);
+      m.marginLocal += initialMarginLocal(c);
+      const k = m.byClass[c.classId] ?? (m.byClass[c.classId] = { contracts: 0, grossLocal: 0, netLocal: 0 });
+      k.contracts += 1; k.grossLocal += c.notional; k.netLocal += sign * c.notional;
+    });
+  });
+  ccpFundOf(v2, region).forEach((f) => { memberOf(f.member).fundLocal += f.amountLocal; });
+  const members = [...byKey.values()].sort((x, y) => y.marginLocal - x.marginLocal);
+  return { regionId: region, sheet: ccpSheetAt(v2, region), openInterest, members };
 }
 
 /**
