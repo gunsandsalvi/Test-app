@@ -39,7 +39,7 @@ import { exposureToHedgeLocal } from '../corporate-financing';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { postInitialMargin, withInitialMargin } from '../derivative-lifecycle';
+import { postInitialMargin, withInitialMargin, admitToHouse } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
@@ -285,8 +285,10 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
     });
   });
 
-  strikeDerivatives(ctx, struck);
-  struck.forEach((c) => postInitialMargin(ctx, c));
+  // §3.17-v-i: the house admits what each member can margin, then the contracts stand and post.
+  const admitted = admitToHouse(ctx, struck);
+    strikeDerivatives(ctx, admitted);
+    admitted.forEach((c) => postInitialMargin(ctx, c));
   // The standing book then marks at the week's fresh prints (the stage settles this class AFTER
   // the market): every open position's move settles in cash between its two named parties, a
   // contract in its delivery week settles to spot and closes, a dead counterparty closes out.

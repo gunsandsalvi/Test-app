@@ -10,7 +10,9 @@ import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
 import { partyKey, partyFromKey } from '../src/engine/ledger/party';
 import { ccpParty, samePartyRef } from '../src/domain/party';
-import { ccpOfContract, ccpOfMoney, ccpSheetOf, ccpOwnCapitalLocal, coverOneFundLocal, fundContributionsOf, CCP_CLOSE_OUT_SESSIONS, runWaterfall, writeDownSurvivors } from '../src/domain/clearing-house';
+import { ccpOfContract, ccpOfMoney, ccpSheetOf, ccpOwnCapitalLocal, coverOneFundLocal, fundContributionsOf, CCP_CLOSE_OUT_SESSIONS, runWaterfall, writeDownSurvivors, memberMarginLimitLocal, memberMarginCapacityLocal, admittedShareOf, scaledContract } from '../src/domain/clearing-house';
+import { admitToHouse } from '../src/engine/simulation/stages/derivative-lifecycle';
+import { openAccount, reserveRowOf, setHomeCurrency } from '../src/engine/ledger/accounts';
 import { trueUpDefaultFunds } from '../src/engine/simulation/stages/derivatives';
 import { openSectorRow, ccpCashOf, ccpDepositsAt, depositLinesAt } from '../src/engine/ledger/accounts';
 import { keepDerivatives, strikeDerivatives, ccpSheetAt, memberMarginPostedLocal, bankMarginAtHouseLocal, bankAtHouseLocal, ccpFundOf, ccpFundLocal, publishCcpFund, membersOfHouse } from '../src/engine/ledger/contract-ledger';
@@ -214,4 +216,48 @@ test('§3.17-iv-c-ii: the survivors\' contributions are written down pro rata, a
   const whole = writeDownSurvivors(fund, (m) => m.id === d.id, 1e9);
   assert.deepEqual(whole.kept.map((c) => c.amountLocal), [0, 0], 'never more than what is in');
   assert.equal(writeDownSurvivors(fund, (m) => m.id === d.id, 0).writtenDownByMember.size, 0);
+});
+
+test('§3.17-v-i: the member limit is what its cash could re-margin over the close-out horizon, and a contract is cut to what fits', () => {
+  const k = Math.sqrt(CCP_CLOSE_OUT_SESSIONS) - 1;
+  assert.equal(memberMarginLimitLocal(1000), 1000 / k);
+  assert.equal(memberMarginLimitLocal(-5), 0);
+  assert.equal(memberMarginCapacityLocal(1000, 1000 / k - 10), 10);
+  assert.equal(memberMarginCapacityLocal(1000, 1e9), 0);
+  assert.equal(admittedShareOf(100, 250), 1);
+  assert.equal(admittedShareOf(100, 25), 0.25);
+  assert.equal(admittedShareOf(0, 0), 1, 'a contract that posts nothing is admitted whole');
+  const cut = scaledContract({ notional: 1000, units: 10, initialMarginLocal: 20, strike: 7 }, 0.5);
+  assert.deepEqual(cut, { notional: 500, units: 5, initialMarginLocal: 10, strike: 7 });
+});
+
+test('§3.17-v-i: the house admits a strike against each member\'s remaining capacity, cuts the second contract and records what it refused', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const dealer = asEntityId('USA_BANK1');
+  const a = { kind: 'INSTITUTION' as const, id: asEntityId('INST-A') };
+  const b = { kind: 'BANK' as const, id: dealer };
+  setActiveWireWorld(wireWorldOf(v2, [{ id: dealer }], [{ id: a.id }]));
+  setActiveWireJournal(newWireJournal(1, 0));
+  try {
+    const k = Math.sqrt(CCP_CLOSE_OUT_SESSIONS) - 1;
+    // The fund can carry 1000/k of margin; the dealer's reserves are ample.
+    setHomeCurrency(v2, a, 'USD'); openAccount(v2, a, 'USD', 1000);
+    setHomeCurrency(v2, b, 'USD'); reserveRowOf(v2, dealer, 'USD', 1e9);
+    const reg = { ccpRefusedNotionalLocal: 0 };
+    const ctx = { v2, nextWeek: 5, pendingNetById: [], pendingTouchedIds: [], fx: PARITY_FX, updatedRegions: { USA: reg } } as unknown as WeeklyStepContext;
+    const c = (id: string, notional: number, im: number): DerivativeContract => ({
+      id, classId: 'FX_FORWARD', regionId: 'USA', currency: 'USD', a, b, notional, strike: 1.1,
+      reference: { kind: 'REGION', regionId: 'EUR' }, termKey: '', settledMarkLocal: 0, initialMarginLocal: im, struckWeek: 5, maturityWeek: 14,
+    });
+    const limit = 1000 / k;
+    const admitted = admitToHouse(ctx, [c('one', 1e6, limit * 0.75), c('two', 1e6, limit * 0.5), c('three', 1e6, limit)]);
+    assert.deepEqual(admitted.map((x) => [x.id, Math.round(x.notional), Math.round(x.initialMarginLocal)]), [
+      ['one', 1e6, Math.round(limit * 0.75)],
+      ['two', 5e5, Math.round(limit * 0.25)],
+    ], 'the first fits, the second is cut to the quarter of the limit left, the third fits nothing');
+    assert.ok(Math.abs(reg.ccpRefusedNotionalLocal - 1.5e6) < 1e-6, 'half of the second and all of the third were refused');
+  } finally {
+    setActiveWireJournal(undefined);
+    setActiveWireWorld(undefined);
+  }
 });

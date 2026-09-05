@@ -63,6 +63,8 @@ export interface DerivativeMarket {
 }
 
 export function runDerivativesStage(state: GameState, ctx: WeeklyStepContext, phase: DerivativePhase): void {
+  // §3.17-v-i: the week's refusals open at zero with its first market.
+  if (phase === 'CLEARING') REGION_IDS.forEach((r) => { const reg = ctx.updatedRegions[r]; if (reg) reg.ccpRefusedNotionalLocal = 0; });
   const view = buildDerivativeMarketView(ctx);
   for (const classId of DERIVATIVE_CLASS_IDS) {
     const market = DERIVATIVE_MARKETS[classId];

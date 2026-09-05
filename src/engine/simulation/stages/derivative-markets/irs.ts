@@ -36,7 +36,7 @@ import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
 import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { postInitialMargin, withInitialMargin } from '../derivative-lifecycle';
+import { postInitialMargin, withInitialMargin, admitToHouse } from '../derivative-lifecycle';
 import { institutionTotalAssetsLocal, institutionBookLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
@@ -263,8 +263,10 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
         });
       });
     });
-    strikeDerivatives(ctx, struck);
-    struck.forEach((c) => postInitialMargin(ctx, c));
+    // §3.17-v-i: the house admits what each member can margin, then the contracts stand and post.
+    const admitted = admitToHouse(ctx, struck);
+    strikeDerivatives(ctx, admitted);
+    admitted.forEach((c) => postInitialMargin(ctx, c));
 
     reg.swapParRateByTenor = parByTenor;
     // The published benchmark: the overnight print compounded, exactly as an overnight index is.

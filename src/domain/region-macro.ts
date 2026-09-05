@@ -910,6 +910,9 @@ export interface Region {
   /** §3.17-iv-c-ii — the clearing house's latest waterfall round: who defaulted, what it owed,
    *  what each line of the stack paid. Written by `derivative-lifecycle.ts:resolveMemberDefault`. */
   lastWaterfall?: import('./clearing-house').WaterfallRound;
+  /** §3.17-v-i — notional the clearing house cut from this week's strikes: what members wanted
+   *  beyond the margin they could carry (`derivative-lifecycle.ts:admitContract`). A measure. */
+  ccpRefusedNotionalLocal?: number;
   /** PUB: matured paper that no named book ever bought — the front-of-ladder undersubscription
    *  the treasury auction leaves behind. It is not a payment; nobody was owed it. */
   lastUnsoldMaturedLocal?: number;

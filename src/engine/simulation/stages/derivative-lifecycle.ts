@@ -20,9 +20,13 @@
 
 import { GameState, RegionId } from '../../../types';
 import { derivativesBookOf, strikeDerivatives, keepDerivatives } from '../../ledger/contract-ledger';
-import { ccpOfContract, memberMarginAccount, runWaterfall, writeDownSurvivors, ccpOwnCapitalLocal, type WaterfallRound } from '../../../domain/clearing-house';
-import { ccpFundOf, publishCcpFund, ccpSheetAt } from '../../ledger/contract-ledger';
+import { ccpOfContract, memberMarginAccount, runWaterfall, writeDownSurvivors, ccpOwnCapitalLocal, memberMarginCapacityLocal, admittedShareOf, scaledContract, type WaterfallRound } from '../../../domain/clearing-house';
+import { ccpFundOf, publishCcpFund, ccpSheetAt, memberMarginPostedLocal } from '../../ledger/contract-ledger';
+import { bankReservesOf, cashOf, obligationCurrencyOf } from '../../ledger/accounts';
+import { institutionSpendableLocal } from './settlement';
+import { convert } from '../../../domain/currency';
 import { pendingSettlementLocal } from './settlement';
+import type { CurrencyCode } from '../../../domain/geography';
 import { bookPnL } from '../../ledger/bank-book';
 import { ccpParty } from '../../../domain/party';
 
@@ -402,6 +406,63 @@ export function settleDerivativeClass(
   deadByMember.forEach(({ member, contracts }) => resolveMemberDefault(ctx, view, member, contracts, net));
   keepDerivatives(ctx, kept);
   return net;
+}
+
+/**
+ * §3.17-v-i — THE HOUSE ADMITS WHAT ITS MEMBERS CAN MARGIN. Each member's remaining capacity
+ * (`clearing-house.ts:memberMarginCapacityLocal`) is opened once per market from its liquid cash
+ * — a bank's reserves, a fund's spendable cash net of the collateral it holds, a firm's cash, each
+ * with the week's pending legs — less the margin it has at the houses from EARLIER weeks (this
+ * week's postings already left its pending cash), and drawn down by every contract admitted.
+ * A contract is cut to the smaller of its two members' admitted shares; one that fits nothing
+ * is refused. What was cut is the region's `ccpRefusedNotionalLocal`, reset each week.
+ */
+export interface MemberCapacity { remainingByKey: Map<string, number> }
+export const openMemberCapacity = (): MemberCapacity => ({ remainingByKey: new Map() });
+
+function memberLiquidCashLocal(ctx: WeeklyStepContext, p: DerivativeParty): number {
+  if (p.kind === 'INSTITUTION') return institutionSpendableLocal(ctx, p);
+  const own = p.kind === 'BANK' ? bankReservesOf(ctx.v2, p.id) : cashOf(ctx.v2, { id: p.id });
+  return Math.max(0, own + pendingSettlementLocal(ctx, p));
+}
+
+function remainingCapacityOf(ctx: WeeklyStepContext, cap: MemberCapacity, p: DerivativeParty, home: CurrencyCode): number {
+  const key = derivativePartyKey(p);
+  const known = cap.remainingByKey.get(key);
+  if (known !== undefined) return known;
+  const opened = memberMarginCapacityLocal(memberLiquidCashLocal(ctx, p), memberMarginPostedLocal(ctx.v2, p, home, ctx.nextWeek));
+  cap.remainingByKey.set(key, opened);
+  return opened;
+}
+
+/** A share below this is dust, not a position: the contract is refused whole. */
+const MIN_ADMITTED_SHARE = 1e-3;
+
+export function admitContract(ctx: WeeklyStepContext, cap: MemberCapacity, c: DerivativeContract): DerivativeContract | undefined {
+  const marginLocal = initialMarginLocal(c);
+  if (!(marginLocal > MIN_LEG_LOCAL)) return c;
+  const sides = [c.a, c.b].map((p) => {
+    const home = obligationCurrencyOf(ctx.v2, p);
+    const marginHome = convert(marginLocal, c.currency, home, ctx.v2.fx);
+    return { key: derivativePartyKey(p), marginHome, remaining: remainingCapacityOf(ctx, cap, p, home) };
+  });
+  const share = Math.min(1, ...sides.map((s) => admittedShareOf(s.marginHome, s.remaining)));
+  const refusedLocal = c.notional * (1 - (share < MIN_ADMITTED_SHARE ? 0 : share));
+  if (refusedLocal > 0) {
+    const reg = ctx.updatedRegions[c.regionId];
+    if (reg) reg.ccpRefusedNotionalLocal = (reg.ccpRefusedNotionalLocal ?? 0) + refusedLocal;
+  }
+  if (share < MIN_ADMITTED_SHARE) return undefined;
+  sides.forEach((s) => cap.remainingByKey.set(s.key, Math.max(0, s.remaining - s.marginHome * share)));
+  return share < 1 ? scaledContract(c, share) : c;
+}
+
+/** A market's whole strike, admitted contract by contract against one capacity read. */
+export function admitToHouse(ctx: WeeklyStepContext, struck: readonly DerivativeContract[]): DerivativeContract[] {
+  const cap = openMemberCapacity();
+  const admitted: DerivativeContract[] = [];
+  struck.forEach((c) => { const a = admitContract(ctx, cap, c); if (a) admitted.push(a); });
+  return admitted;
 }
 
 // §3.13-BOOK d5c / §3.17-i, ii: the margin a contract carries (`registry.ts:initialMarginLocal`),

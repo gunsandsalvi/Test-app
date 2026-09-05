@@ -159,3 +159,28 @@ export function writeDownSurvivors(contributions: readonly CcpFundContribution[]
   });
   return { kept, writtenDownByMember };
 }
+
+/**
+ * §3.17-v-i — THE CLEARING-MEMBER LIMIT. A member may carry at the houses no more initial margin
+ * than it could RE-MARGIN over the close-out horizon from its own liquid cash: the house's call
+ * on a member in a stress is the move over the horizon beyond one session's — (√sessions − 1)
+ * times its margin — and a member that could not meet that call is one the house should not
+ * have let carry the position. The limit is set where the risk is, at the house, on every member
+ * alike (a hedger as much as a dealer); a dealer's PFE budget off its leverage headroom is a
+ * SECOND constraint, its own capital's, and both hold. Rule 5: the margin leg and the contract
+ * go in the same pass, so a contract the member cannot margin is cut to what it can, at the
+ * strike (`derivative-lifecycle.ts:admitContract`), and what was cut is recorded
+ * (`Region.ccpRefusedNotionalLocal`).
+ */
+export const memberMarginLimitLocal = (liquidCashLocal: number): number => Math.max(0, liquidCashLocal) / (Math.sqrt(CCP_CLOSE_OUT_SESSIONS) - 1);
+/** What a member can still post: its limit less the margin it already has at the houses. */
+export const memberMarginCapacityLocal = (liquidCashLocal: number, marginAtHousesLocal: number): number =>
+  Math.max(0, memberMarginLimitLocal(liquidCashLocal) - Math.max(0, marginAtHousesLocal));
+/** The share of a contract a member's remaining capacity admits: all of it when its margin fits,
+ *  the fraction that fits when it does not. A contract that posts nothing is admitted whole. */
+export const admittedShareOf = (marginLocal: number, capacityLocal: number): number =>
+  marginLocal > 0 ? Math.max(0, Math.min(1, capacityLocal / marginLocal)) : 1;
+/** The contract cut to the admitted share: size, units and margin scale together; the terms do not. */
+export function scaledContract<C extends { notional: number; units?: number; initialMarginLocal: number }>(c: C, share: number): C {
+  return { ...c, notional: c.notional * share, units: c.units === undefined ? undefined : c.units * share, initialMarginLocal: c.initialMarginLocal * share };
+}

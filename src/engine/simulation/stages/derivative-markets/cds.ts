@@ -36,7 +36,7 @@ import { bankRequiredReturnAnnual } from '../bank-lending';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
-import { postInitialMargin, withInitialMargin } from '../derivative-lifecycle';
+import { postInitialMargin, withInitialMargin, admitToHouse } from '../derivative-lifecycle';
 import { MEASURE_WINDOW_WEEKS } from '../../../../domain/volatility';
 import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
@@ -281,8 +281,10 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
         });
       });
     });
-    strikeDerivatives(ctx, struck);
-    struck.forEach((c) => postInitialMargin(ctx, c));
+    // §3.17-v-i: the house admits what each member can margin, then the contracts stand and post.
+    const admitted = admitToHouse(ctx, struck);
+    strikeDerivatives(ctx, admitted);
+    admitted.forEach((c) => postInitialMargin(ctx, c));
   });
 }
 

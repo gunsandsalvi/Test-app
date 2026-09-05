@@ -106,7 +106,7 @@ checked by `scripts/check-atlas.sh`.
 | D3 a party that cannot take delivery must close or roll before expiry | — | ❌ |
 | D4 cash settlement is against an observed spot price, which must be cleared | `src/engine/simulation/stages/07-commodities.ts:runCommoditiesStage` | ⚠️ |
 | E1 FORBID no futures price without a physical market underneath it | `src/engine/audit/prices.ts:x2` | ⚠️ |
-| E2 FORBID no unlimited open interest against finite deliverable supply | `src/domain/derivatives/registry.ts:DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM` | ⚠️ |
+| E2 FORBID no unlimited open interest against finite deliverable supply | `src/domain/derivatives/registry.ts:DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM` · `src/domain/clearing-house.ts:memberMarginLimitLocal` | ⚠️ |
 | E3 FORBID no roll that is free | — | ❌ |
 
 ---
@@ -144,7 +144,8 @@ final week.
 **Consequence.** The single largest thing a futures market does — force paper and physical to meet
 at a date — is absent, and its P&L consequence lands as one discontinuous jump on the last week
 of every contract. It also makes E2 (`⚠️`) unenforceable in principle: open interest is bounded by
-hedger need and desk capital (`DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM`), never by deliverable
+hedger need, desk capital (`DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM`) and, since §9.17-v-i, every
+member's margin limit at the clearing house (`memberMarginLimitLocal`), never by deliverable
 supply, and a squeeze — the thing E2 says must follow from finite supply — cannot occur because
 supply is not a constraint on the paper at all.
 

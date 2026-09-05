@@ -28,7 +28,6 @@ import { InstitutionalEntity } from '../../../../domain/institutions';
 import { hedgedAsFixedIncome } from '../../../../domain/assets';
 import { bookHeadOf } from '../../../../engine2/holdings';
 import { V2World, regionOf, typeOf } from '../../../../engine2/world';
-import { pendingSettlementLocal, institutionSpendableLocal } from '../settlement';
 import { isActiveCompany } from '../../../../domain/company';
 import { invoiceCurrencyOf } from '../../../../domain/invoice-currency';
 import { exposureToHedgeLocal } from '../corporate-financing';
@@ -42,10 +41,10 @@ import { leverageHeadroomLocal } from '../../../macro/banking';
 import { fxWeeklySigma } from '../../../../domain/fx-market';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
-import { initialMarginLocal, withInitialMargin, postInitialMargin } from '../derivative-lifecycle';
+import { initialMarginLocal, withInitialMargin, postInitialMargin, openMemberCapacity, admitContract } from '../derivative-lifecycle';
 import { derivativesBookOf, strikeDerivatives, tradeInvoicesOf } from '../../../ledger/contract-ledger';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
-import { cashOf, bankReservesOf } from '../../../ledger/accounts';
+import { bankReservesOf } from '../../../ledger/accounts';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
 import { fxBasisInstrumentId } from '../../../../domain/instrument-keys';
@@ -125,7 +124,7 @@ interface DeskState {
 
 const deskCapacityLocal = (d: DeskState) => deskNotionalCapacityLocal(d.headroomLocal, d.chargedPfeLocal, 'FX_FORWARD');
 
-function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty, view }: DerivativeMarketRun): void {
+function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMarketRun): void {
   const book = derivativesBookOf(ctx);
 
   // Every dealer's desk, opened at what its LIVE book leaves it — contracts that matured released
@@ -326,20 +325,16 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty, vie
   });
 
   // ---- STRIKE. Each holder re-hedges to the book that actually exists — as far as a dealer will
-  // write it, at the cleared basis, posting the class's initial margin from a budget that nets
-  // what its own week has already committed (checking raw cash spent the same
-  // dollars twice and dug the fund's overdraft by exactly the margin's size). ----
+  // write it, at the cleared basis, and as far as the house admits it (§3.17-v-i: a member's
+  // margin at the houses is limited to what its liquid cash could re-margin; the per-holder
+  // budget that stood here — margin ≤ spendable cash net of the week's commitments — is that
+  // rule's weaker form and is gone into it). ----
   const struck: DerivativeContract[] = [];
+  const capacity = openMemberCapacity();
   const strikeFor = (
-    holder: DerivativeParty, holderRegion: RegionId, participantId: string, gaps: Map<RegionId, number>,
-    // §1.19: the caller states the budget, because the two callers read it from two different
-    // places — an institution's is `institutionSpendableLocal`, a company's has no stock-loan
-    // collateral term at all (`LendingParty` is INSTITUTION-only, so a company is never a stock
-    // borrower). Computing it here was a fourth copy of the rule that had lost the collateral net.
-    spendableLocal: number
+    holder: DerivativeParty, holderRegion: RegionId, participantId: string, gaps: Map<RegionId, number>
   ): void => {
     const holderKey = derivativePartyKey(holder);
-    let budgetLocal = spendableLocal + (settledNetByParty.get(holderKey) ?? 0);
     gaps.forEach((gapLocal, issuer) => {
       const dealer = pickDealerBank(dealerBanksByRegion.get(holderRegion), desks);
       if (!dealer) return;
@@ -348,7 +343,7 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty, vie
       const writableLocal = Math.min(gapLocal, filledLocal, deskCapacityLocal(desk));
       if (writableLocal <= 1e6) return;
       const basisBps = clearedBasisBps.get(bookKey(holderRegion, issuer)) ?? 0;
-      const contract: DerivativeContract = withInitialMargin({
+      const offered: DerivativeContract = withInitialMargin({
         id: `${holderKey}-FX-${issuer}-${week}`,
         classId: 'FX_FORWARD',
         regionId: holderRegion,
@@ -368,19 +363,21 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty, vie
         struckWeek: week,
         maturityWeek: week + FX_FORWARD_TENOR_WEEKS,
       }, view);
+      // §3.17-v-i: the house admits what both members can margin — the contract as written, cut,
+      // or not at all.
+      const contract = admitContract(ctx, capacity, offered);
+      if (!contract) return;
+      const writtenLocal = contract.notional;
       const marginLocal = initialMarginLocal(contract);
-      if (marginLocal > budgetLocal) return;
-      budgetLocal -= marginLocal;
-      // Initial margin is the CLIENT'S money sitting with the desk (§3.17-i: posted through the
-      // one path every class uses): reserves move, equity does not, and the desk carries it on
-      // its funding line as the liability it is.
+      // Initial margin is posted through the one path every class uses (§3.17-i, iv-a): both
+      // members to the house.
       postInitialMargin(ctx, contract);
-      desk.chargedPfeLocal += writableLocal * FX.pfeAddOnRate;
-      desk.book.grossNotionalLocal += writableLocal;
+      desk.chargedPfeLocal += writtenLocal * FX.pfeAddOnRate;
+      desk.book.grossNotionalLocal += writtenLocal;
       // The client SELLS the foreign currency forward to hedge a long foreign asset, so the desk
       // BUYS it: the desk is long. Signing this the other way survives only while the basis reads
       // |net| — it becomes load-bearing the moment the desk has to delta-hedge a direction.
-      desk.book.netNotionalByRegion[issuer] = (desk.book.netNotionalByRegion[issuer] ?? 0) + writableLocal;
+      desk.book.netNotionalByRegion[issuer] = (desk.book.netNotionalByRegion[issuer] ?? 0) + writtenLocal;
       desk.marginReceivedLocal += marginLocal;
       struck.push(contract);
     });
@@ -389,15 +386,14 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty, vie
   ctx.updatedInstitutionalEntities.forEach((entity) => {
     const gaps = gapByEntityRegion.get(entity.id);
     if (!gaps) return;
-    strikeFor({ kind: 'INSTITUTION', id: entity.id }, entity.region, entity.id, gaps, institutionSpendableLocal(ctx, entity));
+    strikeFor({ kind: 'INSTITUTION', id: entity.id }, entity.region, entity.id, gaps);
   });
   // DER5 — the corporates' side, struck against the same desks at the same cleared basis. A
   // hedged exporter genuinely feels less of a currency move than an unhedged one.
   ctx.updatedCompanies.forEach((c) => {
     const gaps = corpGapByTicker.get(c.id);
     if (!gaps) return;
-    strikeFor(companyParty(c), c.region, `CORP-${c.ticker}`, gaps,
-      Math.max(0, cashOf(ctx.v2, c) + pendingSettlementLocal(ctx, companyParty(c))));
+    strikeFor(companyParty(c), c.region, `CORP-${c.ticker}`, gaps);
   });
   strikeDerivatives(ctx, struck);
 

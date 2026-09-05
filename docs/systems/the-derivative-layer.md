@@ -110,7 +110,7 @@ checked by `scripts/check-atlas.sh`.
 | C3 the CCP is a real entity with a balance sheet | `src/domain/clearing-house.ts:CcpSheet` · `src/engine/ledger/contract-ledger.ts:ccpFundOf` · `src/engine/simulation/stages/derivatives.ts:trueUpDefaultFunds` | ✅ |
 | **C4 a stated default waterfall, in order** | `src/domain/clearing-house.ts:runWaterfall` · `src/engine/simulation/stages/derivative-lifecycle.ts:resolveMemberDefault` | ✅ |
 | C4.a a member's loss can come from another member's default | `src/domain/clearing-house.ts:writeDownSurvivors` | ✅ |
-| **C5 FORBID the CCP is not a guarantor of last resort** | `src/domain/clearing-house.ts:WaterfallRound` · `src/engine/audit/ownership.ts:o15` | ⚠️ |
+| **C5 FORBID the CCP is not a guarantor of last resort** | `src/domain/clearing-house.ts:WaterfallRound` · `src/domain/clearing-house.ts:memberMarginLimitLocal` · `src/engine/audit/ownership.ts:o15` | ⚠️ |
 | D1 initial margin, sized from the risk of the position | `src/domain/derivatives/registry.ts:initialMarginAtStrike` | ✅ |
 | D2 variation margin: the change in the mark, in cash, every period | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ✅ |
 | D2.a real money leaving one account and arriving in another | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
@@ -200,9 +200,16 @@ contract's initial margin is posted TO the house of the contract's money
 margin held, and `O15` holds the cash to the contracts. ⚠️ at the time because C3 names three
 lines and this was one of them; the default fund and the house's own capital came with 17-iv-c-i.*
 
-What is left is the clearing-member LIMIT (17-v): the house takes every contract its markets
-strike, so a member's capacity is still its dealer's PFE budget and not a limit the house sets
-on the member.
+*2026-09-05 (§9.17-v-i). The house sets each member a LIMIT: it may carry at the houses no more
+initial margin than its liquid cash could re-margin over the close-out horizon
+(`clearing-house.ts:memberMarginLimitLocal`, cash ÷ (√5 − 1)), a hedger and a dealer alike; a
+dealer's PFE budget off its leverage headroom stays as its own capital's second constraint.
+Rule 5 puts the limit at the strike: `derivative-lifecycle.ts:admitContract` cuts a contract to
+the smaller of its two members' remaining capacity, or refuses it, before it stands and posts —
+every market strikes through `admitToHouse` (the FX market per holder, where its weaker
+per-holder budget stood) — and what was cut is `Region.ccpRefusedNotionalLocal`, a §6 measure.
+What the markets do not yet do is SIZE their demand to the limit, so a cut is the house's
+correction after the print rather than the desk's own restraint before it (17-v-iii).*
 
 ### ✅ E2 / E3 / ⚠️ E4 — A DEAD MEMBER'S CLOSE-OUT IS THE HOUSE'S CLAIM, RANKED, AND ITS LOSS IS NAMED
 

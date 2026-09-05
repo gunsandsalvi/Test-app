@@ -76,10 +76,11 @@ export const ccpSheetAt = (v2: V2World, region: RegionId): CcpSheet => ccpSheetO
  * beside its register books (`desk-register.ts:bankBookAssetsLocal`), because it posted from its
  * securities account and reserves left without equity moving.
  */
-export function memberMarginPostedLocal(v2: V2World, party: DerivativeParty, into: CurrencyCode): number {
+export function memberMarginPostedLocal(v2: V2World, party: DerivativeParty, into: CurrencyCode, /** Only contracts struck before this week (§3.17-v-i: a capacity read against cash that has already paid this week's postings). */ beforeWeek?: number): number {
   const key = derivativePartyKey(party);
   let total = 0;
   derivativesOf(v2).forEach((c) => {
+    if (beforeWeek !== undefined && c.struckWeek >= beforeWeek) return;
     const sides = (derivativePartyKey(c.a) === key ? 1 : 0) + (derivativePartyKey(c.b) === key ? 1 : 0);
     if (sides) total += sides * convert(initialMarginLocal(c), c.currency, into, v2.fx);
   });
