@@ -22,7 +22,7 @@ import { setSharedLanes, lane64, laneU32, lane8 } from './shared-lanes';
 import { frontWorkerCount, runFrontSharded } from './front-pool';
 import { nativeFrontCore } from '../engine/simulation/stages/native-kernels';
 import { NSUB, SUBUNITS, SUBUNIT_INDEX } from './state';
-import { mutableLots } from './lots';
+import { openGoodsPass, closeGoodsPass, goodsUnitsOfSub } from './lots';
 import { consumeGoods } from '../engine/ledger/goods-ledger';
 import { SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
 import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
@@ -141,21 +141,25 @@ export function runStage08FrontPass(companies: Company[], inp: FrontPassInputs):
   const S = buildFrontSeam(companies, inp);
   const O = allocCoreOut(S);
   const traceSub = process.env.GOODS_TRACE === '1' ? SUBUNIT_INDEX.get('electricity') : undefined;
-  const storeUnitsOf = (si: number): number => { const L = inp.v2.lots; let t = 0; for (let fr = 0; fr * NSUB + si < L.head.length; fr++) { for (let r = L.head[fr * NSUB + si]; r >= 0; r = L.next[r]) t += L.units[r]; } return t; };
+  const storeUnitsOf = (si: number): number => goodsUnitsOfSub(inp.v2, si);
   const before = traceSub !== undefined ? storeUnitsOf(traceSub) : 0;
-  if (!runFrontSharded(S, O, F, inp.v2)) {
+  // §3.13-BOOK f3: the goods are the register's lots; a pass addresses them through a slot view
+  // opened here and closed after the core ran — serial, native or sharded, one arithmetic.
+  const P = openGoodsPass(inp.v2);
+  if (!runFrontSharded(S, O, F, inp.v2, P)) {
     // §5-SCALE native cores: the C port of runFrontCore, oracle-verified bit-equal; the JS
     // core is the canonical fallback (no addon, NATIVE_KERNELS=0) — one world either way.
-    const nativeRan = nativeFrontCore(S, O, F, mutableLots(inp.v2), FRONT_CORE_TABLES, {
+    const nativeRan = nativeFrontCore(S, O, F, P.views, P.free, FRONT_CORE_TABLES, {
       nsub: NSUB, churn: SUBSCRIPTION_WEEKLY_CHURN, weight: RECEIPTS_MEASUREMENT_WEIGHT,
     });
     if (!nativeRan) {
-      runFrontCore(S, O, F, mutableLots(inp.v2), mutableLots(inp.v2), undefined, 0, companies.length);
+      runFrontCore(S, O, F, P.views, P.free, undefined, 0, companies.length);
     }
+    closeGoodsPass(inp.v2, P);
   }
   if (traceSub !== undefined) {
     let lane = 0; for (let row = 0; row < companies.length; row++) lane += F.inputUnitsConsumed[row * NSUB + traceSub];
-    console.log(`  [front-trace] electricity: store before ${before.toFixed(1)} after ${storeUnitsOf(traceSub).toFixed(1)} drawn(store) ${(before - storeUnitsOf(traceSub)).toFixed(1)} lane ${lane.toFixed(1)} firms ${companies.length} rows ${inp.v2.lots.head.length / NSUB}`);
+    console.log(`  [front-trace] electricity: store before ${before.toFixed(1)} after ${storeUnitsOf(traceSub).toFixed(1)} drawn(store) ${(before - storeUnitsOf(traceSub)).toFixed(1)} lane ${lane.toFixed(1)} firms ${companies.length} rows ${P.nSlots / NSUB}`);
   }
   applyFrontPost(companies, S, O, F, inp.v2, inp.companyUpdates, inp.updatedRegions);
   // §5-WIRES W4: what the recipes drew from the lots this week, recorded on the goods ledger —

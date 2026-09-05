@@ -15,7 +15,7 @@
  */
 import { FrontSeam, FrontCoreOut } from './front-core';
 import { FrontPass } from './stage08-front';
-import { LotViews, freeLotRows } from './lots';
+import { LotViews, GoodsPass, closeGoodsPass } from './lots';
 import { V2World } from './world';
 
 interface PoolWorker {
@@ -113,15 +113,16 @@ function typedLanesOf<T extends object>(o: T): Record<string, unknown> {
  * Run the front core over [0, n) split across the pool. Returns true when the shards ran (lanes
  * updated in place); false when the pool is unavailable and the caller must run serially.
  */
-export function runFrontSharded(S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2: V2World): boolean {
+export function runFrontSharded(S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2: V2World, P: GoodsPass): boolean {
   const workers = ensurePool();
   if (!workers || !receiveMessageOnPortFn) return false;
   const n = S.n;
   const w = Math.min(workers.length, Math.max(1, Math.floor(n / 64)));
   if (w < 2) return false;
 
-  const L = v2.lots;
-  const M = ensureMirror(L.cap, L.head.length);
+  // §3.13-BOOK f3: the register's lot columns and the pass's slot heads, mirrored for the shards.
+  const L = P.views;
+  const M = ensureMirror(L.units.length, L.head.length);
   M.units.set(L.units);
   M.priceLocal.set(L.priceLocal);
   M.acquiredWeek.set(L.acquiredWeek);
@@ -158,13 +159,14 @@ export function runFrontSharded(S: FrontSeam, O: FrontCoreOut, F: FrontPass, v2:
     deadByShard.push((msg.message as { dead: number[] }).dead);
   }
 
-  // Copy the mutated lot columns home, then merge the dead rows in shard order.
-  L.units.set(M.units.subarray(0, L.cap));
-  L.priceLocal.set(M.priceLocal.subarray(0, L.cap));
-  L.acquiredWeek.set(M.acquiredWeek.subarray(0, L.cap));
-  L.next.set(M.next.subarray(0, L.cap));
+  // Copy the mutated lot columns home, then close the pass: heads back onto the rows, the dead
+  // rows recycled in shard order.
+  L.units.set(M.units.subarray(0, L.units.length));
+  L.priceLocal.set(M.priceLocal.subarray(0, L.priceLocal.length));
+  L.acquiredWeek.set(M.acquiredWeek.subarray(0, L.acquiredWeek.length));
+  L.next.set(M.next.subarray(0, L.next.length));
   L.head.set(M.head.subarray(0, L.head.length));
   L.tail.set(M.tail.subarray(0, L.tail.length));
-  for (const dead of deadByShard) freeLotRows(v2, dead);
+  closeGoodsPass(v2, P, deadByShard);
   return true;
 }

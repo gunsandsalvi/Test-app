@@ -15,9 +15,9 @@
  */
 
 import { ItemizedHolding } from '../domain/banking';
-import type { InstrumentId } from '../domain/ids';
+import { asInstrumentId, type InstrumentId } from '../domain/ids';
 import { V2World, rowOf, internType, internInstrument, internRegion, instrumentOf, regionOf, typeOf } from './world';
-import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type TypeRef, type RegionRef } from './refs';
+import { newRefColumn, ABSENT_REF, type RefColumn, type InstrRef, type TypeRef, type RegionRef, type PartyKeyRef } from './refs';
 
 export interface HoldingStore {
   cap: number;
@@ -61,6 +61,9 @@ export interface HoldingStore {
   lotPriceLocal: Float64Array;
   lotWeek: Int32Array;
   lotNext: Int32Array;
+  /** §3.13-BOOK f3 — who delivered the lot, for a GOOD row's lots (the goods ledger's `sellerKey`);
+   *  ABSENT_REF on a security's lot, whose wire says the same thing. */
+  lotSeller: RefColumn<PartyKeyRef>;
   /** §3.13-BOOK f2b — WHAT EACH BOOK HAS REALISED, cumulative, per money: `bookId|CUR` → the
    *  proceeds of every debit less the cost of the lots it consumed. The register's own P&L
    *  record — the capital-gains base and the realised half of a holder's result read here. */
@@ -120,6 +123,7 @@ export function newHoldingStore(): HoldingStore {
     lotHead: new Int32Array(cap).fill(-1), lotTail: new Int32Array(cap).fill(-1),
     lotCap: cap, lotUsed: 0, lotFreeHead: -1,
     lotUnits: new Float64Array(cap), lotPriceLocal: new Float64Array(cap), lotWeek: new Int32Array(cap), lotNext: new Int32Array(cap).fill(-1),
+    lotSeller: newRefColumn<PartyKeyRef>(cap, -1),
     realised: new Map<string, number>(),
     next: new Int32Array(cap).fill(-1),
     freeHead: -1,
@@ -156,6 +160,7 @@ function growLots(H: HoldingStore): void {
   H.lotUnits = gF(H.lotUnits); H.lotPriceLocal = gF(H.lotPriceLocal);
   const w = new Int32Array(cap); w.set(H.lotWeek); H.lotWeek = w;
   const n = new Int32Array(cap).fill(-1); n.set(H.lotNext); H.lotNext = n;
+  const sl = newRefColumn<PartyKeyRef>(cap, -1); sl.set(H.lotSeller); H.lotSeller = sl;
   H.lotCap = cap;
 }
 
@@ -166,7 +171,7 @@ function allocLot(H: HoldingStore): number {
 }
 
 function freeLot(H: HoldingStore, l: number): void {
-  H.lotUnits[l] = 0; H.lotPriceLocal[l] = 0; H.lotWeek[l] = 0;
+  H.lotUnits[l] = 0; H.lotPriceLocal[l] = 0; H.lotWeek[l] = 0; H.lotSeller[l] = ABSENT_REF;
   H.lotNext[l] = H.lotFreeHead; H.lotFreeHead = l;
 }
 
@@ -177,11 +182,12 @@ function freeLots(H: HoldingStore, r: number): void {
 }
 
 /** §3.13-BOOK f1 — a lot lands at the tail of the row's chain (ledger-internal). */
-export function appendLot(v2: V2World, r: number, units: number, priceLocal: number, week: number): void {
+export function appendLot(v2: V2World, r: number, units: number, priceLocal: number, week: number, seller: PartyKeyRef = ABSENT_REF as PartyKeyRef): void {
   if (!(Math.abs(units) > 0) || !Number.isFinite(units)) return;
   const H = mutableHoldings(v2);
   const l = allocLot(H);
   H.lotUnits[l] = units; H.lotPriceLocal[l] = Number.isFinite(priceLocal) ? priceLocal : 0; H.lotWeek[l] = week | 0; H.lotNext[l] = -1;
+  H.lotSeller[l] = seller;
   if (H.lotTail[r] >= 0) H.lotNext[H.lotTail[r]] = l; else H.lotHead[r] = l;
   H.lotTail[r] = l;
 }
@@ -217,6 +223,31 @@ export function adjustLots(v2: V2World, r: number, dUnits: number, priceLocal: n
   }
   if (Math.abs(left) > 1e-9 * Math.max(1, Math.abs(dUnits))) appendLot(v2, r, left, priceLocal, week);
   return consumed;
+}
+
+/** §3.13-BOOK f3 — lots a kernel consumed off a shared view go back to the free list (the
+ *  kernels' dead sinks; the serial path frees through `LotFreeList` directly). */
+export function recycleLots(v2: V2World, lots: readonly number[]): void {
+  const H = mutableHoldings(v2);
+  for (const l of lots) freeLot(H, l);
+}
+
+/** §3.13-BOOK f3 — open a row of `kind` on a book with nothing on it yet: the goods ledger's row
+ *  for a firm's input lots (a GOOD row opens empty and its lots arrive one delivery at a time). */
+export function openKindRow(v2: V2World, entityId: string, kind: string, instrumentId: string, region: string): number {
+  const H = mutableHoldings(v2);
+  H.synced.add(entityId);
+  H.dirty.add(entityId);
+  const slot = slotFor(H, rowOf(v2, entityId));
+  const r = allocRow(H);
+  H.typeRef[r] = internType(v2, kind);
+  H.instrRef[r] = internInstrument(v2, asInstrumentId(instrumentId));
+  H.regionRef[r] = internRegion(v2, region);
+  H.qtyLocal[r] = 0; H.shares[r] = Number.NaN; H.units[r] = 0;
+  H.next[r] = -1;
+  if (H.tail[slot] >= 0) H.next[H.tail[slot]] = r; else H.head[slot] = r;
+  H.tail[slot] = r;
+  return r;
 }
 
 /** §3.13-BOOK f1 — `from`'s chain joins the tail of `to`'s, in order (a rebuild, a fold). */

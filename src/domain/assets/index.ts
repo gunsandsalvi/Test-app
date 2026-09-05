@@ -34,10 +34,12 @@ export type InstrumentKind =
   // The books the adapters clear (§3.13-BOOK dII): nobody issues them, nobody holds them.
   | 'IRS' | 'CDS' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'REPO' | 'SBL'
   // The player's two classes with no engine market behind them yet.
-  | 'OPTION' | 'TRS';
+  | 'OPTION' | 'TRS'
+  // §3.13-BOOK f3: a firm's input inventory — a good, on its own book, in the good's own units.
+  | 'GOOD';
 
 /** Where an instrument sits when a book is summed by class. */
-export type AssetClass = 'EQUITY' | 'CREDIT' | 'SOVEREIGN' | 'DERIVATIVE' | 'COMMODITY' | 'CASH_LIKE';
+export type AssetClass = 'EQUITY' | 'CREDIT' | 'SOVEREIGN' | 'DERIVATIVE' | 'COMMODITY' | 'CASH_LIKE' | 'GOODS';
 
 export interface AssetModule {
   /** For the balance-sheet and NAV views that sum a book by class. */
@@ -125,6 +127,7 @@ export const ASSET_REGISTRY: Record<InstrumentKind, AssetModule> = {
   SBL:              { assetClass: 'EQUITY',     carriesCoupon: false, lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'SHARES',      ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   OPTION:           { assetClass: 'DERIVATIVE', carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   TRS:              { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  GOOD:             { assetClass: 'GOODS',      carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'GOODS_UNITS', ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
 };
 
 /** The one lookup. A caller that cannot find its question here should add a field, not a switch. */

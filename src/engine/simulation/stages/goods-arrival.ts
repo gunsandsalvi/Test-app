@@ -133,7 +133,7 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
       return;
     }
     // The consignment lands on the persistent lot table.
-    receiveInputLot(v2, buyer.id, shipment.subUnitId, shipment.sellerKey,
+    receiveInputLot(v2, buyer.id, buyer.region, shipment.subUnitId, shipment.sellerKey,
       shipment.units, shipment.landedCostPerUnit, state.currentWeek, wireNo);
     arrivedUnits += shipment.units;
   });

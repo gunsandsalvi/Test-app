@@ -83,7 +83,7 @@ export const nativeKernelsActive = addon !== null;
 
 import type { FrontSeam, FrontCoreOut } from '../../../engine2/front-core';
 import type { FrontPass } from '../../../engine2/stage08-front';
-import type { LotStore } from '../../../engine2/lots';
+import type { LotViews, LotFreeList } from '../../../engine2/lots';
 
 interface FrontAddon extends NativeAddon {
   frontCore(
@@ -105,7 +105,7 @@ export interface FrontCoreTables {
  * The three positional orders below are mirrored in kernels.c — change both or neither.
  */
 export function nativeFrontCore(
-  S: FrontSeam, O: FrontCoreOut, F: FrontPass, lots: LotStore, tables: FrontCoreTables,
+  S: FrontSeam, O: FrontCoreOut, F: FrontPass, lots: LotViews, free: LotFreeList, tables: FrontCoreTables,
   consts: { nsub: number; churn: number; weight: number },
 ): boolean {
   const a = addon as FrontAddon | null;
@@ -147,7 +147,7 @@ export function nativeFrontCore(
     O.taxCarryforwardOut, O.taxBasisOut, O.deferredTaxOut,
     O.hasRecurringOut, O.recurringBaseOut,
   ];
-  const scalars = new Float64Array([S.n, S.nextWeek, consts.nsub, consts.churn, consts.weight, lots.freeHead]);
-  lots.freeHead = a.frontCore(seam, tl, outs, scalars);
+  const scalars = new Float64Array([S.n, S.nextWeek, consts.nsub, consts.churn, consts.weight, free.freeHead]);
+  free.freeHead = a.frontCore(seam, tl, outs, scalars);
   return true;
 }

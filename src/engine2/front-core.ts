@@ -39,7 +39,7 @@ import { industrialIncome } from '../domain/company-week/income-statement';
 import { fulfillmentRatio } from '../domain/company-week/inventory';
 import { revHistPush, V2World, rowOf } from './world';
 import { ladderRowsOf, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY } from './tranches';
-import { LotViews, LotStore, consumeFifoOnViews } from './lots';
+import { LotViews, LotFreeList, consumeFifoOnViews } from './lots';
 import { SUBUNITS, SUBUNIT_INDEX, NSUB } from './state';
 import { getBaseAnnualWageLocal } from '../engine/bootstrap/labor-and-wages';
 import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/profiles';
@@ -529,7 +529,7 @@ export function trancheWeekAccrual(
 
 export function runFrontCore(
   S: FrontSeam, O: FrontCoreOut, F: FrontPass,
-  lots: LotViews, freeInto: LotStore | null, deadSink: number[] | undefined,
+  lots: LotViews, freeInto: LotFreeList | null, deadSink: number[] | undefined,
   lo: number, hi: number
 ): void {
   const week = S.nextWeek;

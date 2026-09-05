@@ -14,7 +14,6 @@
  * static within a run). Strings die at this boundary (interned seller keys).
  */
 
-import { newLotStore, ReadonlyLotStore } from './lots';
 import { ReadonlyContractTable, newContractTable } from './contracts';
 import { newTrancheStore, ReadonlyTrancheStore } from './tranches';
 import { newHoldingStore, ReadonlyHoldingStore } from './holdings';
@@ -44,8 +43,7 @@ export interface V2World {
    * instrument index is built to ask.
    */
   refs: RefTables;
-  /** IND1/1$-is-1$ — every firm's real input lots, FIFO by acquisition week. */
-  lots: ReadonlyLotStore;
+  // §3.13-BOOK f3: a firm's input lots are the register's lots, on its GOOD rows (`lots.ts`).
   /** IND11 — the bilateral supply-contract book (§7.304's measured scaling monster). */
   contracts: ReadonlyContractTable;
   /** §7.307/§7.310 — the debt ladder as rows (rows are the authority since §7.313). */
@@ -178,7 +176,6 @@ export function ensureV2(state: V2Host): V2World {
     rowById: new Map(),
     nRows: 0,
     refs: newRefTables(),
-    lots: newLotStore(),
     contracts: newContractTable(),
     tranches: newTrancheStore(),
     holdings: newHoldingStore(),

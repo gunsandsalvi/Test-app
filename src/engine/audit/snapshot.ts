@@ -13,8 +13,7 @@ import { centralBankAssetsLocal } from '../../domain/central-bank';
 import { centralBankBookLocal } from '../sovereign-register';
 import { banksOf } from '../../domain/company';
 import { V2World, ensureV2 } from '../../engine2/world';
-import { inputUnitsHeld } from '../../engine2/lots';
-import { SUBUNITS } from '../../engine2/state';
+import { goodsHeldBy } from '../../engine2/lots';
 import { facilityBookOf, ladderRowsOf, trancheKindOfRow } from '../../engine2/tranches';
 import { materializeBook } from '../../engine2/holdings';
 import { heldInShares } from '../../domain/assets';
@@ -136,11 +135,8 @@ export function goodsUnitsByKey(state: GameState, parts?: Record<string, [number
   const v2 = state.v2 as V2World | undefined;
   for (const c of state.companies) {
     for (const [sub, inv] of Object.entries(c.outputInventoryBySubUnit ?? {})) add(c.region, sub, inv.unitsHeld);
-    if (v2) {
-      const firmRow = v2.rowById.get(c.id);
-      const touched = firmRow === undefined ? undefined : v2.lots.touchedSubs[firmRow];
-      if (touched) for (const subIdx of touched) add(c.region, SUBUNITS[subIdx], inputUnitsHeld(v2, c.id, SUBUNITS[subIdx]), 1);
-    }
+    // §3.13-BOOK f3: a firm's input lots are its GOOD rows on the register.
+    if (v2) for (const g of goodsHeldBy(v2, c.id)) add(c.region, g.subUnitId, g.units, 1);
   }
   const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
   // A consignment is stock in its NAMED carrier's region; one the transport pool carries (no

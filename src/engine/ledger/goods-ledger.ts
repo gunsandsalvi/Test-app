@@ -50,7 +50,7 @@ export function deliverGoods(from: PartyRef, to: PartyRef, subUnitId: string, un
 
 /** A delivered consignment lands on the buyer's input lots, with the wire that delivered it. */
 export function receiveInputLot(
-  v2: V2World, buyerId: string, subUnitId: string, sellerKey: string, units: number, unitPriceLocal: number, week: number, wireNo: number
+  v2: V2World, buyerId: string, buyerRegion: RegionId, subUnitId: string, sellerKey: string, units: number, unitPriceLocal: number, week: number, wireNo: number
 ): void {
   if (!(units > 0.0001)) return;
   if (wireNo < 0) defect(`input lot of ${units} ${subUnitId} for ${buyerId} lands with no wire`);
@@ -59,7 +59,7 @@ export function receiveInputLot(
     const key = `${buyerId}|${subUnitId}`;
     (j.lotReceipts ??= {})[key] = (j.lotReceipts[key] ?? 0) + units;
   }
-  pushLot(v2, buyerId, subUnitId, sellerKey, units, unitPriceLocal, week, wireNo);
+  pushLot(v2, buyerId, buyerRegion, subUnitId, sellerKey, units, unitPriceLocal, week, wireNo);
 }
 
 /** Units finished this week (a transformation, not a move). */
@@ -144,14 +144,14 @@ export function moveOutputUnits(from: StockHolder, to: StockHolder, subUnitId: s
 /** Input lots move from one firm to another (an estate's sale to a
  *  peer): a wire; the units leave the seller's chain FIFO and land as one lot on the buyer at
  *  the cost they left at. Returns the wire number, or -1 when nothing moved. */
-export function moveInputUnits(v2: V2World, from: { id: EntityId; ticker: string }, to: { id: EntityId; ticker: string }, subUnitId: string, units: number, week: number, reason: string): number {
+export function moveInputUnits(v2: V2World, from: { id: EntityId; ticker: string }, to: { id: EntityId; ticker: string; region: RegionId }, subUnitId: string, units: number, week: number, reason: string): number {
   if (!(units > 1e-9)) return -1;
   const drawn = consumeFifo(v2, from.id, subUnitId, units);
   const moved = Math.min(units, drawn.availableUnits);
   if (!(moved > 1e-9)) return -1;
   let costLocal = 0; for (const c of drawn.costsLocal) costLocal += c;
   const n = deliverGoods(companyParty(from), companyParty(to), subUnitId, moved, costLocal / moved, reason);
-  pushLot(v2, to.id, subUnitId, `ESTATE:${from.ticker}`, moved, costLocal / moved, week, n);
+  pushLot(v2, to.id, to.region, subUnitId, `ESTATE:${from.ticker}`, moved, costLocal / moved, week, n);
   return n;
 }
 

@@ -516,12 +516,9 @@ written from here):
     f. **ONE POSITION BOOK, AS LOTS** — split 2026-09-05 (found writing it: the merge, the basis,
        the accrual and the goods stock are four writers' worth of work, and the plan itself says
        writers first). f1 (every register row is a chain of lots the writers keep; `O14` holds
-       the sum) and f2 (the debit takes the wire's units, fills carry the cleared price, and the
-       basis, the unrealised and the realised results are read) are in §9. What is left, in order:
-    f3. **THE GOODS LOTS ARE THE SAME TABLE.** `v2.lots` merges into the position book — the firm
-        the holder, the sub-unit the instrument, kind GOOD — and the FIFO kernels read the one
-        table. A fungible asset sums its lots, an identified one addresses them. This one moves
-        the numbers (iteration order).
+       the sum), f2 (the debit takes the wire's units, fills carry the cleared price, and the
+       basis, the unrealised and the realised results are read) and f3 (the goods lots are the
+       register's lots) are in §9. What is left, in order:
     f4. **ACCRUED INTEREST IS A RECEIVABLE BESIDE THE LOT IT ACCRUES ON** (`holderAccruedInterestLocal`
         and its sovereign twin, 13f).
     f5. **THE LAST GOODS STOCK OUTSIDE THE GOODS LEDGER GETS A HOLDER** (`categoryDemand[c].inventoryLevelLocal`,
@@ -1704,6 +1701,22 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK f3 — THE GOODS LOTS ARE THE REGISTER'S LOTS.** `v2.lots` is deleted. A firm's
+holding of one good is a row of kind GOOD on its own book (the sub-unit its instrument, the
+firm's region its region; `GOOD` joins `InstrumentKind` with a `GOODS` class), and the row's
+lots are the register's lots — the same columns a bond's or a share's live in, plus
+`lotSeller`, who delivered each. `lots.ts` is the goods side of the one table: `pushLot` opens
+the row on first touch and appends; `consumeFifo` draws one firm's good off its row;
+`totalInputValueLocal`, `inputUnitsHeld`, `materializeInputInventory` walk the GOOD rows in
+book order (the old first-touch order). The production kernels — the JS core, its C port and
+the worker shards — address a chain by `(firm row × NSUB + sub)` as they always did: a pass
+OPENS a slot view off the GOOD rows (`openGoodsPass`), runs, and CLOSES it (`closeGoodsPass`:
+heads back onto the rows, units and value re-summed, dead lots recycled, an emptied row off its
+book); the C kernel takes the same six columns and free head it always took, untouched. The
+draw's float rules are verbatim. `O14` now covers every good too. This moves the numbers, as
+(f)'s header said it would: a GOOD row's units and value are re-summed at each pass's close and
+a firm's book order carries them. Gates green; no run.
 
 **13-BOOK f2b — THE BASIS IS READ.** `holdings.ts:rowBasisLocal` (what a row cost — its lots'
 units at the prices they arrived at), `rowHeldSinceWeek`, `bookBasisLocal`, `bookUnrealisedLocal`

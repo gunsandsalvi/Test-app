@@ -221,7 +221,7 @@ function addInputInventory(v2: V2World, update: CompanyWeekUpdate, baseComp: Com
   if (kind === 'OPERATING') { consumeGoods(baseComp.region, subUnitId, addedUnits); return; }
   // ENGINE V2 — the lot lands on the persistent table, in stage order, which is the
   // same order the copy-on-first-touch week arrays used to carry. No copy, no write-back.
-  receiveInputLot(v2, baseComp.id, subUnitId, sellerId, addedUnits, addedValueLocal / addedUnits, week, wireNo);
+  receiveInputLot(v2, baseComp.id, baseComp.region, subUnitId, sellerId, addedUnits, addedValueLocal / addedUnits, week, wireNo);
 }
 
 /** One week's lot in a production pipeline: what was started, and what it cost to start it. */
