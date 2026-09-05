@@ -951,7 +951,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // Housing market evolution as a real asset class
   const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeLocal, region.totalPopulation);
   // S8: housing supply is the real cleared OUTPUT of the residential_construction auction, not
-  // its `inventoryLevelLocal` — that field is frozen at initialization for output-only categories,
+  // its warehouse stock — the pool's row (§3.13-BOOK f5) is written by 04 for input categories only,
   // so the ratio below was a constant pretending to be a market signal and house prices drifted
   // on a number that never changed. Units cleared this week x the cleared price is the real
   // weekly supply, against the same week's real demand.

@@ -150,3 +150,12 @@ export const PREFERENCE_RISK_AVERSION_MAX = stated({
   id: 'preference.riskAversionMax', value: 2.0, kind: 'PREFERENCE',
   owner: 'domain/preferences.ts', reason: 'the most risk-averse, relative to the median rule', replacedBy: 'none (a true primitive)',
 });
+
+/**
+ * §3.13-BOOK f5 — THE SEED'S OPENING STOCK, per category: a tenth of a year's demand in the
+ * region's warehouse on day one. Owner: the seed (`openSeededBooks`). It was `× 0.10` in three
+ * places (the category's own constructor, stage 03's new-entry default, and its lag copy); the
+ * stock is one row with one opening now. What replaces it: a measured inventory-to-sales ratio
+ * from the running economy's own pools, once a season of them exists to measure.
+ */
+export const SEED_OPENING_STOCK_SHARE = 0.10;

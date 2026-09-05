@@ -108,7 +108,7 @@ checked by `scripts/check-atlas.sh`.
 | E3 a producing region's terms of trade move with the price | — | ❌ |
 | E4 VERIFY the shock propagates along the chain, not directly | — | ❌ |
 | **F1 FORBID no consumption without production or inventory** | `src/engine/macro/evolution.ts:demandUnits` | ❌ |
-| **F2 FORBID no negative inventory** | `src/engine/simulation/stages/04-input-output.ts:inventoryLevelLocal` | ❌ |
+| **F2 FORBID no negative inventory** | `src/engine/ledger/goods-ledger.ts:setSegmentStock` | ❌ |
 | **F3 FORBID no price from a written path** | `src/engine/macro/evolution.ts:safeDriftExponent` | ❌ |
 
 ---
@@ -166,7 +166,10 @@ or consumption, and **it is not an input to the price** — `supplyDemandDrift` 
   Consumption exceeding production is not merely possible, it is unremarked: it prints as
   `supplyDemandBalance: 'Deficit (Tight Supply)'` and nothing else.
 - **F2** — the only thing preventing a negative inventory is `Math.max(0, …)` on a percentage that
-  the flows never touched. That is a clamp, not a stock discipline.
+  the flows never touched. That is a clamp, not a stock discipline. (§9.13-BOOK f5: the stock is
+  a GOOD row on the region's segment now, in units, and 04's production, draw and decay are the
+  goods flows `W4` reads against it — a holder and a unit; the discipline behind the clamp is
+  still 04's own arithmetic.)
 
 Contrast the goods side, which has all of this: `audit/wires.ts`'s **W4** checks
 `Δ(output stock + input lots + in transit) = produced − consumed − scrapped + wires in − wires

@@ -63,7 +63,8 @@ export interface CategoryDemandState {
   demandGrowthAnnual: number;
   demandHistory: number[];
   crowdingIntensity: number;
-  inventoryLevelLocal: number;
+  // §3.13-BOOK f5: the category's unsold stock is a GOOD row on the region's segment
+  // (`goods-ledger.ts:segmentStockLocal`), in units; not a value here.
   inputCostPressure: number;
   /** This category's unit price at initialization — the FIXED baseline clearedInputPriceIndex is
    *  measured against. Stored once and never rewritten (S8). */
@@ -75,7 +76,6 @@ export interface CategoryDemandState {
   // field with an unrelated same-week auction price ratio for every category, corrupting
   // stage04's own smoothed self-reference the following week).
   upstreamScarcityIndex?: number;
-  lastWeekInventoryLevelLocal: number; // explicit lag anchor — bidders always react to this, never same-week inventory
   /**
    * What this good actually cost in this region this week: the volume-weighted average of every
    * price its buyers paid, across the local book AND their fills in the world book (XB3a). It is
@@ -133,17 +133,15 @@ export function createSeedCategoryDemandState(
   demandLevelAnnualLocal: number,
   demandGrowthAnnual: number,
   unitPriceLocal: number
-): CategoryDemandState & { upstreamScarcityIndex: number; lastWeekInventoryLevelLocal: number; unitPriceLocal: number } {
+): CategoryDemandState & { upstreamScarcityIndex: number; unitPriceLocal: number } {
   return {
     demandLevelAnnualLocal,
     demandGrowthAnnual,
     demandHistory: [demandLevelAnnualLocal],
     crowdingIntensity: 0.1,
-    inventoryLevelLocal: demandLevelAnnualLocal * 0.10,
     inputCostPressure: 0,
     clearedInputPriceIndex: 1.0,
     upstreamScarcityIndex: 1.0,
-    lastWeekInventoryLevelLocal: demandLevelAnnualLocal * 0.10,
     unitPriceLocal,
     // XB3a: both books open on the bootstrap price, so week 1 is the first week either of them
     // moves. Seeding the local book anywhere else would be a §7.4 cold start — a step change on

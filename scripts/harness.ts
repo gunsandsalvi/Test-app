@@ -128,6 +128,7 @@ import { HouseholdLoanPool, MortgageVintage } from '../src/domain/banking';
 import { executeTrade } from "../src/engine/simulation/trade";
 import { isPubliclyListed, isActiveCompany, banksOf } from '../src/domain/company';
 import { ensureV2 } from '../src/engine2/world';
+import { segmentStockLocal } from '../src/engine/ledger/goods-ledger';
 import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
 import { issuedSharesOf, etfSharesOutstandingOf } from '../src/engine2/instruments';
 import { derivativesOf, repoBookOf, publishRepoBook, tradeInvoicesOf } from '../src/engine/ledger/contract-ledger';
@@ -2030,7 +2031,7 @@ const spiralModule: HarnessModule = {
             const demanded = cd.totalUnitsDemandedThisWeek ?? 0;
             movers.push({
               id, ratio: p / prev, p, idx: cd.clearedInputPriceIndex,
-              inv: cd.inventoryLevelLocal,
+              inv: segmentStockLocal(ensureV2(state), region, id),
               short: demanded > 0 ? supplied / demanded : 1,
             });
           }

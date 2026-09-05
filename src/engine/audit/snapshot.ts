@@ -14,6 +14,7 @@ import { centralBankBookLocal } from '../sovereign-register';
 import { banksOf } from '../../domain/company';
 import { V2World, ensureV2 } from '../../engine2/world';
 import { goodsHeldBy } from '../../engine2/lots';
+import { segmentStockUnits } from '../ledger/goods-ledger';
 import { facilityBookOf, ladderRowsOf, trancheKindOfRow } from '../../engine2/tranches';
 import { materializeBook } from '../../engine2/holdings';
 import { heldInShares } from '../../domain/assets';
@@ -127,16 +128,22 @@ export function registerQtyByHolder(state: GameState): Record<string, number> {
 
 /** §5-WIRES W4: every unit of goods in the world, per `region|subUnit` — a firm's finished stock and
  *  input lots in its region, a consignment in the carrier's region while it is in transit. */
-export function goodsUnitsByKey(state: GameState, parts?: Record<string, [number, number, number]>): Record<string, number> {
+export function goodsUnitsByKey(state: GameState, parts?: Record<string, [number, number, number, number]>): Record<string, number> {
   const out: Record<string, number> = {};
   const add = (region: string, sub: string, units: number, part = 0) => {
-    if (units) { const k = `${region}|${sub}`; out[k] = (out[k] ?? 0) + units; if (parts) { const p = parts[k] ?? (parts[k] = [0, 0, 0]); p[part] += units; } }
+    if (units) { const k = `${region}|${sub}`; out[k] = (out[k] ?? 0) + units; if (parts) { const p = parts[k] ?? (parts[k] = [0, 0, 0, 0]); p[part] += units; } }
   };
   const v2 = state.v2 as V2World | undefined;
   for (const c of state.companies) {
     for (const [sub, inv] of Object.entries(c.outputInventoryBySubUnit ?? {})) add(c.region, sub, inv.unitsHeld);
     // §3.13-BOOK f3: a firm's input lots are its GOOD rows on the register.
     if (v2) for (const g of goodsHeldBy(v2, c.id)) add(c.region, g.subUnitId, g.units, 1);
+  }
+  // §3.13-BOOK f5: and the region's pool stock of each category, on its segment's book.
+  if (v2) {
+    (Object.keys(state.regions) as RegionId[]).forEach((region) => {
+      Object.keys(state.regions[region]?.categoryDemand ?? {}).forEach((sub) => add(region, sub, segmentStockUnits(v2, region, sub), 3));
+    });
   }
   const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
   // A consignment is stock in its NAMED carrier's region; one the transport pool carries (no

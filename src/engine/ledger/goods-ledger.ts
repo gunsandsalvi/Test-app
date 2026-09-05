@@ -15,7 +15,12 @@
 import { V2World } from '../../engine2/world';
 import type { EntityId } from '../../domain/ids';
 import { companyParty } from '../../domain/party';
-import { pushLot, consumeFifo } from '../../engine2/lots';
+import { pushLot, consumeFifo, GOOD_KIND } from '../../engine2/lots';
+import { openKindRow, adjustLots, bookHeadOf, instrumentIdAt, markBookDirty, mutableHoldings } from '../../engine2/holdings';
+import { typeRefOf } from '../../engine2/world';
+import { industryOfSubUnit } from '../../domain/industry-registry';
+import { partyKey } from './party';
+import { activeWireJournal as journalOf, hasActiveWireJournal } from './wire';
 import { isStorable } from '../../domain/industry-registry';
 import { RegionId } from '../../domain/geography';
 import { PartyRef, partyId } from './party';
@@ -170,4 +175,59 @@ export function scrapOutputUnitsTo(comp: StockHolder, subUnitId: string, unitsAf
   const lost = row.unitsHeld - unitsAfter;
   if (lost > 1e-9) scrapGoods(comp.region, subUnitId, lost);
   row.unitsHeld = unitsAfter; row.valueLocal = valueAfterLocal;
+}
+
+/**
+ * §3.13-BOOK f5 — THE REGION'S UPSTREAM STOCK HAS A HOLDER. Stage 04 clears each region's
+ * input-category supply (specialty metals, upstream extraction) against the industries that draw
+ * on it, and what was not drawn stayed in a "warehouse" that was a number on the category — a
+ * value with no holder and no units. It is a GOOD row now, on the book of the region's SEGMENT
+ * of the industry that produces the good (the category's own name where no named industry does),
+ * in the good's units at the price the category last cleared; 04 records what it produced,
+ * consumed and let decay as the goods flows the W4 identity reads, and reads the stock back off
+ * the row, revalued at this week's price.
+ */
+export const segmentBookId = (region: RegionId, industry: string): string => partyKey({ kind: 'SEGMENT', region, industry });
+const segmentBookOfGood = (region: RegionId, subUnitId: string): string => segmentBookId(region, industryOfSubUnit(subUnitId) ?? subUnitId);
+
+/** The segment's row of one good, -1 when it holds none. */
+export function segmentStockRowOf(v2: V2World, region: RegionId, subUnitId: string): number {
+  const H = v2.holdings;
+  const goodRef = typeRefOf(v2, GOOD_KIND);
+  if (goodRef < 0) return -1;
+  for (let r = bookHeadOf(v2, segmentBookOfGood(region, subUnitId)); r >= 0; r = H.next[r]) {
+    if (H.typeRef[r] === goodRef && instrumentIdAt(v2, r) === subUnitId) return r;
+  }
+  return -1;
+}
+
+/** The stock, in the good's units. */
+export function segmentStockUnits(v2: V2World, region: RegionId, subUnitId: string): number {
+  const r = segmentStockRowOf(v2, region, subUnitId);
+  return r < 0 ? 0 : v2.holdings.units[r];
+}
+
+/** The stock at the value it was last written at — what a view reports as "stock in warehouses". */
+export function segmentStockLocal(v2: V2World, region: RegionId, subUnitId: string): number {
+  const r = segmentStockRowOf(v2, region, subUnitId);
+  return r < 0 ? 0 : v2.holdings.qtyLocal[r];
+}
+
+/** A running stock write, the way `setOutputStock` is one: the row takes `units` at
+ *  `unitPriceLocal`, its lots move by the difference, and the flows behind the change are the
+ *  caller's to record (`produceGoods` / `consumeGoods` / `scrapGoods`). */
+export function setSegmentStock(v2: V2World, region: RegionId, subUnitId: string, units: number, unitPriceLocal: number): void {
+  if (!Number.isFinite(units) || units < 0) return defect(`${region} ${subUnitId} pool stock set to ${units}`);
+  const bookId = segmentBookOfGood(region, subUnitId);
+  let r = segmentStockRowOf(v2, region, subUnitId);
+  if (r < 0) {
+    if (!(units > 0)) return;
+    r = openKindRow(v2, bookId, GOOD_KIND, subUnitId, region);
+  }
+  const H = mutableHoldings(v2);
+  const week = hasActiveWireJournal() ? journalOf().week : 0;
+  adjustLots(v2, r, units - H.units[r], unitPriceLocal, week);
+  H.units[r] = units;
+  H.qtyLocal[r] = units * unitPriceLocal;
+  markBookDirty(v2, bookId);
 }

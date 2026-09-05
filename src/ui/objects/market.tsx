@@ -4,7 +4,9 @@ import { defineObject } from './registry';
 import { Card, KV, Link, Stat, StatGrid } from '../ui';
 import { money, pctLevel, num, count } from '../format';
 import { World, regionOf, tapeSeries } from '../world';
-import { REGION_IDS } from '../../domain/geography';
+import { REGION_IDS, type RegionId } from '../../domain/geography';
+import { ensureV2 } from '../../engine2/world';
+import { segmentStockLocal } from '../../engine/ledger/goods-ledger';
 import { INDUSTRY_REGISTRY, industryOfSubUnit } from '../../domain/industry-registry';
 import { categoryPriceTier } from '../../domain/industry';
 import { isActiveCompany } from '../../domain/company';
@@ -105,7 +107,7 @@ export const market = defineObject<Market>({
           <KV k="household spend" hint="annualised" v={money(d.householdDemandLocal)} />
           <KV k="corporate spend" hint="annualised" v={money(d.corporateDemandLocal)} />
           <KV k="ex-works price" hint="before freight" v={num(d.exWorksUnitPriceLocal)} />
-          <KV k="stock in warehouses" v={money(d.inventoryLevelLocal)} />
+          <KV k="stock in warehouses" v={money(segmentStockLocal(ensureV2(world.state), m.region as RegionId, m.subUnitId))} />
           <KV k="input cost pressure" v={num(d.inputCostPressure, 2)} />
           <KV k="named sellers" v={count(sellers.length)} onTap={() => nav.go('sellers')} />
         </Card>

@@ -12,6 +12,7 @@
 import { GameState, RegionId, COMMODITY_CATEGORY_LINKAGE } from '../../../types';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { WeeklyStepContext } from './context';
+import { segmentStockUnits, setSegmentStock, produceGoods, consumeGoods, scrapGoods } from '../../ledger/goods-ledger';
 
 export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): void {
   // 1$ is 1$: an input category (e.g. specialty_metals) is genuinely shared by MULTIPLE demander
@@ -113,7 +114,9 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
       const supplier = reg.categoryDemand[inputCat];
       if (!supplier) return;
 
-      const lastWeekInventory = supplier.lastWeekInventoryLevelLocal ?? supplier.inventoryLevelLocal ?? 0;
+      // §3.13-BOOK f5: the stock is the region's pool row, in UNITS, revalued at this week's price.
+      const unitPriceLocal = Math.max(1e-9, (supplier as { unitPriceLocal?: number }).unitPriceLocal ?? 1);
+      const lastWeekInventory = segmentStockUnits(ctx.v2, regionId, inputCat) * unitPriceLocal;
       const currentGlutSeverity = Math.max(0, 1.0 - (supplier.upstreamScarcityIndex ?? 1.0)); // how far below fair value the price currently sits
       const inventoryHoldingDecayRate = (0.015 + currentGlutSeverity * 0.35) / 52; // decay accelerates sharply the more oversupplied the market genuinely is — real obsolescence pressure, not a flat constant
       const decayedInventory = lastWeekInventory * (1 - inventoryHoldingDecayRate);
@@ -137,7 +140,12 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
       const overallFulfillmentRatio = totalBidQuantity > 0 ? quantityFulfilled / totalBidQuantity : 1;
 
       supplier.upstreamScarcityIndex = Number(newPriceIndex.toFixed(4));
-      supplier.inventoryLevelLocal = Math.max(0, totalAvailableSupply - quantityFulfilled);
+      // §3.13-BOOK f5: what decayed, what was produced and what the industries drew are the
+      // pool's goods flows, in units; the stock the pool holds is what is left.
+      scrapGoods(regionId, inputCat, (lastWeekInventory - decayedInventory) / unitPriceLocal);
+      produceGoods(regionId, inputCat, weeklyProduction / unitPriceLocal);
+      consumeGoods(regionId, inputCat, quantityFulfilled / unitPriceLocal);
+      setSegmentStock(ctx.v2, regionId, inputCat, Math.max(0, totalAvailableSupply - quantityFulfilled) / unitPriceLocal, unitPriceLocal);
       supplier._fulfillmentRatio = totalAvailableSupply > 0 ? quantityFulfilled / totalAvailableSupply : 1;
 
       demanderBidQuantities.forEach(({ demanderSubUnit }) => {
@@ -155,12 +163,6 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
         demanderEntry.inputCostPressure = Number(result.sumCostPressure.toFixed(4));
         demanderEntry._fulfillmentRatio = Number(result.minFulfillment.toFixed(4));
       }
-    });
-
-    // after the loop, snapshot this week's inventory as next week's lag anchor:
-    Object.keys(reg.categoryDemand).forEach(cat => {
-      const entry = reg.categoryDemand[cat];
-      entry.lastWeekInventoryLevelLocal = entry.inventoryLevelLocal ?? 0;
     });
   });
 }

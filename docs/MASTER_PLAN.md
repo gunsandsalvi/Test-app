@@ -513,15 +513,6 @@ written from here):
     d. **THE INSTRUMENT INDEX** — split 2026-09-04 into one declaration class per commit, as d3
        was; dI (the index exists; tranches, equities and fund shares declared; currency on it;
        `UnitOfMeasure` without money) is in §9. What is left, in order:
-    f. **ONE POSITION BOOK, AS LOTS** — split 2026-09-05 (found writing it: the merge, the basis,
-       the accrual and the goods stock are four writers' worth of work, and the plan itself says
-       writers first). f1 (every register row is a chain of lots the writers keep; `O14` holds
-       the sum), f2 (the debit takes the wire's units, fills carry the cleared price, and the
-       basis, the unrealised and the realised results are read), f3 (the goods lots are the
-       register's lots) and f4 (accrued interest is a column of the row, corporate and sovereign)
-       are in §9. What is left:
-    f5. **THE LAST GOODS STOCK OUTSIDE THE GOODS LEDGER GETS A HOLDER** (`categoryDemand[c].inventoryLevelLocal`,
-        a value with no holder and no units).
     g. **PLANT AND HOUSING JOIN** — BLOCKED on step 26 deciding what a unit of plant is. Not a
        cost exclusion: there is no unit to register until that decision is made.
 
@@ -1700,6 +1691,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK f5 — THE LAST GOODS STOCK OUTSIDE THE GOODS LEDGER HAS A HOLDER.**
+`categoryDemand[c].inventoryLevelLocal` and its lag copy are deleted. A region's unsold stock
+of a category is a GOOD row on the book of the region's SEGMENT of the industry that produces
+it (the category's own name where no named industry does), in the good's units at the price
+the category last cleared (`goods-ledger.ts:setSegmentStock` / `segmentStockUnits` /
+`segmentStockLocal`). Stage 04 reads last week's stock off the row revalued at this week's
+price, records what decayed, what was produced and what the industries drew as the pool's goods
+flows, and writes what is left; the seed produces every category's opening stock (a tenth of a
+year's demand, `stated.ts:SEED_OPENING_STOCK_SHARE`, one owner where three `× 0.10` stood);
+`W4` counts the pool as a fourth part of the region's goods; the market view and the harness
+read the row. This closes (f): the position book is lots with a basis, the goods are on it, the
+accruals are on it, and nothing a firm or a region holds is a value with no holder and no unit.
+Gates green; no run.
 
 **13-BOOK f4b — SOVEREIGN ACCRUED INTEREST IS THE SAME COLUMN.** `GameState.
 sovereignAccruedInterestLocal` (keyed `region|bond|party`) is deleted; a sovereign holder's

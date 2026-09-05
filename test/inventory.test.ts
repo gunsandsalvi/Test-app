@@ -75,7 +75,8 @@ test('a line needing nothing is fully fulfilled', () => {
 // §3.13-BOOK f3 — THE GOODS LOTS ARE THE REGISTER'S LOTS.
 import { ensureV2 } from '../src/engine2/world';
 import { pushLot, consumeFifo, goodRowOf, inputUnitsHeld, totalInputValueLocal, materializeInputInventory, openGoodsPass, closeGoodsPass, consumeFifoOnViews, GOOD_KIND } from '../src/engine2/lots';
-import { rowLotsOf, rowUnits, bookRowsOf } from '../src/engine2/holdings';
+import { rowLotsOf, rowUnits, bookRowsOf, rowLotUnits } from '../src/engine2/holdings';
+import { setSegmentStock, segmentStockUnits, segmentStockLocal, segmentStockRowOf } from '../src/engine/ledger/goods-ledger';
 import { SUBUNITS, SUBUNIT_INDEX, NSUB } from '../src/engine2/state';
 import { typeOf } from '../src/engine2/world';
 
@@ -121,4 +122,21 @@ test('a production pass addresses the same lots by slot, and closing it writes t
   assert.deepEqual(rowLotsOf(v2, r).map((l) => [l.units, l.priceLocal]), [[3, 2]]);
   assert.equal(rowUnits(v2.holdings, r), 3);
   assert.equal(v2.holdings.qtyLocal[r], 6);
+});
+
+test('§3.13-BOOK f5: a region\'s pool stock of a category is a GOOD row on its segment, in units at a price', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const sub = SUBUNITS[2];
+  setSegmentStock(v2, 'USA', sub, 100, 2);
+  const r = segmentStockRowOf(v2, 'USA', sub);
+  assert.ok(r >= 0);
+  assert.equal(segmentStockUnits(v2, 'USA', sub), 100);
+  assert.equal(segmentStockLocal(v2, 'USA', sub), 200);
+  assert.equal(rowLotUnits(v2, r), 100, 'the row is its lots');
+  // The stock falls at a new price: the oldest lot is consumed, the value is re-struck.
+  setSegmentStock(v2, 'USA', sub, 60, 3);
+  assert.equal(segmentStockUnits(v2, 'USA', sub), 60);
+  assert.equal(segmentStockLocal(v2, 'USA', sub), 180);
+  assert.deepEqual(rowLotsOf(v2, r).map((l) => [l.units, l.priceLocal]), [[60, 2]]);
+  assert.equal(segmentStockUnits(v2, 'EUR', sub), 0, 'another region holds its own');
 });
