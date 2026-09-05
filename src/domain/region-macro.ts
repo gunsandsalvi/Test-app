@@ -738,6 +738,9 @@ export interface Region {
   /** §3.17d-i — each series' cleared spread, the last `MEASURE_WINDOW_WEEKS` prints: what an index
    *  contract marks at and sizes its margin from. Written by the index book when it clears. */
   creditIndexSpreadHistoryBySeries?: Record<string, number[]>;
+  /** §3.17d-ii — the index-versus-single-name basis the line last cleared: its print against the
+   *  constituents' average print, bps. A measured number (`cds-index.ts:indexBasisBps`). */
+  creditIndexBasisBps?: number;
   /**
    * CAL/DER — the SECURED OVERNIGHT INDEX: the cleared GC repo rate compounded week by week, the
    * way a published overnight benchmark actually is. It is a level, not a rate: the ratio of two

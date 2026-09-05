@@ -32,7 +32,7 @@ export type InstrumentKind =
   | 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER' | 'BANK_FACILITY'
   | 'ETF_SHARE' | 'MMF_SHARE' | 'PE_FUND_INTEREST'
   // The books the adapters clear (§3.13-BOOK dII): nobody issues them, nobody holds them.
-  | 'IRS' | 'CDS' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'REPO' | 'SBL'
+  | 'IRS' | 'CDS' | 'CDS_INDEX' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'REPO' | 'SBL'
   // §3.17b-iii: the index option book, cleared like the others. TRS has no class and no market.
   | 'OPTION' | 'TRS'
   // §3.13-BOOK f3: a firm's input inventory — a good, on its own book, in the good's own units.
@@ -118,6 +118,7 @@ export const ASSET_REGISTRY: Record<InstrumentKind, AssetModule> = {
   PE_FUND_INTEREST: { assetClass: 'EQUITY',     carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'SHARES',      ladderPaper: false, vehicleClaim: true,  hedgedAsFixedIncome: false, carriesRateDuration: false },
   IRS:              { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   CDS:              { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  CDS_INDEX:        { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   FX_SPOT:          { assetClass: 'CASH_LIKE',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'MONEY',       ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   XCS:              { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: false, quotedAs: 'YIELD_LIKE',  countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   COMMODITY_FUTURE: { assetClass: 'COMMODITY',  carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'GOODS_UNITS', ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
@@ -192,6 +193,8 @@ export const isIssuerEquityRow = (h: { instrumentType?: string }): boolean =>
 export const heldInShares = (type: string): boolean => moduleOf(type)?.countedIn === 'SHARES';
 /** The kinds whose class is equity — what an index put covers (§3.17b-iii). */
 export const isEquityClass = (type: string): boolean => holdingClassOf(type) === 'EQUITY';
+/** The kinds whose class is corporate credit — what a credit target counts and an index covers (§3.17d-ii). */
+export const isCreditClass = (type: string): boolean => holdingClassOf(type) === 'CREDIT';
 
 /** §5-WIRES W3 — the kind of paper a debt tranche IS: a bank facility on the lender's book, commercial
  *  paper, a floating-rate loan, or a fixed-rate bond. The tranche ledger's wires carry this kind

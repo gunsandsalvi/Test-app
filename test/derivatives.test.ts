@@ -19,7 +19,7 @@ import { asEntityId } from '../src/domain/ids';
 import { writerReservationVol, ATM_PRICE_PER_VOL_SQRT_T } from '../src/domain/derivatives/classes/option';
 import { lenderReservationBps } from '../src/domain/derivatives/classes/xcs';
 import { protectionNeedLocal, twoWayProtectionQuote, LARGE_EXPOSURE_LIMIT_OF_CAPITAL } from '../src/domain/derivatives/classes/cds';
-import { rollCreditIndex, creditIndexRollDue, survivingShareOf, pendingEventsOf, eventPayoutLocal, CDX_ROLL_WEEKS, type CreditIndexSeries } from '../src/domain/derivatives/classes/cds-index';
+import { rollCreditIndex, creditIndexRollDue, survivingShareOf, pendingEventsOf, eventPayoutLocal, indexHolderQuote, indexBasisBps, CDX_ROLL_WEEKS, type CreditIndexSeries } from '../src/domain/derivatives/classes/cds-index';
 
 /** §3.17d-i — a four-name basket, one name's event already settled for the series. */
 const SERIES: CreditIndexSeries = {
@@ -437,4 +437,22 @@ test('CDS index: the mark is the spread move on the surviving share plus a faile
   // N2 fails with a closed workout at 0.2: the mark carries its weight at par less that.
   const failed = view({ creditIndexSpreadBps: () => 100, isIssuerDefaulted: (id) => id === 'N2', issuerWorkout: () => ({ state: 'CLOSED', recovery: 0.2 }) });
   assert.ok(Math.abs(DERIVATIVE_CLASSES.CDS_INDEX.markToMarketUSDToA(c, failed)! - 1_000_000 * 0.8) < 1e-9);
+});
+
+// §3.17d-ii — real money is on the line by its target gap, one side each; the basis is measured.
+test('CDS index: a holder under its credit target writes for the gap, one over it buys for the excess below its reservation', () => {
+  const writer = indexHolderQuote({ reservationBps: 120, rangeBps: 40, gapLocal: 500 });
+  assert.deepEqual(writer, { reservationStat: 120, fullSizeStatRange: 40, maxHoldingLocal: 500, currentHoldingLocal: 0 });
+  const buyer = indexHolderQuote({ reservationBps: 120, rangeBps: 40, gapLocal: -300 });
+  assert.equal(buyer.currentHoldingLocal, 300);
+  assert.equal(buyer.maxHoldingLocal, 300, 'it never writes');
+  const target = (print: number) => buyer.maxHoldingLocal * Math.max(0, Math.min(1, (print - buyer.reservationStat) / buyer.fullSizeStatRange));
+  assert.equal(target(120) - buyer.currentHoldingLocal, 0, 'at its reservation it keeps the excess');
+  assert.equal(target(80) - buyer.currentHoldingLocal, -300, 'a range below it, the whole excess is laid off');
+  assert.equal(target(100) - buyer.currentHoldingLocal, -150);
+});
+
+test('CDS index: the basis is the print against the constituents\' average, and undefined until they print', () => {
+  assert.equal(indexBasisBps(110, [100, 140, 0]), -10, 'a name with no print is left out');
+  assert.equal(indexBasisBps(110, [0, 0]), undefined);
 });

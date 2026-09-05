@@ -106,9 +106,9 @@ checked by `scripts/check-atlas.sh`.
 | A3 the protection leg is contingent; its value a read from the cleared spread | `src/domain/derivatives/classes/cds.ts:markToMarketUSDToA` | ✅ |
 | A4 the reference entity exists here and can default | `src/engine/audit/ownership.ts:o8` | ✅ |
 | A4.a FORBID no protection on an entity nobody can observe failing | `src/engine/audit/ownership.ts:o5` | ✅ |
-| A5 the index: a fixed basket traded as one line | `src/domain/derivatives/classes/cds-index.ts:CDS_INDEX_PROFILE` | ⚠️ |
+| A5 the index: a fixed basket traded as one line | `src/domain/derivatives/classes/cds-index.ts:CDS_INDEX_PROFILE` · `src/engine/simulation/stages/derivative-markets/cds-index.ts:runCdsIndexMarket` | ✅ |
 | A5.a a series: names fixed at the roll, a name's event settles its weight once for the line | `src/engine/simulation/stages/derivative-markets/cds-index.ts:runCdsIndexMarket` · `src/domain/derivatives/classes/cds-index.ts:pendingEventsOf` · `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ✅ |
-| **A5.b the index clears, and the index-versus-single-name basis is measured** | — | ❌ |
+| A5.b the index clears, and the index-versus-single-name basis is measured | `src/domain/derivatives/classes/cds-index.ts:indexHolderQuote` · `src/domain/derivatives/classes/cds-index.ts:indexBasisBps` | ✅ |
 | B1 the buyer of protection has a reason | `src/domain/derivatives/classes/cds.ts:protectionNeedLocal` · `src/engine/simulation/stages/derivative-markets/cds.ts:runCdsMarket` | ✅ |
 | B1.a a bank hedges a loan it cannot sell | `src/domain/derivatives/classes/cds.ts:LARGE_EXPOSURE_LIMIT_OF_CAPITAL` | ✅ |
 | B2 the seller of protection has a reason | `src/engine/simulation/stages/asset-allocation.ts:computeReservationSpreadBps` | ✅ |
@@ -167,7 +167,14 @@ the spread is the rating's own arithmetic run forward.
 The natural pair for it is step 17f's registry of comparables, which needs an implied PD to state
 what the CDS-versus-bond relationship *should* be.
 
-### ⚠️ A5 / ✅ A5.a / ❌ A5.b — THE SERIES EXISTS AND SETTLES; THE LINE DOES NOT YET CLEAR
+### ✅ A5 / A5.a / A5.b — THE INDEX IS A SERIES, IT SETTLES, AND IT CLEARS
+
+*2026-09-05 (§9.17d-ii).* The line clears on its own book (`runCdsIndexMarket`): an insurer or
+pension fund under its corporate-credit target WRITES index protection for the gap and one over it
+BUYS for the excess, each below its own reservation on the basket (`indexHolderQuote`); the desks
+and the credit funds quote two-way at the basket's reservation — the mean of their single-name
+reservations. The print joins `creditIndexSpreadHistoryBySeries` and the index-versus-single-name
+basis is published as `Region.creditIndexBasisBps` (`indexBasisBps`), measured, never set.
 
 *2026-09-05 (§9.17d-i).* The basket is a SERIES on the region (`Region.creditIndexSeries`): rolled
 every `CDX_ROLL_WEEKS` from the names the single-name book has printed, equal-weighted and fixed
@@ -176,8 +183,7 @@ closes, at what the workout paid, and every contract on the line settles that ev
 lifecycle's new partial-event hook (`profile.ts:eventSettlement`), its `units` counting the
 series' events it has settled. The class (`CDS_INDEX_PROFILE`) pays premium on the surviving
 share, marks the spread move on it as a risky annuity plus a failed name's expected payoff, and
-holds past maturity while a failed name's workout is open. What is absent is the MARKET: nobody
-buys or writes the line yet, so it has no print and no basis — **§3 step 17d-ii**.
+holds past maturity while a failed name's workout is open.
 
 ### ❌ A1.d — THERE IS NO CDS CURVE, AND SO NO TERM STRUCTURE OF CREDIT
 

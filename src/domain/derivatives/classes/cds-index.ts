@@ -71,6 +71,31 @@ export function pendingEventsOf(c: { units?: number }, series: CreditIndexSeries
 export const eventPayoutLocal = (notional: number, names: number, recovery: number): number =>
   (notional / Math.max(1, names)) * Math.max(0, 1 - Math.max(0, Math.min(1, recovery)));
 
+/**
+ * §3.17d-ii — A REAL-MONEY HOLDER'S QUOTE ON THE LINE, from its target gap. Over its target it
+ * BUYS protection for the excess where the print is tighter than its own cost of the risk (it
+ * lays the class off for less than the class costs it to carry); under it, it WRITES for the gap
+ * above that cost (the asset class without funding it). One side each, stated to the engine as
+ * the two-way quote is: a buyer opens holding its excess and sells it down below the reservation.
+ */
+export function indexHolderQuote(args: { reservationBps: number; rangeBps: number; gapLocal: number }): {
+  reservationStat: number; fullSizeStatRange: number; maxHoldingLocal: number; currentHoldingLocal: number;
+} {
+  const range = Math.max(1e-9, args.rangeBps);
+  if (args.gapLocal >= 0) return { reservationStat: args.reservationBps, fullSizeStatRange: range, maxHoldingLocal: args.gapLocal, currentHoldingLocal: 0 };
+  const excess = -args.gapLocal;
+  return { reservationStat: args.reservationBps - range, fullSizeStatRange: range, maxHoldingLocal: excess, currentHoldingLocal: excess };
+}
+
+/** §3.17d-ii — THE INDEX-VERSUS-SINGLE-NAME BASIS: the line's print against the equal-weighted
+ *  mean of its constituents' own prints; undefined until the names have printed. Measured, never
+ *  set — a comparable for the relative-value book (§3 step 17f). */
+export function indexBasisBps(indexPrintBps: number, singleNamePrintsBps: readonly number[]): number | undefined {
+  const printed = singleNamePrintsBps.filter((b) => b > 0);
+  if (printed.length === 0) return undefined;
+  return Number((indexPrintBps - printed.reduce((a, b) => a + b, 0) / printed.length).toFixed(1));
+}
+
 const seriesOf = (c: DerivativeContract, m: DerivativeMarketView): CreditIndexSeries | undefined => {
   const ref = basketReferenceOf(c);
   return m.creditIndexSeries(ref.regionId, ref.seriesId);

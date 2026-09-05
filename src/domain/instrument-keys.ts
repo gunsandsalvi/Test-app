@@ -56,6 +56,9 @@ export const equityIssuerId = (instrumentId: InstrumentId): EntityId => asEntity
 export const cdsInstrumentId = (regionId: RegionId, issuerId: string): InstrumentId =>
   asInstrumentId(`${regionId}-CDS-${issuerId}`);
 
+/** §3.17d-ii — one credit index SERIES as the line it clears on (the series id names its region). */
+export const creditIndexInstrumentId = (seriesId: string): InstrumentId => asInstrumentId(seriesId);
+
 /** One region's par interest-rate swap at one of the three quoted tenors. */
 export const swapInstrumentId = (regionId: RegionId, tenorKey: string): InstrumentId =>
   asInstrumentId(`${regionId}-IRS-${tenorKey}`);

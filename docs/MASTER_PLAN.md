@@ -547,18 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17d-ii. **The credit index CLEARS** (user; 17d-i built the series and the class — §9). The line
-    has no market: `derivative-markets/cds-index.ts` rolls the series and records its events and
-    strikes nothing. Who is on it: the asset class's REAL-MONEY holders — an asset manager, an
-    insurer, a pension fund whose corporate-credit target (`institution-profiles.ts` targets,
-    corpBondPct + loanPct of its assets) exceeds what its cash credit book holds WRITES index
-    protection for the gap (the asset class without funding it), one whose book exceeds its
-    target BUYS it for the excess; and 17c's two-way quoters (desks, credit funds) at the
-    basket's own reservation — the equal-weighted mean of the constituents' single-name
-    reservations. The print joins `creditIndexSpreadHistoryBySeries` (what the class marks at
-    and sizes margin from), and the **index-versus-single-name basis** — the print against the
-    constituents' average single-name print — is published on the region as a measured number,
-    one of 17f's comparables. Atlas: cds A5/A5.b.
 17d-iii. **The CDS curve** (atlas cds A1.d: *"a stated tenor, and a CURVE of them — 1y, 3y, 5y,
     10y, which is a term structure of credit and not one number"*). `classes/cds.ts:
     CDS_TENOR_WEEKS` is one tenor and every contract is struck with `termKey: ''`;
@@ -1611,7 +1599,22 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17d-i — THE CREDIT INDEX: THE SERIES AND THE CLASS.** A CDX is a fixed basket traded as one
+**17d-ii — THE CREDIT INDEX CLEARS.** The series on the run is one instrument
+  (`creditIndexInstrumentId`, kind `CDS_INDEX` on the registry). On the line: the real-money
+  holders by their TARGET GAP — an insurer or pension fund whose corporate-credit target
+  (`allocationTargetFor`: corpBondPct + loanPct of its assets) exceeds its cash credit book
+  (`institutionBookLocal` through the registry's `isCreditClass`) writes index protection for
+  the gap at its reservation, one over its target buys for the excess below it
+  (`indexHolderQuote`: one side each, the buyer opening holding its excess) — and 17c's two-way
+  quoters (desks through `deskNotionalCapacityLocal(…, 'CDS_INDEX')`, credit funds at their
+  capital) at the basket's reservation, the equal-weighted mean of their single-name
+  reservations. The float is the openings; what a seat holds against its opening after the
+  print is what it did; buyers draw pro rata from the writers; a new line carries
+  `units = events so far` (struck on the survivors). The print joins
+  `creditIndexSpreadHistoryBySeries` (the class's mark and margin), and
+  `Region.creditIndexBasisBps` = print − mean of the constituents' single-name prints
+  (`indexBasisBps`), one of 17f's comparables. Atlas: cds A5/A5.b ✅. Gates green; no run.
+- **17d-i — THE CREDIT INDEX: THE SERIES AND THE CLASS.** A CDX is a fixed basket traded as one
   line, and the basket is a SERIES: `Region.creditIndexSeries` (names fixed at the roll, events
   settled once for the line), rolled every `CDX_ROLL_WEEKS = 26` by `derivative-markets/
   cds-index.ts` from the names the single-name book has printed (at least `CDX_MIN_NAMES`);
