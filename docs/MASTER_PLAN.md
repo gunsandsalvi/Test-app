@@ -405,15 +405,20 @@ written from here):
     earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
     all). Seven slices, in this order, because each one is load-bearing for the next:
 
-    v-c. **THE P&L EXPENSES WHAT IT SOLD, NOT WHAT IT DREW** (`goods.md` F5: *revenue on delivery;
-       COGS is the units that left*). The input draw is expensed in the week it is DRAWN, whatever
-       was made or sold — and since §9.13-INV-v-a the same inputs are ALSO capitalised into the
-       finished batch's cost, which §9.13-INV-v-b then puts on the filed balance sheet. One cost,
-       counted in two places (rule 4), and it is a live double count rather than a latent one:
-       a firm's earnings are charged for inputs its stock is simultaneously carrying. Either the
-       draw stops being an expense and `writeFinishedRows`'s returned COGS becomes one, or the
-       batch stops capitalising it — the first is the accounting and the second is not. This moves
-       earnings, which is what step 13 says the class must do.
+    v-c-ii. **THE INCOME STATEMENT CHARGES WHAT IT SOLD** (`goods.md` F5: *revenue on delivery;
+       COGS is the units that left*). Today `newEbitdaMargin` is `1 − (input draw + payroll + other
+       opex) / revenue`: every production cost expensed in the week it is INCURRED. Since
+       §9.13-INV-v-a the line's share of those same costs is ALSO capitalised into the batch, and
+       §9.13-INV-v-b put that on the filed balance sheet — one cost in two places (rule 4), and a
+       live double count rather than a latent one. The end state is the accounting one, because the
+       alternative is to stop capitalising and lose the basis the whole class exists to build:
+       EBITDA is revenue less the COGS the register hands back (`comp.cogsWeeklyLocal`, measured
+       since v-c-i) less the costs no batch absorbed — an idle line's payroll is a period cost, and
+       that is what makes idle capacity expensive. A firm that produces and does not sell then
+       carries the cost in its stock instead of charging it, which is what absorption means and
+       what the balance sheet already says since v-b. **This moves every firm's earnings**, which
+       is what step 13 says the class must do, and it wants the whole cost model read first: the
+       margin is the seam the labour bid, the capital charge and the throttle all read.
     vi. **LOWER OF COST AND NET REALISABLE VALUE** (`goods.md` E2/E2.a/E2.c/E3, the user's *"apply
        real world facts"*). Cost until the market falls below it, then written down to market, and
        **the write-down is a charge to income in the period it happens** — E3's missing writer.
@@ -1223,6 +1228,15 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-v-c-i — THE COST OF WHAT IT SOLD, MEASURED.** `writeFinishedRows` draws the week's
+  deliveries off the register's own lots first-in-first-out, so what those units COST falls out of
+  the draw; it lands on the firm as `cogsWeeklyLocal`. The model has never had this number —
+  `goods.md` F5 asks for it and the P&L expenses the INPUT DRAW instead, in the week it is drawn,
+  whatever was made or sold. A firm the week skipped is written to zero rather than left carrying
+  last week's, which would read as trading by a company that did none. Measured and expensed by
+  nothing: writers first, again, and `13-INV-v-c-ii` is where the income statement takes it and
+  the double count v-b exposed is closed. Gates green; no run (rule 11).
 
 **13-INV-v-b — THE READERS TAKE THE BASIS, AND THE STOCK IS WORTH WHAT IT COST.** Every read of
   *what a firm's finished stock is worth* now answers with the register's cost:

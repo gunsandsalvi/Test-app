@@ -359,6 +359,16 @@ export interface Company {
   // (`ledger/plant-ledger.ts:plantVintagesOf` reads them, `writePlantRows` writes them). Gross,
   // net, accumulated depreciation and the week's charge are reads of that list at the week
   // asked. Never a field here.
+  /**
+   * §3.13-INV-v-c-i — THE COST OF WHAT IT SOLD THIS WEEK: the units that left its finished stock,
+   * at what those units cost to make, drawn first-in-first-out off the register's own lots
+   * (`goods-ledger.ts:writeFinishedRows`). The model has never had this number — `goods.md` F5
+   * asks for it and the P&L expenses the INPUT DRAW instead, in the week it is drawn, whatever was
+   * made or sold. MEASURED here and expensed by nothing yet: `13-INV-v-c-ii` is where the income
+   * statement stops charging production costs as they are incurred and charges this instead, which
+   * is also what ends the double count of capitalising them into the batch as well.
+   */
+  cogsWeeklyLocal?: number;
   /** IND1: capital goods that actually ARRIVED last week, at landed cost. Real net investment. */
   /**
    * IND13 — ASSETS UNDER CONSTRUCTION: capital that has arrived and is not yet plant.

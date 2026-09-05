@@ -1931,7 +1931,9 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
       // construction queue (the estate holds it); dropped here, it arrived and then never existed.
       const landed = companyUpdates[d.backLanes.ticker[row]]?.capexUnderConstruction;
       if (landed && landed.length > 0) comp.assetsUnderConstruction = [...(comp.assetsUnderConstruction ?? []), ...landed];
-      return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
+      // §3.13-INV-v-c-i: a firm the week skipped sold nothing through it — a stale COGS would
+      // read as a week's trading by a company that had none.
+      return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0, cogsWeeklyLocal: 0 });
     }
     const core = pre ?? runBackCore(comp, row, d);
     const { annualInterest, bondCallPremiumLocal, buybacksThisWeek: buybacksFromCore, newLeverage, newCoverage, capexCommissionedThisWeekLocal, cashLedger, costDriversLocal, debtIssuanceThisWeek, debtRepaymentThisWeek, isDefaulted, loanCallPremiumLocal, measuredInputConsumptionWeeklyLocal, newBaselineDividendYield, newCapex, newCdsSpreadBps, newDividendYield, newEbit, newEbitda, newEmployeeCount, newEps, newExecutionQuality, newGrowthCapex, newInputSupplyConstraintFactor, newLastOpportunisticOfferingWeek, newMaintenanceCapex, newMaintenanceShortfallStreak, newNetIncome, newOccupationMixDrift, newOutputInventoryBySubUnit, newRating, newRecentFulfillmentEMA, newRecurringBaseLocal, newRevenue, newRndExpense, newTotalDebt, preActionFixedLocal, preActionFloatingLocal, preFaceByRow, rowList, sec, stillUnderConstruction, targetProductionLocal, updatedProductLines, weeklyDepreciation, weeklyPayrollLocal, post, cash } = core;
@@ -1975,7 +1977,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // it cost, the deliveries drawn first-in-first-out, and the row trued to the record it must
     // equal until §3.13-INV-vii retires the record. Nothing reads the basis yet (writers first);
     // `O17` is what watches the two agree.
-    writeFinishedRows(v2, comp.id, comp.region, mergedOutputInventoryBySubUnit, update?.finishedFlowBySubUnit, nextWeek);
+    const finishedWeek = writeFinishedRows(v2, comp.id, comp.region, mergedOutputInventoryBySubUnit, update?.finishedFlowBySubUnit, nextWeek);
     let buybacksThisWeek = buybacksFromCore;
     const __k3 = S08K_PROF ? performance.now() : 0;
     const isReportingThisWeek = !isDefaulted && isPubliclyListed(comp)
@@ -2404,6 +2406,8 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // §7.246 — the week's two measured cost lines, persisted for stage 05's floor decomposition.
     comp.payrollWeeklyLocal = round1(weeklyPayrollLocal);
     comp.realInputConsumptionCostWeeklyLocal = round1(measuredInputConsumptionWeeklyLocal);
+    // §3.13-INV-v-c-i: what the units that LEFT cost to make. Measured, not yet expensed.
+    comp.cogsWeeklyLocal = round1(finishedWeek.cogsLocal);
 
     comp.ebit = round1(newEbit);
 
