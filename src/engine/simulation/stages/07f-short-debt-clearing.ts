@@ -548,7 +548,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const deltaLocal = afterLocal - (heldFace.get(b.key) ?? 0);
           faceDeltaLocal += deltaLocal;
           if (!(Math.abs(deltaLocal) > 1)) return;
-          const spec = { instrumentType: 'GOV_BOND' as const, instrumentId: b.key, issuerRegion: regionId, valueLocal: Math.abs(deltaLocal), units: Math.abs(deltaLocal) };
+          // §3.13-BOOK f2a: the fill moves at the price this session cleared, face by face.
+          const spec = { instrumentType: 'GOV_BOND' as const, instrumentId: b.key, issuerRegion: regionId, valueLocal: Math.abs(deltaLocal) * (clearedPriceOf(ctx.v2, b.key) ?? 1), units: Math.abs(deltaLocal) };
           if (deltaLocal > 0) transferHolding(ctx.v2, house, bankPartyOf(bank.id), spec, 'bill clearing fill');
           else transferHolding(ctx.v2, bankPartyOf(bank.id), house, spec, 'bill clearing fill');
         });
@@ -603,7 +604,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const afterLocal = bookedLocal > 1 ? bookedLocal : 0;
           const deltaLocal = afterLocal - (heldFace.get(instrumentId) ?? 0);
           if (!(Math.abs(deltaLocal) > 1)) return;
-          const spec = { instrumentType: 'GOV_BOND' as const, instrumentId, issuerRegion: regionId, valueLocal: Math.abs(deltaLocal), units: Math.abs(deltaLocal) };
+          // §3.13-BOOK f2a: at the price this session cleared, face by face.
+          const spec = { instrumentType: 'GOV_BOND' as const, instrumentId, issuerRegion: regionId, valueLocal: Math.abs(deltaLocal) * (clearedPriceOf(ctx.v2, instrumentId) ?? 1), units: Math.abs(deltaLocal) };
           if (deltaLocal > 0) transferHolding(ctx.v2, house, companyParty(comp), spec, 'bill clearing fill');
           else transferHolding(ctx.v2, companyParty(comp), house, spec, 'bill clearing fill');
         });

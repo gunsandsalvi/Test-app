@@ -517,15 +517,13 @@ written from here):
        the accrual and the goods stock are four writers' worth of work, and the plan itself says
        writers first). f1 (every register row is a chain of lots the writers keep; `O14` holds
        the sum) is in §9. What is left, in order:
-    f2. **THE BASIS IS READ.** `basisOf` a row and its lots' holding period; a sale's proceeds
-        against the lots it consumed is the realised gain, the mark against the basis the
-        unrealised — which closes `the-register.md` D4 (❌ today), unblocks the capital-gains base
-        (`the-treasury.md` C1) and lets `equity.md` E4.a close. Two things first, found writing
-        f1: `debitRow` takes units in proportion to the VALUE leaving, not the units the wire
-        names (a sale of 120 face at par out of a row marked at 0.99 takes 121 face), so a
-        realised gain has no quantity until the debit honours the wire; and a credit fill's lot
-        is at the wire's price, which is par (`clearedBookDelta`) until the fill wires carry the
-        cleared price.
+    f2. **THE BASIS IS READ** — split 2026-09-05; f2a (the debit takes the units the wire
+        names; the fill wires and lots carry the cleared price) is in §9. What is left:
+    f2b. **THE READS.** `basisOf` a row and its lots' holding period; a sale's proceeds against
+        the lots it consumed is the realised gain, the mark against the basis the unrealised, and
+        the register keeps what each book has realised — which closes `the-register.md` D4 (❌
+        today), unblocks the capital-gains base (`the-treasury.md` C1) and lets `equity.md` E4.a
+        close.
     f3. **THE GOODS LOTS ARE THE SAME TABLE.** `v2.lots` merges into the position book — the firm
         the holder, the sub-unit the instrument, kind GOOD — and the FIFO kernels read the one
         table. A fungible asset sums its lots, an identified one addresses them. This one moves
@@ -1712,6 +1710,17 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK f2a — THE DEBIT TAKES THE WIRE'S UNITS; THE FILL WIRES AND LOTS CARRY THE CLEARED
+PRICE.** `debitRow` took the wire's VALUE and let the units follow in proportion, so a sale of
+120 face at par out of a row marked at 0.99 took 121 face and no quantity a realised gain could
+stand on existed. The units leave first now, oldest lot first, and the value that leaves is the
+row's own mark on those units — what is left is still `units × mark`, and the gap between the
+wire's proceeds and the mark-value that left is the sale's gain against the mark. A clearing
+fill's wire and lot carry the price the book CLEARED (`holdings-store.ts:finalize` reads the
+price store where the appended row is written at par; 07c's and 07f's bank and company fills
+move at `clearedPriceOf`). This moves the numbers, as (f)'s header says it will: a fill values
+at the cleared price at the site rather than at par until the mark. Gates green; no run.
 
 **13-BOOK f1 — A POSITION IS A CHAIN OF LOTS, WRITERS FIRST.** The register gained a lot table
 under its rows (`holdings.ts:lotHead/lotTail`, `lotUnits/lotPriceLocal/lotWeek/lotNext`): every

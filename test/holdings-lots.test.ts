@@ -33,9 +33,7 @@ test('a credit is a lot at its price, a debit consumes first-in-first-out, and t
     const [r] = bookRowsOf(v2, fund.id);
     assert.deepEqual(rowLotsOf(v2, r), [{ units: 100, priceLocal: 1.0, week: 3 }, { units: 50, priceLocal: 1.0, week: 4 }]);
     assert.equal(rowLotUnits(v2, r), rowUnits(v2.holdings, r));
-    // A sale of 120 takes the whole first lot and 20 of the second. (At one price, because the
-    // register still debits units in proportion to VALUE rather than by the units the wire names —
-    // §3 f2's first job; the lots follow the row either way, which is what O14 holds.)
+    // A sale of 120 takes the whole first lot and 20 of the second.
     transferHolding(v2, fund, house, spec(120, 1.0), 'sale');
     assert.deepEqual(rowLotsOf(v2, r), [{ units: 30, priceLocal: 1.0, week: 4 }]);
     assert.equal(rowLotUnits(v2, r), rowUnits(v2.holdings, r));
@@ -62,6 +60,33 @@ test('a desk that sells what it does not have carries a negative lot, and coveri
     transferHolding(v2, house, desk, spec(60, 1.01), 'covered and then some');
     assert.deepEqual(rowLotsOf(v2, r), [{ units: 20, priceLocal: 1.01, week: 7 }]);
     assert.equal(rowLotUnits(v2, r), rowUnits(v2.holdings, r));
+  } finally {
+    setActiveWireJournal(undefined);
+    setActiveWireWorld(undefined);
+  }
+});
+
+test('§3.13-BOOK f2a: a debit takes the units the wire names, and the value that leaves is the row\'s own mark on them', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const fund = { kind: 'INSTITUTION' as const, id: asEntityId('INST-G') };
+  setActiveWireJournal(newWireJournal(1, 3));
+  setActiveWireWorld(wireWorldOf(v2, [], [{ id: fund.id }]));
+  try {
+    seedLadder(v2, governmentIssuer('USA'), [{ id: bond, principalLocal: 1e6, rateType: 'FIXED', couponRate: 0.02, originationWeek: 0, maturityWeek: 260, seniority: 'SENIOR' }]);
+    issueHolding(v2, gov, fund, spec(100, 0.98), 'bought cheap');
+    issueHolding(v2, gov, fund, spec(50, 1.02), 'bought dear');
+    const [r] = bookRowsOf(v2, fund.id);
+    const H = v2.holdings;
+    assert.equal(rowUnits(H, r), 150);
+    assert.ok(Math.abs(H.qtyLocal[r] - 149) < 1e-9, 'carried at what it cost until a mark');
+    // Sold 120 face at par: 120 units leave — not the 121 a value proportion would have taken —
+    // and the value leaving is the row's mark on them (149 × 120/150), so what is left is still
+    // units × mark. The oldest lot goes first.
+    transferHolding(v2, fund, house, spec(120, 1.0), 'sale at par');
+    assert.equal(rowUnits(H, r), 30);
+    assert.ok(Math.abs(H.qtyLocal[r] - 149 * 30 / 150) < 1e-9);
+    assert.deepEqual(rowLotsOf(v2, r), [{ units: 30, priceLocal: 1.02, week: 3 }]);
+    assert.equal(rowLotUnits(v2, r), rowUnits(H, r));
   } finally {
     setActiveWireJournal(undefined);
     setActiveWireWorld(undefined);

@@ -48,7 +48,7 @@ import { bankSecuritiesParty, bankPartyOf } from '../../../domain/party';
 import { GameState, RegionId, ItemizedHolding } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { priceFromYield, yieldFromPrice, zeroRateAt, PaperTerms, COUPON_PERIOD_WEEKS } from '../../../domain/pricing';
-import { setClearedPrice } from '../../../engine2/prices';
+import { setClearedPrice, clearedPriceOf } from '../../../engine2/prices';
 import { retireTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { materializeGovLadder, ladderRowsOf, trancheRowOf } from '../../../engine2/tranches';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
@@ -610,7 +610,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         newClearedLocal += usd;
         const deltaLocal = usd - (heldFace.get(instrumentId) ?? 0);
         if (!(Math.abs(deltaLocal) > 1)) return;
-        const spec = { instrumentType: 'GOV_BOND' as const, instrumentId, issuerRegion: regionId, valueLocal: Math.abs(deltaLocal), units: Math.abs(deltaLocal) };
+        // §3.13-BOOK f2a: the fill moves at the price this auction cleared, face by face.
+        const spec = { instrumentType: 'GOV_BOND' as const, instrumentId, issuerRegion: regionId, valueLocal: Math.abs(deltaLocal) * (clearedPriceOf(ctx.v2, instrumentId) ?? 1), units: Math.abs(deltaLocal) };
         if (deltaLocal > 0) transferHolding(ctx.v2, house, bankPartyOf(bank.id), spec, 'sovereign bond clearing fill');
         else transferHolding(ctx.v2, bankPartyOf(bank.id), house, spec, 'sovereign bond clearing fill');
       });

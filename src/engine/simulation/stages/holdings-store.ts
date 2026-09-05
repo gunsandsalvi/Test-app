@@ -31,6 +31,7 @@
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
 import { bookHeadOf, newBookRow, freeBookRow, setBookChain, relinkBook, materializeBook, setRowShares, foldRowInto, moveLotsTo, adjustLots, rowUnits } from '../../../engine2/holdings';
 import { activeWireJournal, hasActiveWireJournal } from '../../ledger/wire';
+import { clearedPriceOf } from '../../../engine2/prices';
 import { V2World } from '../../../engine2/world';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
@@ -281,13 +282,15 @@ export class HoldingsStore {
           // appended row's), never at the value delta — the delta carries the revaluation of the
           // shares the holder kept, which is a mark, not a move (measured: USA EQUITY −66.7B at
           // the house in one week from exactly that).
+          // §3.13-BOOK f2a: a credit fill's wire — and its lot — carries the price the book
+          // CLEARED (the price store's), not the par the appended row is written in.
           const priceOf = (id: string): number | undefined => {
             const mark = markById.get(`${key}|${id}`);
             if (mark !== undefined) return mark;
             const x = a.get(id), y = b.get(id);
             if (x?.shares && x.shares > 0) return x.valueLocal / x.shares;
             if (y?.shares && y.shares > 0) return y.valueLocal / y.shares;
-            return undefined;
+            return clearedPriceOf(v2, id as InstrumentId);
           };
           clearedBookDelta(
             { kind: 'INSTITUTION', id: slot.entity.id }, region as RegionId, type as ItemizedHolding['instrumentType'],
@@ -325,7 +328,7 @@ export class HoldingsStore {
         const r = newBookRow(v2, h, week, false);
         let before = 0;
         for (const old of olds) { before += rowUnits(v2.holdings, old); moveLotsTo(v2, old, r); }
-        const px = markById.get(k) ?? (h.quantityShares !== undefined && h.quantityShares > 0 ? (h.quantityOrNotionalLocal ?? 0) / h.quantityShares : 1);
+        const px = markById.get(k) ?? (h.quantityShares !== undefined && h.quantityShares > 0 ? (h.quantityOrNotionalLocal ?? 0) / h.quantityShares : (clearedPriceOf(v2, h.instrumentId) ?? 1));
         adjustLots(v2, r, rowUnits(v2.holdings, r) - before, px, week);
         ids.push(r);
       }

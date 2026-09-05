@@ -290,66 +290,62 @@ const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
  * exactly this case; so does this.
  */
 /**
+ * §3.13-BOOK f2a — THE DEBIT TAKES THE UNITS THE WIRE NAMES. It used to take the wire's VALUE and
+ * let the units follow in proportion, so a sale of 120 face at par out of a row marked at 0.99
+ * took 121 face — the quantity a realised gain needs did not exist. The units leave first, oldest
+ * lot first; the value that leaves with them is the row's OWN mark on those units, so what is
+ * left is still `units × mark`, and the difference between the wire's proceeds and the mark-value
+ * that left is the sale's gain against the mark (the lots say the gain against cost — f2b).
+ *
  * §3.13-BOOK d5a — A ROW UNDER A LIEN CANNOT BE SOLD BELOW IT. `enforceLien` is the transfer's
  * arm: a sale that would leave fewer units than are pledged defects at the site (the auctions
  * floor a pledging bank's holding at its pledged face, so this is the guard behind that floor).
  * A retirement is the other arm: the paper ceased, the lien shrinks to what is left, and the
  * repo book's collateral call takes it from there.
+ *
+ * A DEBIT LARGER THAN THE POSITION IS A DEFECT, NOT A SHORTFALL TO SWALLOW. The wire for the
+ * FULL quantity is already written by the time this runs, so a remainder left after the walk is
+ * paper minted on the receiving side that never left the payer's book. `retireTranche` defects on
+ * exactly this case; so does this. One walk of the chain, one relink only if a row emptied.
  */
 function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien: boolean): void {
   const H = mutableHoldings(v2);
   const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
-  let leftLocal = spec.valueLocal; let leftShares = spec.shares ?? Number.NaN;
+  const askedUnits = unitsOf(spec);
+  let leftUnits = askedUnits;
   let hit = false; let drops = false;
   // The residue of a row-by-row subtraction scales with the whole position the walk draws from,
-  // not with the amount asked for: a debit of a thousand dollars taken out of a book of billions
-  // carries the book's rounding, not its own.
-  let walkedLocal = 0; let walkedShares = 0;
+  // not with the amount asked for.
+  let walkedUnits = 0;
   for (let r = bookHeadOf(v2, holderId); r >= 0; r = H.next[r]) {
-    if (H.typeRef[r] === tRef && H.instrRef[r] === iRef && (leftLocal > 1e-9 || leftShares > 1e-12)) {
+    if (H.typeRef[r] === tRef && H.instrRef[r] === iRef && leftUnits > 1e-12) {
       hit = true;
-      walkedLocal += Math.abs(H.qtyLocal[r]);
-      const takeLocal = Math.min(leftLocal, H.qtyLocal[r]);
-      // §9.13-CREDIT row 5 — AND THE QUANTITY LEAVES WITH THE VALUE. This took value and shares
-      // and left `units` where it was, so every debit of a credit row drove the two apart: a
-      // holder that sold half its position still reported the whole face. The units taken are the
-      // row's OWN — what fraction of its value is leaving, applied to what it holds — so the
-      // ledger never needs the caller to know, and while value and units are the same number this
-      // subtracts exactly what the value line does.
       const unitsHere = rowUnits(H, r);
-      const takeUnits = H.qtyLocal[r] > 0 ? unitsHere * (takeLocal / H.qtyLocal[r]) : 0;
-      const byShares = !Number.isNaN(leftShares) && !Number.isNaN(H.shares[r]);
-      const takeSh = byShares ? Math.min(leftShares, H.shares[r]) : 0;
-      // A share-counted row's units ARE its shares (`unitsOf` says so on the way in), so it
-      // takes the share line rather than the value proportion — the two agree only while the
-      // row's own price and the instruction's are the same number.
-      const nextUnits = byShares ? H.shares[r] - takeSh : unitsHere - takeUnits;
-      // §3.13-BOOK d5a: the lien is tested BEFORE the row moves — a sale under it defects with
-      // the row untouched; a retirement shrinks the lien to what the paper leaves.
+      walkedUnits += Math.abs(unitsHere);
+      const takeUnits = Math.min(leftUnits, Math.max(0, unitsHere));
+      const nextUnits = unitsHere - takeUnits;
+      const takeLocal = unitsHere > 0 ? H.qtyLocal[r] * (takeUnits / unitsHere) : 0;
       if (H.lienUnits[r] > 0) {
         if (enforceLien && nextUnits < H.lienUnits[r] - Math.max(PLEDGE_ROUNDING_TOLERANCE_LOCAL, 1e-9 * H.lienUnits[r])) {
           defect(`${holderId} sold ${spec.instrumentType} ${spec.instrumentId} under a lien: ${H.lienUnits[r]} units pledged, ${nextUnits} would be left`);
         }
         if (!enforceLien && H.lienUnits[r] > nextUnits) H.lienUnits[r] = Math.max(0, nextUnits);
       }
-      H.qtyLocal[r] -= takeLocal; leftLocal -= takeLocal;
-      H.units[r] = unitsHere - takeUnits;
+      H.qtyLocal[r] -= takeLocal;
+      H.units[r] = nextUnits;
+      // A share-counted row's units ARE its shares (`unitsOf` says so on the way in).
+      if (!Number.isNaN(H.shares[r])) H.shares[r] = nextUnits;
       // §3.13-BOOK f1: what leaves comes off the oldest lots first.
-      adjustLots(v2, r, nextUnits - unitsHere, priceOf(spec).priceLocal, lotWeek());
-      if (byShares) {
-        walkedShares += Math.abs(H.shares[r]);
-        H.shares[r] -= takeSh; leftShares -= takeSh;
-        H.units[r] = H.shares[r];
-      }
+      adjustLots(v2, r, -takeUnits, priceOf(spec).priceLocal, lotWeek());
+      leftUnits -= takeUnits;
     }
     if (!keepsRow(H, r)) drops = true;
   }
   // What is left after the walk is either float noise from the row-by-row subtraction — which
   // scales with the position it walked — or paper the holder never had.
-  if (leftLocal > 1e-9 * Math.max(1, spec.valueLocal, walkedLocal)
-    || leftShares > 1e-9 * Math.max(1, spec.shares ?? 0, walkedShares)) {
+  if (leftUnits > 1e-9 * Math.max(1, askedUnits, walkedUnits)) {
     defect(`${holderId} was debited ${spec.instrumentType} ${spec.instrumentId} beyond its position`
-      + ` — ${(leftLocal / 1e6).toFixed(6)}M and ${Number.isNaN(leftShares) ? 0 : leftShares} shares undelivered`);
+      + ` — ${leftUnits} units undelivered`);
   }
   if (drops) {
     const kept: number[] = [];
