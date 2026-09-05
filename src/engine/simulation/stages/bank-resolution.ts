@@ -17,14 +17,14 @@
 
 import { reseatSwapLines } from './swap-lines';
 import { reseatCentralBankLoans } from './central-bank-loans';
-import { GameState, RegionId } from '../../../types';
+import { GameState, RegionId, Company } from '../../../types';
 import { bankSovereignBookLocal } from '../../sovereign-register';
 import { bankBookAssetsLocal, deskGrossLocal } from '../../desk-register';
-import { bankParty, companyParty } from '../../../domain/party';
+import { bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { BankingSector, DepositLines, swapLineDrawnLocal } from '../../../domain/banking';
 import { BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
-import { assumingCapitalLocal, chooseAssumingBank, isBankUnderPca, planBankResolution, restateBankSheetStatistics, PCA_CAPITAL_RATIO } from '../../../domain/bank-resolution';
+import { assumingCapitalLocal, chooseAssumingBank, isBankUnderPca, isBankIlliquid, planBankResolution, restateBankSheetStatistics, PCA_CAPITAL_RATIO } from '../../../domain/bank-resolution';
 import { assumeBankBooks } from '../../ledger/bank-transfer';
 import { reassignConsignments } from './goods-arrival';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
@@ -32,7 +32,7 @@ import { banksOf } from '../../../domain/company';
 import { dateOfWeek } from '../../../domain/calendar';
 import { WeeklyStepContext } from './context';
 import { bankAtHouseLocal, novateDerivatives, publishRepoBook, repoBookOf, primeBrokerageBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
-import { pay, runSettlementStage } from './settlement';
+import { pay, runSettlementStage, pendingSettlementLocal } from './settlement';
 import { fieldsOf, residualOf } from '../bank-identity-trace';
 import { ladderRowsOf, facilityBookOf } from '../../../engine2/tranches';
 import { moveFacilityLender } from '../../ledger/tranche-ledger';
@@ -110,7 +110,15 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
   // mechanism can be exercised on a world where no bank is under PCA. Inert unless set.
   const forced = (process.env.BANK_RESOLUTION_FORCE ?? '').split(',')
     .map((s) => s.split('@')).filter(([t, w]) => t && Number(w) === week).map(([t]) => t);
-  const failing = liveBanks().filter((c) => isBankUnderPca(c.bankBalanceSheet!, facilityBookOf(ctx.v2, c.id)) || forced.includes(c.ticker))
+  // §3.20-LLR-iv: two triggers, distinct — capital (PCA) and liquidity (overdrawn at the central
+  // bank after the close's market and window have run, `isBankIlliquid`).
+  const reservesAfterMarket = (c: Company): number => bankReservesOf(ctx.v2, c.id) + pendingSettlementLocal(ctx, bankSecuritiesParty(c));
+  const triggerOf = new Map<EntityId, 'capital' | 'liquidity'>();
+  liveBanks().forEach((c) => {
+    if (isBankUnderPca(c.bankBalanceSheet!, facilityBookOf(ctx.v2, c.id)) || forced.includes(c.ticker)) triggerOf.set(c.id, 'capital');
+    else if (isBankIlliquid(reservesAfterMarket(c))) triggerOf.set(c.id, 'liquidity');
+  });
+  const failing = liveBanks().filter((c) => triggerOf.has(c.id))
     .sort((a, b) => a.bankBalanceSheet!.bankEquityLocal - b.bankBalanceSheet!.bankEquityLocal);
   if (failing.length === 0) return;
   const failingIds = new Set(failing.map((c) => c.id));
@@ -240,7 +248,9 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
       id: `bank-resolution-${bank.ticker}-${week}`,
       week,
       title: `${bank.name} closed by the supervisor; ${acquirer.name} assumes its deposits`,
-      description: `${bank.ticker} fell below the ${(100 * PCA_CAPITAL_RATIO).toFixed(0)}% capital floor and was resolved: `
+      description: (triggerOf.get(bank.id) === 'liquidity'
+        ? `${bank.ticker} ended the week overdrawn at the central bank after the market and the window had run — it could not pay — and was resolved: `
+        : `${bank.ticker} fell below the ${(100 * PCA_CAPITAL_RATIO).toFixed(0)}% capital floor and was resolved: `)
         + `${acquirer.ticker} takes its books, every deposit and the ${gb(plan.centralBankLoanAssumedLocal)} owed to the central bank, capitalised at ${gb(plan.acquirerCapitalLocal)}`
         + (plan.ladderBailedInLocal > 0 ? `; its own ${gb(plan.ladderBailedInLocal)} of bonds stay behind for the receivership` : '')
         + (plan.guaranteeLocal > 0 ? `; the treasury covers ${gb(plan.guaranteeLocal)} under the deposit guarantee` : '')

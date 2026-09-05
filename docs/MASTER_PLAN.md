@@ -551,17 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-20-LLR-iv. **A BANK CAN FAIL FOR LIQUIDITY, WITH A DISTINCT TRIGGER.** (20-LLR — nothing could fail
-    for want of liquidity — is §9 in four parts: the session moved to the close, the unbounded
-    loan deleted, the overdraft priced, the seat made solvent-only and the run built.) Resolution
-    still triggers on capital alone (`isBankUnderPca`). A bank that is overdrawn at the central
-    bank after the close's market and window have run — the state 20-LLR-ii records and 20-LLR-iii
-    charges for and runs on — is a bank that cannot pay, and the supervisor closes it for that
-    whether or not its capital ratio says so. The trigger is the recorded state, not a count of
-    weeks: `bank-resolution` reads the overdraft beside PCA (`money-market.md` D4,
-    `banks-funding-and-liquidity.md` D6). What one bank's run says about the others (E5) is the
-    other absence left on those trees, and it belongs with 37-BANKEQUITY's contagion, not here.
-
 21-BRACKET. **THE BRACKET IS STILL A PRINT, AND IT IS MEASURED: 206 TIMES IN 16 WEEKS.**
     Step 21 below names this; instrumenting `solveClearingStat` counted it. Over the 16-week
     reference, cumulative: **67 solves returned the TIGHT bracket** (`demandAtU(uLo) > targetUSD`
@@ -901,7 +890,10 @@ step that owns its node; where it does not yet, the step below is the owner.
     `capexUnderConstruction` lag as any capex, it posts nothing until the plant is in service,
     and its revenue share is what it then sells. Entry and exit (20d-ii) together are what
     makes a sector's line-up an outcome.
-37-BANKEQUITY. **A BANK CANNOT RAISE CAPITAL, AND IT HAS ONE LAYER OF IT.** (banks-capital
+37-BANKEQUITY. **A BANK CANNOT RAISE CAPITAL, AND IT HAS ONE LAYER OF IT.** (Also here, from
+    20-LLR-iv: what one bank's run says about the others — `banks-funding-and-liquidity.md` E5 —
+    the contagion of a failure across the sector's funding, which a bank with only retained
+    earnings for capital cannot answer.) (banks-capital
     A2.b/A2.c, A3, C2/C2.a/C2.b, B2; banks-funding A3.) No bank issues equity —
     `evolveBankingSector` records the old equity-rescale write as deleted and says a bank "stays
     undercapitalized until a real equity raise exists" — and no bank issues a subordinated tranche,
@@ -1443,6 +1435,16 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20-LLR-iv — A BANK CAN FAIL FOR LIQUIDITY.** 20-LLR is closed with this. Resolution triggered on
+  capital alone (`isBankUnderPca`, a book ratio); `domain/bank-resolution.ts:isBankIlliquid` is the
+  second trigger, distinct: a bank whose account at the central bank is below zero after the close's
+  market and window have run — the repo books, the unsecured book on its name, the seat it was
+  eligible for — cannot pay, and `bank-resolution` closes it for that whatever its capital ratio
+  says; the resolution's news names which trigger fired. `money-market.md` D4 ✅,
+  `banks-funding-and-liquidity.md` D6 ✅, `banks-capital-and-resolution.md` C1.a ✅ (C1's book-ratio
+  test stays ⚠️, D1's). E5 — what one bank's run says about the others — noted on 37-BANKEQUITY.
+  Gates green; no run.
 
 **20-LLR-iii — THE THREE QUESTIONS, ANSWERED.** With a bank that cannot fund now having somewhere to
   be, the three constraints 20-LLR first proposed as patches are mechanisms. (1) A penalty on the

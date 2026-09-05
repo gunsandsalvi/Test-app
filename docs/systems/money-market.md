@@ -127,7 +127,7 @@ checked by `scripts/check-atlas.sh`.
 | D1 it shrinks: it sells assets, in a real book | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:liquidityFloorLocal` | ✅ |
 | D2 it bids up for deposits, and depositors respond | `src/engine/macro/banking.ts:liquidityShortfallShare` | ⚠️ |
 | D3 it draws the facility, at the penalty, against collateral | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
-| **D4 it FAILS — for liquidity, with a distinct trigger** | `src/domain/bank-resolution.ts:isBankUnderPca` | ❌ |
+| **D4 it FAILS — for liquidity, with a distinct trigger** | `src/domain/bank-resolution.ts:isBankIlliquid` | ✅ |
 | **D5 a RUN: depositors withdraw because they observe weakness** | `src/engine/simulation/stages/depositor-flight.ts:runDepositorFlight` | ✅ |
 | D5.a what they observe must be observable | `src/ui/objects/company.tsx:bankCapitalRatio` | ✅ |
 | D5.b VERIFY a run is self-reinforcing | `src/domain/region-macro.ts:depositorFlightLocal` | ⚠️ |
@@ -151,8 +151,10 @@ runs inside `bank-funding-close.ts`, after `settlement-close` has settled the we
 the standing facility as the posted-rate seat at the top of the corridor), then unsecured on the
 name (`interbank.ts`), then the overnight window takes what was left unlent, round by round until
 nothing moves. The need is read on settled reserves plus the legs already posted. C5 and D6 below
-are what is still wrong at that close, and D4 (a bank that fails for liquidity) is what the
-unbounded loan still forecloses; A3.a is no longer the cause of them.
+were what was still wrong at that close, and are closed below (§9.20-LLR-ii, -iii); D4 — a bank
+that fails for liquidity — is `bank-resolution.ts:isBankIlliquid` since §9.20-LLR-iv: overdrawn at
+the central bank after the market and the window have run, the supervisor closes it, capital ratio
+or no. A3.a is no longer the cause of any of them.
 
 ### ✅ C5 / D6 — THE ONLY FACILITY IS THE SEAT, AND IT HAS BAGEHOT'S FOUR
 

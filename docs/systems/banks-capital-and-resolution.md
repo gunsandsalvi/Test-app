@@ -96,7 +96,7 @@ checked by `scripts/check-atlas.sh`.
 | B3 breaching triggers consequences before failure | `src/engine/macro/banking.ts:targetPayoutRatio` | ✅ |
 | B3.a VERIFY a bank near the line behaves differently | `src/engine/simulation/stages/bank-lending.ts:headroomLocal` | ⚠️ |
 | **C1 insolvency is assets < liabilities, distinct from illiquidity** | `src/domain/bank-resolution.ts:isBankUnderPca` | ⚠️ |
-| **C1.a solvent and illiquid, or insolvent and liquid** | — | ❌ |
+| **C1.a solvent and illiquid, or insolvent and liquid** | `src/domain/bank-resolution.ts:isBankIlliquid` | ✅ |
 | C2 recapitalisation first, if somebody will provide it | `src/engine/simulation/stages/bank-resolution.ts:injectionLocal` | ⚠️ |
 | **C2.a existing holders diluted, new money priced** | — | ❌ |
 | C2.b it can fail — nobody has to buy | — | ❌ |
@@ -122,7 +122,11 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ⚠️ C1 / C1.a — THE ONLY WAY TO FAIL IS CAPITAL, AND THE TEST IS A BOOK RATIO. KNOWN(20-LLR)
+### ⚠️ C1 / ✅ C1.a — THERE ARE TWO WAYS TO FAIL NOW, AND THE CAPITAL TEST IS STILL A BOOK RATIO
+
+*2026-09-05 (§9.20-LLR-iv): C1.a's second cell is live. `isBankIlliquid` — overdrawn at the central
+bank after the close's market and window have run — closes a solvent bank for liquidity, beside the
+capital test; the resolution names which trigger fired. C1's own defect below stands.*
 
 `isBankUnderPca` is `sheet.bankEquityLocal < bankRwaLocal(sheet) * PCA_CAPITAL_RATIO` (2%), and
 `bank-resolution.ts:116` is the only caller that closes a bank. So:
@@ -132,14 +136,9 @@ checked by `scripts/check-atlas.sh`.
   (`macro/banking.ts:463`: `sovereignLocal * 0.0`), so a bank whose entire balance sheet is
   government bonds has `rwaLocal ≈ 0` and falls into `isBankUnderPca`'s second branch,
   `bankEquityLocal < 0`. Its equity has to go outright negative before anything happens.
-- **there is no other trigger at all.** C1.a's two-by-two — solvent/illiquid and insolvent/liquid —
-  has only one live cell, and 20-LLR states the count: "the overwhelming majority of bank failures
-  are funding events" and the model has none.
-
-**Already §3 step 20-LLR** (second of its three compounding failures). Its resolution is a
-*liquidity* trigger, which cannot be written until the funding shortfall is real — i.e. after
-20-LLR's ordering fix. C1's own defect (book RWA standing in for a valuation) is separate and joins
-D1 below.
+- there WAS no other trigger, and since §9.20-LLR-iv there is: the liquidity trigger above,
+  written once the funding shortfall was real (20-LLR's ordering fix). C1's own defect (book RWA
+  standing in for a valuation) is separate and joins D1 below.
 
 ### ❌ D1 / D2.a — THERE IS NO VALUATION, SO THERE IS NO HOLE. NEW
 

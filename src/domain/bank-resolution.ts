@@ -31,6 +31,18 @@ export function assumingCapitalLocal(sheet: BankingSector, facilityBookLocal: nu
 }
 
 /** Under prompt corrective action: capital below the closure ratio, or no capital at all. */
+/**
+ * §3.20-LLR-iv — A BANK CAN FAIL FOR LIQUIDITY, WITH A DISTINCT TRIGGER. A bank whose account at
+ * the central bank is below zero AFTER the close's market and window have run — the repo books,
+ * the unsecured book on its name, the standing-facility seat it was eligible for — is a bank that
+ * cannot pay: nobody would fund it and the central bank has no line for it. The supervisor closes
+ * it for that whether or not its capital ratio says so (`banks-capital-and-resolution.md` C1.a:
+ * solvent and illiquid is a live cell now). The trigger is the recorded state, not a count.
+ */
+export function isBankIlliquid(reservesAfterMarketLocal: number): boolean {
+  return reservesAfterMarketLocal < -1;
+}
+
 export function isBankUnderPca(sheet: BankingSector, facilityBookLocal: number): boolean {
   const rwaLocal = bankRwaLocal(sheet, facilityBookLocal);
   if (rwaLocal > 0) return sheet.bankEquityLocal < rwaLocal * PCA_CAPITAL_RATIO;

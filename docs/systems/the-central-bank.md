@@ -145,8 +145,8 @@ D4 holds: a bank out of eligible paper is not a borrower at the seat, and after 
 on its name (§9.20b) has taken what surplus banks will lend it, it ends the week short — recorded on
 the region (`bank-funding-close.ts:recordFundingShortfalls`) and told by the news. What a bank
 overdrawn at the central bank pays is the penalty rate at the open (`chargeOverdrawnReserves`), and
-its uninsured depositors leave it (`depositor-flight.ts`) — §9.20-LLR-iii. What is left is that a
-bank can FAIL for it: **§3 step 20-LLR-iv**.
+its uninsured depositors leave it (`depositor-flight.ts`) — §9.20-LLR-iii — and a bank overdrawn
+after all that is closed for it (`bank-resolution.ts:isBankIlliquid`, §9.20-LLR-iv).
 
 In FOREIGN money the swap lines (`domain/swap-lines.ts`, `stages/swap-lines.ts`) lend freely and at
 a penalty — drawn by the central bank from the other central bank and on-lent to its banks for a

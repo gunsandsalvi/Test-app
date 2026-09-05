@@ -113,7 +113,7 @@ checked by `scripts/check-atlas.sh`.
 | **D4 shrinks its assets: it stops lending** | `src/domain/banking.ts:bankRunsOffItsBook` · `src/engine/simulation/stages/bank-lending.ts:runBankWeeklyLending` | ⚠️ |
 | D4.a which transmits into the credit book | — | ❌ |
 | D5 draws the facility, collateralised, at a penalty | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ⚠️ |
-| **D6 it can FAIL TO FUND ITSELF** | `src/domain/bank-resolution.ts:isBankUnderPca` | ❌ |
+| **D6 it can FAIL TO FUND ITSELF** | `src/domain/bank-resolution.ts:isBankIlliquid` | ✅ |
 | **D6.a FORBID no unbounded, uncollateralised, unpriced line** | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
 | **E1 depositors can leave; A1.c leaves fastest** | `src/engine/simulation/stages/depositor-flight.ts:runDepositorFlight` | ✅ |
 | **E2 they leave because they observe something** | — | ❌ |
@@ -132,14 +132,18 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ D6 / ✅ D6.a E1 E3 E4.a / ⚠️ E3.a / ❌ E5 — THE LIABILITY SIDE HAS A CONSTRAINT AND A RUN, AND STILL NO FAILURE MODE
+### ✅ D6 D6.a E1 E3 E4.a / ⚠️ E3.a / ❌ E5 — THE LIABILITY SIDE HAS A CONSTRAINT, A RUN, AND A FAILURE MODE
+
+*2026-09-05 (§9.20-LLR-iv): D6 holds — a bank overdrawn at the central bank after the close's market
+and window have run is closed by the supervisor for that (`bank-resolution.ts:isBankIlliquid`),
+whatever its capital ratio; the resolution's news says which trigger fired.*
 
 *2026-09-05 (§9.20-LLR-iii): the run exists. A bank that ended the week short is on the region's
 record; its uninsured depositors — firms and institutions, the household line being insured (E4) —
 leave for the soundest bank, each when the bank has been short for as many closes as its own
 management's patience, and the deposit takes its reserves with it (`depositor-flight.ts`). E1, E3
 and E4.a hold; E3.a is measurable on `depositorFlightLocal`; E5 (what one bank's run says about
-the others) is not read. D6 — that the bank can FAIL for it — is §3 step 20-LLR-iv.*
+the others) is not read.*
 
 *2026-09-05 (§9.20-LLR-ii): D6.a holds — the unbounded line is deleted; the only central-bank
 lending is the collateral-bounded, priced seat in the repo book at the close, and a bank it will
