@@ -553,14 +553,6 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-28. **The harness's own defects.** *(The first — the NaN per-bank identity — is DONE, with the
-    over-pledge and SME-cash reads that were dead the same way; §9's lint entry.)*
-    `:2600` reads book-weighted regional averages for the capital and NIM bands, so a minority of
-    banks below the floor can never report — iterate the named banks. `:592` computes a central-bank
-    identity and `void`s it. `:296` skips any class with zero outstanding (a claim against a retired
-    ladder passes vacuously). `:802` NaN purity covers 12 fields and no holdings, prices, accounts or
-    derivatives. `:2690` skips every firm born mid-run. `:1721` re-derives depreciation as
-    `grossPPE/12` rather than the engine's schedule.
 29. **The gates actually gate.** `check-hygiene.sh:110`'s fraction ratchet drops whole lines
     containing `toFixed(` — the tree's commonest idiom — so the budget cannot see them; `:36`'s
     asset-switch pattern matches only a literal on the right, so `'EQUITY' === x` or `.includes(x)`
@@ -1335,6 +1327,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**28 — THE HARNESS'S OWN DEFECTS.** Six named; two were already gone. The capital and NIM bands
+  read each region's book-weighted aggregate, so a minority of banks below the floor could never
+  report — they iterate the named banks' own sheets now. The central-bank identity that was
+  computed and `void`ed (the audit's M1 owns it) is deleted, not voided. NaN purity covered twelve
+  fields on the objects and none of the stores: it now walks every holding row of every company,
+  institution and household book (`units`, `qtyLocal`, `lienUnits`, `accruedLocal`), every cleared
+  price, every account row's balance and lien, and every derivative contract's notional, strike,
+  units, margin and mark — a NaN passes every `>` test silently, which is how the per-bank identity
+  passed every bank every week. A firm born mid-run has a revenue baseline (its first week), so the
+  ×20 check sees it. The zero-outstanding skip died with the harness's private ownership walk
+  (§9.13-READ A9: the check is the audit's O1, which fires on paper held against nothing), and the
+  `grossPPE/12` depreciation died with the plant register (§9.26-f-i: the harness reads
+  `plantDepreciationAnnualLocal`). Gates green; no run (rule 11).
 
 **27-iv — THE BASIS IS ARBITRAGED AT EVERY TENOR THE PROTECTION BOOK PRINTS.** `readCdsBasis` read
   the CDS–cash basis at the benchmark tenor only; the 1y/3y/10y books opened at the issuer's cash

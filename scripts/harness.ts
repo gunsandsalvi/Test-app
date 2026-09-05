@@ -128,7 +128,9 @@ import { ProductLine } from '../src/domain/company';
 import { HouseholdLoanPool, MortgageVintage } from '../src/domain/banking';
 import { executeTrade } from "../src/engine/simulation/trade";
 import { isPubliclyListed, isActiveCompany, banksOf } from '../src/domain/company';
-import { ensureV2 } from '../src/engine2/world';
+import { ensureV2, instrumentOf } from '../src/engine2/world';
+import { bookRowsOf, instrumentIdAt } from '../src/engine2/holdings';
+import { householdBookId } from '../src/engine/ledger/holdings-ledger';
 import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
 import { issuedSharesOf, etfSharesOutstandingOf } from '../src/engine2/instruments';
 import { derivativesOf, repoBookOf, publishRepoBook, tradeInvoicesOf, bankAtHouseLocal, houseViewOf } from '../src/engine/ledger/contract-ledger';
@@ -148,7 +150,7 @@ import { mortgageSeverityAtLtv, vintageCurrentLtv, householdBookRwaLocal } from 
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS } from '../src/engine/macro/banking';
 import { VIEW_CAPITAL_GOOD_IDS } from '../src/domain/industry-registry';
 import { centralBankAssetsLocal, centralBankFxReservesLocal } from '../src/domain/central-bank';
-import { centralBankBookLocal, centralBankSovereignAssetsLocal, centralBankPositions, bankSovereignBookLocal, bankSovereignPositions, bankSovereignFaceByBond, lienFaceLocal } from '../src/engine/sovereign-register';
+import { centralBankSovereignAssetsLocal, centralBankPositions, bankSovereignBookLocal, bankSovereignPositions, bankSovereignFaceByBond, lienFaceLocal } from '../src/engine/sovereign-register';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
 import { unclassifiedReasons } from '../src/engine/simulation/stages/settlement';
 import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
@@ -519,18 +521,9 @@ function checkCentralBankIdentity(state: GameState, week: number) {
   REGION_IDS_SEED_ORDER.forEach((region) => {
     const cb = state.regions[region]?.centralBankSheet;
     if (!cb) return;
-    const reserves = banksOf(state.companies, region)
-      .reduce((a, c) => a + bankReservesOf(ensureV2(state), c.id), 0);
-    // XB5: the asset side is the sovereign book PLUS the FX reserves. Leaving the reserves out
-    // here while the engine counts them made the identity fail by exactly their size — 231 of
-    // 273 violations at the XB close, and a harness bug rather than an engine one.
-    const sovereignBook = centralBankBookLocal(ensureV2(state), region);
-    const fxBook: Record<string, number> = cb.fxReservesByRegion ?? {};
-    const fxReserves = Object.keys(fxBook).reduce((a, k) => a + (Number(fxBook[k]) || 0), 0);
-    const assets = sovereignBook + fxReserves;
-    // §5-CLOSE: the identity itself is the audit's M1 (scripts/audit/money.ts), asserted to the
-    // dollar with no unbacked term; what stays here are the central bank's own operating rules.
-    void assets; void reserves;
+    // §5-CLOSE: the balance-sheet identity itself is the audit's M1 (`audit/money.ts`), asserted
+    // to the dust with no unbacked term; §3.28 deleted the copy that was computed here and
+    // `void`ed. What stays are the central bank's own operating rules.
     // A3.5: the treasury cannot overdraw — the negative side of its account row is the advance.
     // PUB2b: the book may only move by redemption and by fills against an order it actually
     // placed. A week whose fill exceeds the order is the auction handing the central bank paper
@@ -770,6 +763,35 @@ function checkNaNAndPurity(state: GameState, week: number) {
   if (isNaN(idx.marketBreadth) || isNaN(idx.globalCreditComposite?.value)) {
     violations.push({ week, message: 'NaN/Infinity in composite indices' });
   }
+
+  // §3.28: the STORES, not twelve fields on the objects. A NaN in a holding's units, a cleared
+  // price, an account's balance or a contract's notional passes every `>` test silently
+  // (`Math.abs(NaN) > x` is false — the per-bank identity check passed every bank every week that
+  // way), so the one place it can be caught is here, on every row, every week.
+  const v2 = ensureV2(state);
+  const H = v2.holdings;
+  const bad = (x: number) => !Number.isFinite(x);
+  const bookIds = [...state.companies.map((c) => c.id), ...state.institutionalEntities.map((e) => e.id), ...REGION_IDS.map((r) => householdBookId(r))];
+  let badRows = 0, badRowExample = '';
+  bookIds.forEach((bookId) => {
+    bookRowsOf(v2, bookId).forEach((r) => {
+      // `shares` is NaN by design where the row is not counted in shares; `units` is the quantity.
+      if (bad(H.units[r]) || bad(H.qtyLocal[r]) || bad(H.lienUnits[r]) || bad(H.accruedLocal[r])) { badRows++; if (!badRowExample) badRowExample = `${bookId} ${instrumentIdAt(v2, r)}`; }
+    });
+  });
+  if (badRows) violations.push({ week, message: `NaN/Infinity in ${badRows} holding rows (first: ${badRowExample})` });
+  let badPrices = 0, badPriceExample = '';
+  v2.prices.byIdRef.forEach((price, ref) => { if (bad(price)) { badPrices++; if (!badPriceExample) badPriceExample = instrumentOf(v2, ref); } });
+  if (badPrices) violations.push({ week, message: `NaN/Infinity in ${badPrices} cleared prices (first: ${badPriceExample})` });
+  const A = v2.accounts;
+  let badAccounts = 0;
+  for (let i = 0; i < A.n; i++) if (bad(A.balance[i]) || bad(A.lien[i])) badAccounts++;
+  if (badAccounts) violations.push({ week, message: `NaN/Infinity in ${badAccounts} account rows` });
+  let badContracts = 0, badContractExample = '';
+  derivativesOf(v2).forEach((c) => {
+    if (bad(c.notional) || bad(c.strike) || (c.units !== undefined && bad(c.units)) || bad(c.initialMarginLocal) || (c.settledMarkLocal !== undefined && bad(c.settledMarkLocal))) { badContracts++; if (!badContractExample) badContractExample = `${c.classId} ${c.id}`; }
+  });
+  if (badContracts) violations.push({ week, message: `NaN/Infinity in ${badContracts} derivative contracts (first: ${badContractExample})` });
 }
 
 function checkOwnershipConservation(state: GameState, week: number) {
@@ -2519,22 +2541,26 @@ function runHarness() {
       }
     });
 
-    // 6. Bank capital ratio & NIM bands — every region (§4.0 Tier 1 item 17: only the USA was
-    // banded, so EUR banks printed negative margins for the model's whole life unwatched).
+    // 6. Bank capital ratio & NIM bands — every NAMED bank in every region (§4.0 Tier 1 item 17:
+    // only the USA was banded, so EUR banks printed negative margins for the model's whole life
+    // unwatched; §3.28: the band then read the region's book-weighted aggregate, so a minority of
+    // banks below the floor could never report — the aggregate is a sum, and a sum has no floor).
     REGION_IDS_SEED_ORDER.forEach((rid) => {
-      const bank = state.regions[rid].bankingSector;
-      if (bank.bankCapitalRatio < 0.05 || bank.bankCapitalRatio > 0.35) {
-        violations.push({
-          week: w,
-          message: `${rid} Bank capital ratio out of band [0.05, 0.35]: ${bank.bankCapitalRatio.toFixed(4)}`
-        });
-      }
-      if (bank.netInterestMarginPct < 0.01 || bank.netInterestMarginPct > 0.08) {
-        violations.push({
-          week: w,
-          message: `${rid} Bank NIM out of band [0.01, 0.08]: ${bank.netInterestMarginPct.toFixed(4)}`
-        });
-      }
+      banksOf(state.companies, rid).forEach((b) => {
+        const sheet = b.bankBalanceSheet!;
+        if (sheet.bankCapitalRatio < 0.05 || sheet.bankCapitalRatio > 0.35) {
+          violations.push({
+            week: w,
+            message: `${rid} ${b.ticker} capital ratio out of band [0.05, 0.35]: ${sheet.bankCapitalRatio.toFixed(4)}`
+          });
+        }
+        if (sheet.netInterestMarginPct < 0.01 || sheet.netInterestMarginPct > 0.08) {
+          violations.push({
+            week: w,
+            message: `${rid} ${b.ticker} NIM out of band [0.01, 0.08]: ${sheet.netInterestMarginPct.toFixed(4)}`
+          });
+        }
+      });
     });
 
     // 7. EPS accuracy on a company that enters the world LISTED.
@@ -2546,6 +2572,9 @@ function runHarness() {
     state.companies.forEach(c => {
       if (!knownTickers.has(c.ticker)) {
         knownTickers.add(c.ticker);
+        // §3.28: a firm born mid-run has a baseline too — its first week — so the ×20 revenue
+        // check below sees it; it used to see only the seed's firms.
+        initialRevenueByTicker.set(c.ticker, c.annualRevenue);
         const issuedShares = issuedSharesOf(ensureV2(state), c.id);
         if (isPubliclyListed(c) && issuedShares > 0) {
           const calcEps = c.netIncome / issuedShares;
