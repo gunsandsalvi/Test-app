@@ -33,7 +33,7 @@ export type InstrumentKind =
   | 'ETF_SHARE' | 'MMF_SHARE' | 'PE_FUND_INTEREST'
   // The books the adapters clear (§3.13-BOOK dII): nobody issues them, nobody holds them.
   | 'IRS' | 'CDS' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'REPO' | 'SBL'
-  // The player's two classes with no engine market behind them yet.
+  // §3.17b-iii: the index option book, cleared like the others. TRS has no class and no market.
   | 'OPTION' | 'TRS'
   // §3.13-BOOK f3: a firm's input inventory — a good, on its own book, in the good's own units.
   | 'GOOD';
@@ -190,6 +190,8 @@ export const isIssuerEquityRow = (h: { instrumentType?: string }): boolean =>
  *  (the wire's quantity is dollars at 1). The one fact the ledger, the primary and a merger's
  *  exchange all need, owned here. */
 export const heldInShares = (type: string): boolean => moduleOf(type)?.countedIn === 'SHARES';
+/** The kinds whose class is equity — what an index put covers (§3.17b-iii). */
+export const isEquityClass = (type: string): boolean => holdingClassOf(type) === 'EQUITY';
 
 /** §5-WIRES W3 — the kind of paper a debt tranche IS: a bank facility on the lender's book, commercial
  *  paper, a floating-rate loan, or a fixed-rate bond. The tranche ledger's wires carry this kind

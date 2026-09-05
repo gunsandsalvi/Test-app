@@ -208,16 +208,16 @@ function freeRow(S: ObligationStore, r: number): void {
   S.next[r] = S.freeHead; S.freeHead = r;
 }
 
-const REF_KINDS = ['RATE', 'ISSUER', 'COMMODITY', 'REGION', 'SHARES'] as const;
+const REF_KINDS = ['RATE', 'ISSUER', 'COMMODITY', 'REGION', 'SHARES', 'INDEX'] as const;
 const refKindIdOf = (r: DerivativeReference): number => REF_KINDS.indexOf(r.kind);
 const refTextOf = (r: DerivativeReference): string | undefined =>
-  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' ? r.regionId : undefined;
+  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' || r.kind === 'INDEX' ? r.regionId : undefined;
 function referenceAt(S: ReadonlyObligationStore, r: number): DerivativeReference {
   const kind = REF_KINDS[S.refKind[r]];
   const text = S.refText[r] ?? '';
   return kind === 'ISSUER' || kind === 'SHARES' ? { kind, issuerId: asEntityId(text) }
     : kind === 'COMMODITY' ? { kind, commodityId: text }
-      : kind === 'REGION' ? { kind, regionId: text as RegionId }
+      : kind === 'REGION' || kind === 'INDEX' ? { kind, regionId: text as RegionId }
         : { kind: 'RATE' };
 }
 

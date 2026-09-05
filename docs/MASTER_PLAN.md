@@ -549,11 +549,6 @@ written from here):
 
 17b. **An options class, and the FX swap lines** — split 2026-09-05, one commit each; 17b-i
     (the option class on the one book) is in §9. What is left, in order:
-17b-iii. **THE OPTIONS MARKET.** Index puts per region: the equity holders' need for downside
-    cover sized by the hedging arithmetic every other market uses (`hedging.ts`), written by the
-    desks and the volatility sellers at a CLEARED implied volatility (the stat), struck through
-    the house like every class. Then the class prices at the implied volatility the book
-    clears, not the realised one.
 17b-iv. **THE FX FUNDING MARKET.** `fx-forwards-and-xcs.md` B2, B4, C1: a term book per pair
     where a bank short a currency borrows it against its own for a term — the cross-currency
     swap, a class on the one book with two notionals exchanged — cleared at the basis the
@@ -1622,6 +1617,34 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17b-iii — THE OPTIONS MARKET.** Index puts, per region
+(`derivative-markets/option.ts:runOptionMarket`, the class's slot filled). WHO NEEDS COVER: every
+institution with an equity book (`institutionBookLocal` over `assets:isEquityClass`), sized by
+the one hedging arithmetic every other market uses — `exposureToHedgeLocal` with the book as the
+exposure, the holder's own surplus as what absorbs a one-sigma fall over the tenor (the index's
+realised vol × √(13/52)), its management's risk aversion — less the puts it already holds
+(`standing.coverLocal('OPTION','a', …, region)`), no more than it can margin at the house. WHO
+WRITES: the banks' desks on the one derivative budget and the hedge funds whose strategy sells
+volatility (`HedgeFundStrategyProfile.sellsVolatility`: global macro and long/short equity),
+each at a RESERVATION VOLATILITY — `option.ts:writerReservationVol`: the volatility it expects
+to realise plus the premium that pays its required return on the capital the position consumes
+(the class's PFE add-on against the leverage floor), turned into vol points through the
+at-the-money identity price ≈ 0.4·S·σ·√T (`ATM_PRICE_PER_VOL_SQRT_T`, tested against
+Black–Scholes). THE BOOK: one instrument per region (`indexOptionInstrumentId`, kind `OPTION`
+admitted to `registerBook`), stat the implied volatility in vol points, YIELD_LIKE, cleared by
+`clearFinancialAsset` from the writers' schedules against the holders' float; the region
+publishes `indexImpliedVol` and the view's `indexAnnualVol` reads it first, so the class prices
+at the implied volatility the book clears and the realised one only before a print. THE
+STRIKE: at-the-money puts on the region's composite (`DerivativeReference` gains `INDEX`, a
+sixth arm; `indexReferenceOf`; the profile's `underlyingOf` serves shares and index alike) at
+the listed tenor (`OPTION_TENOR_WEEKS` = 13), each holder's cover drawn from each writer pro
+rata, admitted against the members' limits, struck, margined; the premium fires in the settle
+that follows. The strike is at the latest PUBLISHED index level (stage 12 recomputes the index
+after this phase) — stated, not hidden. `test/derivatives.test.ts`: the put on the index, its
+margin on the index's move, a fall pays the fall; the reservation is the realised vol with no
+capital, more with; the at-the-money identity within 0.2 points of Black–Scholes. Gates green;
+no run.
 
 **17b-ii — THE LEGACY DERIVATIVE LAYER IS DELETED.** `derivative.md` D1.a: stage 12 marked six
 position kinds — IRS, CDS, TRS, XCS, COMMODITY_FUTURE, OPTION — by formula, against nobody, and

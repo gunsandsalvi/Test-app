@@ -112,17 +112,19 @@ export interface HedgeFundStrategyProfile {
   readonly runsFxDirectional: boolean;
   /** Hedges the currency on its foreign equity; a macro book does not, the currency IS the trade. */
   readonly hedgesForeignEquity: boolean;
+  /** §3.17b-iii — writes index options: sells the volatility the equity holders buy cover against. */
+  readonly sellsVolatility: boolean;
 }
 
 export const HEDGE_FUND_STRATEGY_PROFILES: Record<HedgeFundStrategy, HedgeFundStrategyProfile> = {
   // Rates and FX: a large liquid book against which to run directional risk, and the biggest
   // cash sleeve of the four, because its positions are margin and its dry powder is the point.
-  GLOBAL_MACRO:      { targets: { govBondPct: 0.45, corpBondPct: 0.05, loanPct: 0,    equityPct: 0.20, cashPct: 0.30 }, pricesOffRecovery: false, shortsEquity: false, tradesCommodityFutures: true,  runsFxDirectional: true,  hedgesForeignEquity: false },
-  LONG_SHORT_EQUITY: { targets: { govBondPct: 0.02, corpBondPct: 0.03, loanPct: 0,    equityPct: 0.80, cashPct: 0.15 }, pricesOffRecovery: false, shortsEquity: true,  tradesCommodityFutures: false, runsFxDirectional: false, hedgesForeignEquity: true  },
-  LONG_SHORT_CREDIT: { targets: { govBondPct: 0.03, corpBondPct: 0.52, loanPct: 0.30, equityPct: 0,    cashPct: 0.15 }, pricesOffRecovery: false, shortsEquity: false, tradesCommodityFutures: false, runsFxDirectional: false, hedgesForeignEquity: true  },
+  GLOBAL_MACRO:      { targets: { govBondPct: 0.45, corpBondPct: 0.05, loanPct: 0,    equityPct: 0.20, cashPct: 0.30 }, pricesOffRecovery: false, shortsEquity: false, tradesCommodityFutures: true,  runsFxDirectional: true,  hedgesForeignEquity: false, sellsVolatility: true },
+  LONG_SHORT_EQUITY: { targets: { govBondPct: 0.02, corpBondPct: 0.03, loanPct: 0,    equityPct: 0.80, cashPct: 0.15 }, pricesOffRecovery: false, shortsEquity: true,  tradesCommodityFutures: false, runsFxDirectional: false, hedgesForeignEquity: true , sellsVolatility: true },
+  LONG_SHORT_CREDIT: { targets: { govBondPct: 0.03, corpBondPct: 0.52, loanPct: 0.30, equityPct: 0,    cashPct: 0.15 }, pricesOffRecovery: false, shortsEquity: false, tradesCommodityFutures: false, runsFxDirectional: false, hedgesForeignEquity: true , sellsVolatility: false },
   // The distressed book is the one that must be able to bid when everyone else is at their
   // limit, which is what its unusually large sleeve and its conviction size are for.
-  DISTRESSED:        { targets: { govBondPct: 0,    corpBondPct: 0.40, loanPct: 0.35, equityPct: 0,    cashPct: 0.25 }, convictionMultiple: 4.0, pricesOffRecovery: true, shortsEquity: false, tradesCommodityFutures: false, runsFxDirectional: false, hedgesForeignEquity: true },
+  DISTRESSED:        { targets: { govBondPct: 0,    corpBondPct: 0.40, loanPct: 0.35, equityPct: 0,    cashPct: 0.25 }, convictionMultiple: 4.0, pricesOffRecovery: true, shortsEquity: false, tradesCommodityFutures: false, runsFxDirectional: false, hedgesForeignEquity: true, sellsVolatility: false },
 };
 
 /** The strategy profile of a hedge fund; undefined for every other kind (or an unlabelled one). */

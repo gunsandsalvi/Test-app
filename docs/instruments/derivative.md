@@ -125,6 +125,11 @@ worthless; margin on the shares' own move; the reference the issuer's `SHARES`. 
 (`derivative-markets/option.ts`) strikes nothing yet. The player's six kinds moving onto it, with
 the player as a party, is 17b-ii; a market for anyone else's options is 17b-iii.*
 
+*2026-09-05 (§9.17b-iii). The market exists: index puts per region, the equity holders' cover
+against the desks and the volatility sellers at a cleared implied volatility
+(`derivative-markets/option.ts:runOptionMarket`, `Region.indexImpliedVol`), the reference the
+region's `INDEX`; the class prices at the implied volatility the book clears.*
+
 `12-portfolio-and-positions.ts` runs a second, older derivative layer beside the one book, and it
 is the node's exact opposite. Six position kinds — `IRS` (:246), `CDS` (:294), `TRS` (:350),
 `COMMODITY` (:377), `OPTION` (:403), `XCS` (:466) — are priced by formula off

@@ -16,6 +16,8 @@ import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, standingPfeChargeLocal, 
 import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivatives/hedging';
 import { StandingBook } from '../src/domain/derivatives/standing-book';
 import { asEntityId } from '../src/domain/ids';
+import { writerReservationVol, ATM_PRICE_PER_VOL_SQRT_T } from '../src/domain/derivatives/classes/option';
+import { calculateBlackScholesGreeks } from '../src/engine/blackScholes';
 import { realisedUnsecuredRecoveryRate, CLAIM_SENIORITY, type Estate } from '../src/domain/estate';
 import { partyKey } from '../src/engine/ledger/party';
 
@@ -38,6 +40,9 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
   equityPrice: () => 100,
   equityAnnualVol: () => 0.3,
   equityWeeklyMove: () => 0.05,
+  indexLevel: () => 4000,
+  indexAnnualVol: () => 0.2,
+  indexWeeklyMove: () => 0.03,
   ...over,
 });
 
@@ -281,4 +286,23 @@ test('§3.17b-i OPTION: the premium is paid once in the strike week, the mark is
   const putExercised = DERIVATIVE_CLASSES.OPTION.eventTermination(put, view({ week: 36, equityPrice: () => 90 }))!;
   assert.ok(Math.abs(putExercised.usdToB - -10_000) < 1e-9, 'a put pays the fall through the strike');
   assert.equal(DERIVATIVE_CLASSES.OPTION.closeOutMoveOf(call, view()), 0.05, 'margin on the shares\' own move');
+});
+
+test('§3.17b-iii OPTION on an index: the put is on the region\'s composite, and a writer\'s reservation is a volatility', () => {
+  const put = base({ classId: 'OPTION', reference: { kind: 'INDEX', regionId: 'USA' }, termKey: 'PUT', strike: 4000, units: 25, notional: 100_000, struckWeek: 10, maturityWeek: 23 });
+  const v = view({ week: 10, indexLevel: () => 4000, indexAnnualVol: () => 0.2 });
+  const prem = DERIVATIVE_CLASSES.OPTION.periodicLegUSDToB(put, v)!;
+  assert.ok(prem.usdToB > 0, 'the holder pays a premium at strike');
+  assert.equal(DERIVATIVE_CLASSES.OPTION.closeOutMoveOf(put, v), 0.03, 'margin on the index\'s own move');
+  const fell = DERIVATIVE_CLASSES.OPTION.eventTermination(put, view({ week: 23, indexLevel: () => 3600 }))!;
+  assert.ok(Math.abs(fell.usdToB - -(400 * 25)) < 1e-9, 'a 10% fall pays the fall on the units');
+  // The reservation: realised vol plus the premium that pays the return on the capital consumed.
+  const r0 = writerReservationVol({ realisedVol: 0.2, capitalChargeRate: 0, requiredReturnAnnual: 0.1, tenorYears: 0.25 });
+  assert.equal(r0, 0.2, 'no capital consumed: the writer asks for what it expects to realise');
+  const r1 = writerReservationVol({ realisedVol: 0.2, capitalChargeRate: 0.003, requiredReturnAnnual: 0.1, tenorYears: 0.25 });
+  assert.ok(r1 > 0.2, 'capital consumed: a premium in vol points');
+  // The approximation the reservation rests on: an at-the-money price is ~0.4 · S · σ · √T.
+  const S = 100, T = 0.25, vol = 0.2;
+  const bs = calculateBlackScholesGreeks(S, S, T, 0, vol, 'PUT').price;
+  assert.ok(Math.abs(bs / S - ATM_PRICE_PER_VOL_SQRT_T * vol * Math.sqrt(T)) < 0.002, `ATM price ${bs} against the approximation`);
 });

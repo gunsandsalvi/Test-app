@@ -98,7 +98,7 @@ checked by `scripts/check-atlas.sh`.
 | A2 the exposure is managed, and how is this system | `src/engine/simulation/stages/derivatives.ts:runDerivativesStage` · `src/engine/simulation/stages/derivative-markets/option.ts:OPTION_MARKET` | ✅ |
 | A3 the same obligation twice, one number from two sides | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ✅ |
 | A4 VERIFY Σ marks = 0 per contract and in aggregate | `src/engine/audit/ownership.ts:o9` | ✅ |
-| B1 two parties agree terms at a cleared price | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
+| B1 two parties agree terms at a cleared price | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` · `src/engine/simulation/stages/derivative-markets/option.ts:runOptionMarket` | ✅ |
 | B2 recorded on both books; one contract, not two | `src/engine/ledger/contract-ledger.ts:strikeDerivatives` | ✅ |
 | B3 closed by an offset, an early termination, or expiry | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ⚠️ |
 | B3.a an offset with a different counterparty does not remove the first | `src/domain/derivatives/standing-book.ts:StandingBook` | ✅ |

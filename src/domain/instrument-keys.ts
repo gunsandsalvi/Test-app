@@ -70,6 +70,10 @@ export const fxSpotInstrumentId = (pairKey: string): InstrumentId => asInstrumen
  */
 export const fxBasisInstrumentId = (pairKey: string): InstrumentId => asInstrumentId(`XCS-${pairKey}`);
 
+/** §3.17b-iii — one region's index option book, by kind (a put or a call). */
+export const indexOptionInstrumentId = (regionId: RegionId, optionType: string): InstrumentId =>
+  asInstrumentId(`${regionId}-OPT-${optionType}`);
+
 /** One commodity's futures contract at one delivery tenor, in whole months. */
 export const commodityFutureInstrumentId = (commodityId: string, tenorMonths: number): InstrumentId =>
   asInstrumentId(`FUT-${commodityId}-${tenorMonths}M`);

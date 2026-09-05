@@ -77,12 +77,14 @@ export type DerivativeReference =
    *  a reference names what the contract is ON, and the hygiene ratchet on instrument-kind literals must stay clean) (its `stockPrice` is the
    *  underlying's print; `termKey` says CALL or PUT, `strike` is the strike per share, `units`
    *  the shares). */
-  | { kind: 'SHARES'; issuerId: EntityId };
+  | { kind: 'SHARES'; issuerId: EntityId }
+  /** §3.17b-iii — an index option: the region whose composite equity index it is on. */
+  | { kind: 'INDEX'; regionId: RegionId };
 
 /** The standing book keys cover by reference; this is that key — the string the field used to
  *  hold, so a cover lookup by `issuer.id`, `comm.id` or a region still finds its contracts. */
 export const referenceKeyOf = (r: DerivativeReference): string =>
-  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' ? r.regionId : '';
+  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' || r.kind === 'INDEX' ? r.regionId : '';
 
 export const issuerReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): EntityId =>
   c.reference.kind === 'ISSUER' ? c.reference.issuerId : defect(`${c.classId} contract read as if it named an issuer`);
@@ -92,6 +94,8 @@ export const regionReferenceOf = (c: { classId: DerivativeClassId; reference: De
   c.reference.kind === 'REGION' ? c.reference.regionId : defect(`${c.classId} contract read as if it named a region`);
 export const sharesReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): EntityId =>
   c.reference.kind === 'SHARES' ? c.reference.issuerId : defect(`${c.classId} contract read as if it named an issuer's shares`);
+export const indexReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): RegionId =>
+  c.reference.kind === 'INDEX' ? c.reference.regionId : defect(`${c.classId} contract read as if it named an index`);
 /** §3.17b-i — the option's kind, as its `termKey` carries it. */
 export type OptionType = 'CALL' | 'PUT';
 export const optionTypeOf = (c: { classId: DerivativeClassId; termKey: string }): OptionType =>

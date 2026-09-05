@@ -189,6 +189,12 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
         ?? realizedAnnualVol(regionIndexOf(ctx.updatedCompositeIndices, c.region).historical, VOL_WINDOW_WEEKS);
     },
     equityWeeklyMove: (issuerId) => measuredWeeklyMove(priceSeriesOf(ctx, issuerId)),
+    // §3.17b-iii — the region's composite index: its level (last computed — stage 12 recomputes
+    // it after this phase, so a strike is at the latest published level), the IMPLIED vol its
+    // option book cleared when it has one and the realised vol before, and its weekly move.
+    indexLevel: (r) => { const v = regionIndexOf(ctx.updatedCompositeIndices, r).value; return v > 0 ? v : Number.NaN; },
+    indexAnnualVol: (r) => region(r)?.indexImpliedVol ?? realizedAnnualVol(regionIndexOf(ctx.updatedCompositeIndices, r).historical, VOL_WINDOW_WEEKS),
+    indexWeeklyMove: (r) => measuredWeeklyMove(regionIndexOf(ctx.updatedCompositeIndices, r).historical),
   };
 }
 

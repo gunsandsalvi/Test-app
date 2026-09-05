@@ -70,6 +70,11 @@ export interface DerivativeMarketView {
   equityAnnualVol(issuerId: EntityId): number | undefined;
   /** The shares' weekly move as a fraction of the price. */
   equityWeeklyMove(issuerId: EntityId): number | undefined;
+  // §3.17b-iii — THE INDEX an option is on: the region's composite level, its volatility (the
+  // IMPLIED one the options book cleared when it has, its realised one before), its weekly move.
+  indexLevel(regionId: RegionId): number;
+  indexAnnualVol(regionId: RegionId): number | undefined;
+  indexWeeklyMove(regionId: RegionId): number | undefined;
 }
 
 export interface DerivativeLeg {

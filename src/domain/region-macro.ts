@@ -913,6 +913,10 @@ export interface Region {
   /** §3.17-v-i — notional the clearing house cut from this week's strikes: what members wanted
    *  beyond the margin they could carry (`derivative-lifecycle.ts:admitContract`). A measure. */
   ccpRefusedNotionalLocal?: number;
+  /** §3.17b-iii — the implied volatility the region's index option book last cleared, annual. The
+   *  option class prices at it while it stands; the realised one before. Written by
+   *  `derivative-markets/option.ts`. */
+  indexImpliedVol?: number;
   /** PUB: matured paper that no named book ever bought — the front-of-ladder undersubscription
    *  the treasury auction leaves behind. It is not a payment; nobody was owed it. */
   lastUnsoldMaturedLocal?: number;
