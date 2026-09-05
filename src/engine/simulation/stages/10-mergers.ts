@@ -7,7 +7,7 @@
  * the sequence — see that file's header comment for why.)
  */
 
-import { movePlant, movePlantQueue } from '../../ledger/plant-ledger';
+import { movePlant, movePlantQueue, plantVintagesOf } from '../../ledger/plant-ledger';
 import { writePlantRows } from '../../ledger/plant-ledger';
 import { slicePlant, mergePlant } from '../../../domain/plant';
 import { restateBankSheetStatistics } from '../../../domain/bank-resolution';
@@ -157,11 +157,9 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     // §3.26-f-ii — the plant moves as vintages: the line's share of every vintage goes with the
     // spin-off (the machines keep their age), and so does that share of the construction queue —
     // the structuredClone had given BOTH books the whole queue, capital minted twice.
-    const split = slicePlant(parent.plant, share);
-    spin.plant = split.taken;
-    parent.plant = split.kept;
-    writePlantRows(ctx.v2, spin.id, spin.region, spin.plant); // §3.13-BOOK g-ii-b: the rows keep both registers
-    writePlantRows(ctx.v2, parent.id, parent.region, parent.plant);
+    const split = slicePlant(plantVintagesOf(ctx.v2, parent.id), share);
+    writePlantRows(ctx.v2, spin.id, spin.region, split.taken); // §3.13-BOOK g-ii: the rows are both registers
+    writePlantRows(ctx.v2, parent.id, parent.region, split.kept);
     const queue = parent.assetsUnderConstruction ?? [];
     spin.assetsUnderConstruction = queue.map((lot) => ({ ...lot, valueLocal: lot.valueLocal * share }));
     parent.assetsUnderConstruction = queue.map((lot) => ({ ...lot, valueLocal: lot.valueLocal * (1 - share) }));
@@ -222,7 +220,7 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     admitParty(companyParty(spin));
     // §3.26-f-iii — the plant and the queue moved above; here, once the spin-off is a party, the
     // wires that say so (the consideration is the shares minted below, so the price is nothing).
-    movePlant(companyParty(parent), companyParty(spin), spin.plant, 0, 'spin-off: plant carved out with the line');
+    movePlant(companyParty(parent), companyParty(spin), plantVintagesOf(ctx.v2, spin.id), 0, 'spin-off: plant carved out with the line');
     movePlantQueue(companyParty(parent), companyParty(spin), spin.assetsUnderConstruction ?? [], 'spin-off: construction in progress carved out');
     registerCompanyEquity(ctx.v2, spin, spinShares);
     if (openingCashLocal > 0) {
@@ -329,10 +327,10 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // its age and life), and so does its construction queue: a lot that has arrived and not yet
   // entered service is capital, and an acquired shell never commissions it.
   // §3.26-f-iii — and both moves are wires (the consideration is the tender above: shares and cash).
-  movePlant(companyParty(target), companyParty(acquirer), target.plant, 0, 'merger: plant to the acquirer');
+  const targetPlant = plantVintagesOf(ctx.v2, target.id); // §3.13-BOOK g-ii-d: the rows
+  movePlant(companyParty(target), companyParty(acquirer), targetPlant, 0, 'merger: plant to the acquirer');
   movePlantQueue(companyParty(target), companyParty(acquirer), target.assetsUnderConstruction ?? [], 'merger: construction in progress to the acquirer');
-  acquirer.plant = mergePlant(acquirer.plant, target.plant);
-  writePlantRows(ctx.v2, acquirer.id, acquirer.region, acquirer.plant); // §3.13-BOOK g-ii-b
+  writePlantRows(ctx.v2, acquirer.id, acquirer.region, mergePlant(plantVintagesOf(ctx.v2, acquirer.id), targetPlant)); // §3.13-BOOK g-ii
   acquirer.assetsUnderConstruction = [...(acquirer.assetsUnderConstruction ?? []), ...(target.assetsUnderConstruction ?? [])];
   target.assetsUnderConstruction = [];
 
@@ -550,8 +548,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   target.capex = 0;
   target.maintenanceCapex = 0;
   target.growthCapex = 0;
-  target.plant = [];
-  writePlantRows(ctx.v2, target.id, target.region, []); // §3.13-BOOK g-ii-b: the target's rows go with its plant
+  writePlantRows(ctx.v2, target.id, target.region, []); // §3.13-BOOK g-ii: the target's plant is the acquirer's now
 
   ctx.recentMergers.push({
     acquirerTicker: acquirer.ticker,

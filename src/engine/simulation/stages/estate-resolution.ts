@@ -247,9 +247,8 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     if (comp) {
       // The dead firm's register still wears while the workout runs (no rebuild retires it):
       // what wore out this week leaves it here, on the ledger, so W6 closes for an estate too.
-      const worn = retireWornPlant(comp.plant, ctx.nextWeek);
-      comp.plant = worn.plant;
-      writePlantRows(ctx.v2, comp.id, comp.region, comp.plant); // §3.13-BOOK g-ii-b
+      const worn = retireWornPlant(plantVintagesOf(ctx.v2, comp.id), ctx.nextWeek);
+      writePlantRows(ctx.v2, comp.id, comp.region, worn.plant); // §3.13-BOOK g-ii: the rows are the register
       retirePlant(comp.id, worn.retiredCostLocal);
     }
     estate.assets.ppeLocal = comp ? plantNetLocal(plantVintagesOf(ctx.v2, comp.id), ctx.nextWeek) : 0;
@@ -257,9 +256,8 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     const plant = sellPlantToBidders(ctx, estate, comp, ppeOfferedLocal);
     if (weeksLeft(ppeWeeks) <= 1 && comp) {
       // §3.26-f-iii — abandoned, on the ledger: a scrap is not a sale to nobody.
-      abandonPlant(comp.id, comp.plant.reduce((a, v) => a + v.costLocal, 0));
-      comp.plant = [];
-      writePlantRows(ctx.v2, comp.id, comp.region, []); // §3.13-BOOK g-ii-b
+      abandonPlant(comp.id, plantVintagesOf(ctx.v2, comp.id).reduce((a, v) => a + v.costLocal, 0));
+      writePlantRows(ctx.v2, comp.id, comp.region, []); // §3.13-BOOK g-ii: abandoned, off the rows
     }
     estate.assets.ppeLocal = comp ? plantNetLocal(plantVintagesOf(ctx.v2, comp.id), ctx.nextWeek) : 0;
     thisWeek.ppeSoldLocal += plant.soldLocal;
@@ -381,11 +379,13 @@ function sellPlantToBidders(
     // in the wrong kinds (buildings for a firm short of machines) adds little and is bid for as
     // little; a slice that completes the bidder's mix is worth its whole book. A5's value.
     const peerMix = capitalMixOf(peer.productLines, profileKeyOf(peer));
-    const probe = slicePlant(comp.plant, Math.min(1, offeredLocal / Math.max(1e-9, plantNetLocal(comp.plant, ctx.nextWeek))));
+    const estatePlant = plantVintagesOf(ctx.v2, comp.id); // §3.13-BOOK g-ii-d: both registers are rows
+    const peerPlant = plantVintagesOf(ctx.v2, peer.id);
+    const probe = slicePlant(estatePlant, Math.min(1, offeredLocal / Math.max(1e-9, plantNetLocal(estatePlant, ctx.nextWeek))));
     const probeNetLocal = plantNetLocal(probe.taken, ctx.nextWeek);
     const productiveShare = probeNetLocal > 0
-      ? Math.max(0, Math.min(1, (plantEffectiveNetLocal(mergePlant(peer.plant, probe.taken), peerMix, ctx.nextWeek)
-        - plantEffectiveNetLocal(peer.plant, peerMix, ctx.nextWeek)) / probeNetLocal))
+      ? Math.max(0, Math.min(1, (plantEffectiveNetLocal(mergePlant(peerPlant, probe.taken), peerMix, ctx.nextWeek)
+        - plantEffectiveNetLocal(peerPlant, peerMix, ctx.nextWeek)) / probeNetLocal))
       : 0;
     if (!(productiveShare > 0)) return; // nothing on offer it can use: no bid
     // §3.26-d: against ITS OWN cost of capital (one owner) — the region's long rate at its own
@@ -443,13 +443,11 @@ function sellPlantToBidders(
     // the dead firm's register (the machines keep their age and life), at the cleared price of
     // book; `takenLocal` is net book, the unit the auction cleared in.
     const remainingNetLocal = plantNetLocal(plantVintagesOf(ctx.v2, comp.id), ctx.nextWeek);
-    const split = slicePlant(comp.plant, remainingNetLocal > 0 ? Math.min(1, takenLocal / remainingNetLocal) : 0);
+    const split = slicePlant(plantVintagesOf(ctx.v2, comp.id), remainingNetLocal > 0 ? Math.min(1, takenLocal / remainingNetLocal) : 0);
     // §3.26-f-iii — the move is a PLANT wire at the price of book it cleared at.
     movePlant(companyPartyOf(estate.companyId), companyParty(peer), split.taken, takenLocal * price, 'estate plant sold at auction');
-    peer.plant = mergePlant(peer.plant, split.taken);
-    comp.plant = split.kept;
-    writePlantRows(ctx.v2, peer.id, peer.region, peer.plant); // §3.13-BOOK g-ii-b: the buyer's and the estate's rows
-    writePlantRows(ctx.v2, comp.id, comp.region, comp.plant);
+    writePlantRows(ctx.v2, peer.id, peer.region, mergePlant(plantVintagesOf(ctx.v2, peer.id), split.taken)); // §3.13-BOOK g-ii: the buyer's and the estate's rows
+    writePlantRows(ctx.v2, comp.id, comp.region, split.kept);
     estate.lastWeek?.buyerIds.push(peer.id);
     soldLocal += takenLocal;
   });

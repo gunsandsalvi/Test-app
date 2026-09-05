@@ -240,16 +240,3 @@ export function seedPlantVintages(
 export function seedMixOf(mix: Record<string, number>, lifeOf: (kind: string) => number): { kind: string; weight: number; usefulLifeYears: number }[] {
   return Object.entries(mix).filter(([, w]) => w > 0).map(([kind, weight]) => ({ kind, weight, usefulLifeYears: lifeOf(kind) }));
 }
-
-/** §3.13-BOOK g-ii-b — how far two registers of the same plant disagree: the cost by which a
- *  vintage (kind, life, service week) differs between them, summed — zero when they are one. The
- *  register rows against the field, per firm (`O16`). */
-export function plantVintageGapLocal(a: readonly PlantVintage[], b: readonly PlantVintage[]): number {
-  const keyOf = (v: PlantVintage): string => `${v.kind}|${v.usefulLifeYears}|${v.enteredServiceWeek}`;
-  const byKey = new Map<string, number>();
-  for (const v of mergePlant(a, [])) byKey.set(keyOf(v), (byKey.get(keyOf(v)) ?? 0) + v.costLocal);
-  for (const v of mergePlant(b, [])) byKey.set(keyOf(v), (byKey.get(keyOf(v)) ?? 0) - v.costLocal);
-  let gap = 0;
-  byKey.forEach((d) => { gap += Math.abs(d); });
-  return gap;
-}

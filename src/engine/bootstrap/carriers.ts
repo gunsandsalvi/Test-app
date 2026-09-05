@@ -18,6 +18,7 @@
  */
 
 import { Company, CreditRating, Region, RegionId } from '../../types';
+import { stashSeedPlant } from '../ledger/plant-ledger';
 import { stashSeedIssuedShares } from '../ledger/instrument-ledger';
 import { stashOpeningCash } from '../ledger/accounts';
 import { stashSeedRevenueHistory, stashSeedRing } from '../../engine2/world';
@@ -201,7 +202,6 @@ export function generateCarriers(
     region: c.region,
     carrierFleet: { assets: c.assets, fuelInventoryTonnes: 0, lastWeekTonneNm: 0, lastWeekFreightRevenueLocal: 0 },
     // no books yet: the seed auction prices the fleet at marginal cost before its plant exists.
-    plant: [],
   })) as unknown as Company[];
   const clearing = runFreightClearing({ plantOf: () => [], carriers: provisional, regions, unitMassTonnes, bookings, fxToUsd, week: openingWeek });
 
@@ -362,7 +362,6 @@ function buildCarrierCompany(
     growthCapex: 0,
     baselineGrowthCapexToRevenueRatio: 0,
     maintenanceShortfallStreak: 0,
-    plant,
     executionQuality: 1.0,
     occupationMixDrift: {},
     creditRating: rating,
@@ -389,5 +388,6 @@ function buildCarrierCompany(
   stashSeedRing(__c, 'price', [stockPrice]);
   stashOpeningCash(__c, Math.round(Math.max(0, ebitda) * 0.6)); // §5-WIRES A3.1
   stashSeedIssuedShares(__c, sharesOutstanding); // §3.13-BOOK dIV
+  stashSeedPlant(__c, plant); // §3.13-BOOK g-ii-d: its rows open with its book
   return __c;
 }

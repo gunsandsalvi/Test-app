@@ -152,3 +152,10 @@ export function writePlantRows(v2: V2World, companyId: EntityId, region: string,
   relinkBook(v2, companyId, [...others, ...kept]);
   markBookDirty(v2, companyId);
 }
+
+// ---- §3.13-BOOK g-ii-d — THE SEED'S PLANT, before its rows exist. A generator builds a firm's
+// opening vintages before the world the rows live in; they wait here, keyed by the object, until
+// `openSeededBooks` (or the birth that made the firm) writes the rows — never a field on the firm.
+const seedPlantStash = new WeakMap<object, readonly PlantVintage[]>();
+export function stashSeedPlant(company: object, vintages: readonly PlantVintage[]): void { seedPlantStash.set(company, vintages); }
+export function seedPlantOf(company: object): readonly PlantVintage[] { return seedPlantStash.get(company) ?? []; }

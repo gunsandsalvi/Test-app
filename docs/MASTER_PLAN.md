@@ -390,158 +390,24 @@ written from here):
     housing** (units must be defined before anything else is possible — step 26 owns that
     decision). Each class is its own commit and each is expected to move the numbers.
 
-    **THE FINISHED CLASSES ARE IN §9** — 13-SOV, 13-CREDIT, 13-EQUITY, 13-BILL and 13-READ (its
-    C2.a and D13 leftovers included), so **inventory at cost versus price is the next class**, once
-    13-BOOK below is through.
+    **THE FINISHED CLASSES ARE IN §9** — 13-SOV, 13-CREDIT, 13-EQUITY, 13-BILL, 13-READ (its
+    C2.a and D13 leftovers included) and **13-BOOK, whole** (a–g: the id spaces, the entity
+    registry, the instrument index, the contract store, the liens, the one kind list, the position
+    book as lots with a basis, the goods, the accruals, the dwellings and the plant on it), so
+    **inventory at cost versus price is the next class**. What is left open of the survey, and
+    nothing else:
 
-    **13-BOOK — THE ONE BOOK: ONE ID SPACE, ONE WRITE PATH, AND TABLES THAT CAN BE CHECKED
-    AGAINST EACH OTHER** (user, 2026-09-05: *"I want a single source of truth for whatever is
-    possible to do so, at any cost"*, *"make it impossible for something to change an object or an
-    entity outside of some clear input/output layer and make it easy to check between the tables
-    if they are consistent (all issuers still exist, etc.), similar to how money already works"*,
-    and *"currency should live in the right place, it's a fundamental nature of an asset"*).
-    **This absorbs 13-OUTSIDE**, which was the same step seen through one asset class.
-
-    **THE MODEL ALREADY HAS ONE EXAMPLE OF WHAT IS BEING ASKED FOR, AND IT IS MONEY.** A balance
-    moves only through `pay()`; identity is a `PartyRef` and never an object reference;
-    `v2.accounts` is the only store; and a payment with no counterparty is a defect at its site
-    rather than a leak. Nothing else in the model has all four. This step is that discipline
-    applied to everything that can carry it.
-
-    **WHAT IS TRUE TODAY, MEASURED** — restated after (a), (b) and (c); a bullet the finished
-    slices closed is marked rather than deleted, because the diagnosis is what the open slices are
-    aimed at and a reader has to see the whole shape.
-    · **Entities have four identities.** `PartyRef` (the ledger's), `v2.rowById` (a universal
-      id→row allocator, 28 sites), `Company.id` and `Company.ticker` — **845 `.ticker` references
-      and 155 `ByTicker` maps** — and `PartyRef` is itself inconsistent, keying COMPANY and the
-      three BANK kinds by TICKER and INSTITUTION by ID. **CLOSED by (c)**: all four are branded, a
-      named function stands at every crossing, and `PartyRef` is a view of the entity store keyed
-      by `EntityId`. What is left is that `Company.ticker` still keys ~470 reads and 129 maps,
-      each marked at its site as a display name or a participant seat, never an identity.
-    · **Instruments have no registry of instances.** Debt is `v2.tranches` (real, one writer);
-      **equity's issued side is `Company.sharesOutstanding`, a scalar with no instrument record**;
-      derivatives are `v2.contracts`; fund shares reuse the holder's ENTITY id as an instrument
-      id; goods are sub-unit ids. ~~The KIND has four taxonomies, which `assets/index.ts` documents
-      and reconciles with a superset rather than replacing.~~ **CLOSED by (e)**: one list,
-      `assets/index.ts:InstrumentKind`, and every other union a view of it.
-    · **Positions live in eight stores** — the register plus the bank's `sovereignBondHoldingsByBond`
-      and `dealerDeskInventory`, the central bank's book, `Company.treasuryHoldings`, three derived
-      regional desk arrays, `etfShares` and `portfolioCompanyIds` — and `v2.lots` beside them.
-    · ~~**One intern table holds every id space.**~~ **CLOSED by slice (b)** — seven spaces, seven
-      numberings, the whole table behind fifteen functions in `world.ts`. It was one array in
-      which an instrument id, a region id, an entity id and the literal `'CORP_BOND'` were the
-      same integers, with only naming convention preventing a collision.
-    · **CURRENCY IS DERIVED FROM A PROXY, AND SMUGGLED INTO A UNIT'S NAME.** `DebtTranche` has NO
-      currency field; every amount is `…Local` and every payment reaches for `currencyOf(region)`.
-      `UnitOfMeasure` is `PAR_USD | SHARES | GOODS_UNITS | CONTRACTS | USD` — **the quantity's
-      unit and the money are one label**, so a bond's par and its currency cannot be stated
-      separately and a cross-currency issue is inexpressible. §9.13c-DENOM gave an OBLIGATION and
-      a BOOK their currency; the INSTRUMENT never got one, which is the half that matters, because
-      it is the instrument that has the currency and everything else that borrows it.
-      (`sovereign-credit.md` A4.b is the same absence from the sovereign's side: *"in its own money
-      it can always create more; in someone else's it cannot"* — inexpressible while the money is
-      a function of the region.)
-
-    **THE SEVEN STORES, each the only place its fact lives.** ENTITY (who exists) · ASSET (what
-    KINDS exist, and what a unit of each is) · INSTRUMENT (what INSTANCES exist: kind, issuer,
-    currency, issued units — an INDEX that copies no quantity) · POSITION (who holds what, as LOTS
-    with a basis) · PRICE (`v2.prices`, done) · TERMS (a bond's schedule, a contract's legs — per
-    class, each already one writer) · ACCOUNT (`v2.accounts`, done).
-
-    **THE I/O LAYER, AND IT IS THE POINT.** Each store exposes a `Readonly` view and a ledger, and
-    the mutable handle is module-private — the shape `mutableHoldings` and `mutableTranches` already
-    have, made total. `structuredClone` on the host state must keep working, so these are plain
-    data with private accessors, never classes.
-
-    **THE WALL IS UP ON ALL SIX STORES, HAS ONE DOOR, AND THE REGISTER IS ONE REPRESENTATION — d0
-    and d1 in §9.** No file outside `engine/ledger/` and `engine2/` names a mutable handle, and
-    `check-hygiene.sh` fails the first that does; the rows are the register, `entity.itemizedHoldings`
-    is the week-end view `core.ts` materialises and nothing in a week reads, and the mirror's sync
-    machinery is deleted, on the register (d1) and the ladder (d1b) alike, and every wire resolves
-    both parties and its instrument against the world before it is written (d2). What is LEFT on
-    the enforcement side is the books outside the register (d3).
-
-    **THE CROSS-TABLE CHECK IS AT THE WRITE, NOT IN A GATE** (reviewed 2026-09-04: a scan of four
-    tables needs a STATE, so "a gate in `check-hygiene.sh`" is either a run — rule 11 forbids it —
-    or a test over the seed, which is the weak form). The strong form is `pay()`'s: `wire()` and
-    every ledger operation resolve both parties through the entity index and the instrument through
-    its store, and `defect()` on a miss — an unknown holder, an unknown instrument, an issuer that is
-    not alive. Today `wire()` throws on a non-positive quantity, a self-wire and a missing journal,
-    and on nothing about WHO or WHAT; `O3`, `O8` and `O11` find it a week later as a count. After
-    (d2) they are regressions rather than the detection, and the pure test over the seeded state is
-    the gate-time half.
-
-    **THE SLICES, each its own commit, in this order.**
-    **(a) BRAND THE STORE KEYS, (b) SPLIT THE INTERN TABLE and (c) THE ENTITY REGISTRY are DONE
-    — in §9** (a; b in three steps; c1, c2a/b/c, c-then-1/2/3a/3b/4). `refs.instruments.strings` is the list of every instrument the world has
-    named, which is what (d) is built on;
-    `domain/party.ts:PartyRef` is the one party union, which is what (c-then-3b) needs; and every
-    entity id, ticker and instrument id is a branded type with a named function at every crossing.
-    **Three things they found and handed forward, all of them (d)'s:**
-    · **The ETF share has two keys** — `ETFSHARE-<fund>` in the clearing book, the fund's own
-      entity id in the register. (d) deletes one of them.
-    · **An index's constituents are ISSUERS in a field named `instrumentId`** (`indices.md` A1).
-      `rebalance` mints every constituent as an equity id whatever the asset class, and all THREE
-      readers — `index-calculation.ts:basketValueLocal`, 07b:571, 07d:489 — read it back as an
-      issuer, so the equity side wants a borrower as much as the credit side does. (d) decides
-      which way it resolves: the field splits by asset class, or a credit index states tranches.
-    · **`DerivativeContract.referenceId` is four id spaces in one `string`**, discriminated by
-      `classId` alone: an entity id from the CDS book, a commodity id, a REGION from the FX
-      forward, `''` from the swap. Same shape, same resolution.
-
-    **(c) IS CLOSED** — c-then-3b and c-then-4 in §9. `PartyRef`'s five entity arms key by
-    `EntityId`, the eleven stored ticker references are in the entity space, the seat→party
-    crossing is one named function per stage, and `O8` walks every party-keyed store.
-
-    **THE OPEN SLICES — REORDERED 2026-09-04 (user), ENFORCEMENT FIRST.** The twelve commits of
-    (a)–(c) were identity plumbing: necessary for (d), byte-identical, and after all of them the
-    user's sentence — *impossible to change an object outside a clear I/O layer, violations throw
-    at the site* — was still false in four places (the mirror, the open doors, the write that does
-    not resolve its parties, the books outside the register). The old order put every one of those
-    behind three large representation refactors. The new order puts them first, each small and
-    byte-identical, so the goal is mostly in hand before a number moves:
-    d–f. **DONE, in §9** (2026-09-05): the instrument index (dI–dV), the contract store and its
-       six kinds (d4a–d4c-vi), the liens (d5a–c), the one kind list (e), and the position book as
-       lots with a basis, the goods and the accruals on it (f1–f5). What is left of PART II's
-       13-BOOK:
-    g. **PLANT AND HOUSING JOIN.** g-i (housing) is in §9: the household sector's dwellings are a
-       DWELLING row on its register book, lots at the price each was bought at. What is left:
-    g-ii. **PLANT JOINS** — g-ii-a is in §9: the rows exist (`plant-ledger.ts:writePlantRows` /
-       `plantVintagesOf`, a row per capital good and life in units of cost, lots at the service
-       week, round-trip pinned). Writers first (f1's discipline), what is left:
-    g-ii-d. **THE FIELD GOES.** `Company.plant` is deleted and the writers write rows only; the
-       vintage functions stay the semantics (a writer reads the rows, applies them, writes the
-       rows). W6 keeps closing on the wires and the flows, in cost.
-
-    **WHAT IS NOT IN THE BOOK, AND WHY.** SME pool loans, mortgage vintages and consumer pools are
-    positions of the BANK with no register of their own — that is 37-LOANBOOK, sequenced there
-    because it needs 37-LOSSRATE's answer to "what is a loan". The employment relationship is the
-    non-financial twin of this step and is 37-EMPLOYMENT.
-
-    **IT WILL MOVE THE NUMBERS AND SLICE (f) WILL MOVE THEM A LOT** — the merge changes iteration
-    order, so float identity goes, and the basis columns are new. That is expected (rule 11: the
-    harness is red by design and step 38 owns the measurement). What does NOT bend is the
-    sequencing: (f) is done WRITERS-FIRST — every writer maintains a lot chain while the chain's
-    sum still equals today's `units`, where nothing can break because the two numbers are equal,
-    and only then do readers take the basis. That discipline is what made §9.13-CREDIT row 5 and
-    the household books work and its absence is what parked `13 (part 3)`. Speed here is bought by
-    slicing, never by skipping it.
-
-    **THE CONTINUOUS-VERSUS-DISCRETE CONVENTION** (step 12b, §9.12b): `engine/nelsonSiegel.ts`
-    discounts CONTINUOUSLY (`exp(-z·t)`) where `domain/pricing/` compounds discretely — two answers
-    to one question (rule 4). The remaining NS sites, enumerated at §9.13-BILL rather than assumed:
-    `11-fiscal` (two coupon strikes), `pricing.ts` (which `call-protection` and `12-portfolio`
-    reach through), `stage08-back:1348` (a refinancing's risk-free) and `macro/initialization:392`
-    (the seed's coupons) — **steps 25 and 26 own those four**. Three more are PERMITTED and are not
-    work: `07f:166` (a bill bidder's own reservation, `bond.md` N7.b), `sovereign-curve:43` (the
-    fit's one owner PUBLISHING it) and `audit/prices:249` (`P6` MEASURING the fit against the
-    cleared points).
-
-    **11f AND STEP 12'S TAIL ARE CLOSED, in §9** — the register was keyed by TRANCHE and the
-    auctions cleared by ISSUER, so `register-split.ts` had to invent the mapping; it is deleted,
-    along with `dealer-desks.ts`'s `clearingKeyOf` on the desks' side. **What is left of `O7` and
-    `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
-    apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
+    · **13-NS — THE CONTINUOUS-VERSUS-DISCRETE CONVENTION** (step 12b, §9.12b, carried out of the
+      finished 13-BOOK block): `engine/nelsonSiegel.ts` discounts CONTINUOUSLY (`exp(-z·t)`) where
+      `domain/pricing/` compounds discretely — two answers to one question (rule 4). Four sites
+      still take `curvePointAt(…).rate`, a continuously-compounded zero, as a coupon or a
+      discrete discount rate: `11-fiscal` (two coupon strikes), `stage08-back` (a refinancing's
+      risk-free) and `macro/initialization` (the seed's coupons). Step 25 gave the point its
+      traded flag and left the convention; the point should hand back the rate in the convention
+      the pricing compounds in, once, at its one owner. Three more are PERMITTED and are not
+      work: `07f` (a bill bidder's own reservation, `bond.md` N7.b), `sovereign-curve` (the fit's
+      one owner PUBLISHING it) and `audit/prices` (`P6` MEASURING the fit against the cleared
+      points).
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
@@ -1328,6 +1194,22 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK g-ii-d — THE FIELD GOES, AND 13-BOOK IS DONE.** `Company.plant` is deleted. Every
+  writer reads its firm's rows (`plantVintagesOf`), applies the vintage function it always did,
+  and writes the rows back — the scrap and the rebuild in stage 08, the estate's wear, abandonment
+  and sale, the spin-off, the merger, the resolution — so there is one register of plant and
+  nothing for `O16` to compare; it and `plantVintageGapLocal` are deleted with the field. A
+  generator's opening vintages wait in a stash keyed by the firm (`plant-ledger.ts:stashSeedPlant`
+  / `seedPlantOf`, the seed's idiom) until `openSeededBooks` or the birth writes the rows: the
+  seed's firms, their clones (the parent's stash, scaled with the clone), the carriers, the
+  private tier, a newborn's carve-out and the FDI subsidiary's minting; the seed's own reads
+  before the rows open — the regional capital charge, the provisional freight book — read the
+  stash. The harness reads the rows. **13-BOOK is through**: its §3 block leaves with this entry
+  (the survey's state, the seven stores, the wall, the slices' order — all in §9's d0–g entries),
+  and the one thing in it still open, the Nelson-Siegel continuous-versus-discrete convention at
+  four sites, is inserted as `13-NS` where it belongs, with step 13's other leftover-free
+  remainder: inventory at cost versus price is the next class. Gates green; no run (rule 11).
 
 **13-BOOK g-ii-c — THE READERS TAKE THE ROWS.** Every read of a firm's plant is a read of its
   register rows now: the front seam's opening net and year's charge, the back lanes, the staffing

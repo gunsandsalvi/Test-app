@@ -1,6 +1,6 @@
 
 import { profileKeyOf } from './stages/profiles';
-import { writePlantRows } from '../ledger/plant-ledger';
+import { writePlantRows, seedPlantOf } from '../ledger/plant-ledger';
 import { plantNetLocal } from '../../domain/plant';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
 import type { EntityId } from '../../domain/ids';
@@ -418,7 +418,7 @@ function openSeededBooks(state: GameState): void {
     // §3.13-BOOK g-ii-b — EVERY FIRM'S PLANT ROWS, from the vintages the seed built: an opening
     // stock (the-seed A3), so no wire; the rows are the register from here and every writer
     // hands them the list it computes.
-    state.companies.forEach((c) => writePlantRows(v2, c.id, c.region, c.plant));
+    state.companies.forEach((c) => writePlantRows(v2, c.id, c.region, seedPlantOf(c)));
     // §9.13-EQUITY — AND THE HOUSEHOLD SECTOR'S BOOK, opened by wire like every other holder's.
     // Every share of every listed company is either on a named book or held directly by
     // households; the institutions' books have just been opened, so what is left of each issue is
@@ -1264,7 +1264,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           c.employeeCount, SECTOR_OCCUPATION_MIX[c.sector] ?? { GENERAL: 1.0 },
           baseAnnualWageLocal, unitPools, 1.0
         ) * 52;
-        const netPpeLocal = plantNetLocal(c.plant, SEED_WEEK); // §3.26-f-ii: the register at the seed week
+        const netPpeLocal = plantNetLocal(seedPlantOf(c), SEED_WEEK); // §3.26-f-ii: the register at the seed week (its stash, before the rows open)
         capitalChargeLocal += netPpeLocal * costOfCapitalOf(c, riskFreeRateOf(reg)); // §3.26-d: one owner
       });
       if (basePayrollLocal > 0) {
@@ -1370,7 +1370,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       regions[r].tradeBalanceAnnualUSD = regions[r].exportsAnnualUSD - regions[r].importsAnnualUSD;
     });
     const clearing = runFreightClearing({
-      plantOf: (c) => c.plant, // the seed's carriers, before their rows are opened (`openSeededBooks`)
+      plantOf: (c) => seedPlantOf(c), // the seed's carriers, before their rows are opened (`openSeededBooks`)
       carriers, regions, unitMassTonnes: seededUnitMassTonnes, bookings, fxToUsd: seedFxToUsd, week: SEED_WEEK,
     });
     // A lane no carrier serves still needs a price to be evaluated against, or a route can never

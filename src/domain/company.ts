@@ -354,15 +354,11 @@ export interface Company {
   previousCapex?: number;
   maintenanceCapex: number;
   growthCapex: number;
-  /**
-   * §3.26-f-ii — THE PLANT, as dated vintages (`domain/plant.ts`): what each commissioning cost,
-   * the week it entered service, its own life. Gross, net, accumulated depreciation and the
-   * week's charge are READS of it at the week asked (`plantGrossLocal`, `plantNetLocal`,
-   * `plantAccumulatedDepreciationLocal`, `plantDepreciationAnnualLocal`); the two scalars they
-   * replace were kept in step by hand by six writers and could not be told apart when they drifted.
-   * Oldest first; every writer returns a new array.
-   */
-  plant: import('./plant').PlantVintage[];
+  // §3.26-f-ii / §3.13-BOOK g-ii — THE PLANT is dated vintages (`domain/plant.ts`) on the firm's
+  // own REGISTER BOOK: a row per capital good and life, in units of cost, its lots the vintages
+  // (`ledger/plant-ledger.ts:plantVintagesOf` reads them, `writePlantRows` writes them). Gross,
+  // net, accumulated depreciation and the week's charge are reads of that list at the week
+  // asked. Never a field here.
   /** IND1: capital goods that actually ARRIVED last week, at landed cost. Real net investment. */
   /**
    * IND13 — ASSETS UNDER CONSTRUCTION: capital that has arrived and is not yet plant.

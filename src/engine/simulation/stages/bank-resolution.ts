@@ -15,7 +15,7 @@
  * The plan (domain/bank-resolution.ts) decides who eats the hole; this stage only executes it.
  */
 
-import { movePlant } from '../../ledger/plant-ledger';
+import { movePlant, plantVintagesOf } from '../../ledger/plant-ledger';
 import { writePlantRows } from '../../ledger/plant-ledger';
 import { mergePlant } from '../../../domain/plant';
 import { reseatSwapLines } from './swap-lines';
@@ -203,14 +203,14 @@ export function runBankResolutionStage(state: GameState, ctx: WeeklyStepContext)
     rekeyBankLinks(state, ctx, regionId, bank, acquirer);
     // Premises and people go with the books: the branches open on Monday under the new name.
     // §3.26-f-ii/iii: vintage by vintage, and the move is a wire (the consideration is the books).
-    movePlant(bankParty(bank), bankParty(acquirer), bank.plant, 0, 'resolution: premises to the acquirer');
-    acquirer.plant = mergePlant(acquirer.plant, bank.plant);
-    writePlantRows(ctx.v2, acquirer.id, acquirer.region, acquirer.plant); // §3.13-BOOK g-ii-b
+    const bankPlant = plantVintagesOf(ctx.v2, bank.id); // §3.13-BOOK g-ii-d: the rows
+    movePlant(bankParty(bank), bankParty(acquirer), bankPlant, 0, 'resolution: premises to the acquirer');
+    writePlantRows(ctx.v2, acquirer.id, acquirer.region, mergePlant(plantVintagesOf(ctx.v2, acquirer.id), bankPlant)); // §3.13-BOOK g-ii
     acquirer.employeeCount += bank.employeeCount;
     acquirer.annualRevenue += bank.annualRevenue;
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (bank.bankMarketShare ?? 0)).toFixed(6));
-    bank.plant = []; bank.employeeCount = 0;
-    writePlantRows(ctx.v2, bank.id, bank.region, []); // §3.13-BOOK g-ii-b
+    bank.employeeCount = 0;
+    writePlantRows(ctx.v2, bank.id, bank.region, []); // §3.13-BOOK g-ii: the premises are the acquirer's now
     bank.annualRevenue = 0; bank.ebitda = 0; bank.ebit = 0; bank.bankMarketShare = 0;
 
     // ---- 3. Settle the reserve legs while both sheets still exist, then verify the shell is empty. ----

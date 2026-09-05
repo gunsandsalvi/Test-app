@@ -1,4 +1,5 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, ProductLine, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE, REGION_IDS_SEED_ORDER } from '../types';
+import { stashSeedPlant, seedPlantOf } from './ledger/plant-ledger';
 import { stashSeedIssuedShares, seedIssuedSharesOf } from './ledger/instrument-ledger';
 import { stashSeedRing, peekSeedRing } from '../engine2/world';
 import { stashOpeningCash, openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf, seedSovereignBookLocalOf } from './ledger/accounts';
@@ -11,7 +12,7 @@ import { getInitialRegions, CORPORATE_TAX_RATE_BY_REGION } from './macro/initial
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
 import { getRegionProductivityPerCapitaLocal } from './bootstrap/population';
 import { SECTOR_PPE_INTENSITY } from './simulation/constants';
-import { seedPlantVintages, seedMixOf, plantGrossLocal, plantNetLocal, plantAccumulatedDepreciationLocal, plantDepreciationAnnualLocal, type PlantVintage } from '../domain/plant';
+import { seedPlantVintages, seedMixOf, plantGrossLocal, plantNetLocal, plantAccumulatedDepreciationLocal, plantDepreciationAnnualLocal } from '../domain/plant';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from './equity-valuation';
 import { UNIVERSE_SCALE, PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
@@ -621,7 +622,6 @@ export function generateInitialCompanies(
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
         debtTranches,
         capex,
-        plant: seedPlant,
         maintenanceCapex,
         growthCapex,
         baselineGrowthCapexToRevenueRatio: growthCapex / Math.max(1, tmpl.revBase),
@@ -711,6 +711,7 @@ export function generateInitialCompanies(
       stashSeedRing(company, 'price', historicalPrices);
       stashOpeningCash(company, tmpl.cashBase); // §5-WIRES A3.1: the seed opens its account with it
       stashSeedIssuedShares(company, tmpl.shares); // §3.13-BOOK dIV: declared on the index at the seed
+      stashSeedPlant(company, seedPlant); // §3.13-BOOK g-ii-d: its rows open with its book
       companies.push(company);
     });
     // Flat per region rather than scaled to region size, matching SECTOR_FIRM_COUNT's
@@ -790,6 +791,7 @@ export function generateInitialCompanies(
       // the parent's. Every line proportional to size scales together here; scaling the cap
       // alone left clones whose cap was not price × shares, and the seed wrote register shares
       // against that cap.
+      stashSeedPlant(newCompany, seedPlantOf(parent)); // §3.13-BOOK g-ii-d: the clone's plant is its parent's, scaled with it below
       scaleFirmSize(newCompany, revenueScale);
       companies.push(newCompany);
     }
@@ -982,8 +984,9 @@ function scaleFirmSize(company: Company | Record<string, unknown>, k: number): v
     'growthCapex', 'currentLiabilities', 'technicalReservesLocal', 'aumLocal',
     'insurancePremiumsWrittenLocal', 'insuranceClaimsPaidLocal'] as const satisfies readonly (keyof Company)[];
   SIZED_FIELDS.forEach(scale);
-  // §3.26-f-ii: the plant is a register; each vintage's cost scales with the firm.
-  c.plant = ((c.plant as PlantVintage[] | undefined) ?? []).map((v) => ({ ...v, costLocal: v.costLocal * k }));
+  // §3.26-f-ii: the plant is a register; each vintage's cost scales with the firm (§3.13-BOOK
+  // g-ii-d: the seed's stash, until its rows open).
+  stashSeedPlant(company, seedPlantOf(company).map((v) => ({ ...v, costLocal: v.costLocal * k })));
   ((c.debtTranches as DebtTranche[] | undefined) ?? []).forEach((t) => { t.principalLocal *= k; });
   ((c.historicalFundamentals as FundamentalSnapshot[] | undefined) ?? [])
     .forEach((snap) => scaleSnapshot(snap as unknown as Record<string, unknown>, k));
@@ -1301,7 +1304,6 @@ export function generatePrivateCompanies(
       capex, maintenanceCapex, growthCapex: capex - maintenanceCapex,
       baselineGrowthCapexToRevenueRatio: (capex - maintenanceCapex) / Math.max(1, revBase),
       maintenanceShortfallStreak: 0,
-      plant,
       executionQuality: 1.0,
       occupationMixDrift: {},
       creditRating: rating,
@@ -1350,6 +1352,7 @@ export function generatePrivateCompanies(
     } as unknown as Company;
     stashSeedRing(pc, 'rating', [rating]); // §4.C II.5
     stashOpeningCash(pc, Math.round(ebitda * 0.6)); // §5-WIRES A3.1: a birth pays it
+    stashSeedPlant(pc, plant); // §3.13-BOOK g-ii-d: its rows open when the birth (or the seed) writes them
     return pc;
   });
 }

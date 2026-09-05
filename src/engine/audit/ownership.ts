@@ -1,8 +1,6 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
-import { plantVintagesOf } from '../ledger/plant-ledger';
-import { plantVintageGapLocal } from '../../domain/plant';
 import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf, liveObligationPartiesOf, securityLoanBookOf, ccpSheetAt } from '../ledger/contract-ledger';
 import { accountKey } from '../ledger/accounts';
 import { ccpOwnCapitalLocal } from '../../domain/clearing-house';
@@ -652,27 +650,8 @@ function o14(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
-/**
- * O16 — §3.13-BOOK g-ii-b. THE PLANT ROWS ARE THE PLANT. Every firm's PLANT rows on its register
- * book hold exactly the vintages `Company.plant` carries: every writer hands the rows the list it
- * computed, and a firm whose two disagree is a writer that moved the field and not the rows —
- * the check that lets g-ii-c hand the readers the rows and g-ii-d delete the field.
- */
-function o16(state: GameState, week: number): AuditFinding[] {
-  const out: AuditFinding[] = [];
-  const v2 = ensureV2(state);
-  let off = 0, gapLocal = 0;
-  for (const c of state.companies) {
-    const gap = plantVintageGapLocal(plantVintagesOf(v2, c.id), c.plant);
-    const gross = c.plant.reduce((a, v) => a + v.costLocal, 0);
-    if (gap > floatDustLocal(gross, c.plant.length + 1)) { off++; gapLocal += gap; }
-  }
-  if (off) out.push({ family: 'O', check: 'O16 the plant rows are the plant', week, usd: gapLocal, message: `${off} firms' plant rows disagree with their register (${(gapLocal / 1e6).toFixed(3)}M of cost in all)` });
-  return out;
-}
-
 export function auditOwnership(state: GameState, week: number): AuditFinding[] {
-  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week), ...o13(state, week), ...o14(state, week), ...o15(state, week), ...o16(state, week)];
+  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week), ...o13(state, week), ...o14(state, week), ...o15(state, week)];
 }
 export type { RegionId };
 

@@ -713,9 +713,8 @@ export function applyCapCompWrites(comp: Company, cap: ReturnType<typeof runCapi
   comp.mothballedStreakWeeks = cap.retirementWrites.mothballedStreakWeeks;
   // §3.26-f-ii — the scrap retires the oldest vintages first, off the register.
   if (cap.scrapWrites) {
-    const scrapped = scrapPlantShare(comp.plant, cap.scrapWrites.scrappedShare, nextWeek);
-    comp.plant = scrapped.plant;
-    writePlantRows(v2, comp.id, comp.region, comp.plant); // §3.13-BOOK g-ii-b: the rows keep the register
+    const scrapped = scrapPlantShare(plantVintagesOf(v2, comp.id), cap.scrapWrites.scrappedShare, nextWeek);
+    writePlantRows(v2, comp.id, comp.region, scrapped.plant); // §3.13-BOOK g-ii: the rows ARE the register
     scrapPlant(comp.id, scrapped.scrappedCostLocal); // §3.26-f-iii: a write-off is a recorded transformation
   }
 }
@@ -1941,7 +1940,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // §3.26-f-ii — THE REGISTER IS THE ROLL-FORWARD: what wore out this week leaves it, what
     // entered service joins it as this week's vintage at the firm's own life (the scrap, if any,
     // already landed through `applyCapCompWrites`). Gross, net and the charge are reads of it.
-    const worn = retireWornPlant(comp.plant, nextWeek);
+    const worn = retireWornPlant(plantVintagesOf(v2, comp.id), nextWeek); // §3.13-BOOK g-ii-d: the rows
     // §3.26-f-iv-a — one vintage per KIND of capital good that entered service this week: the
     // lots the front pass commissioned (its rule, `entersServiceWeek <= nextWeek`), grouped.
     // §3.26-f-iv-b — each at the capital good's OWN life (a building's forty years, a server's five).
@@ -2313,8 +2312,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
 
     comp.growthCapex = round1(newGrowthCapex);
 
-    comp.plant = newPlant;
-    writePlantRows(v2, comp.id, comp.region, newPlant); // §3.13-BOOK g-ii-b: the rows keep the register
+    writePlantRows(v2, comp.id, comp.region, newPlant); // §3.13-BOOK g-ii: the rows ARE the register
 
       // IND1: read by stage 05's capacity growth — real net investment is what arrived.
       // IND13 — the plant grew by what entered service. Both lines are named on the rebuild
