@@ -13,6 +13,7 @@ import { World, companyOf, regionOf, displayWeek } from '../world';
 import { materializeLadder } from '../../engine2/tranches';
 import { trancheId, yearOf, quoteOfInstrument, priceWord, spreadWord } from '../objects/tranche';
 import { instrumentDisplayName } from '../../domain/instruments';
+import { auctionSummaryOf } from '../../domain/government';
 import { isDiscountBill } from '../../domain/government';
 import { SectionLabel } from '../objects/common';
 
@@ -104,6 +105,7 @@ export const ladder: FunctionModule = {
         <KV k="annual interest" hint={total > 0 ? `${pctLevel(interest / total, 2)} blended` : undefined} v={money(interest)} />
         <KV k="due within a year" v={money(rows.filter((x) => x.maturityWeek - now < WEEKS_PER_YEAR).reduce((a, x) => a + x.principalLocal, 0))} />
         {[...byTenor.entries()].sort((a, b) => parseInt(a[0]) - parseInt(b[0])).map(([k, v]) => <KV key={k} k={`issued as ${k}`} v={money(v)} />)}
+        {r.lastAuction ? (() => { const a = auctionSummaryOf(r.lastAuction.offerings); return <KV k="last auction" hint={`${formatDate(displayWeek(world.state, r.lastAuction.week))}${a.withdrawnLocal > 1 ? ` · ${money(a.withdrawnLocal)} withdrawn` : ''}`} v={`placed ${money(a.placedLocal)} of ${money(a.offeredLocal)}`} />; })() : null}
       </Card>
       <SectionLabel>the wall</SectionLabel>
       <Wall rows={rows} world={world} />

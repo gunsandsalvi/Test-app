@@ -293,7 +293,11 @@ a year earlier, is gone, and with it a dead second bond-name grammar. §9.15b-i:
 story that DEVELOPS — an open estate records its week (`domain/estate.ts:EstateWeek`: what the
 waterfall paid each class, what was sold, to which peers) and `news-derivation.ts` tells it each
 week between the default and the close, naming the buyers and what is still owed against what is
-left.
+left. §9.15b-ii: an under-subscribed auction is an event a reader can see — the treasury records
+the week's auction rung by rung (`region-macro.ts:lastAuction`, written by 07c and 07f through
+`government.ts:recordPrimaryOffering`), the story names the rungs that came up short and the
+account's state, the ladder view shows the last auction, and a failed CP roll's story carries the
+derived feed's refs, size and cause.
 
 ### Also marked, briefly
 

@@ -547,15 +547,8 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-15b. **News slice 2** — split 2026-09-05; 15b-i (a workout that develops: the estate's week and
-    its story) is in §9. What is left, one commit each:
-15b-ii. **An auction that failed or came in under-subscribed.** 07c and 07f withdraw what the
-    primary did not place (`sovereign issuance withdrawn`, `bill issuance withdrawn`) and record
-    nothing a story can read; the treasury's account runs lower in silence. The region records
-    the week's auction — offered, placed, withdrawn, by bond — and the story names the shortfall
-    and what the treasury did about it (the advance it drew, the need that rolled forward). A CP
-    roll that fails already tells its story (`07f`, "CP Roll Fails"); bring it onto the derived
-    feed's shape (refs, materiality, cause) rather than beside it.
+15b. **News slice 2** — split 2026-09-05; 15b-i (a workout that develops) and 15b-ii (an
+    under-subscribed auction) are in §9. What is left:
 15b-iii. **Contract-break streaks.** No object here is called a contract break. The real thing
     is a party that does not perform: the settlement pass's `[unresolved]` legs (a leg addressed
     to a bank with no sheet), a derivative closed out on a counterparty's death
@@ -1654,6 +1647,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**15b-ii — AN AUCTION THAT CAME IN UNDER-SUBSCRIBED IS AN EVENT.** 07c and 07f withdrew what the
+primary did not place and recorded nothing; the treasury's account ran lower in silence. The
+region now keeps the week's auction rung by rung (`government.ts:PrimaryOfferingRecord` —
+offered, placed, withdrawn, bond or bill — on `Region.lastAuction`, written by both stages through
+`recordPrimaryOffering`, which opens a fresh record when the week turns); `auctionSummaryOf` gives
+the coverage and the shortfalls largest first; `news-derivation.ts` 7c tells it above $1M
+withdrawn — "USA auction placed 68% of 22.00B … Short: USA 4.5% 2037 3.00B of 8.00B … The
+treasury's account stands at X, Y of it drawn from the central bank" — urgent past a quarter
+withdrawn; the region's ladder view shows the last auction. The CP-roll story 07f already wrote is
+on the derived feed's shape now (kind, refs to the firm, its region and its bank, the revolver as
+its size, the cause), and says what matured, what the market took and what the line caught.
+`test/auction-record.test.ts`. Gates green; no run.
 
 **15b-i — A WORKOUT IS A STORY THAT DEVELOPS.** The derived feed told a default (1) and a close
 (7) and nothing between, though a workout runs for weeks paying classes and selling slices. An

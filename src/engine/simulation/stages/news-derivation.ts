@@ -27,7 +27,10 @@ import { reasonText } from './settlement';
 import { isActiveCompany, banksOf } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { ladderTotalLocal } from '../../../engine2/tranches';
-import { cashOf, bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import { cashOf, bankReservesOf, householdDepositsAt, treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
+import { auctionSummaryOf } from '../../../domain/government';
+import { instrumentNameOf } from '../../instrument-name';
+import { yearOfWeek } from '../../../domain/calendar';
 import { estateAssetsLocal, estateWeekPaidLocal, outstandingLocal } from '../../../domain/estate';
 
 type Ref = NonNullable<NewsItem['refs']>[number];
@@ -302,6 +305,36 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       refs: [...(c ? [company(c)] : []), region(e.regionId), ...buyers.map(company)],
       materialityLocal: paid + sold,
       impactRegion: e.regionId, affectedTicker: e.ticker,
+    });
+  });
+
+  // ---- 7c. §3.15b-ii: an auction that came in under-subscribed. The treasury offered every
+  // dollar of its rungs no book held; what the primary did not take was withdrawn from the
+  // ladder and the need rolled forward. The story names the rungs that came up short and what
+  // the treasury's account did about it. ----
+  REGION_IDS.forEach((rid) => {
+    const reg = ctx.updatedRegions[rid];
+    const auction = reg?.lastAuction;
+    if (!reg || !auction || auction.week !== week) return;
+    const a = auctionSummaryOf(auction.offerings);
+    if (a.withdrawnLocal < 1e6 || a.coverage === undefined) return;
+    const nameOf = (id: string) => instrumentNameOf(ctx.v2, id, () => undefined, yearOfWeek) ?? id;
+    const short = a.shortfalls.slice(0, 4).map((o) => `${nameOf(o.bondId)} ${M(o.withdrawnLocal)} of ${M(o.offeredLocal)}`).join(', ');
+    const advance = waysAndMeansOf(ctx.v2, rid);
+    push({
+      id: `auction-${rid}-${week}`,
+      kind: a.placedLocal < 1 ? 'auction fails' : 'auction under-subscribed',
+      category: 'MACRO',
+      title: a.placedLocal < 1
+        ? `${rid} auction finds no buyer for ${M(a.offeredLocal)}`
+        : `${rid} auction placed ${P(a.coverage, 0)} of ${M(a.offeredLocal)}`,
+      description: `The ${rid} treasury offered ${M(a.offeredLocal)} across ${auction.offerings.length} rung${auction.offerings.length === 1 ? '' : 's'}; the market took ${M(a.placedLocal)} and ${M(a.withdrawnLocal)} was withdrawn to be offered again. Short: ${short}. `
+        + `The treasury's account stands at ${M(treasuryAccountOf(ctx.v2, rid))}${advance > 0 ? `, ${M(advance)} of it drawn from the central bank` : ''}.`,
+      cause: 'The bids the auction found stopped short of the offering at any price the books would pay.',
+      refs: [region(rid)],
+      materialityLocal: a.withdrawnLocal,
+      impactRegion: rid,
+      urgent: a.withdrawnLocal > 0.25 * a.offeredLocal,
     });
   });
 

@@ -897,6 +897,9 @@ export interface Region {
   /** PUB2 — this week's gross issuance proceeds and principal redeemed, so the TGA has the
    * financing leg that funds the deficit it is debited by. Written by stage 11. */
   lastIssuanceProceedsLocal?: number;
+  /** §3.15b-ii — the latest week's auction, rung by rung: offered, placed, withdrawn. Written by
+   *  07c (bonds) and 07f (bills) through `government.ts:recordPrimaryOffering`. */
+  lastAuction?: import('./government').AuctionRecord;
   /** PUB: matured paper that no named book ever bought — the front-of-ladder undersubscription
    *  the treasury auction leaves behind. It is not a payment; nobody was owed it. */
   lastUnsoldMaturedLocal?: number;

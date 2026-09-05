@@ -68,7 +68,7 @@ import { centralBankParticipant, bookCentralBankFills, CENTRAL_BANK_PARTICIPANT_
 import { transferHolding } from '../../ledger/holdings-ledger';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityLocal } from './repo-clearing';
 import { accruedPerFace, banksOf } from '../../../domain/company';
-import { sovereignCouponByBond } from '../../../domain/government';
+import { sovereignCouponByBond, recordPrimaryOffering } from '../../../domain/government';
 import { moveSovereignAccrued } from './sovereign-calendar';
 import { defect } from '../../../domain/defect';
 
@@ -691,6 +691,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const o = result.primaryOutcomeById.get(inst.id);
       const placedLocal = o && !o.withdrawn ? Math.max(0, o.marketTakeLocal) : 0;
       const unplacedLocal = Math.max(0, (inst.primaryOfferingLocal ?? 0) - placedLocal);
+      // §3.15b-ii: the treasury records what it offered, what the primary took and what it
+      // withdraws — the one line a story about this auction can be told from.
+      recordPrimaryOffering(reg, ctx.nextWeek, { bondId: inst.id, kind: 'BOND', offeredLocal: inst.primaryOfferingLocal ?? 0, placedLocal, withdrawnLocal: unplacedLocal > 1 ? unplacedLocal : 0 });
       if (unplacedLocal <= 1) return;
       // §3.13-SOV row 3: the paper that found no buyer is THIS BOND's, so it comes off THIS
       // BOND. It used to be withdrawn from a group and spread over whatever rungs were in it,

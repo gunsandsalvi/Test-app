@@ -337,3 +337,48 @@ export function sovereignCouponDueShare(tranche: { originationWeek: number }, we
   return (week - tranche.originationWeek) % periodWeeks === 0 ? 1 / PAYMENTS_PER_YEAR : 0;
 }
 
+
+/**
+ * §3.15b-ii — THE WEEK'S AUCTION, as the treasury records it. 07c (bonds) and 07f (bills) offer
+ * every dollar of a rung no book holds and withdraw what the primary did not place; until this
+ * record they wrote nothing a story could read, and an under-subscribed auction — the one
+ * primary-market event with a real consequence for the treasury's account — happened in silence.
+ * One row per piece of paper offered; the region keeps the latest week's rows.
+ */
+export interface PrimaryOfferingRecord {
+  bondId: string;
+  kind: 'BOND' | 'BILL';
+  offeredLocal: number;
+  placedLocal: number;
+  withdrawnLocal: number;
+}
+
+export interface AuctionRecord { week: number; offerings: PrimaryOfferingRecord[] }
+
+/** Append a rung's outcome to the region's record of THIS week's auction, opening it if the week turned. */
+export function recordPrimaryOffering(reg: { lastAuction?: AuctionRecord }, week: number, rec: PrimaryOfferingRecord): void {
+  if (!(rec.offeredLocal > 1)) return;
+  if (reg.lastAuction?.week !== week) reg.lastAuction = { week, offerings: [] };
+  reg.lastAuction.offerings.push(rec);
+}
+
+export interface AuctionSummary {
+  offeredLocal: number;
+  placedLocal: number;
+  withdrawnLocal: number;
+  /** Placed over offered; undefined when nothing was offered. */
+  coverage: number | undefined;
+  /** The rungs that came up short, largest shortfall first. */
+  shortfalls: PrimaryOfferingRecord[];
+}
+
+export function auctionSummaryOf(offerings: readonly PrimaryOfferingRecord[]): AuctionSummary {
+  const offeredLocal = offerings.reduce((a, o) => a + o.offeredLocal, 0);
+  const placedLocal = offerings.reduce((a, o) => a + o.placedLocal, 0);
+  const withdrawnLocal = offerings.reduce((a, o) => a + o.withdrawnLocal, 0);
+  return {
+    offeredLocal, placedLocal, withdrawnLocal,
+    coverage: offeredLocal > 0 ? placedLocal / offeredLocal : undefined,
+    shortfalls: offerings.filter((o) => o.withdrawnLocal > 1).sort((a, b) => b.withdrawnLocal - a.withdrawnLocal),
+  };
+}

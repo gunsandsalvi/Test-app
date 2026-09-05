@@ -62,7 +62,7 @@ import { transferHolding } from '../../ledger/holdings-ledger';
 import { issueTranche, retireTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf } from './dealer-desks';
 import { dealerDeskTicker } from '../../../domain/dealer-desk';
-import { discountBillProceedsLocal, billYieldFromPrice, isDiscountBill } from '../../../domain/government';
+import { discountBillProceedsLocal, billYieldFromPrice, isDiscountBill, recordPrimaryOffering } from '../../../domain/government';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { materializeGovLadder } from '../../../engine2/tranches';
@@ -650,6 +650,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const o = result.primaryOutcomeById.get(inst.id);
           const placedLocal = o && !o.withdrawn ? Math.max(0, o.marketTakeLocal) : 0;
           const unplacedLocal = Math.max(0, (inst.primaryOfferingLocal ?? 0) - placedLocal);
+          // §3.15b-ii: the bill auction's own record, beside the bond auction's.
+          recordPrimaryOffering(reg, ctx.nextWeek, { bondId: inst.id, kind: 'BILL', offeredLocal: inst.primaryOfferingLocal ?? 0, placedLocal, withdrawnLocal: unplacedLocal > 1 ? unplacedLocal : 0 });
           if (unplacedLocal <= 1) return;
           // §3.13-SOV row 2: withdrawn paper is face that ceased to exist, and it comes off THIS
           // BOND's own row by wire — the array-and-diff this replaces rebuilt a list to derive the
@@ -1184,13 +1186,18 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           // SETL2b / step 10: a BANK_CREDIT payment writes the borrower's deposit at settlement,
           // and the matching asset is the facility row itself on the borrower's ladder — the
           // lender's book is a read of that row (`facilityBookOf`), so nothing else is recorded.
+          // §3.15b-ii: on the derived feed's shape — what it names, what it ranks by, and why.
           ctx.newsItems.push({
             id: `cp-fail-${iss.comp.ticker}-${ctx.nextWeek}`,
             week: ctx.nextWeek,
-            title: `${iss.comp.ticker} CP Roll Fails — Revolver Drawn`,
-            description: `${iss.comp.name} could not place ${(revolverLocal / 1e6).toFixed(0)}M of commercial paper (rating ${iss.comp.creditRating}) and drew its bank revolver at policy+${REVOLVER_MARGIN_BPS}bps.`,
+            kind: 'cp roll fails',
+            title: `${iss.comp.name} cannot roll its paper and draws its revolver`,
+            description: `${iss.comp.ticker} (${iss.comp.creditRating}, ${iss.comp.region}) had ${(iss.maturedLocal / 1e6).toFixed(0)}M of commercial paper maturing and the market placed ${(placedLocal / 1e6).toFixed(0)}M of the ${(rollNeedLocal / 1e6).toFixed(0)}M it wanted to roll; ${(revolverLocal / 1e6).toFixed(0)}M came from its committed bank line at policy + ${REVOLVER_MARGIN_BPS}bp.`,
+            cause: `The paper market said no to ${iss.comp.ticker} at any price short of the revolver's.`,
+            refs: [{ type: 'company', id: iss.comp.id }, { type: 'region', id: iss.comp.region }, ...(iss.comp.homeBankId ? [{ type: 'company' as const, id: iss.comp.homeBankId }] : [])],
+            materialityLocal: revolverLocal,
             category: 'CREDIT',
-            impactBadge: '[FUNDING SQUEEZE]',
+            impactBadge: '[CP ROLL FAILS]',
             impactRegion: iss.comp.region,
             impactSector: iss.comp.sector,
             affectedTicker: iss.comp.ticker,
