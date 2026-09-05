@@ -60,10 +60,10 @@ function syncSheets(ctx: WeeklyStepContext, regionId: RegionId, banks: readonly 
 }
 
 /**
- * The close session for one region. Returns what each borrower still needs after the market —
- * the window's share — keyed by bank id.
+ * The close session for one region. Returns what each borrower still needs after the market,
+ * keyed by bank id, and what the session struck.
  */
-export function runInterbankSession(ctx: WeeklyStepContext, regionId: RegionId, reg: Region, banks: readonly Bank[]): Map<EntityId, number> {
+export function runInterbankSession(ctx: WeeklyStepContext, regionId: RegionId, reg: Region, banks: readonly Bank[]): { unfunded: Map<EntityId, number>; struckLocal: number } {
   const week = ctx.nextWeek;
   const unfunded = new Map<EntityId, number>();
   const surplusByLender = new Map<EntityId, number>();
@@ -78,7 +78,7 @@ export function runInterbankSession(ctx: WeeklyStepContext, regionId: RegionId, 
     }
   });
   borrowers.forEach((b) => unfunded.set(b.bank.id, b.needLocal));
-  if (borrowers.length === 0 || surplusByLender.size === 0) return unfunded;
+  if (borrowers.length === 0 || surplusByLender.size === 0) return { unfunded, struckLocal: 0 };
   const policyBps = reg.policyRate * 10000;
   const corridorWidthBps = Math.max(1, SRF_SPREAD_BPS + ON_RRP_SPREAD_BPS);
   const bankById = new Map(banks.map((b) => [b.id, b]));
@@ -140,7 +140,7 @@ export function runInterbankSession(ctx: WeeklyStepContext, regionId: RegionId, 
   publishInterbankBook(ctx.v2, regionId, book);
   syncSheets(ctx, regionId, banks);
   if (struckLocal > 0) reg.interbankRateAnnual = Number((struckRateWeighted / struckLocal).toFixed(6));
-  return unfunded;
+  return { unfunded, struckLocal };
 }
 
 /** The open: every loan due this week repays, principal between the reserve accounts and

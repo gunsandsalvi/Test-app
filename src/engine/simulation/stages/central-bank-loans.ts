@@ -1,15 +1,19 @@
 /**
- * §3.20-LLR-a — THE CENTRAL BANK'S LOANS TO ITS BANKS, AS A BOOK. Struck at the funding close for
- * what the interbank market left unfunded (`bank-funding-close.ts`), serviced and rolled at the
- * open (`02b`), re-seated when a bank is resolved. The two scalars that stood for this —
+ * §3.20-LLR-a — THE CENTRAL BANK'S LOANS TO ITS BANKS, AS A BOOK: serviced and rolled at the open
+ * (`02b`), re-seated when a bank is resolved. The two scalars that stood for this —
  * `CentralBank.loansToBanksLocal` and `BankingSector.centralBankLoanLocal` — are reads of it.
+ *
+ * §3.20-LLR-ii — NOTHING STRIKES A ROW ANY MORE. The funding close lent whatever the market left
+ * unfunded, unsecured and unrefusable; that loan is deleted, the standing-facility seat in the
+ * repo book is the window's only lending, and a bank that cannot fund ends the week short. The
+ * kind and this service stay for what §3 step 20-LLR-iii may write into them.
  */
 
 import { WeeklyStepContext } from './context';
 import { RegionId, Region } from '../../../types';
 import type { EntityId, Ticker } from '../../../domain/ids';
 import { BankingSector } from '../../../domain/banking';
-import { CentralBankLoan, centralBankLoanId, centralBankLoanInterestWeeklyLocal, centralBankLoansOwedLocal, centralBankLoansLentLocal } from '../../../domain/central-bank-loan';
+import { CentralBankLoan, centralBankLoanInterestWeeklyLocal, centralBankLoansOwedLocal, centralBankLoansLentLocal } from '../../../domain/central-bank-loan';
 import { centralBankLoanBookOf, publishCentralBankLoanBook } from '../../ledger/contract-ledger';
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
 import { bankParty, bankSecuritiesParty } from '../../../domain/party';
@@ -31,28 +35,6 @@ export function syncCentralBankLoanSheets(ctx: WeeklyStepContext, regionId: Regi
   const book = centralBankLoanBookOf(ctx.v2, regionId);
   banks.forEach((b) => { if (b.bankBalanceSheet) b.bankBalanceSheet.centralBankLoanLocal = Math.round(centralBankLoansOwedLocal(book, b.id)); });
   if (reg.centralBankSheet) reg.centralBankSheet.loansToBanksLocal = Math.round(centralBankLoansLentLocal(book));
-}
-
-/** The close: a bank short of its buffer after the market is lent the shortfall, overnight, as a row. */
-export function strikeCentralBankLoan(ctx: WeeklyStepContext, regionId: RegionId, reg: Region, bank: Bank, principalLocal: number): CentralBankLoan | undefined {
-  if (!(principalLocal > 0) || !bank.bankBalanceSheet) return undefined;
-  const week = ctx.nextWeek;
-  const loan: CentralBankLoan = {
-    id: centralBankLoanId(regionId, bank.id, week), regionId, bankId: bank.id,
-    principalLocal: Math.round(principalLocal), rateAnnual: centralBankLoanRateAnnual(reg), struckWeek: week, maturityWeek: week + 1,
-  };
-  const book = centralBankLoanBookOf(ctx.v2, regionId);
-  const same = book.find((c) => c.id === loan.id);
-  // A second round of the same close adds to the same overnight row.
-  publishCentralBankLoanBook(ctx.v2, regionId, same
-    ? book.map((c) => (c.id === loan.id ? { ...c, principalLocal: c.principalLocal + loan.principalLocal } : c))
-    : [...book, loan]);
-  // The lender of last resort pays with reserves it creates; the loan is its asset.
-  pay(ctx, {
-    payer: { kind: 'CENTRAL_BANK', region: regionId }, payee: bankSecuritiesParty(bank),
-    amount: loan.principalLocal, currency: currencyOf(regionId), reason: 'central bank loan drawn',
-  });
-  return loan;
 }
 
 /**

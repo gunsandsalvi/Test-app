@@ -786,6 +786,10 @@ export interface Region {
   /** GUARD — the repo session's own volume diagnostic (see RepoSessionResult). */
   repoFundableNeedLocal?: number;
   repoClearedVolumeLocal?: number;
+  /** §3.20-LLR-ii — what each bank (by entity id) was still short of its buffer after the close's
+   *  market and window: the state a bank that could not fund ends the week in. Written fresh every
+   *  close by `bank-funding-close.ts:recordFundingShortfalls`; empty on a clean close. */
+  bankFundingShortfallsLocal?: Record<string, number>;
   neutralRate: number;
   /**
    * PUB2b: what the Taylor rule wanted BEFORE the floor clamped it. The gap between this and the

@@ -115,15 +115,15 @@ checked by `scripts/check-atlas.sh`.
 | B5.a its alternative is the floor, or bills directly | `src/engine/simulation/stages/money-market-fund.ts:quoteMmfNetYieldAnnual` | ✅ |
 | B6 tenor: overnight and term, each with its own book | `src/engine/simulation/stages/repo-clearing.ts:REPO_TERM_WEEKS` | ✅ |
 | B6.a VERIFY the term/overnight spread is information | `src/engine/simulation/stages/derivative-markets/irs.ts:overnightRateAnnual` | ⚠️ |
-| **B7 the market can fail to clear for a name** | `src/engine/simulation/stages/repo-clearing.ts:unfundedTermLocal` | ⚠️ |
+| **B7 the market can fail to clear for a name** | `src/engine/simulation/stages/repo-clearing.ts:unfundedTermLocal` · `src/engine/simulation/stages/bank-funding-close.ts:recordFundingShortfalls` | ✅ |
 | C1 a floor: the CB pays on reserves, or takes cash at a window | `src/engine/simulation/stages/repo-clearing.ts:parkUnlentSleevesAtTheWindow` | ✅ |
 | C1.a cash parked there LEAVES the banking system | `src/engine/simulation/stages/repo-clearing.ts:drawReverseRepoAtTheClose` | ✅ |
 | C2 a ceiling: a standing facility that lends | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
 | C3 VERIFY the market rate sits inside the corridor | `src/engine/audit/prices.ts:repo` | ⚠️ |
 | C4 the facility is collateralised and priced above the market | `src/engine/simulation/stages/repo-clearing.ts:SRF_SEAT_STEP_BPS` | ✅ |
 | C4.a so a bank prefers the market; drawing is information | `src/domain/repo.ts:srfBorrowedLocal` | ✅ |
-| C4.b a bank out of eligible collateral CANNOT DRAW | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` | ⚠️ |
-| **C5 FORBID no uncollateralised, unpriced, unlimited CB credit** | `src/engine/simulation/stages/central-bank-loans.ts:strikeCentralBankLoan` | ❌ |
+| C4.b a bank out of eligible collateral CANNOT DRAW | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` | ✅ |
+| **C5 FORBID no uncollateralised, unpriced, unlimited CB credit** | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
 | D1 it shrinks: it sells assets, in a real book | `src/engine/simulation/stages/07c-sovereign-bond-clearing.ts:liquidityFloorLocal` | ✅ |
 | D2 it bids up for deposits, and depositors respond | `src/engine/macro/banking.ts:liquidityShortfallShare` | ⚠️ |
 | D3 it draws the facility, at the penalty, against collateral | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
@@ -131,7 +131,7 @@ checked by `scripts/check-atlas.sh`.
 | **D5 a RUN: depositors withdraw because they observe weakness** | — | ❌ |
 | D5.a what they observe must be observable | `src/ui/objects/company.tsx:bankCapitalRatio` | ✅ |
 | D5.b VERIFY a run is self-reinforcing | — | ❌ |
-| **D6 LOLR: freely, good collateral, penalty, solvent — all four** | `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` | ❌ |
+| **D6 LOLR: freely, good collateral, penalty, solvent — all four** | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` · `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` | ❌ |
 | **E1 the policy rate reaches the economy THROUGH this market** | `src/engine/simulation/stages/repo-clearing.ts:RepoSessionResult` | ⚠️ |
 | E2 VERIFY a squeeze here raises funding costs elsewhere | `src/engine/simulation/stages/repo-clearing.ts:fundableNeedLocal` | ⚠️ |
 | **E3 interbank exposure is a contagion path, by name** | `src/domain/repo.ts:RepoContract` | ⚠️ |
@@ -154,24 +154,18 @@ nothing moves. The need is read on settled reserves plus the legs already posted
 are what is still wrong at that close, and D4 (a bank that fails for liquidity) is what the
 unbounded loan still forecloses; A3.a is no longer the cause of them.
 
-### ❌ C5 / D6 — THE FACILITY AT THE CLOSE HAS NONE OF BAGEHOT'S FOUR. KNOWN(20-LLR)
+### ✅ C5 / ❌ D6 — THE ONLY FACILITY IS THE SEAT, AND IT HAS THREE OF BAGEHOT'S FOUR
 
-Worth stating precisely because **the model contains a correct facility and an incorrect one**, and
-the difference is this tree's whole C section:
+*2026-09-05 (§9.20-LLR-ii).* The model used to contain a correct facility and an incorrect one: the
+standing-facility seat in the repo book — collateralised (pledged paper, per bucket, encumbered),
+size-bounded by `unencumberedBorrowingCapacityLocal`, priced at a posted rate cleared in the book,
+and unreachable by a bank with no free paper — and an unsecured, flat-priced, unrefusable loan of
+the whole remaining shortfall at the close, which took whatever the seat left. The loan is deleted.
+The seat is the window's only lending, so C5 holds and C4.b is no longer defeated: a bank out of
+eligible paper is not a borrower and ends the week short (`recordFundingShortfalls`, B7).
 
-| | the SRF seat (`repo-clearing.ts:414`) | `strikeCentralBankLoan` (`central-bank-loans.ts`, a contract row since §9.20-LLR-a) |
-|---|---|---|
-| collateral | pledged paper, per bucket, encumbered | none |
-| size | bounded by `unencumberedBorrowingCapacityLocal` | the whole shortfall, always |
-| price | `srfBps − 1bp`, a posted rate cleared in the book | policy + 125bp, flat |
-| refusal | a bank with no free paper never becomes a borrower | unreachable |
-| when | the close, after the flows (§9.20-LLR-i) | the close, after it |
-
-Since §9.20-LLR-i both run at the close, the disciplined one first; the undisciplined one still takes whatever the disciplined one left.
-That is why C4.b is marked `⚠️` rather than `✅`: the collateral constraint is real and correctly
-implemented, and it is *defeated* — a bank with no eligible paper drops out of `needByTicker`
-entirely, its shortfall becomes invisible to the session, and the close then lends it the whole
-amount unsecured. **Already §3 step 20-LLR.**
+D6 stays ❌ for the one condition the seat does not carry: it lends to any bank with paper,
+solvent or not — `the-central-bank.md` D3.a, §3 step 20-LLR-iii.
 
 ### ✅ B2 / B2.a / ⚠️ B2.b — THE UNSECURED MARKET EXISTS, AT THE CLOSE, ONE BOOK PER NAME
 
@@ -226,14 +220,15 @@ precisely so a quiet week can be told from a dead market. Nothing reads them int
 anywhere else, so E2 is a channel that is instrumented and not connected. **A measurement, for §3
 step 38**, and it becomes a real read the week E1 is wired.
 
-### ⚠️ B7 / D2 / ✅ D1 — THE SQUEEZE EXISTS IN ONE BOOK AND IS ABSORBED IN THE OTHER
+### ✅ B7 / ⚠️ D2 / ✅ D1 — THE SQUEEZE EXISTS, AND IS NO LONGER ABSORBED
 
 B7 is genuinely representable in the TERM book and the code says why: `withWindow: false` for term,
 so "a term need the private market will not fund simply is not funded, and falls back to overnight
 below. That is a funding squeeze, and it could not previously happen"
-(`repo-clearing.ts:473`). But the overnight book always has the window in it at full size, so
-`unfundedTermLocal` is never a failure — it is a maturity shift. The only genuine non-clearing is a
-bank with no unencumbered paper, and C5's facility catches that at the close.
+(`repo-clearing.ts:473`). The overnight book has the window in it at full size, so
+`unfundedTermLocal` is a maturity shift; the genuine non-clearing is a bank with no unencumbered
+paper, and since §9.20-LLR-ii nothing catches it at the close — it ends the week short, recorded on
+the region (`bank-funding-close.ts:recordFundingShortfalls`) and told by the news. B7 holds.
 
 D1 is real and good: a bank's 07c schedule has `minHoldingLocal = max(encumbered face, liquidity
 floor)`, so it can sell down to what it must keep and no further, at whatever the auction prints.

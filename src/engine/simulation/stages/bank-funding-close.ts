@@ -1,18 +1,17 @@
 /**
- * THE FUNDING CLOSE: a bank whose reserve account ends the week below its operating
- * buffer raises money overnight to cover it — §3.20b: FIRST from the banks that ended above
- * theirs, unsecured, on its name and at the market's price of it (`interbank.ts`), and only for
- * what no bank will lend from the central bank.
+ * THE FUNDING CLOSE: the money market, where the week's flows have made every bank's need
+ * knowable (§3.20-LLR-i). Per region, per round: the repo books, with the standing facility as
+ * the posted-rate seat at the top of the corridor — collateral-bounded, priced, and a bank out
+ * of eligible paper simply is not a borrower in it; then the unsecured book on the name
+ * (§3.20b); then the overnight window taking what was left unlent; then settlement, until
+ * nothing moves.
  *
- * Why at the close and not in 02b beside the roll: the shortfall is made by the books that clear
- * AFTER 02b — the desks buy inventory sized by capital, not by cash, and the settlement of a
- * week's customer flows can take 50B of reserves out of one bank (measured MIUJ at −25B
- * by week 3). A repo session or a raise struck in the morning cannot see any of it. A real
- * treasury funds its day at the end of the day; this is that.
- *
- * The liability is written by bank-lending.ts (its owner); the cash arrives as a payment from
- * the unmodeled wholesale lender and settles in its own pass, so the week closes with every
- * reserve account at or above its buffer and the central bank counts real balances.
+ * §3.20-LLR-ii — THERE IS NO LOAN BEHIND THE MARKET. The unbounded, unsecured, unrefusable
+ * central-bank loan that stood here is gone: the seat is the lender of last resort, and a bank
+ * that still ends the week below its buffer — or overdrawn at the central bank — ends it so.
+ * That is a real state, recorded per bank on the region (`recordFundingShortfalls`) for the
+ * news, the resolution and the audit to read; what it costs the bank, and whether the seat
+ * lends to a bank the supervisor would close, are §3 step 20-LLR-iii's.
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
@@ -21,7 +20,6 @@ import { currencyOf } from '../../../domain/geography';
 import { GameState } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { centralBankShortfallLocal } from './bank-lending';
-import { strikeCentralBankLoan, syncCentralBankLoanSheets } from './central-bank-loans';
 import { bankCashBufferRatioOf } from '../../macro/banking';
 import { WeeklyStepContext } from './context';
 import { pendingSettlementLocal, runSettlementStage } from './settlement';
@@ -56,37 +54,38 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
       reg.repoFundableNeedLocal = Math.round(session.fundableNeedLocal);
       reg.repoClearedVolumeLocal = Math.round(session.clearedVolumeLocal);
       if (session.clearedVolumeLocal > 0) raisedAny = true;
-      const unfunded = runInterbankSession(ctx, regionId, reg, banks);
-      if ([...unfunded.values()].some((v) => v > 0)) raisedAny = true;
+      const unsecured = runInterbankSession(ctx, regionId, reg, banks);
+      if (unsecured.struckLocal > 0) raisedAny = true;
       // The money fund's quote for next week's yield-gap decision, off its post-session book.
       refreshMmfQuotes(regionId, reg, ctx);
-    });
-    const touchedRegions = new Set<RegionId>();
-    ctx.updatedCompanies.forEach((bank) => {
-      if (!bank.isBankEntity || !bank.bankBalanceSheet || !isActiveCompany(bank)) return;
-      const reg = ctx.updatedRegions[bank.region];
-      if (!reg) return;
-      const reservesLocal = bankReservesOf(ctx.v2, bank.id) + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
-      const raisedLocal = centralBankShortfallLocal(householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)), reservesLocal, bankCashBufferRatioOf(bank));
-      if (raisedLocal <= 0) return;
-      raisedAny = true;
-      // §3.20-LLR-a: the lender of last resort's loan is a ROW — the central bank pays with
-      // reserves it creates, and the row is the asset the money it made has behind it.
-      strikeCentralBankLoan(ctx, bank.region, reg, bank, raisedLocal);
-      touchedRegions.add(bank.region);
-      if (process.env.FUNDING_TRACE === '1') {
-        console.log(`  [funding-close] w${ctx.nextWeek} r${round} ${bank.region}:${bank.ticker} raised ${(raisedLocal / 1e6).toFixed(0)}M (cash was ${(reservesLocal / 1e6).toFixed(0)}M)`);
-      }
-    });
-    touchedRegions.forEach((regionId) => {
-      const reg = ctx.updatedRegions[regionId];
-      if (reg) syncCentralBankLoanSheets(ctx, regionId, reg, banksOf(ctx.updatedCompanies, regionId));
     });
     // THE OVERNIGHT WINDOW takes what the session left unlent of the non-banks' idle cash: the
     // deposits leave the banks that held them, and the next round is where a bank short because
     // of that borrows — at the market first, then at the window's seat.
-    drawReverseRepoAtTheClose(ctx);
-    if (!raisedAny) return;
+    if (drawReverseRepoAtTheClose(ctx) > 0) raisedAny = true;
+    if (!raisedAny) break;
     runSettlementStage(ctx);
   }
+  recordFundingShortfalls(ctx);
+}
+
+/**
+ * §3.20-LLR-ii — A BANK THAT COULD NOT FUND ENDS THE WEEK SHORT, AND THE WEEK SAYS SO. What each
+ * bank is still short of its buffer after the market and the window, on settled reserves plus
+ * the legs already posted, written fresh on the region every close (a clean close leaves the
+ * record empty). Nothing lends against it: this is the constraint the funding channel had lost.
+ */
+export function recordFundingShortfalls(ctx: WeeklyStepContext): void {
+  (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
+    const reg = ctx.updatedRegions[regionId];
+    if (!reg) return;
+    const short: Record<string, number> = {};
+    banksOf(ctx.updatedCompanies, regionId).forEach((bank) => {
+      if (!isActiveCompany(bank)) return;
+      const reservesLocal = bankReservesOf(ctx.v2, bank.id) + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
+      const shortLocal = centralBankShortfallLocal(householdDepositsAt(ctx.v2, bank.ticker, currencyOf(regionId)), reservesLocal, bankCashBufferRatioOf(bank));
+      if (shortLocal > 0) short[bank.id] = Math.round(shortLocal);
+    });
+    reg.bankFundingShortfallsLocal = short;
+  });
 }

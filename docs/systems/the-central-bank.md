@@ -90,7 +90,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.a it can always meet an obligation in its own money | `src/engine/simulation/stages/central-bank-demand.ts:bookCentralBankFills` | ✅ |
 | A2 it has a balance sheet, and a real one | `src/domain/central-bank.ts:CentralBank` | ✅ |
 | A2.a liabilities: reserves, currency, the TGA, the RRP window | `src/domain/central-bank.ts:centralBankLiabilitiesLocal` · `src/engine/ledger/accounts.ts:bankReservesOf` | ✅ |
-| A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsLocal` · `src/domain/central-bank-loan.ts:CentralBankLoan` · `src/engine/ledger/contract-ledger.ts:centralBankLoanBookOf` · `src/engine/ledger/contract-ledger.ts:swapLineBookOf` | ✅ |
+| A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsLocal` · `src/domain/central-bank-loan.ts:CentralBankLoan` · `src/engine/ledger/contract-ledger.ts:centralBankLoanBookOf` · `src/engine/simulation/stages/central-bank-loans.ts:serviceCentralBankLoans` · `src/engine/ledger/contract-ledger.ts:swapLineBookOf` | ✅ |
 | A2.c VERIFY it closes weekly, with a revaluation account | `src/engine/audit/money.ts:m1` | ✅ |
 | A3 a mandate: a stated objective | `src/domain/region-macro.ts:targetInflation` | ⚠️ |
 | A4 operationally independent, financially owned | `src/domain/central-bank.ts:remittanceLocal` | ✅ |
@@ -109,9 +109,9 @@ checked by `scripts/check-atlas.sh`.
 | C4 reinvestment is a separate decision; the difference is QT | `src/domain/central-bank.ts:reinvestmentShare` | ✅ |
 | D1 the standing facility lends against collateral at a stated rate | `src/engine/macro/banking.ts:SRF_SPREAD_BPS` | ✅ |
 | D2 eligibility and haircuts are ITS choice, a policy instrument | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ⚠️ |
-| **D3 lender of last resort: freely, good collateral, penalty, solvent** | `src/engine/simulation/stages/central-bank-loans.ts:strikeCentralBankLoan` · `src/engine/simulation/stages/swap-lines.ts:drawSwapLine` | ❌ |
+| **D3 lender of last resort: freely, good collateral, penalty, solvent** | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` · `src/engine/simulation/stages/swap-lines.ts:drawSwapLine` | ⚠️ |
 | **D3.a FORBID it does not lend to an insolvent bank** | `src/engine/simulation/stages/bank-funding-close.ts:runBankFundingCloseStage` | ❌ |
-| **D4 it can REFUSE, and refusal must be reachable** | — | ❌ |
+| **D4 it can REFUSE, and refusal must be reachable** | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` · `src/engine/simulation/stages/bank-funding-close.ts:recordFundingShortfalls` | ✅ |
 | E1 the treasury banks with it; the account is a liability | `src/engine/ledger/accounts.ts:treasuryAccountOf` | ✅ |
 | **E2 FORBID no automatic overdraft** | `src/engine/ledger/accounts.ts:waysAndMeansOf` | ❌ |
 | E3 remittance: its net income goes to the treasury | `src/domain/central-bank.ts:remittanceLocal` | ✅ |
@@ -128,45 +128,27 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ D3 / D3.a / D4 — THERE IS NO LENDER OF LAST RESORT, THERE IS A CREDIT LINE. KNOWN(20-LLR)
+### ⚠️ D3 / ❌ D3.a / ✅ D4 — THE LENDER OF LAST RESORT IS THE SEAT, WITH THREE OF BAGEHOT'S FOUR
 
-*2026-09-05 (§9.17b-v). In FOREIGN money there is one now, and it has two of the four: the swap
-lines (`domain/swap-lines.ts`, `stages/swap-lines.ts`) lend freely — what the funding market left
-unfilled once the basis cleared past the line's price — and at a penalty (overnight plus
-`SWAP_LINE_SPREAD_BPS`), drawn by the central bank from the other central bank against its own
-money and on-lent to its banks for a quarter. Unsecured, and to any bank that came to the market:
-collateral and solvency are still the two the domestic line lacks, so the row stays ❌.*
+*2026-09-05 (§9.20-LLR-ii).* The unsecured, flat-priced, unrefusable loan the funding close struck
+for whatever the market left unfunded is deleted. The window's only lending is the standing-facility
+seat in the repo book, which runs at the close now (§9.20-LLR-i), after the week's flows:
 
-*2026-09-05 (§9.20-LLR-a): the loan is a CONTRACT now — a row of the contract store per bank per
-close (`domain/central-bank-loan.ts`, `stages/central-bank-loans.ts`), struck at the close for what the
-interbank market left unfunded, paying its week's interest at its own struck rate at the open, repaid
-from cash above the buffer and rolled at that morning's rate when it cannot be; `loansToBanksLocal`
-and `centralBankLoanLocal` are reads of the book, and a resolution re-seats the rows. §9.20-LLR-b did
-the same for the swap-line draws (`swapLineBookOf`; the three lines that stood for them are reads,
-written by `syncSwapLineSheets` alone). What a row carries is still what the scalar carried: none
-of the four below.*
-
-Bagehot's rule is four conditions and `strikeCentralBankLoan` (`central-bank-loans.ts`) has one and a
-half:
-
-| Bagehot | code |
+| Bagehot | the seat |
 |---|---|
-| freely | ✅ — it lends exactly the shortfall, every time |
-| against good collateral | ❌ — no collateral is named, tested or encumbered |
-| at a penalty | ⚠️ — `policy + SRF_SPREAD_BPS + CENTRAL_BANK_LOAN_PENALTY_BPS` = policy + 125bp, the same for every bank, and it is paid at `02b:464` while the sheet's own margin statistic charges a *different* rate (see `banks-funding-and-liquidity.md` B2) |
-| to the solvent | ❌ — nothing in `bank-funding-close.ts` reads `isBankUnderPca`, or capital, or anything else |
+| freely | ✅ — a posted rate with an elastic quantity, at full size at its price |
+| against good collateral | ✅ — pledged sovereign paper, per bucket, encumbered on the register, bounded by `unencumberedBorrowingCapacityLocal` |
+| at a penalty | ✅ — `srfBps − 1bp`, the top of the corridor, cleared in the book |
+| to the solvent | ❌ — nothing reads `isBankUnderPca` before the seat lends |
 
-D4 (refusal reachable) has no code path whatever: the function's only early return is
-`shortfallLocal < 1e6`. **The central bank cannot say no**, and since the funding-close runs at stage
-417 of ~50 named stages — after resolution's own trigger has *not* fired and before
-`bank-resolution` at 418 — a bank that is about to be closed is funded first.
+D4 holds: a bank out of eligible paper is not a borrower at the seat, and after the unsecured book
+on its name (§9.20b) has taken what surplus banks will lend it, it ends the week short — recorded on
+the region (`bank-funding-close.ts:recordFundingShortfalls`) and told by the news. D3.a is the one
+condition left, with what a short bank pays and whether its depositors move: **§3 step 20-LLR-iii**.
 
-Note what this is NOT: `runRegionalRepoSession`'s standing-facility seat IS a proper facility. It is
-collateralised (`unencumberedBorrowingCapacityLocal` bounds the borrower's size), priced (`srfBps -
-SRF_SEAT_STEP_BPS`, a posted rate with an elastic quantity), and a bank out of eligible paper simply
-does not appear as a borrower. **The model has a disciplined facility and an undisciplined one, and
-the undisciplined one runs later** — which is rule 4's defect and exactly what 20-LLR names as the
-escape hatch from the disciplined one. **Already §3 step 20-LLR.**
+In FOREIGN money the swap lines (`domain/swap-lines.ts`, `stages/swap-lines.ts`) lend freely and at
+a penalty — drawn by the central bank from the other central bank and on-lent to its banks for a
+quarter — but unsecured and to any bank that came to the market; the same two gaps.
 
 ### ❌ E2 — THE TREASURY HAS AN AUTOMATIC OVERDRAFT HERE, ON THIS SHEET
 

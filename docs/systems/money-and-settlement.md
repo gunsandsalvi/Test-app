@@ -113,7 +113,7 @@ checked by `scripts/check-atlas.sh`.
 | B2 a balance is carried and changes only by a named movement | `src/engine/ledger/accounts.ts:projectBooks` | ✅ |
 | B3 a balance can be negative | `src/engine/ledger/accounts.ts:treasuryNetOf` | ✅ |
 | B3.a a customer overdrawn is borrowing — a **credit decision** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` · `src/engine/macro/banking.ts:leverageHeadroomLocal` | ✅ |
-| B3.b a bank overdrawn at the CB borrows, priced by the corridor | `src/engine/simulation/stages/central-bank-loans.ts:strikeCentralBankLoan` | ⚠️ |
+| B3.b a bank overdrawn at the CB borrows, priced by the corridor | `src/engine/simulation/stages/bank-funding-close.ts:recordFundingShortfalls` | ❌ |
 | **B3.c FORBID an overdraft is never a silent negative** | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ✅ |
 | C1 a payment is an instruction | `src/engine/simulation/stages/settlement.ts:PaymentInstruction` | ✅ |
 | C1.a it names both sides | `src/engine/ledger/wire.ts:wirePush`, `src/engine/ledger/wire-world.ts:wireWorldOf`, `src/engine/ledger/entity-index.ts:companyOfParty`, `src/domain/party.ts:companyParty` | ✅ |
@@ -179,8 +179,10 @@ where the news tells it. So B3.a is a decision, and E1.a holds: nothing silently
 What is still absent is E1 itself — what a party in that state IS. A firm whose bank refused it
 is in default of payment, and nothing yet reads the refusal as one: the negative balance carries
 to next week's close and is offered to the same lender again. That, and the bank path (a bank
-short of reserves still reaches `strikeCentralBankLoan` — a contract row since §9.20-LLR-a — which lends the shortfall
-unconditionally), are **§3 step 20-LLR**, which owns the funding channel end to end.
+short of reserves reached `strikeCentralBankLoan`, which lent the shortfall
+unconditionally — deleted by §9.20-LLR-ii: a bank the seat will not fund now ends the week short,
+recorded and told, and B3.b is ❌ until 20-LLR-iii prices that overdraft), are **§3 step 20-LLR**, which
+owns the funding channel end to end.
 
 **Two corrections to 20-LLR's own text, from reading the code today.** (1) The step says the
 facility carries "no penalty rate"; there is one — `CENTRAL_BANK_LOAN_PENALTY_BPS = 100` over

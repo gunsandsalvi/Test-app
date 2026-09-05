@@ -243,6 +243,26 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
     });
   });
 
+  // ---- 6a. §3.20-LLR-ii: a bank that could not fund. The market and the window have run and it
+  // still ends the week below its buffer — nothing lends against that any more. ----
+  banksOf(ctx.updatedCompanies).forEach((b) => {
+    const shortLocal = ctx.updatedRegions[b.region]?.bankFundingShortfallsLocal?.[b.id] ?? 0;
+    if (!(shortLocal > 1e6)) return;
+    const sheet = ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet;
+    push({
+      id: `unfunded-${b.ticker}-${week}`,
+      kind: 'bank short of funding',
+      category: 'CENTRAL_BANK',
+      title: `${b.name} ends the week ${M(shortLocal)} short of reserves`,
+      description: `${b.ticker} could not fund its buffer at the close: the repo book, the unsecured interbank book and the standing facility together left it ${M(shortLocal)} short. Reserves ${M(bankReservesOf(ctx.v2, b.id))} against ${M(householdDepositsAt(ctx.v2, b.ticker, currencyOf(b.region)))} of household deposits${sheet ? `, capital ratio ${P(sheet.bankCapitalRatio)}, at the window ${M(sheet.srfBorrowingLocal ?? 0)}` : ''}.`,
+      cause: `Its collateral, its name and the market's spare reserves did not cover what the week's flows took.`,
+      refs: [company(b), region(b.region)],
+      materialityLocal: shortLocal,
+      impactRegion: b.region, impactSector: b.sector, affectedTicker: b.ticker,
+      urgent: true,
+    });
+  });
+
   // ---- 6. A bank at the window. ----
   banksOf(ctx.updatedCompanies).forEach((b) => {
     const sheet = ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet;

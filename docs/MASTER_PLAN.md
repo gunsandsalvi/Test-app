@@ -623,15 +623,8 @@ written from here):
     **The central bank is doing the interbank market's job because the interbank market is
     closed by the time there is a job to do.**
 
-    **THE FIX IS TO MOVE THE SESSION, NOT TO BOUND THE LOAN — and the session is moved (20-LLR-i,
-    §9).** What is left, in order:
-    · **20-LLR-ii — DELETE THE LOAN.** `central-bank-loans.ts:strikeCentralBankLoan` still lends
-      whatever the close session and the unsecured book left unfunded. It goes: the window's
-      only lending is the standing-facility seat in the repo book, collateral-bounded, at the
-      corridor's ceiling. A bank that still cannot fund ends the week below its buffer — or
-      overdrawn at the central bank — and that is a real state the week records, not a loan.
-      The rows 20-LLR-a built carry nothing after this and the kind stays for what 20-LLR-iii
-      may write into it.
+    **THE FIX IS TO MOVE THE SESSION, NOT TO BOUND THE LOAN — the session is moved (20-LLR-i) and
+    the loan is deleted (20-LLR-ii), both §9.** What is left:
     · **20-LLR-iii — the three questions**, only now askable because a bank that cannot fund
       has somewhere to be: a penalty rate on an overdrawn reserve account, a solvency test on
       the seat (D3.a: the window does not lend to a bank under PCA), and depositor flight from a
@@ -1519,6 +1512,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20-LLR-ii — THE LOAN IS DELETED.** `strikeCentralBankLoan` — the funding close's unsecured,
+  flat-priced, unrefusable loan of whatever the market left unfunded — is gone. The standing-facility
+  seat in the repo book (collateralised, size-bounded by the unencumbered paper, priced at the top of
+  the corridor, at the close since 20-LLR-i) is the window's only lending; the close runs the repo
+  books, the unsecured book on the name and the overnight window round by round and stops when
+  nothing moves (the window's draw now reports what it parked so a drained bank gets its round).
+  A bank still below its buffer ends the week so: `bank-funding-close.ts:recordFundingShortfalls`
+  writes each bank's shortfall on the region (`bankFundingShortfallsLocal`, empty on a clean
+  close) and the news tells it. The `CB_LOAN` kind and its service stay for 20-LLR-iii. Trees:
+  `money-market.md` C5 ✅ C4.b ✅ B7 ✅ (D6 ❌: the seat lacks the solvency test),
+  `the-central-bank.md` D3 ⚠️ (three of Bagehot's four) D4 ✅ (D3.a ❌), `banks-funding-and-
+  liquidity.md` D6.a ✅, `money-and-settlement.md` B3.b ❌ (an overdrawn bank is nobody's borrower
+  until 20-LLR-iii prices it). Gates green; no run.
 
 **20-LLR-i — THE MONEY MARKET CLEARS AT THE CLOSE.** The session (`runRegionalRepoSession`) ran at
   stage 3 of ~50, before every book that moves reserves, so it sized each bank's shortfall against

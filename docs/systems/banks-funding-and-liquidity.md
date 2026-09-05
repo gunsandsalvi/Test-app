@@ -114,7 +114,7 @@ checked by `scripts/check-atlas.sh`.
 | D4.a which transmits into the credit book | — | ❌ |
 | D5 draws the facility, collateralised, at a penalty | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ⚠️ |
 | **D6 it can FAIL TO FUND ITSELF** | `src/domain/bank-resolution.ts:isBankUnderPca` | ❌ |
-| **D6.a FORBID no unbounded, uncollateralised, unpriced line** | `src/engine/simulation/stages/central-bank-loans.ts:strikeCentralBankLoan` | ❌ |
+| **D6.a FORBID no unbounded, uncollateralised, unpriced line** | `src/engine/simulation/stages/repo-clearing.ts:CB_SRF_SEAT_ID` | ✅ |
 | **E1 depositors can leave; A1.c leaves fastest** | — | ❌ |
 | **E2 they leave because they observe something** | — | ❌ |
 | E2.a and what they observe is observable | `src/ui/objects/company.tsx:bankCapitalRatio` | ✅ |
@@ -132,7 +132,12 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ D6 / D6.a / E1–E5 — THE WHOLE LIABILITY SIDE HAS NO FAILURE MODE. KNOWN(20-LLR)
+### ❌ D6 / ✅ D6.a / ❌ E1–E5 — THE LIABILITY SIDE HAS A CONSTRAINT NOW, AND STILL NO FAILURE MODE
+
+*2026-09-05 (§9.20-LLR-ii): D6.a holds — the unbounded line is deleted; the only central-bank
+lending is the collateral-bounded, priced seat in the repo book at the close, and a bank it will
+not fund ends the week short (`bank-funding-close.ts:recordFundingShortfalls`). D6 — that it can
+FAIL for it — is still 20-LLR-iii's, with the run.*
 
 `bank-lending.ts:917` is four lines: `shortfallLocal = operatingCashBufferLocal(...) - settledCashLocal`,
 and if it is positive the bank gets exactly that, always. No collateral, no eligibility, no cap, no

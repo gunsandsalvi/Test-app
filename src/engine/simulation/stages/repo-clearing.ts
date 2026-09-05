@@ -681,8 +681,9 @@ function parkUnlentSleevesAtTheWindow(
  * than in the money-market session is what keeps every book's budget the same as the cash it
  * actually had while it was trading.
  */
-export function drawReverseRepoAtTheClose(ctx: WeeklyStepContext): void {
+export function drawReverseRepoAtTheClose(ctx: WeeklyStepContext): number {
   const parkedByRegion = new Map<string, number>();
+  let parkedTotal = 0;
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     const wantLocal = ctx.rrpIntendedByEntity.get(e.id) ?? 0;
     const rateAnnual = ctx.rrpRateAnnualByRegion.get(e.region) ?? 0;
@@ -693,6 +694,7 @@ export function drawReverseRepoAtTheClose(ctx: WeeklyStepContext): void {
     const parkedLocal = Math.min(wantLocal, institutionSpendableLocal(ctx, e));
     if (!(parkedLocal > 0)) return e;
     parkedByRegion.set(e.region, (parkedByRegion.get(e.region) ?? 0) + parkedLocal);
+    parkedTotal += parkedLocal;
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: e.id },
       payee: { kind: 'CENTRAL_BANK', region: e.region },
@@ -707,6 +709,7 @@ export function drawReverseRepoAtTheClose(ctx: WeeklyStepContext): void {
     if (cb) cb.reverseRepoBorrowedLocal = (cb.reverseRepoBorrowedLocal ?? 0) + usd;
   });
   ctx.rrpIntendedByEntity.clear();
+  return parkedTotal;
 }
 
 /** Last week's parked cash, back with the interest it earned at the rate it was struck at. */

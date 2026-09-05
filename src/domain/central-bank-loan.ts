@@ -1,6 +1,6 @@
 /**
- * §3.20-LLR-a — THE CENTRAL BANK'S LOAN TO A BANK IS A CONTRACT. The funding close lends a bank
- * what it is short of its buffer (`bank-funding-close.ts`); each such loan is a row of the
+ * §3.20-LLR-a — THE CENTRAL BANK'S LOAN TO A BANK IS A CONTRACT. (§3.20-LLR-ii: the funding close
+ * no longer strikes one — the standing-facility seat is the window's only lending.) A loan is a row of the
  * contract store — the central bank as lender, the bank as borrower, a principal, the rate it
  * was struck at (the window rate plus the unsecured penalty), overnight on the model's clock —
  * matured at the next open (`02b`): repaid from the bank's cash above its buffer, and what
