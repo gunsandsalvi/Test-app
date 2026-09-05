@@ -72,7 +72,11 @@ export interface FrontPass {
 
 let scratch: FrontPass | undefined;
 
-function allocScratch(n: number): FrontPass {
+/** §3.13-INV-v-c-ii-a — exported so `test/native-mirror.test.ts` can build the lanes both cores
+ *  write into. It hands back a REUSED module singleton, so that test records the opening state of
+ *  every lane before either core runs and RESTORES it between them: a lane one core writes and the
+ *  other leaves alone must read as a difference, not as the first core's answer carried over. */
+export function allocScratch(n: number): FrontPass {
   if (scratch && scratch.n >= n) {
     // §5-WIRES W4: the consumption record ACCUMULATES within the week (+= per recipe input), so
     // a reused scratch starts it at zero — measured: unreset, week 2's record carried week 1's.
