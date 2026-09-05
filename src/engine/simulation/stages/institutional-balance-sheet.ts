@@ -16,9 +16,9 @@ import { marketCapAt } from '../../../engine2/instruments';
  *     their debt interest (stage 08); the receiving side simply did not exist — dollars leaving
  *     one real book and arriving nowhere, the exact "1$ is 1$" hole rule 4 exists to catch.
  *     Corporate bond coupons and loan interest are credited weekly here off the issuer's own
- *     real tranche terms. Sovereign coupons are deliberately NOT credited: the government does
- *     not pay them yet (its interest expense does not exist — /BP5), and crediting the
- *     holder without debiting the payer would create money.
+ *     real tranche terms, and sovereign coupons by the calendar (`sovereign-calendar.ts`); both
+ *     accrue onto the register row between the dates, and §3.13f counts that accrued in the
+ *     total below — a receivable is an asset.
  *
  *  2. **Marking.** `totalAssetsLocal` becomes what it is: cash plus the book, recomputed weekly
  *     after the clearing stages. A derived sum, not a stored parameter.
@@ -34,7 +34,7 @@ import { marketCapAt } from '../../../engine2/instruments';
 
 import { institutionProfile } from '../../../domain/institution-profiles';
 
-import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
+import { bookHeadOf, instrumentIdAt, bookAccruedLocal } from '../../../engine2/holdings';
 import { RegionId, InstitutionalEntity, Company, GameState } from '../../../types';
 import { institutionTotalAssetsLocal as totalAssetsRead } from '../../../domain/institutions';
 import { V2World, ensureV2, typeOf, typeRefOf, regionOf } from '../../../engine2/world';
@@ -241,7 +241,9 @@ export function institutionTotalAssetsLocal(ctx: WeeklyStepContext, entity: Inst
   const portfolioLocal = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
     ? sponsorPortfolioLocal(entity, comparableMultiple(ctx.v2, ctx, entity.region, ctx.prevActiveFirms), companyIndex(ctx), ctx.v2)
     : 0;
-  return totalAssetsRead(entity, entityCashOf(ctx.v2, entity), institutionBookLocal(ctx.v2, entity.id), pendingLocal, portfolioLocal);
+  // §3.13f: plus the coupon accrued on its rows and not yet paid — the bank's
+  // `sovereignAccruedCouponLocal`, read here rather than carried.
+  return totalAssetsRead(entity, entityCashOf(ctx.v2, entity), institutionBookLocal(ctx.v2, entity.id), pendingLocal, portfolioLocal, bookAccruedLocal(ctx.v2, entity.id));
 }
 /**
  * §3.13-BOOK (c-then-2) — the memo stays, and it is the ONE place in the engine where one is safe
@@ -268,5 +270,5 @@ export function institutionTotalAssetsFromState(state: GameState, entity: Instit
     ? sponsorPortfolioLocal(entity, comparableMultiple(ensureV2(state), state, entity.region, state.companies.filter((c) => isActiveCompany(c))),
         buildEntityIndex(state.companies, state.institutionalEntities ?? []).companyById, v2)
     : 0;
-  return totalAssetsRead(entity, entityCashOf(v2, entity), institutionBookLocal(v2, entity.id), 0, portfolioLocal);
+  return totalAssetsRead(entity, entityCashOf(v2, entity), institutionBookLocal(v2, entity.id), 0, portfolioLocal, bookAccruedLocal(v2, entity.id));
 }

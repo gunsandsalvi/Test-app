@@ -547,12 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-13f. **An accrued coupon is an ASSET, and only the banks carry it.** The ledger holds the balance;
-    a bank shows it as `sovereignAccruedCouponLocal`, an institution shows nothing. So an
-    institution that pays a seller's accrued at settlement (13b) has the cash gone and no
-    receivable standing against it until the coupon date, and the same is true of every week it
-    accrues. One line on the institutional sheet, read from the same ledger the bank's is.
-
 14-SHELL. **THE SHELL, BEFORE THE VIEWS THAT SIT IN IT** (user, 2026-09-04: *"the UI lags when
     showing the holders section given it's so long, put instead the top 50 and a button to click
     to expand at the bottom (same applies for every long list); when I click on the search bar at
@@ -1682,6 +1676,18 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13f — AN ACCRUED COUPON IS AN ASSET OF EVERY HOLDER.** An institution's total assets — the one
+read every sizing pass, the household residual and the UI take (`domain/institutions.ts:
+institutionTotalAssetsLocal`, fed by `institutional-balance-sheet.ts` from the context and from a
+closed state) — count the coupon accrued on its register rows and not yet paid by a date
+(`bookAccruedLocal`), the same line a bank carries as `sovereignAccruedCouponLocal` and read off
+the same ledger; the statement view shows it as "Accrued coupon" and sums it into total assets. An
+institution that paid a seller's accrued at settlement (13b) had the cash gone and nothing standing
+against it until the date, and every week it accrued was income on no sheet; now equity, the
+residual of assets over the beneficiary claim, moves the week the coupon is earned. The seed's
+pre-register read is untouched (nothing has accrued before the rows exist). `test/sovereign-
+calendar.test.ts`. Gates green; no run.
 
 **13e-ii — THE CENTRAL BANK JOINS THE CALENDAR.** `central-bank.ts` paid the central bank its
 coupon WEEKLY, `face × coupon / 52` straight from the treasury and outside the holder walk — a

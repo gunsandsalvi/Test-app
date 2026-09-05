@@ -117,6 +117,13 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
+**2026-09-05 (§9.13f) — E2's read counts the receivable.** `institutionTotalAssetsLocal` takes the
+coupon accrued on the entity's register rows and not yet paid by a date (`holdings.ts:accruedLocal`,
+read by `bookAccruedLocal`) as an asset, the same line a bank carries as `sovereignAccruedCouponLocal`
+and off the same ledger; the statement view shows it as "Accrued coupon". Before, an institution
+that paid a seller's accrued at settlement had the cash gone and nothing standing against it until
+the coupon date.
+
 ### ❌ B1 / B2 / B2.a / B2.b / E3 — THE LIABILITY IS A CASH BALANCE, NOT A PRESENT VALUE
 
 There is no discount rate in this sector, fixed or otherwise, because **there is no discounting.**

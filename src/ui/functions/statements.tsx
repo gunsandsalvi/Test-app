@@ -18,7 +18,7 @@ import { Card, Hint, KV, Tabs, T, mono } from '../ui';
 import { statementLocal, pct, pctLevel, ratio, changePct, money } from '../format';
 import { formatDate, quarterLabel } from '../calendar';
 import { World, companyOf, institutionOf, regionOf, bookOf } from '../world';
-import { bookBasisLocal, bookUnrealisedLocal, bookRealisedOf } from '../../engine2/holdings';
+import { bookBasisLocal, bookUnrealisedLocal, bookRealisedOf, bookAccruedLocal } from '../../engine2/holdings';
 import { bankRwaLocal } from '../../domain/bank-pricing';
 
 import { cashOf, householdDepositsOf, bankReservesOf, stateDepositLines, treasuryAccountOf } from '../../engine/ledger/accounts';
@@ -197,7 +197,9 @@ function InstitutionStatements({ world, e }: { world: World; e: InstitutionalEnt
   book.forEach((r) => byType.set(r.instrumentType, (byType.get(r.instrumentType) ?? 0) + r.usd));
   const holdings = book.reduce((a, r) => a + r.usd, 0);
   const eCashLocal = entityCashOf(ensureV2(world.state), e);
-  const assets = holdings + eCashLocal;
+  // §3.13f: the coupon accrued on the book and not yet paid — a receivable, on the sheet like a bank's.
+  const accruedLocal = bookAccruedLocal(ensureV2(world.state), e.id);
+  const assets = holdings + accruedLocal + eCashLocal;
   const lines: Line[] = [...byType.entries()].sort((a, b) => b[1] - a[1]).map(([t, usd]) => ({ label: t.toLowerCase().replace(/_/g, ' '), usd }));
   // §3.13-BOOK f2b: the book's cost and its two results, read off the register's lots.
   const v2 = ensureV2(world.state);
@@ -205,6 +207,7 @@ function InstitutionStatements({ world, e }: { world: World; e: InstitutionalEnt
   return (
     <Statement units="USD millions · the live book" asOf={formatDate(world.state.currentWeek)} lines={[
       ...lines,
+      { label: 'Accrued coupon', usd: accruedLocal },
       { label: 'Cash at the house bank', usd: eCashLocal },
       { label: 'Total assets', usd: assets, total: true },
       { label: 'The book at cost', usd: bookBasisLocal(v2, e.id) },

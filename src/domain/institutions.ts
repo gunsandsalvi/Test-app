@@ -217,16 +217,20 @@ export interface InstitutionalEntity {
 /**
  * AN INSTITUTION'S TOTAL ASSETS ARE A READ, never a stored mark: its cash, what it is owed this
  * week (the unsettled legs of its trades and receipts), its overnight cash lent to banks and to
- * the central bank's window, its stock-loan book, and its securities — the register's rows — or, for a sponsor, its portfolio
- * companies at the public comparable. The stored `totalAssetsLocal` this replaces was a week-end
- * mark of exactly this sum, read a week stale by every sizing pass.
+ * the central bank's window, its stock-loan book, its securities — the register's rows — or, for
+ * a sponsor, its portfolio companies at the public comparable, and (§3.13f) the coupon ACCRUED on
+ * those rows and not yet paid by a date: a receivable, an asset, the same line a bank carries as
+ * `sovereignAccruedCouponLocal` and read off the same ledger. Without it an institution that paid
+ * a seller's accrued at settlement (13b) had the cash gone and nothing standing against it until
+ * the coupon date, and every week it accrued was income on no sheet. The stored `totalAssetsLocal`
+ * this replaces was a week-end mark of exactly this sum, read a week stale by every sizing pass.
  */
 export function institutionTotalAssetsLocal(
   e: { repoLentLocal?: number; rrpLentLocal?: number; stockLoanNetLocal?: number; entityType: InstitutionalEntityType; peFund?: unknown },
-  cashLocal: number, bookLocal: number, pendingLocal: number, portfolioLocal: number
+  cashLocal: number, bookLocal: number, pendingLocal: number, portfolioLocal: number, accruedLocal: number
 ): number {
   return cashLocal + pendingLocal + (e.repoLentLocal ?? 0) + (e.rrpLentLocal ?? 0) + (e.stockLoanNetLocal ?? 0)
-    + (e.entityType === 'PRIVATE_EQUITY' && e.peFund ? portfolioLocal : bookLocal);
+    + (e.entityType === 'PRIVATE_EQUITY' && e.peFund ? portfolioLocal : bookLocal) + accruedLocal;
 }
 
 /** The seed's read, before the register exists: cash plus the entity's own itemized rows. */
