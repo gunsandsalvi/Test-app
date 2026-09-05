@@ -40,6 +40,7 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
+import { publishRepoBook } from '../../ledger/contract-ledger';
 import { bankSovereignFaceByBond } from '../../sovereign-register';
 import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
@@ -387,7 +388,7 @@ export function runRegionalRepoSession(
 
   const finish = (book: RepoContract[], onRateAnnual: number, termRateAnnual: number | undefined,
                   clearedVolumeLocal: number): RepoSessionResult => {
-    reg.repoBook = book;
+    publishRepoBook(reg, book); // §3.13-BOOK d4b: the contract ledger's door
     // C5: the window's lending is the central bank's ASSET, derived from the same book.
     if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentLocal = Math.round(repoLentLocal(book, { kind: 'CENTRAL_BANK', region: regionId }));
     reg.repoTermRateAnnual = termRateAnnual === undefined ? undefined : Number(termRateAnnual.toFixed(6));
@@ -825,7 +826,8 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
         ),
       });
     });
-    reg.repoBook = book.filter((c) => c.principalLocal > 1);
-    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentLocal = Math.round(repoLentLocal(reg.repoBook, { kind: 'CENTRAL_BANK', region: regionId }));
+    const survivors = book.filter((c) => c.principalLocal > 1);
+    publishRepoBook(reg, survivors);
+    if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentLocal = Math.round(repoLentLocal(survivors, { kind: 'CENTRAL_BANK', region: regionId }));
   });
 }

@@ -1,4 +1,5 @@
 import { entityCashOf, bankReservesOf } from '../../ledger/accounts';
+import { publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
 import { bankBookAssetsLocal } from '../../desk-register';
 import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
@@ -233,7 +234,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       }
     });
 
-    reg.primeBrokerageBook = nextBook;
+    publishPrimeBrokerageBook(reg, nextBook); // §3.13-BOOK d4b: the contract ledger's door
 
     // The brokers' asset line, derived from the book — one writer, the G2 pattern.
     const brokerIds = new Set(nextBook.map((l) => l.brokerId));
@@ -312,7 +313,7 @@ export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
       drawnByBroker.set(brokerBankId, (drawnByBroker.get(brokerBankId) ?? 0) + drawLocal);
       return { ...fund, primeBrokerageAvailableLocal: Math.max(0, (fund.primeBrokerageAvailableLocal ?? 0) - drawLocal) };
     });
-    reg.primeBrokerageBook = book;
+    publishPrimeBrokerageBook(reg, book);
     if (drawnByBroker.size > 0) {
       // Post-08: the live sheet is the only bank-sheet write that survives (§7.250).
       ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {

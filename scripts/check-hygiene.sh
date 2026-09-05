@@ -110,6 +110,16 @@ if [ -n "$IX_STRAY" ]; then
   echo "$IX_STRAY"
   exit 1
 fi
+# §3.13-BOOK d4b — ONE DOOR for the bilateral books: the derivatives, repo, stock-loan and
+# prime-brokerage books and the trade invoices are written by engine/ledger/contract-ledger.ts
+# alone (a strike, a publish, a novation, a settlement), which resolves every party it names.
+BOOK_STRAY=$(grep -rnE "\.(derivativesBook|repoBook|securityLoanBook|primeBrokerageBook|tradeInvoices)\s*=[^=]|\.tradeInvoices\.push\(" src scripts/harness.ts --include=*.ts --include=*.tsx 2>/dev/null \
+  | grep -vE '^src/engine/ledger/contract-ledger\.ts:' || true)
+if [ -n "$BOOK_STRAY" ]; then
+  echo "ERROR: a bilateral book is written outside engine/ledger/contract-ledger.ts — every contract goes through its door:"
+  echo "$BOOK_STRAY"
+  exit 1
+fi
 # §3.13-BOOK d0 — ONE DOOR. The five mutable store handles are the stores' own: nothing outside
 # engine/ledger/ and engine2/ may name one. A stage or the seed that needs a write asks the owning
 # module for a named operation (`openSectorRow`, `setRowShares`, `restrikeContract`, …), so every

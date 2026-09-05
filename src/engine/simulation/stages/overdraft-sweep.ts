@@ -9,6 +9,7 @@
  * balance is zero at settlement and the money that was spent has a lender.
  */
 import { WeeklyStepContext } from './context';
+import { publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
 import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { defect } from '../../../domain/defect';
@@ -118,7 +119,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       drawnByBroker.set(brokerBankId, (drawnByBroker.get(brokerBankId) ?? 0) + drawLocal);
       return { ...fund, primeBrokerageAvailableLocal: Math.max(0, (fund.primeBrokerageAvailableLocal ?? 0) - withinLineLocal) };
     });
-    reg.primeBrokerageBook = book;
+    publishPrimeBrokerageBook(reg, book); // §3.13-BOOK d4b: the contract ledger's door
 
     // ---- 3. Pools: an SME facility draw at the region's banks, by their share of the pool's
     // deposits (the split settlement itself uses for a SEGMENT balance). ----

@@ -15,6 +15,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { settleTradeInvoices } from '../../ledger/contract-ledger';
 import type { EntityId } from '../../../domain/ids';
 import { companyPartyOf } from '../../../domain/party';
 import { CURRENCY_BY_REGION, CurrencyCode } from '../../../domain/geography';
@@ -83,5 +84,5 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
     ctx.tradeInvoiceFxGainLocal += settledLocal - bookedLocal;
   });
 
-  state.tradeInvoices = stillOutstanding;
+  settleTradeInvoices(state, stillOutstanding); // §3.13-BOOK d4b: the contract ledger's door
 }

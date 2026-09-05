@@ -106,7 +106,7 @@ checked by `scripts/check-atlas.sh`.
 | **B2 unsecured lending prices the borrower's name** | — | ❌ |
 | B2.a a doubted name pays more, or finds no bid | — | ❌ |
 | B2.b VERIFY the strongest-to-weakest spread measures stress | — | ❌ |
-| B3 secured lending prices the collateral | `src/domain/repo.ts:RepoContract` | ✅ |
+| B3 secured lending prices the collateral | `src/domain/repo.ts:RepoContract` · `src/engine/ledger/contract-ledger.ts:publishRepoBook` | ✅ |
 | B3.a eligibility is per asset, and something is ineligible | `src/engine/simulation/stages/repo-clearing.ts:collateralCapacityLocal` | ✅ |
 | B3.b haircuts by asset and tenor | `src/engine/simulation/stages/repo-clearing.ts:computeSovereignRepoHaircuts` | ✅ |
 | B3.c pledged collateral is encumbered and cannot be pledged twice | `src/domain/collateral.ts:overPledgedByBond` | ✅ |

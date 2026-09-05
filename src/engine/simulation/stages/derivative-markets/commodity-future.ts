@@ -38,7 +38,7 @@ import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { exposureToHedgeLocal } from '../corporate-financing';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
-import { strikeDerivatives } from '../derivative-lifecycle';
+import { strikeDerivatives } from '../../../ledger/contract-ledger';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf } from '../../../../engine2/tranches';
 

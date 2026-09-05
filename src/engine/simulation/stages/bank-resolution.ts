@@ -31,7 +31,7 @@ import { partyKey } from '../../ledger/party';
 import { deskBookId } from '../../ledger/holdings-ledger';
 import { getSimulationDate } from '../../formatters';
 import { WeeklyStepContext } from './context';
-import { derivativesBookOf } from './derivative-lifecycle';
+import { novateDerivatives, publishRepoBook, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
 import { pay, runSettlementStage } from './settlement';
 import { fieldsOf, residualOf } from '../bank-identity-trace';
 import { ladderRowsOf, facilityBookOf } from '../../../engine2/tranches';
@@ -73,15 +73,16 @@ export function rekeyBankLinks(
     moveFacilityLender(v2, { id: c.id, ticker: c.ticker, region: c.region }, fromBank.id, toBank.id, 'bank resolution: facilities assumed');
   });
   const reg = ctx.updatedRegions[regionId];
+  // §3.13-BOOK d4b: the novated books go back through the contract ledger's door.
   if (reg?.repoBook) {
-    reg.repoBook = reg.repoBook.map((c) => ({
+    publishRepoBook(reg, reg.repoBook.map((c) => ({
       ...c,
       borrowerId: rekeyId(c.borrowerId) ?? c.borrowerId,
       lender: c.lender.kind === 'BANK' ? { ...c.lender, id: rekeyId(c.lender.id) ?? c.lender.id } : c.lender,
-    }));
+    })));
   }
   if (reg?.primeBrokerageBook) {
-    reg.primeBrokerageBook = reg.primeBrokerageBook.map((l) => ({ ...l, brokerId: rekeyId(l.brokerId) ?? l.brokerId }));
+    publishPrimeBrokerageBook(reg, reg.primeBrokerageBook.map((l) => ({ ...l, brokerId: rekeyId(l.brokerId) ?? l.brokerId })));
   }
   ctx.primaryOfferingsWorking = ctx.primaryOfferingsWorking.map((o) => ({ ...o, leadBankId: rekeyId(o.leadBankId) ?? o.leadBankId }));
   // The treasury's accrued-coupon ledger is keyed by holder; the failed bank's accruals are the
@@ -111,7 +112,7 @@ export function rekeyBankLinks(
   // entity id — so the whole book rekeys on one field rather than on whichever name an arm had.
   const rekeyParty = (p: DerivativeParty): DerivativeParty =>
     (p.id === fromBank.id ? { ...p, id: toBank.id } : p);
-  ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekeyParty(c.a), b: rekeyParty(c.b) }));
+  novateDerivatives(ctx, state, rekeyParty);
   // THE DELIVERIES MOVE WITH THE BOOKS. A resolved bank buys goods like any other firm, and its
   // consignments were the one link this function did not re-key: the assuming bank took the
   // business but not the shipments, so what was still on the water named a bank that no longer

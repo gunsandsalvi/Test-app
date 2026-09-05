@@ -35,7 +35,7 @@ import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequire
 import { bankRequiredReturnAnnual } from '../bank-lending';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
-import { strikeDerivatives } from '../derivative-lifecycle';
+import { strikeDerivatives } from '../../../ledger/contract-ledger';
 import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf, facilityRowsOf } from '../../../../engine2/tranches';

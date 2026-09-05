@@ -79,7 +79,7 @@ checked by `scripts/check-atlas.sh`.
 | Node | Code | |
 |---|---|---|
 | A1 a fund with committed capital from named investors | `src/domain/institutions.ts:lpCommitments` | ✅ |
-| **A2 capital is CALLED — a real payment the investor cannot refuse** | `src/engine/simulation/stages/pe-lifecycle.ts:callCapitalLocal` | ⚠️ |
+| **A2 capital is CALLED — a real payment the investor cannot refuse** | `src/engine/simulation/stages/pe-lifecycle.ts:callCapitalLocal` · `src/engine/ledger/contract-ledger.ts:drawCommitment` | ⚠️ |
 | **A2.a the investor must hold liquidity against calls it did not time** | — | ❌ |
 | **A3 a manager on a fee and a share of the gains** | — | ❌ |
 | A4 the fund has a life: invest, hold, exit, wind up | `src/engine/simulation/stages/pe-lifecycle.ts:PE_FUND_LIFE_WEEKS` | ⚠️ |

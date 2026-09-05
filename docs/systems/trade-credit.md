@@ -81,7 +81,7 @@ supplier's place in the estate.
 
 | Node | Code | |
 |---|---|---|
-| A1 delivered now, paid later; a receivable and a payable | `src/engine/simulation/stages/05-unit-bidding.ts:tradeInvoicesBooked` | ✅ |
+| A1 delivered now, paid later; a receivable and a payable | `src/engine/simulation/stages/05-unit-bidding.ts:tradeInvoicesBooked` · `src/engine/ledger/contract-ledger.ts:bookTradeInvoices` | ✅ |
 | A2 both sit on real balance sheets | `src/engine/companyGenerator.ts:accountsReceivable` | ⚠️ |
 | **A3 terms, and a discount that is an implicit interest rate** | `src/domain/trade-invoice.ts:paymentTermWeeks` | ⚠️ |
 | A4 unsecured credit the supplier decided to extend | `src/domain/trade-invoice.ts:creditAffordableWeeks` | ✅ |

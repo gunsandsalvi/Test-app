@@ -99,7 +99,7 @@ checked by `scripts/check-atlas.sh`.
 | A3 the same obligation twice, one number from two sides | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ✅ |
 | **A4 VERIFY Σ marks = 0 per contract and in aggregate** | — | ❌ |
 | B1 two parties agree terms at a cleared price | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
-| B2 recorded on both books; one contract, not two | `src/engine/simulation/stages/derivative-lifecycle.ts:strikeDerivatives` | ✅ |
+| B2 recorded on both books; one contract, not two | `src/engine/ledger/contract-ledger.ts:strikeDerivatives` | ✅ |
 | B3 closed by an offset, an early termination, or expiry | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ⚠️ |
 | B3.a an offset with a different counterparty does not remove the first | `src/domain/derivatives/standing-book.ts:StandingBook` | ✅ |
 | B4 novation, with the old counterparty's consent | `src/engine/simulation/stages/10-mergers.ts:runMergersStage` | ⚠️ |

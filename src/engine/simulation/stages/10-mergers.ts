@@ -34,7 +34,7 @@ import { cashOf, moveSectorRowsToBank, moveBankReserves, bankReservesOf, bankDep
 import { moveOutputUnits, moveInputUnits } from '../../ledger/goods-ledger';
 import { materializeInputInventory, inputUnitsHeld } from '../../../engine2/lots';
 import { novateContracts } from '../../../engine2/contracts';
-import { derivativesBookOf } from './derivative-lifecycle';
+import { novateDerivatives } from '../../ledger/contract-ledger';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { assumedDebtTrancheId, acquiredTrancheId, equityInstrumentId } from '../../../domain/instrument-keys';
 import type { InstrumentId } from '../../../domain/ids';
@@ -506,7 +506,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // acquirer on either side. A merged firm is not dead — an acquired firm's rows cannot exist.
   if (!target.bankBalanceSheet) {
     const rekey = (p: DerivativeParty): DerivativeParty => (p.kind === 'COMPANY' && p.id === target.id ? companyParty(acquirer) : p);
-    ctx.derivativesBook = derivativesBookOf(ctx, state).map((c) => ({ ...c, a: rekey(c.a), b: rekey(c.b) }));
+    novateDerivatives(ctx, state, rekey); // §3.13-BOOK d4b: through the contract ledger's door
   }
   reassignConsignments(state, target, acquirer);
   Object.entries(target.outputInventoryBySubUnit ?? {}).forEach(([subUnitId, row]) => {

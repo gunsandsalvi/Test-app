@@ -15,6 +15,7 @@
  */
 
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
+import { publishSecurityLoanBook } from '../../ledger/contract-ledger';
 import { marketCapAt, issuedSharesOf } from '../../../engine2/instruments';
 import { GameState, RegionId, Company } from '../../../types';
 import { ensureV2, ringFill, rowOf } from '../../../engine2/world';
@@ -541,7 +542,7 @@ function publishBook(
   fees: Record<string, number>,
   priceOf: (instrumentId: string) => number
 ): void {
-  reg.securityLoanBook = book;
+  publishSecurityLoanBook(reg, book); // §3.13-BOOK d4b: the contract ledger's door
   reg.borrowFeeBpsByCompanyId = fees;
   publishLent(ctx, book);
   const parties = new Set<string>();

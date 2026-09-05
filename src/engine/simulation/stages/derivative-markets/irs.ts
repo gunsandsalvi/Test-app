@@ -35,7 +35,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
 import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
-import { strikeDerivatives } from '../derivative-lifecycle';
+import { strikeDerivatives } from '../../../ledger/contract-ledger';
 import { institutionTotalAssetsLocal, institutionBookLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 

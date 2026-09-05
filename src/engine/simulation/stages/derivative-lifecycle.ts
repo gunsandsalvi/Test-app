@@ -19,6 +19,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { derivativesBookOf, strikeDerivatives, keepDerivatives } from '../../ledger/contract-ledger';
 import { bankSecuritiesParty } from '../../../domain/party';
 
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
@@ -37,18 +38,10 @@ import type { EntityId } from '../../../domain/ids';
 const MIN_LEG_LOCAL = 1;
 
 /** The live book: the week's working copy, initialised from state on first touch. */
-export function derivativesBookOf(ctx: WeeklyStepContext, state: GameState): DerivativeContract[] {
-  if (!ctx.derivativesBook) ctx.derivativesBook = [...(state.derivativesBook ?? [])];
-  return ctx.derivativesBook;
-}
+// §3.13-BOOK d4b: the book's reads and writes are the contract ledger's; re-exported so the
+// lifecycle's readers keep one import.
+export { derivativesBookOf, strikeDerivatives };
 
-export function strikeDerivatives(ctx: WeeklyStepContext, state: GameState, struck: DerivativeContract[]): void {
-  if (struck.length === 0) return;
-  const book = derivativesBookOf(ctx, state);
-  book.push(...struck);
-  // A strike only appends; the standing index folds the tail and stays the book's.
-  if (ctx.derivativeStanding?.book === book) ctx.derivativeStanding.index.extend(book);
-}
 
 /**
  * THE STANDING BOOK, INDEXED: what every market asks of the live book — a party's
@@ -181,7 +174,7 @@ export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameSt
     if (markLocal !== null) payToB(ctx, c, -(markLocal - (c.settledMarkLocal ?? 0)), 'derivative close-out', net);
     else payToB(ctx, c, profile.closeOutUSDToB(c, view), 'derivative close-out', net);
   }
-  if (closed > 0) ctx.derivativesBook = kept;
+  if (closed > 0) keepDerivatives(ctx, kept);
   return closed;
 }
 
@@ -268,7 +261,7 @@ export function settleDerivativeClass(
     kept.push(c);
   }
 
-  ctx.derivativesBook = kept;
+  keepDerivatives(ctx, kept);
   return net;
 }
 

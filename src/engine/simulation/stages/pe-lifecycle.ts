@@ -1,4 +1,5 @@
 import { V2World } from '../../../engine2/world';
+import { drawCommitment, returnCommitment } from '../../ledger/contract-ledger';
 import { registerCompanyEquity, setIssuedUnits } from '../../ledger/instrument-ledger';
 import { issuedSharesOf, marketCapAt } from '../../../engine2/instruments';
 import { bankCreditParty, companyParty } from '../../../domain/party';
@@ -219,7 +220,7 @@ function callCapitalLocal(
   capacity.forEach((x) => {
     if (!(x.availableLocal > 0)) return;
     const shareLocal = calledLocal * (x.availableLocal / totalAvailableLocal);
-    x.commitment.drawnLocal += shareLocal;
+    drawCommitment(x.commitment, shareLocal); // §3.13-BOOK d4b: the contract ledger's door
     // The call is a PAYMENT — LP to fund — where it used to be a bare debit of the LP
     // with no credit to anyone, so the buy side of every sponsor-to-sponsor deal paid twice and
     // one purchase price was destroyed per deal. Both legs live in the journal now.
@@ -266,7 +267,7 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: EntityId, amountLoca
   sponsor.peFund.lpCommitments.forEach((c) => {
     if (!(c.drawnLocal > 0)) return;
     const shareLocal = paidLocal * (c.drawnLocal / totalDrawnLocal);
-    c.drawnLocal = Math.max(0, c.drawnLocal - shareLocal);
+    returnCommitment(c, shareLocal); // §3.13-BOOK d4b: the contract ledger's door
     // A distribution is a PAYMENT — fund to LP — not a pair of object rebuilds.
     pay(ctx, {
       payer: { kind: 'INSTITUTION', id: sponsorId },

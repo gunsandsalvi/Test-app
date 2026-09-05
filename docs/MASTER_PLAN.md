@@ -516,13 +516,6 @@ written from here):
         it: the derivatives are NOT in `v2.contracts`, which is the supply-contract table; they
         are `state.derivativesBook`, an object array with one lifecycle writer). d4a (one party
         union and one key across the bilateral books) is in §9. What is left, in order:
-    d4b. **ONE DOOR.** A `contract-ledger` is the only writer of the six bilateral books —
-        `state.derivativesBook`, `reg.repoBook`, `reg.securityLoanBook`, `reg.primeBrokerageBook`,
-        `state.tradeInvoices`, `peFund.lpCommitments` — through named operations (strike, draw,
-        repay, novate, close out), each resolving both parties against the wire world (d2) at the
-        write, so a contract on a party that does not exist is refused at the site rather than
-        found by `O5`/`O8` a week later. The books keep their shapes; the stages keep their
-        arithmetic; only the writes move. Byte-identical.
     d4c. **ONE STORE.** The six books become one columnar contract store beside the register:
         kind, party A, party B, currency, principal, rate, struck and maturity weeks, and a
         per-kind terms row (a repo's pledges, a loan's shares, an invoice's booked rate), with
@@ -1721,6 +1714,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d4b — ONE DOOR FOR EVERY BILATERAL OBLIGATION.** `engine/ledger/contract-ledger.ts` is
+the only writer of the six bilateral books, through named operations — `strikeDerivatives`,
+`keepDerivatives`, `novateDerivatives`, `publishRepoBook`, `publishSecurityLoanBook`,
+`publishPrimeBrokerageBook`, `bookTradeInvoices`, `settleTradeInvoices`, `drawCommitment`,
+`returnCommitment` — and every party a written contract names resolves against the active wire
+world at the write (`wire.ts:resolvePartyRef`, d2's resolver), so a contract on a party the entity
+store does not hold defects at the site rather than surfacing in `O5`/`O8` a week later. The four
+derivative adapters strike through it, the lifecycle keeps its survivors through it, a merger's
+and a resolution's re-keys novate through it, the repo, stock-loan and prime-brokerage sessions
+(and the close sweep's emergency draw) publish through it, stage 05 books the week's invoices and
+the trade settlement writes what is still owed through it, and a capital call and a distribution
+move a commitment through it. `check-hygiene.sh` refuses a bare assignment to any of the five
+book fields outside the ledger. The books keep their shapes and the stages their arithmetic —
+byte-identical; a resolution costs one bitmap read per party per publish. Gates green; no run.
 
 **13-BOOK d4a — ONE PARTY UNION AND ONE KEY ACROSS THE BILATERAL BOOKS.** `repo.ts:RepoParty` is
 `PartyOfKind<'BANK' | 'INSTITUTION' | 'CENTRAL_BANK'>` — the window's arm carries its region like

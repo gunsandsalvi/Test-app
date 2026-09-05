@@ -145,6 +145,11 @@ function growResolved(id: number): void {
 }
 const partyDesc = (p: PartyRef): string =>
   'id' in p ? `${p.kind}:${p.id}` : 'industry' in p ? `${p.kind}:${p.region}:${p.industry}` : `${p.kind}:${p.region}`;
+/** §3.13-BOOK d4b: a party a CONTRACT names resolves against the active world, as a wire's do. */
+export function resolvePartyRef(ref: PartyRef, what: string): void {
+  const w = world ?? defect(`${what} names ${partyDesc(ref)} with no world active to resolve it against`);
+  resolveParty(w, partyId(ref));
+}
 function resolveParty(w: WireWorld, id: number): void {
   if (id < resolved.length ? resolved[id] === 1 : (growResolved(id), false)) return;
   const ref = partyOf(id);
