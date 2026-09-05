@@ -6,7 +6,7 @@ import type { Company } from '../src/types';
 
 const firm = (over: Record<string, unknown> = {}): Company => ({
   management: { patienceWeeks: 10, riskAversion: 1, appointedWeek: 0 },
-  growthCapex: 52e6, maintenanceCapex: 52e6, plant: [{ costLocal: 1e9, enteredServiceWeek: 10 - 0.4 * 520, usefulLifeYears: 10 }],
+  growthCapex: 52e6, maintenanceCapex: 52e6, plant: [{ costLocal: 1e9, enteredServiceWeek: 10 - 0.4 * 520, usefulLifeYears: 10, kind: 'heavy_equipment' }],
   annualRevenue: 2e9, stockPrice: 10, eps: 1, ...over,
 } as unknown as Company);
 const base = { week: 10, marketCapLocal: 1e9, costOfDebtAnnual: 0.04, effectiveTaxRate: 0.25, ebitdaAnnual: 4e8, ebitAnnual: 3e8, cashLocal: 2e8, rating: 'BBB' as const };

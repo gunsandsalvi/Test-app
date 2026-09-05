@@ -28,7 +28,7 @@ import { SUBSCRIPTION_WEEKLY_CHURN } from '../domain/industry-registry';
 import { RECEIPTS_MEASUREMENT_WEIGHT } from '../domain/company';
 
 type ProductLines = NonNullable<Company['productLines']>;
-type ConstructionLot = { valueLocal: number; entersServiceWeek: number };
+import type { ConstructionLot } from '../domain/plant';
 
 /** The kernel's coupon-due flags, packed. */
 export const DUE_BOND = 1, DUE_CP = 2, DUE_LOAN = 4;

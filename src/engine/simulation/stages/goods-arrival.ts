@@ -125,6 +125,7 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
         update.capexUnderConstruction.push({
           valueLocal: shipment.units * shipment.landedCostPerUnit,
           entersServiceWeek: ctx.nextWeek + commissioningLeadWeeksOf(shipment.subUnitId),
+          kind: shipment.subUnitId, // §3.26-f-iv-a: the vintage will know what it is
         });
         arrivePlant(buyer.id, shipment.units * shipment.landedCostPerUnit); // §3.26-f-iii: W6's queue leg
       }

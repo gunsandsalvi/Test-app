@@ -80,7 +80,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 a stock of productive assets held by a named firm | `src/domain/plant.ts:PlantVintage` · `src/domain/plant.ts:plantGrossLocal` | ✅ |
 | A2 capacity is a function of the stock | `src/engine/simulation/stages/05-unit-bidding.ts:unitsPerNetPpeDollar` | ✅ |
 | A3 it depreciates — a cost and a reduction | `src/domain/plant.ts:plantDepreciationAnnualLocal` · `src/domain/company-week/income-statement.ts:industrialIncome` | ✅ |
-| A4 capital is specific | `src/domain/plant.ts:slicePlant` · `src/engine/simulation/stages/estate-resolution.ts:peersOf` | ⚠️ |
+| A4 capital is specific | `src/domain/plant.ts:PlantVintage` · `src/engine/simulation/stages/estate-resolution.ts:peersOf` | ⚠️ |
 | A5 its value is what it can produce; it can be written down | `src/domain/plant.ts:scrapPlantShare` · `src/domain/company-week/capital-programme.ts:capacityRetirement` | ⚠️ |
 | **B1 invests when the return beats the cost of capital** | `src/domain/company-week/capital-programme.ts:desiredGrowthCapex` · `src/domain/company-week/cost-of-capital.ts:costOfCapitalOf` | ❌ |
 | B1.a the return comes from expected demand and price | `src/engine2/stage08-lanes.ts:categoryShortfall` | ⚠️ |
@@ -230,14 +230,20 @@ W6 closes the identity per firm every week (`plantIdentityGaps`): Δ(gross plant
 retired − scrapped − abandoned + born + wires in − wires out, and the construction queue's own line.
 A pool carve-out's plant is a wire from the segment; an FDI subsidiary's is minted and says so.
 
-What A4 still lacks is a KIND. A vintage is specific in time (dated, lived) but carries no record of
-the capital good it was made from, so specificity across firms is still an accident of ownership:
-`sellPlantToBidders` sells to same-region, same-sector peers, a merger moves vintages across sectors,
-and a buyer converts them into capacity at **its own** `unitsPerNetPpeDollar` — a steel mill's plant
-becomes whatever the buyer makes. A5 is the same shape: a vintage is carried at cost less wear and
-never revalued against what it can produce; the only write-down is `capacityRetirement`'s scrap of a
-share mothballed for a year (now the oldest vintages, by vintage). **§3 step 26-f-iv** (the vintage's
-kind: the sub-unit of the capital good it was commissioned from, which the purchase already knows).
+*2026-09-05 (§9.26-f-iv-a):* a vintage now records WHAT it is — `PlantVintage.kind`, the CAPITAL_GOOD
+sub-unit the purchase named, stamped on the construction lot at landing (`05-unit-bidding.ts`,
+`goods-arrival.ts`), carried through the front seam's construction CSR, and set on the vintage at
+commissioning, one vintage per kind per week; the seed builds the register in the mix the firm buys
+with, a carrier's fleet as `commercial_fleet`; every move keeps the kind.
+
+What the record now shows is why A4 stays ⚠️: every firm's mix is the SAME basket
+(`capexBasketWeight`, "the share of any buyer's capex basket" — **§3 step 26-f-iv-b**), and capacity
+does not read kinds: `sellPlantToBidders` sells to same-region, same-sector peers, a merger moves
+vintages across sectors, and a buyer converts them into capacity at **its own** `unitsPerNetPpeDollar`
+on the whole register — a steel mill's plant becomes whatever the buyer makes (**26-f-iv-c**). A5 is
+the same shape: a vintage is carried at cost less wear and never revalued against what it can
+produce; the only write-down is `capacityRetirement`'s scrap of a share mothballed for a year (now
+the oldest vintages, by vintage).
 
 ### ❌ D4 / E4 — THE TWO VERIFY NODES ARE NEVER MEASURED
 

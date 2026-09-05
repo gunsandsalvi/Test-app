@@ -78,7 +78,7 @@ export interface CompanyWeekUpdate {
    *  capital delivered but not yet commissioned. */
   outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueLocal: number }>;
   wipBySubUnit?: Record<string, { units: number; valueLocal: number }[]>;
-  capexUnderConstruction?: { valueLocal: number; entersServiceWeek: number }[];
+  capexUnderConstruction?: import('../../../domain/plant').ConstructionLot[];
   /** The production target stage 05 set, carried so stage 08 books against the same number. The
    *  underscore is the original author's marker that it is a hand-off and not a company field. */
   _targetProductionLocal?: number;

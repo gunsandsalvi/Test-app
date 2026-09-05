@@ -35,9 +35,21 @@ export interface PlantFlow {
   arrivedLocal: number;
 }
 
+/** §3.26-f-iv-a — capital that has arrived and is not yet plant: what it cost, the week it enters
+ *  service, and the capital good it is (the CAPITAL_GOOD sub-unit the purchase named). */
+export interface ConstructionLot {
+  valueLocal: number;
+  entersServiceWeek: number;
+  kind: string;
+}
+
 export interface PlantVintage {
   /** What it cost when it entered service — gross book, never revalued. */
   costLocal: number;
+  /** §3.26-f-iv-a — WHAT it is: the sub-unit id of the capital good it was made from
+   *  (`industry-registry.ts:purchaseKindOf` = CAPITAL_GOOD; a carrier's fleet is
+   *  `commercial_fleet`). Specific in kind as well as in time; a move keeps it. */
+  kind: string;
   /** The week it entered service; its age is read against the week it is asked at. */
   enteredServiceWeek: number;
   /** Its own straight-line life, stamped when it entered service (`usefulLifeYearsOf`). */
@@ -94,27 +106,29 @@ export function plantDepreciationAnnualLocal(plant: readonly PlantVintage[], wee
 
 /** Register order: oldest first; equal service weeks by life. */
 const byAge = (a: PlantVintage, b: PlantVintage): number =>
-  a.enteredServiceWeek - b.enteredServiceWeek || a.usefulLifeYears - b.usefulLifeYears;
+  a.enteredServiceWeek - b.enteredServiceWeek || a.usefulLifeYears - b.usefulLifeYears
+  || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0);
 
-/** Two registers become one, in age order; a vintage of the same week and life folds in. */
+/** Two registers become one, in age order; a vintage of the same week, life and kind folds in. */
 export function mergePlant(a: readonly PlantVintage[], b: readonly PlantVintage[]): PlantVintage[] {
   const all = [...a, ...b].filter((v) => v.costLocal > 0).sort(byAge);
   const out: PlantVintage[] = [];
   for (const v of all) {
     const last = out[out.length - 1];
-    if (last && last.enteredServiceWeek === v.enteredServiceWeek && last.usefulLifeYears === v.usefulLifeYears) {
+    if (last && last.enteredServiceWeek === v.enteredServiceWeek && last.usefulLifeYears === v.usefulLifeYears && last.kind === v.kind) {
       out[out.length - 1] = { ...last, costLocal: last.costLocal + v.costLocal };
     } else out.push({ ...v });
   }
   return out;
 }
 
-/** What entered service this week joins the register as this week's vintage at the given life. */
+/** What entered service this week joins the register as this week's vintage of that kind, at the
+ *  given life; a second lot of the same kind this week folds into it. */
 export function commissionVintage(
-  plant: readonly PlantVintage[], costLocal: number, week: number, usefulLifeYears: number
+  plant: readonly PlantVintage[], costLocal: number, week: number, usefulLifeYears: number, kind: string
 ): PlantVintage[] {
   if (!(costLocal > 0)) return [...plant];
-  return mergePlant(plant, [{ costLocal, enteredServiceWeek: week, usefulLifeYears }]);
+  return mergePlant(plant, [{ costLocal, enteredServiceWeek: week, usefulLifeYears, kind }]);
 }
 
 /** Vintages fully worn at `week` leave the register — a transformation, not a move. */
@@ -174,15 +188,21 @@ export function slicePlant(plant: readonly PlantVintage[], fraction: number): { 
  * state the seed opens in (§7.4) — is one vintage a year, each `gross / life`, spread evenly over
  * the life: ages ½, 1½, …, (life − ½) years, so the register is exactly half worn (its net is
  * `gross / 2`) and its year's charge is `gross / life`. The stated 45% and 35% worn fractions the
- * seed carried were this shape asserted; here it is built.
+ * seed carried were this shape asserted; here it is built. §3.26-f-iv-a: in the MIX of capital
+ * goods the firm buys with (`mixByKind`, weights normalised), one set of yearly vintages per kind.
  */
-export function seedPlantVintages(grossLocal: number, usefulLifeYears: number, week: number): PlantVintage[] {
+export function seedPlantVintages(grossLocal: number, usefulLifeYears: number, week: number, mixByKind: Record<string, number>): PlantVintage[] {
   const life = Math.max(1, Math.round(usefulLifeYears));
   if (!(grossLocal > 0)) return [];
-  const costLocal = grossLocal / life;
+  const kinds = Object.entries(mixByKind).filter(([, w]) => w > 0);
+  const total = kinds.reduce((a, [, w]) => a + w, 0);
+  if (!(total > 0)) return [];
   const out: PlantVintage[] = [];
-  for (let k = life - 1; k >= 0; k--) {
-    out.push({ costLocal, enteredServiceWeek: week - (k * 52 + 26), usefulLifeYears: life });
+  for (const [kind, w] of kinds) {
+    const costLocal = (grossLocal * w / total) / life;
+    for (let k = life - 1; k >= 0; k--) {
+      out.push({ costLocal, enteredServiceWeek: week - (k * 52 + 26), usefulLifeYears: life, kind });
+    }
   }
-  return out;
+  return mergePlant(out, []);
 }

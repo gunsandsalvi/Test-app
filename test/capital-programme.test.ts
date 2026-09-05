@@ -88,7 +88,7 @@ test('investment is never negative, however hard the firm is squeezed', () => {
 
 test('the plant grows by what was COMMISSIONED, not what was ordered', () => {
   const { commissionedLocal, stillUnderConstruction } = commissionCapital(
-    [{ valueLocal: 100, entersServiceWeek: 5 }, { valueLocal: 900, entersServiceWeek: 40 }], 10);
+    [{ valueLocal: 100, entersServiceWeek: 5, kind: 'heavy_equipment' }, { valueLocal: 900, entersServiceWeek: 40, kind: 'commercial_construction' }], 10);
   assert.equal(commissionedLocal, 100);
   assert.equal(stillUnderConstruction.length, 1);
   assert.equal(stillUnderConstruction[0].valueLocal, 900);

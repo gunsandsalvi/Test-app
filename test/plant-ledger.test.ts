@@ -21,7 +21,7 @@ test('the summary nets plant wires per firm in cost and carries the flows; W6 cl
   setActiveWireJournal(j);
   setActiveWireWorld(wireWorldOf(v2, [{ id: a }, { id: b }], []));
   try {
-    movePlant(companyPartyOf(a), companyPartyOf(b), [{ costLocal: 400, enteredServiceWeek: 1, usefulLifeYears: 10 }], 200, 'sold');
+    movePlant(companyPartyOf(a), companyPartyOf(b), [{ costLocal: 400, enteredServiceWeek: 1, usefulLifeYears: 10, kind: 'heavy_equipment' }], 200, 'sold');
     movePlantQueue(companyPartyOf(b), companyPartyOf(a), [{ valueLocal: 50 }], 'queue');
     commissionPlant(a, 120); retirePlant(a, 20); scrapPlant(a, 5); arrivePlant(a, 130); bornPlant(b, 9);
   } finally {

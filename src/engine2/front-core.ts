@@ -25,6 +25,7 @@
  * stage08-front.ts's inline pass; verification deferred to the end-of-build reckoning.
  */
 
+import { defect } from '../domain/defect';
 import { exitIdleLines } from '../domain/company-week/product-lines';
 import { patienceWeeksOf } from '../domain/preferences';
 import { Company, RegionId } from '../types';
@@ -189,6 +190,7 @@ export interface FrontSeam {
   ucStart: Int32Array;
   ucValue: Float64Array;
   ucServiceWeek: Int32Array;
+  ucKind: Int32Array;                          // §3.26-f-iv-a: the capital good's sub-unit index
 
   // supply-shock CSR
   shStart: Int32Array;
@@ -239,6 +241,10 @@ interface FrontSeamInputs {
   suppliedSubUnitsByRegion: Map<string, Set<string>>;
   companyStore: import('./company-store').CompanyStore;
 }
+
+/** §3.26-f-iv-a — a construction lot names a registry capital good, or it is a defect at the seam. */
+const kindIndexOf = (lot: { kind: string }): number =>
+  SUBUNIT_INDEX.get(lot.kind) ?? defect(`a construction lot of kind ${lot.kind}, which is no registry sub-unit`);
 
 export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): FrontSeam {
   const { v2, nextWeek, companyUpdates, updatedRegions, supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion, companyStore } = inp;
@@ -323,6 +329,7 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     ucStart: lane32(n + 1),
     ucValue: lane64(nUc),
     ucServiceWeek: lane32(nUc),
+    ucKind: lane32(nUc),
     shStart: lane32(n + 1),
     shSupplierRevenue: lane64(nSh),
     shInvLocal: lane64(nSh),
@@ -464,10 +471,10 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     }
     const update = companyUpdates[comp.ticker];
     for (const lot of comp.assetsUnderConstruction ?? []) {
-      S.ucValue[atUc] = lot.valueLocal; S.ucServiceWeek[atUc] = lot.entersServiceWeek | 0; atUc++;
+      S.ucValue[atUc] = lot.valueLocal; S.ucServiceWeek[atUc] = lot.entersServiceWeek | 0; S.ucKind[atUc] = kindIndexOf(lot); atUc++;
     }
     for (const lot of update?.capexUnderConstruction ?? []) {
-      S.ucValue[atUc] = lot.valueLocal; S.ucServiceWeek[atUc] = lot.entersServiceWeek | 0; atUc++;
+      S.ucValue[atUc] = lot.valueLocal; S.ucServiceWeek[atUc] = lot.entersServiceWeek | 0; S.ucKind[atUc] = kindIndexOf(lot); atUc++;
     }
     for (const rel of supplyRelsByCustomer.get(comp.id) ?? []) {
       const stats = supplierShockStats.get(rel.supplierCompanyId);
@@ -788,9 +795,9 @@ export function applyFrontPost(
     const comp = companies[row];
 
     // construction survivors (value-equal materialisation of commissionCapital's split)
-    const keep: { valueLocal: number; entersServiceWeek: number }[] = [];
+    const keep: { valueLocal: number; entersServiceWeek: number; kind: string }[] = [];
     for (let u = S.ucStart[row]; u < S.ucStart[row + 1]; u++) {
-      if (O.ucKeep[u]) keep.push({ valueLocal: S.ucValue[u], entersServiceWeek: S.ucServiceWeek[u] });
+      if (O.ucKeep[u]) keep.push({ valueLocal: S.ucValue[u], entersServiceWeek: S.ucServiceWeek[u], kind: SUBUNITS[S.ucKind[u]] });
     }
     F.stillUnderConstruction[row] = keep;
 

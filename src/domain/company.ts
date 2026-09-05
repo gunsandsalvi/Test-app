@@ -372,7 +372,7 @@ export interface Company {
    * delivery and this is the second half: investment shows up AFTER the demand that justified
    * it, which is what makes a capacity cycle a cycle.
    */
-  assetsUnderConstruction?: { valueLocal: number; entersServiceWeek: number }[];
+  assetsUnderConstruction?: import('./plant').ConstructionLot[];
   /** IND13 — what actually entered service last week: what the plant really grew by. */
   capexCommissionedLastWeekLocal?: number;
   rndExpense?: number;

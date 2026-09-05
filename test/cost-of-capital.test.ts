@@ -16,8 +16,8 @@ test('the region\'s rate is its own ten-year point, the policy rate before a cur
 
 test('the weekly charge is the net plant at that rate over the year', () => {
   // §3.26-f-ii: the net plant is the register's read at the week — new plant is unworn.
-  const firm = { beta: 1, plant: [{ costLocal: 5200, enteredServiceWeek: 10, usefulLifeYears: 10 }] };
+  const firm = { beta: 1, plant: [{ costLocal: 5200, enteredServiceWeek: 10, usefulLifeYears: 10, kind: 'heavy_equipment' }] };
   assert.ok(Math.abs(weeklyCapitalChargeLocal(firm, 0.04, 10) - (5200 * (0.04 + EQUITY_RISK_PREMIUM)) / 52) < 1e-9);
-  assert.equal(weeklyCapitalChargeLocal({ beta: 1, plant: [{ costLocal: 100, enteredServiceWeek: 0, usefulLifeYears: 1 }] }, 0.04, 52), 0,
+  assert.equal(weeklyCapitalChargeLocal({ beta: 1, plant: [{ costLocal: 100, enteredServiceWeek: 0, usefulLifeYears: 1, kind: 'heavy_equipment' }] }, 0.04, 52), 0,
     'a fully worn vintage carries no charge');
 });

@@ -551,16 +551,22 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-f-iv. **A VINTAGE HAS A KIND.** (the-capital-programme A4, A5.) A vintage is specific in
-    time — dated, lived — and in nothing else: `PlantVintage` carries no record of the capital
-    good it was made from, so a merger moves a steel mill's vintages into a software firm and
-    the buyer makes software with them at its own `unitsPerNetPpeDollar`, and the estate's
-    same-sector rule (`peersOf`) is the only specificity there is. The purchase already knows the
-    good (`05-unit-bidding.ts:addInputInventory` and `goods-arrival.ts` push the lot from a named
-    CAPITAL_GOOD sub-unit): stamp it on the lot and the vintage, seed the register from the
-    sector's capital-goods mix, and let capacity per line read the vintages whose kind serves
-    it — which is what makes misallocation possible and costly (A4), and gives A5 a value that
-    is what the vintage can produce rather than what it cost.
+26-f-iv-b. **THE CAPEX BASKET IS THE INDUSTRY'S, AND A CAPITAL GOOD HAS A LIFE.** `capexBasketWeight`
+    is "the share of ANY buyer's capex basket" (`industry-registry.ts:60`): a steel mill and a
+    software firm buy the same mix of heavy equipment, buildings, fleet and software, and no
+    tree names it. The registry says what each industry's capital is made of (the way it says
+    each product's recipe), `05-unit-bidding.ts:1381` splits a buyer's capex by ITS industry's
+    mix, the seed's register is that mix, and a capital good carries its own `usefulLifeYears`
+    (a building's is not a server's; today one sector life stamps every vintage, and a carrier's
+    fleet life is `FREIGHT_ASSET_SPEC`'s by exception). goods.md's capex rows re-marked.
+26-f-iv-c. **CAPACITY READS THE VINTAGES WHOSE KIND SERVES THE LINE.** (A4's cost of
+    misallocation, A5's value.) A line's capacity is `unitsPerNetPpeDollar × net plant` of the
+    WHOLE register (`05-unit-bidding.ts:976`), so a steel mill's heavy equipment merged into a
+    software firm makes software at the buyer's ratio. With iv-b the line's industry says which
+    kinds its plant is made of: capacity reads the net of those vintages only, a vintage of a kind
+    the line does not use produces nothing for it (misallocation is possible and costly), and a
+    vintage's value is what it can produce — which is what the estate's bidders should be paying
+    for, and what a write-down (A5) is a fall in.
 26b. **Housing clears.** `housingStockUSD`, a median price and an ownership rate are an
     aggregate marked by formula — dwellings have no owners and no price anyone struck, which
     rule 3 does not allow and no step currently covers. Households, builders and estates clear
@@ -1362,6 +1368,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-f-iv-a — A VINTAGE HAS A KIND.** (rule 10 split of 26-f-iv into a/b/c; b and c in §3.)
+  `PlantVintage.kind` is the CAPITAL_GOOD sub-unit the vintage was made from, and the construction
+  lot carries it from landing (`ConstructionLot`: `05-unit-bidding.ts:addInputInventory` and
+  `goods-arrival.ts` name the good they push) through the front seam's construction CSR
+  (`ucKind`, a registry index or a defect at the seam; not shipped to the C core, which sums
+  values) to commissioning, where the rebuild makes one vintage per kind that entered service
+  this week (the front pass's rule, `entersServiceWeek <= nextWeek`, on the same lots). The seed
+  builds the register in the mix the firm buys with (`seedPlantVintages(gross, life, week,
+  CAPEX_SUPPLIER_WEIGHTS)` — one set of yearly vintages per kind), a carrier's fleet as
+  `commercial_fleet`; `mergePlant` folds only equal (week, life, kind), so a slice, a merger, an
+  estate's sale and a scrap keep every kind. the-capital-programme A4 re-cited to `PlantVintage`
+  and stays ⚠️, honestly: the record now shows every firm's mix is the one basket (iv-b) and that
+  capacity reads the whole register (iv-c). `test/plant.test.ts` (a mix seeds per kind; a slice
+  keeps every kind; a kind never folds into another). Gates green; no run (rule 11).
 
 **26-f-iii — THE PLANT WIRE, AND W6.** The wire follows the decision. `ASSET_KINDS` carries
   `PLANT` (appended last, so every earlier journal's kind ids stand): a move of plant between two

@@ -24,7 +24,7 @@ test('experience moves one policy-term step toward what the book cost; the seed 
   assert.equal(a.rateAnnual, b.rateAnnual, 'one seed rate');
   assert.ok(Math.abs(a.rateAnnual * 1000 - 100 * PREMIUM_TO_SURPLUS_RATIO) < 1e-9, 'at which the region\'s premiums are what its capital let it write');
   assert.ok(Math.abs(a.lossPerCoverAnnual - 0.7 * a.rateAnnual) < 1e-15);
-  assert.equal(corporateInsurableBaseLocal({ plant: [{ costLocal: 40, enteredServiceWeek: 0, usefulLifeYears: 10 }], annualRevenue: 60 }, 5), 100);
+  assert.equal(corporateInsurableBaseLocal({ plant: [{ costLocal: 40, enteredServiceWeek: 0, usefulLifeYears: 10, kind: 'heavy_equipment' }], annualRevenue: 60 }, 5), 100);
   assert.equal(householdInsurableBaseLocal(-5, 20), 20);
 });
 

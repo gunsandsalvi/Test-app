@@ -237,6 +237,7 @@ function addInputInventory(v2: V2World, update: CompanyWeekUpdate, baseComp: Com
     update.capexUnderConstruction.push({
       valueLocal: addedValueLocal,
       entersServiceWeek: week + commissioningLeadWeeksOf(subUnitId),
+      kind: subUnitId, // §3.26-f-iv-a: the vintage will know what it is
     });
     arrivePlant(baseComp.id, addedValueLocal); // §3.26-f-iii: W6's queue leg
     // W4: as GOODS the machine is consumed on receipt — it becomes plant, not stock.

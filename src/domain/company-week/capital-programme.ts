@@ -295,12 +295,12 @@ export function capacityRetirement(i: CapacityRetirementInputs): CapacityRetirem
 
 /** IND13 — the plant grows by what was COMMISSIONED, not what was ordered or delivered. That lag
  *  is the capacity cycle. */
-export function commissionCapital(
-  underConstruction: { valueLocal: number; entersServiceWeek: number }[],
+export function commissionCapital<T extends { valueLocal: number; entersServiceWeek: number }>(
+  underConstruction: T[],
   week: number
-): { commissionedLocal: number; stillUnderConstruction: { valueLocal: number; entersServiceWeek: number }[] } {
+): { commissionedLocal: number; stillUnderConstruction: T[] } {
   let commissionedLocal = 0;
-  const stillUnderConstruction: { valueLocal: number; entersServiceWeek: number }[] = [];
+  const stillUnderConstruction: T[] = [];
   for (const lot of underConstruction) {
     if (lot.entersServiceWeek <= week) commissionedLocal += lot.valueLocal;
     else stillUnderConstruction.push(lot);

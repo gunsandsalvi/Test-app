@@ -1940,7 +1940,15 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     // entered service joins it as this week's vintage at the firm's own life (the scrap, if any,
     // already landed through `applyCapCompWrites`). Gross, net and the charge are reads of it.
     const worn = retireWornPlant(comp.plant, nextWeek);
-    const newPlant = commissionVintage(worn.plant, capexCommissionedThisWeekLocal, nextWeek, usefulLifeYearsOf(comp));
+    // §3.26-f-iv-a — one vintage per KIND of capital good that entered service this week: the
+    // lots the front pass commissioned (its rule, `entersServiceWeek <= nextWeek`), grouped.
+    let newPlant = worn.plant;
+    {
+      const lifeYears = usefulLifeYearsOf(comp);
+      for (const lot of [...(comp.assetsUnderConstruction ?? []), ...(weekUpdate?.capexUnderConstruction ?? [])]) {
+        if (lot.entersServiceWeek <= nextWeek) newPlant = commissionVintage(newPlant, lot.valueLocal, nextWeek, lifeYears, lot.kind);
+      }
+    }
     // §3.26-f-iii — both are transformations on the plant ledger, so W6 closes: what wore out
     // left the register, what entered service left the queue and joined it.
     retirePlant(comp.id, worn.retiredCostLocal);

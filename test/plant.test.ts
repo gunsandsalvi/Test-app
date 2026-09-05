@@ -15,7 +15,7 @@ const near = (a: number, b: number, msg = '', tol = 1e-6) =>
   assert.ok(Math.abs(a - b) <= tol * Math.max(1, Math.abs(b)), `${a} vs ${b}${msg ? ` — ${msg}` : ''}`);
 
 test('the seed is a derivation: a stationary plant is half worn and its charge is gross over life', () => {
-  const plant = seedPlantVintages(1_200, 12, 100);
+  const plant = seedPlantVintages(1_200, 12, 100, { heavy_equipment: 1 });
   assert.equal(plant.length, 12, 'one vintage a year');
   near(plantGrossLocal(plant, 100), 1_200);
   near(plantNetLocal(plant, 100), 600, 'half worn — the 45% and 35% the seed stated were this shape asserted');
@@ -25,14 +25,14 @@ test('the seed is a derivation: a stationary plant is half worn and its charge i
 });
 
 test('gross = net + accumulated, at every week, by construction', () => {
-  const plant = seedPlantVintages(2_400, 7, 50);
+  const plant = seedPlantVintages(2_400, 7, 50, { heavy_equipment: 3, enterprise_software: 1 });
   for (const w of [50, 51, 120, 400, 900]) {
     near(plantGrossLocal(plant, w), plantNetLocal(plant, w) + plantAccumulatedDepreciationLocal(plant, w));
   }
 });
 
 test('a vintage wears straight-line from its own service week and leaves the register when fully worn', () => {
-  const v: PlantVintage = { costLocal: 520, enteredServiceWeek: 10, usefulLifeYears: 1 };
+  const v: PlantVintage = { costLocal: 520, enteredServiceWeek: 10, usefulLifeYears: 1, kind: 'heavy_equipment' };
   assert.equal(wornShareOf(v, 10), 0);
   near(wornShareOf(v, 36), 0.5);
   assert.equal(wornShareOf(v, 62), 1);
@@ -46,18 +46,20 @@ test('a vintage wears straight-line from its own service week and leaves the reg
 });
 
 test('commissioning appends this week\'s vintage at the firm\'s own life, and a same-week lot folds in', () => {
-  const plant = commissionVintage([], 100, 20, 10);
-  const again = commissionVintage(plant, 50, 20, 10);
-  assert.equal(again.length, 1, 'one vintage per commissioning week');
+  const plant = commissionVintage([], 100, 20, 10, 'heavy_equipment');
+  const again = commissionVintage(plant, 50, 20, 10, 'heavy_equipment');
+  assert.equal(again.length, 1, 'one vintage per commissioning week and kind');
   assert.equal(again[0].costLocal, 150);
   assert.equal(again[0].enteredServiceWeek, 20);
-  const later = commissionVintage(again, 30, 25, 10);
-  assert.equal(later.length, 2);
-  assert.deepEqual(plant, [{ costLocal: 100, enteredServiceWeek: 20, usefulLifeYears: 10 }], 'never mutated in place');
+  const other = commissionVintage(again, 40, 20, 10, 'enterprise_software');
+  assert.equal(other.length, 2, '§3.26-f-iv-a: a different kind the same week is its own vintage');
+  const later = commissionVintage(other, 30, 25, 10, 'heavy_equipment');
+  assert.equal(later.length, 3);
+  assert.deepEqual(plant, [{ costLocal: 100, enteredServiceWeek: 20, usefulLifeYears: 10, kind: 'heavy_equipment' }], 'never mutated in place');
 });
 
 test('a scrap retires the OLDEST vintages first, exactly the share of gross', () => {
-  const plant = seedPlantVintages(1_200, 12, 100); // twelve vintages of 100
+  const plant = seedPlantVintages(1_200, 12, 100, { heavy_equipment: 1 }); // twelve vintages of 100
   const { plant: left, scrappedCostLocal, scrappedNetLocal } = scrapPlantShare(plant, 0.25, 100);
   near(scrappedCostLocal, 300);
   near(plantGrossLocal(left, 100), 900);
@@ -66,14 +68,27 @@ test('a scrap retires the OLDEST vintages first, exactly the share of gross', ()
 });
 
 test('a slice moves a fraction of every vintage and conserves cost and age; a merge folds registers in age order', () => {
-  const a = seedPlantVintages(600, 3, 100);
+  const a = seedPlantVintages(600, 3, 100, { commercial_fleet: 1 });
   const { taken, kept } = slicePlant(a, 0.3);
   near(plantGrossLocal(taken, 100), 180);
   near(plantGrossLocal(kept, 100), 420);
   near(plantNetLocal(taken, 100) + plantNetLocal(kept, 100), plantNetLocal(a, 100));
   assert.deepEqual(taken.map((v) => v.enteredServiceWeek), a.map((v) => v.enteredServiceWeek), 'the machines keep their age');
-  const b = commissionVintage([], 50, 90, 3);
+  const b = commissionVintage([], 50, 90, 3, 'commercial_fleet');
   const merged = mergePlant(kept, b);
   near(plantGrossLocal(merged, 100), 470);
   for (let i = 1; i < merged.length; i++) assert.ok(merged[i].enteredServiceWeek >= merged[i - 1].enteredServiceWeek, 'oldest first');
+});
+
+test('§3.26-f-iv-a: the seed is built in a mix of kinds, and a slice or a merge keeps every kind', () => {
+  const plant = seedPlantVintages(1_000, 5, 100, { heavy_equipment: 3, enterprise_software: 1 });
+  assert.equal(plant.length, 10, 'yearly vintages per kind');
+  const byKind = (p: PlantVintage[]) => p.reduce((m, v) => { m[v.kind] = (m[v.kind] ?? 0) + v.costLocal; return m; }, {} as Record<string, number>);
+  near(byKind(plant).heavy_equipment, 750);
+  near(byKind(plant).enterprise_software, 250);
+  const { taken } = slicePlant(plant, 0.2);
+  near(byKind(taken).heavy_equipment, 150, 'a slice takes every kind pro rata');
+  const merged = mergePlant(plant, taken);
+  assert.equal(merged.length, 10, 'same week, life and kind fold; a kind never folds into another');
+  near(byKind(merged).enterprise_software, 300);
 });
