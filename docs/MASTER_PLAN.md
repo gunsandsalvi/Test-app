@@ -548,9 +548,6 @@ written from here):
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
 15. **Search by asset, price and spread together** (rule 9) — split 2026-09-05, one commit each:
-15-ii. **PRICE and DM/OAS side by side in every fixed-income view** (needs step 13): the ladder,
-    the holders lists, the tranche object and its screener show the cleared price and the spread
-    it implies, from the ONE price store.
 15-iii. **The UI unit errors the audit found.** `commodity.tsx:37` and `fx.tsx:29` render an
     absolute move with `pctLevel` (a $2 move prints "200.0%"), `:39` prints an 0–100 field as
     "4800%", `macro.tsx:79` shows home ownership as "0.6%", `:63` reports a permanent 0.0% current
@@ -1654,6 +1651,18 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**15-ii — PRICE AND DM/OAS SIDE BY SIDE IN EVERY FIXED-INCOME VIEW.** One read,
+`credit-price.ts:paperQuoteOf`: the tranche's cleared price per unit of face off the one price
+store, and what it implies — `rowSpreadBps` (an OAS on a bond, a discount margin on a floater)
+against the issuer's region's curve for corporate paper; for a sovereign, which has no credit
+spread here (bond.md N7.b), the YIELD — a bond's off its coupon schedule (`yieldFromPrice`), a
+bill's off its discount to par over its remaining life (`billYieldFromPrice`). Unprinted paper
+(a facility, a debut) quotes nothing and the views print a dash, never par. Shown in the tranche
+object (a second stat row), its screener (two sortable columns), the ladder table and an
+institution's holdings (a share shows neither). `test/paper-quote.test.ts`: a spread fed through
+`priceFromSpreadBps` comes back to a hundredth of a basis point, a yield through `priceFromYield`
+to a millionth. Gates green; no run.
 
 **15-i — TRANCHES ARE SEARCHABLE, BY CLASS AND BY ISSUER.** `objects/tranche.tsx` was
 `searchable: false` and listed nothing. Every live tranche now lists once per world (a memo the

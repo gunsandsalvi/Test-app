@@ -11,7 +11,7 @@ import { money, pctLevel, count } from '../format';
 import { formatDate, formatMonthYear, WEEKS_PER_YEAR } from '../calendar';
 import { World, companyOf, regionOf, displayWeek } from '../world';
 import { materializeLadder } from '../../engine2/tranches';
-import { trancheId, yearOf } from '../objects/tranche';
+import { trancheId, yearOf, quoteOfInstrument, priceWord, spreadWord } from '../objects/tranche';
 import { instrumentDisplayName } from '../../domain/instruments';
 import { isDiscountBill } from '../../domain/government';
 import { SectionLabel } from '../objects/common';
@@ -45,6 +45,8 @@ function LadderTable({ rows, world, nav }: { rows: Row[]; world: World; nav: Nav
       { key: 'kind', label: 'kind', width: 0.9, render: (r) => r.kind },
       { key: 'usd', label: 'size', width: 0.9, render: (r) => money(r.principalLocal) },
       { key: 'rate', label: 'rate', width: 0.8, render: (r) => pctLevel(r.rate, 2) },
+      { key: 'price', label: 'price', width: 0.8, render: (r) => priceWord(quoteOfInstrument(world, r.id)) },
+      { key: 'spread', label: 'spread', width: 0.9, render: (r) => spreadWord(quoteOfInstrument(world, r.id)) },
       { key: 'due', label: 'due', width: 1.1, render: (r) => (r.maturityWeek - now <= 0 ? 'now' : formatMonthYear(displayWeek(world.state, r.maturityWeek))) },
     ]} />
   );

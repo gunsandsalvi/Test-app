@@ -14,6 +14,7 @@ import { World, companyOf, institutionOf, regionOf, holdersOf, bookOf, sovereign
 import { centralBankBookLocal, bankSovereignBookLocal } from '../../engine/sovereign-register';
 import { refOfIdentifier, labelOf } from '../objects';
 import { instrumentName } from '../objects/book';
+import { quoteOfInstrument, priceWord, spreadWord } from '../objects/tranche';
 import { banksOf } from '../../domain/company';
 import { institutionTotalAssetsFromState } from '../../engine/simulation/stages/institutional-balance-sheet';
 import { entityCashOf } from '../../engine/ledger/accounts';
@@ -110,6 +111,9 @@ function InstitutionHoldings({ world, id, nav }: { world: World; id: string; nav
           { key: 'name', label: 'name', sortable: true, width: 1.7, render: (r) => { const ref = refOfIdentifier(world, r.instrumentId) ?? (r.instrumentType === 'GOV_BOND' ? refOfIdentifier(world, r.region) : undefined); return ref ? <Link to={ref} nav={nav}>{ref.type === 'region' ? `${r.region} ${tenorWord(r.instrumentId)}` : instrumentName(world, r.instrumentId)}</Link> : r.instrumentId; } },
           { key: 'usd', label: 'value', sortable: true, width: 0.9, render: (r) => money(r.usd) },
           { key: 'nav', label: '% of', width: 0.7, render: (r) => (nav_ > 0 ? (100 * r.usd / nav_).toFixed(1) : '—') },
+          // §3.15-ii: a tranche's price and spread beside its value; an equity or a fund share shows neither.
+          { key: 'price', label: 'price', width: 0.7, render: (r) => priceWord(quoteOfInstrument(world, r.instrumentId)) },
+          { key: 'spread', label: 'spread', width: 0.9, render: (r) => spreadWord(quoteOfInstrument(world, r.instrumentId)) },
           { key: 'type', label: 'type', sortable: true, width: 1.1, render: (r) => typeWord(r.instrumentType) },
         ]}
       />

@@ -25,7 +25,9 @@ import { trancheIdOf,
   trancheRowOf, issuerIdOf, ladderRowsOf, trancheScheduleOf,
   TR_FLOATING, TR_CP, TR_FACILITY,
 } from '../engine2/tranches';
-import { priceFromSpreadBps, spreadBpsFromPrice } from '../domain/pricing';
+import { priceFromSpreadBps, spreadBpsFromPrice, yieldFromPrice, COUPON_PERIOD_WEEKS } from '../domain/pricing';
+import { billYieldFromPrice, isDiscountBill } from '../domain/government';
+import { regionOfGovernmentEntity } from '../domain/entity-keys';
 import type { ZeroCurve, PaperTerms } from '../domain/pricing';
 import { spreadAtTenor, CreditCurvePoint, CreditCurveRead } from '../domain/credit-curve';
 
@@ -205,4 +207,40 @@ export function priceAtSpreadOnTranche(
   terms: PaperTerms, curve: ZeroCurve, spreadBps: number
 ): number {
   return priceFromSpreadBps(terms, curve, spreadBps);
+}
+
+/**
+ * §3.15-ii — WHAT A FIXED-INCOME VIEW SHOWS BESIDE THE FACE: the cleared price per unit of face
+ * and what it implies — an OAS on a bond, a discount margin on a floater (`rowSpreadBps`), and
+ * on a sovereign, which has no credit spread here (`bond.md` N7.b), the YIELD: a bond's off its
+ * own coupon schedule, a bill's off its discount to par over its remaining life. One read, so
+ * the ladder, the holders lists, the tranche object and its screener cannot each derive it.
+ * Undefined for paper no market has printed (a facility, a debut) — rule 3, not par.
+ */
+export interface PaperQuote {
+  pricePerFace: number;
+  /** Corporate paper: the OAS or discount margin the price implies against the region's curve. */
+  spreadBps?: number;
+  /** Sovereign paper: the yield the price implies. */
+  yieldAnnual?: number;
+}
+
+export function paperQuoteOf(
+  v2: V2World, instrumentId: string, rates: RegionRates | undefined, week: number
+): PaperQuote | undefined {
+  const row = trancheRowOf(v2, instrumentId);
+  if (row === undefined || !isPricedRow(v2.tranches.flags[row])) return undefined;
+  const price = clearedPriceOf(v2, trancheIdOf(v2, row));
+  if (price === undefined || !(price > 0)) return undefined;
+  const S = v2.tranches;
+  const weeksToMaturity = S.maturityWeek[row] - week;
+  if (!(weeksToMaturity > 0)) return { pricePerFace: price };
+  if (regionOfGovernmentEntity(issuerIdOf(v2, instrumentId)) !== undefined) {
+    const tenorYears = (S.maturityWeek[row] - S.originationWeek[row]) / 52;
+    const yieldAnnual = isDiscountBill(tenorYears)
+      ? billYieldFromPrice(price, weeksToMaturity / 52)
+      : yieldFromPrice({ annualCouponRate: Number.isNaN(S.couponRate[row]) ? 0 : S.couponRate[row], periodWeeks: COUPON_PERIOD_WEEKS, weeksToMaturity }, price);
+    return { pricePerFace: price, yieldAnnual };
+  }
+  return { pricePerFace: price, spreadBps: rates ? rowSpreadBps(v2, rates, row, week) : undefined };
 }

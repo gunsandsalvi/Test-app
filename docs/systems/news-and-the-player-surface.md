@@ -281,7 +281,11 @@ the keyboard did to the visual viewport — the shell counter-moves by its scrol
 alone moves up by the keyboard's height. §9.15-i: a tranche is searchable from the bar by its
 market name, its issuer and its class (`objects/tranche.tsx`), a class word alone (`bonds`,
 `bills`, …) opens the screener over that class (`objects/index.ts:kindOfWord`, through the
-module's `kindWords`), and a tranche has peers — its issuer's ladder, its class, all.
+module's `kindWords`), and a tranche has peers — its issuer's ladder, its class, all. §9.15-ii:
+every fixed-income view (the tranche, its screener, the ladder, an institution's holdings) shows
+the cleared PRICE and what it implies side by side — an OAS or discount margin on corporate
+paper, a yield on a sovereign — through one read, `engine/credit-price.ts:paperQuoteOf`, off the
+one price store; unprinted paper shows a dash, never par.
 
 ### Also marked, briefly
 

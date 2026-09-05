@@ -5,7 +5,10 @@ import { defineObject } from './registry';
 import { ensureV2 } from '../../engine2/world';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { Card, KV, Link, Stat, StatGrid } from '../ui';
-import { money, pctLevel } from '../format';
+import { money, pctLevel, bps } from '../format';
+import { paperQuoteOf, PaperQuote } from '../../engine/credit-price';
+import { issuerIdOf } from '../../engine2/tranches';
+import { regionOfGovernmentEntity } from '../../domain/entity-keys';
 import { formatDate, formatSpan, formatMonthYear, yearOfWeek } from '../calendar';
 import { REGION_IDS } from '../../domain/geography';
 import { instrumentDisplayName } from '../../domain/instruments';
@@ -55,6 +58,24 @@ function companyView(world: World, c: { id: string; name: string; ticker: string
   const kind: TrancheKind = t.isCommercialPaper ? 'commercial paper' : t.isBankFacility ? 'facility' : t.rateType === 'FLOATING' ? 'loan' : t.seniority === 'SUBORDINATED' ? 'subordinated bond' : 'bond';
   return { ownerRef: { type: 'company', id: c.id }, ownerName: c.name, id: t.id, name: instrumentDisplayName(c.ticker, t, yearOf(world)), kind, issuerTicker: c.ticker, region: c.region, principalLocal: t.principalLocal, couponRate: coupon, rateType: t.rateType, floatingMarginBps: t.floatingMarginBps, seniority: t.seniority, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, callProtection: t.callProtection, isCommercialPaper: t.isCommercialPaper, isBankFacility: t.isBankFacility, facilityBankId: t.facilityBankId };
 }
+
+/**
+ * §3.15-ii — PRICE AND SPREAD, side by side, from the ONE price store (`credit-price.ts:paperQuoteOf`):
+ * the issuer's region supplies the curve a corporate spread is read against.
+ */
+export function quoteOfInstrument(world: World, instrumentId: string): PaperQuote | undefined {
+  const v2 = ensureV2(world.state);
+  let issuerId: string;
+  try { issuerId = issuerIdOf(v2, instrumentId); } catch { return undefined; }
+  const regionId = regionOfGovernmentEntity(issuerId) ?? companyOf(world, issuerId)?.region;
+  const reg = regionId ? regionOf(world, regionId) : undefined;
+  return paperQuoteOf(v2, instrumentId, reg?.zeroRates ? { zeroRates: reg.zeroRates, policyRate: reg.policyRate ?? 0 } : undefined, world.state.currentWeek);
+}
+/** "98.50" — a price per hundred of face; "—" where no market has printed one. */
+export const priceWord = (q: PaperQuote | undefined): string => (q ? (q.pricePerFace * 100).toFixed(2) : '—');
+/** "350bp" on corporate paper, "4.12% yld" on a sovereign, "—" where nothing prints. */
+export const spreadWord = (q: PaperQuote | undefined): string =>
+  q?.spreadBps !== undefined ? `${bps(q.spreadBps)}bp` : q?.yieldAnnual !== undefined ? `${pctLevel(q.yieldAnnual, 2)} yld` : '—';
 
 /** §3.15-i: every live tranche in the world, once per world (the search reads it per keystroke). */
 const listMemo = new WeakMap<World, { id: string; obj: TrancheView }[]>();
@@ -119,6 +140,8 @@ export const tranche = defineObject<TrancheView>({
       { key: 'class', label: 'class', render: (r) => r.obj.kind, value: (r) => r.obj.kind },
       { key: 'principal', label: 'principal', render: (r) => money(r.obj.principalLocal), value: (r) => r.obj.principalLocal },
       { key: 'rate', label: 'rate', render: (r) => pctLevel(r.obj.couponRate, 2), value: (r) => r.obj.couponRate },
+      { key: 'price', label: 'price', render: (r, w) => priceWord(quoteOfInstrument(w, r.obj.id)), value: (r, w) => quoteOfInstrument(w, r.obj.id)?.pricePerFace ?? -1 },
+      { key: 'spread', label: 'spread', render: (r, w) => spreadWord(quoteOfInstrument(w, r.obj.id)), value: (r, w) => { const q = quoteOfInstrument(w, r.obj.id); return q?.spreadBps ?? (q?.yieldAnnual !== undefined ? q.yieldAnnual * 10000 : -1); } },
       { key: 'due', label: 'due', render: (r, w) => formatMonthYear(displayWeek(w.state, r.obj.maturityWeek)), value: (r) => r.obj.maturityWeek },
     ],
   },
@@ -126,6 +149,7 @@ export const tranche = defineObject<TrancheView>({
   overview({ world, obj: t, nav }) {
     const now = world.state.currentWeek;
     const left = t.maturityWeek - now;
+    const q = quoteOfInstrument(world, t.id);
     return (
       <>
         <ObjectHeader name={t.name} sub={<>{t.ownerRef.type === 'region' ? 'sovereign tranche of ' : t.isCommercialPaper ? 'commercial paper of ' : t.isBankFacility ? 'bank facility of ' : t.seniority === 'SUBORDINATED' ? 'subordinated tranche of ' : 'senior tranche of '}<Link to={t.ownerRef} nav={nav}>{t.ownerName}</Link>{t.ownerRef.type === 'region' ? <> · <RegionLink id={t.ownerRef.id} nav={nav} /></> : null}</>} />
@@ -133,6 +157,11 @@ export const tranche = defineObject<TrancheView>({
           <Stat label="principal" value={money(t.principalLocal)} sub="outstanding" />
           <Stat label="coupon" value={pctLevel(t.couponRate, 2)} sub={t.rateType === 'FLOATING' ? `policy + ${t.floatingMarginBps ?? 0}bp` : 'fixed'} />
           <Stat label="due" value={formatDate(displayWeek(world.state, t.maturityWeek))} sub={left > 0 ? `in ${formatSpan(left)}` : 'matured'} neg={left <= 4} />
+        </StatGrid>
+        {/* §3.15-ii: the price and what it implies, side by side, off the one price store. */}
+        <StatGrid cols={2}>
+          <Stat label="price" value={priceWord(q)} sub={q ? 'per 100 of face, last cleared' : 'no market has printed this paper'} />
+          <Stat label={q?.yieldAnnual !== undefined ? 'yield' : t.rateType === 'FLOATING' ? 'discount margin' : 'OAS'} value={spreadWord(q)} sub={q?.yieldAnnual !== undefined ? 'the price implies' : q?.spreadBps !== undefined ? 'over the curve, at its life' : ''} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="issued" v={formatDate(displayWeek(world.state, t.originationWeek))} />
