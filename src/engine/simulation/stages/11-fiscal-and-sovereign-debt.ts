@@ -113,7 +113,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const trackedFirms = updatedCompanies.filter(f => f.region === regionId && isActiveCompany(f));
     const trackedInvestmentLocal = trackedFirms.reduce((s, f) => s + f.maintenanceCapex + f.growthCapex, 0);
     const trackedEmployment = trackedFirms.reduce((s, f) => s + f.employeeCount, 0);
-    const totalPrivateEmployment = (reg.smePools || []).reduce((s, seg) => s + seg.employment, 0);
+    const totalPrivateEmployment = reg.smePools.reduce((s, seg) => s + seg.employment, 0);
     const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + totalPrivateEmployment) / trackedEmployment : 1;
     const investmentComponentLocal = trackedInvestmentLocal * investmentScaleFactor;
 
@@ -489,7 +489,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // cash arriving a settlement day later). The regional accrual below stays as the statement's
     // smooth expectation; the PAYMENT is per segment.
     let smeAccrualWeeklyLocal = 0;
-    (reg.smePools || []).forEach((sg) => {
+    reg.smePools.forEach((sg) => {
       const accrualLocal = Math.max(0, sg.annualRevenueLocal * sg.marginPct) * reg.effectiveTaxRate / 52;
       smeAccrualWeeklyLocal += accrualLocal;
       sg.accruedTaxLocal = (sg.accruedTaxLocal ?? 0) + accrualLocal;

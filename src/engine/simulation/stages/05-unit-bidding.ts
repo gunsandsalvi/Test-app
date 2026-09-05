@@ -375,7 +375,6 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
   const walk = (c: Company) => {
     if (!isActiveCompany(c)) return;
     const index = byRegion[c.region as RegionId];
-    if (!index) return;
     lookup.byTicker.set(c.ticker, c);
     lookup.byId.set(c.id, c);
     lookup.byKey.set(c.id, c); // ids first; the ticker pass below overwrites any collision
@@ -410,7 +409,6 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
     ctx.updatedCompanies.forEach((c) => {
       if (!openEstateIds.has(c.id)) return;
       const index = byRegion[c.region as RegionId];
-      if (!index) return;
       const rows = Object.entries(c.outputInventoryBySubUnit ?? {}).filter(([, r]) => r.unitsHeld > 0.0001);
       if (rows.length === 0) return;
       lookup.byTicker.set(c.ticker, c);
@@ -1432,7 +1430,7 @@ function buildRegionDemandPlans(
   // bids for capital-goods categories from its own real capexLocal, so a segment's capex dollars
   // land on a real named supplier instead of being credited as an ambient revenue bump.
   if (isCapexSupplierCategory) {
-    (reg.smePools || []).forEach(segment => {
+    reg.smePools.forEach(segment => {
       const segCapexLocal = segment.capexLocal ?? 0;
       if (segCapexLocal <= 0) return;
       const demandUnits = ((segCapexLocal / 52) * (INDUSTRY_REGISTRY[segment.industry].capitalMix[subUnitId] ?? 0)) / referencePriceLocal;
@@ -1457,7 +1455,7 @@ function buildRegionDemandPlans(
   // literal `recipeInputs` a named firm of that industry consumes, so it competes for inputs in
   // the same books it sells into.
   if (isRecipeInputCategory) {
-    (reg.smePools || []).forEach(pool => {
+    reg.smePools.forEach(pool => {
       // CHAIN-D: blended over what this pool actually SELLS, because its industry's products no
       // longer share one recipe. A pool with no sales yet falls back to an equal split.
       const intensity = smePoolRecipeInputs(pool.industry, pool.salesDerivedAnnualRevenueUSDBySubUnit)[subUnitId];
@@ -2732,7 +2730,6 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
 
   // Everything dispatched this week joins what is already on the water — appended in place, the
   // same order the spread produced, without copying tens of thousands of live entries weekly.
-  if (!state.goodsInTransit) state.goodsInTransit = [];
   for (const sh of ctx.shipmentsDispatched) state.goodsInTransit.push(sh);
   bookTradeInvoices(ctx.v2, ctx.tradeInvoicesBooked); // §3.13-BOOK d4b: the contract ledger's door
 

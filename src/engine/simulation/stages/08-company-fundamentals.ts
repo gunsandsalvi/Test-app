@@ -147,7 +147,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const carryingCostByTicker = new Map<Ticker, number>();
   prevActiveFirms.forEach(c => {
     let total = 0;
-    Object.entries(c.outputInventoryBySubUnit || {}).forEach(([su, inv]) => {
+    Object.entries(c.outputInventoryBySubUnit).forEach(([su, inv]) => {
       total += (inv as { valueLocal: number }).valueLocal * (annualCarryingCostRateOf(su) / 52);
     });
     if (total > 0) carryingCostByTicker.set(c.ticker, total);
@@ -616,15 +616,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // than prevActiveFirms (the twin-object trap §7.302 fell into). The lines array itself is
     // fresh (replacement semantics for the persisted array, per the batteries' clone rule).
     ctx.updatedCompanies.forEach((c) => {
-      if (!isActiveCompany(c) || !(c.productLines || []).length) return;
-      let touched = false;
-      const lines = (c.productLines || []).map((pl) => {
+      const prior = c.productLines ?? [];
+      if (!isActiveCompany(c) || prior.length === 0) return;
+      const lines = prior.map((pl) => {
         const sum = shareSumByKey.get(`${c.region}:${pl.subUnitId}`) ?? 0;
         if (!(sum > 1e-9) || Math.abs(sum - 1) < 1e-9) return pl;
-        touched = true;
         return { ...pl, categoryMarketShare: roundN(pl.categoryMarketShare / sum, 1e6) };
       });
-      if (touched) c.productLines = lines;
+      // Written only when a line changed — the same object comes back for an untouched one.
+      if (lines.some((l, i) => l !== prior[i])) c.productLines = lines;
     });
   }
 

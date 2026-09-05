@@ -381,8 +381,8 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   // the treasury's account did about it. ----
   REGION_IDS.forEach((rid) => {
     const reg = ctx.updatedRegions[rid];
-    const auction = reg?.lastAuction;
-    if (!reg || !auction || auction.week !== week) return;
+    const auction = reg.lastAuction;
+    if (!auction || auction.week !== week) return;
     const a = auctionSummaryOf(auction.offerings);
     if (a.withdrawnLocal < 1e6 || a.coverage === undefined) return;
     const nameOf = (id: string) => instrumentNameOf(ctx.v2, id, () => undefined, yearOfWeek) ?? id;

@@ -77,7 +77,7 @@ export function runRelativeValueStage(state: GameState, ctx: WeeklyStepContext):
 function readSwapSpread(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view: DerivativeLifecycleView, standing: StandingBook, book: DerivativeContract[], week: number): void {
   REGION_IDS.forEach((regionId: RegionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg || !reg.swapParRateByTenor || !reg.zeroRates) return;
+    if (!reg.swapParRateByTenor) return;
     const regionFunds = funds.filter((f) => f.region === regionId);
     if (regionFunds.length === 0) return;
     const pbBook = primeBrokerageBookOf(ctx.v2, regionId);
@@ -149,7 +149,7 @@ function readSwapSpread(ctx: WeeklyStepContext, funds: InstitutionalEntity[], vi
 function readIndexBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view: DerivativeLifecycleView, standing: StandingBook, book: DerivativeContract[], week: number): void {
   REGION_IDS.forEach((regionId: RegionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg || reg.creditIndexSeriesId === undefined) return;
+    if (reg.creditIndexSeriesId === undefined) return;
     const regionFunds = funds.filter((f) => f.region === regionId);
     if (regionFunds.length === 0) return;
     const seriesId = reg.creditIndexSeriesId;
@@ -197,7 +197,6 @@ function readIndexBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], vi
 function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view: DerivativeLifecycleView, standing: StandingBook, book: DerivativeContract[], week: number): void {
   REGION_IDS.forEach((regionId: RegionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     const regionFunds = funds.filter((f) => f.region === regionId);
     if (regionFunds.length === 0) return;
     const pbBook = primeBrokerageBookOf(ctx.v2, regionId);
@@ -285,7 +284,6 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
 function readSeniority(ctx: WeeklyStepContext, funds: InstitutionalEntity[], week: number): void {
   REGION_IDS.forEach((regionId: RegionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     const regionFunds = funds.filter((f) => f.region === regionId);
     if (regionFunds.length === 0) return;
     const pbBook = primeBrokerageBookOf(ctx.v2, regionId);
@@ -342,7 +340,7 @@ function readSeniority(ctx: WeeklyStepContext, funds: InstitutionalEntity[], wee
 function readBondBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view: DerivativeLifecycleView, standing: StandingBook, book: DerivativeContract[], week: number): void {
   REGION_IDS.forEach((regionId: RegionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg || reg.bondFuturesBasis === undefined || reg.bondFuturesDeliverableId === undefined) return;
+    if (reg.bondFuturesBasis === undefined || reg.bondFuturesDeliverableId === undefined) return;
     // ---- THE BOND BASIS, as the line last printed it. A roll since the print leaves nothing to
     // read: the basis belongs to a delivery that has passed. ----
     const deliveryWeek = nextDeliveryWeek(week);

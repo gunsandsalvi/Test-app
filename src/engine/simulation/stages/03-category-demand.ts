@@ -109,7 +109,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       // pool's cash and shows up as measurable distress instead of disappearing into a statistic.
       {
         const baseAnnualWageLocal = getBaseAnnualWageLocal(regionId);
-        (reg.smePools || []).forEach((pool) => {
+        reg.smePools.forEach((pool) => {
           const wagesLocal = weeklyWageBillLocal(
             pool.employment,
             SECTOR_OCCUPATION_MIX[INDUSTRY_REGISTRY[pool.industry].sector as keyof typeof SECTOR_OCCUPATION_MIX] ?? { GENERAL: 1.0 },

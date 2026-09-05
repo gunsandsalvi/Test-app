@@ -102,7 +102,6 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
 
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
 
     // ---- 2. Funds of every kind: a prime-brokerage draw at the home bank. Past the line the
     // morning struck it is still funded — the money is already spent — at a penalty the next
@@ -192,7 +191,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       if (!drawnLocal && !smeRows) return c;
       const loans = [...(c.bankBalanceSheet.businessLoans ?? [])];
       (smeRows ?? []).forEach((r) => {
-        const existing = loans.find((l) => l.borrowerKind === 'SME_POOL' && l.borrowerId === r.poolId);
+        const existing = loans.find((l) => l.borrowerId === r.poolId);
         if (existing) existing.principalLocal = Math.round(existing.principalLocal + r.usd);
         else loans.push({
           id: `${c.ticker}-SME-${r.industry}`, borrowerId: r.poolId, borrowerKind: 'SME_POOL', principalLocal: Math.round(r.usd),

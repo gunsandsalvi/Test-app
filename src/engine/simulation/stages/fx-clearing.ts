@@ -463,7 +463,6 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   // Record what the market did, including what it could NOT clear.
   REGIONS.filter((r) => r !== 'USA').forEach((r) => {
     const reg = ctx.updatedRegions[r];
-    if (!reg) return;
     const key = ctx.updatedFxPairs.some(p => p.base === r && p.quote === 'USA')
       ? pairKey(r, 'USA') : pairKey('USA', r);
     const prior = state.fxPairs.find(p => pairKey(p.base, p.quote) === key)?.rate ?? 0;

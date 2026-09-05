@@ -94,7 +94,8 @@ export interface Dealer {
 // its bespoke branches in evolution.ts pretended it was a tradable spot commodity, which it
 // never was.
 // BP1a: the WORKING copy, initialized from the registry-derived base below; init calibrates it.
-export const COMMODITY_CATEGORY_LINKAGE: Record<string, { subUnitId: string; intensityShare: number }> =
+/** Keyed by commodity id (and symbol) and SPARSE — a commodity with no link has no entry (§3.29-iii: the type says so). */
+export const COMMODITY_CATEGORY_LINKAGE: Partial<Record<string, { subUnitId: string; intensityShare: number }>> =
   JSON.parse(JSON.stringify(VIEW_BASE_COMMODITY_CATEGORY_LINKAGE));
 
 /**

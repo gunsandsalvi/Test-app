@@ -54,7 +54,6 @@ function runXcsMarket({ ctx, week, standing, view }: DerivativeMarketRun): void 
 
   REGION_IDS.forEach((home) => {
     const reg = ctx.updatedRegions[home];
-    if (!reg) return;
     const published: Record<string, number> = { ...(reg.xcsBasisBps ?? {}) };
     REGION_IDS.forEach((foreign) => {
       if (foreign === home) return;

@@ -198,8 +198,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   const householdDemandByFund = new Map<EntityId, number>();
   REGION_IDS.forEach((region) => {
     const reg = ctx.updatedRegions[region];
-    const hs = reg?.householdState;
-    if (!hs) return;
+    const hs = reg.householdState;
 
     const listed = ctx.updatedCompanies.filter(
       (c) => c.region === region && isActiveCompany(c) && isPubliclyListed(c) && marketCapAt(ctx.v2, c) > 0
@@ -545,7 +544,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   });
   if (inKindOwedByFund.size > 0) {
     const { institutionById: entityById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
-    let delivered = false;
+    let delivered = false as boolean; // set inside the forEach below, which narrowing cannot see
     const fundAssetsLocal = new Map<EntityId, number>();
     // The cash the slice loop has NOT yet promised. The payments below settle at the
     // close, so `fund.cashLocal` never falls between redeemers — while `share` renormalizes

@@ -96,7 +96,6 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
   const H = v2.holdings;
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     // §3.13-BOOK d4c-iv: the store's rows.
     const priorBook: PrimeBrokerageLine[] = primeBrokerageBookOf(ctx.v2, regionId);
     const haircuts = measuredHaircutsFor(ctx, regionId, reg);

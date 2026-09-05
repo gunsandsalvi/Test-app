@@ -311,7 +311,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     settlePeLifecycleDeals(ctx, ctx.nextWeek);
     REGION_IDS.forEach((regionId) => {
       const reg = ctx.updatedRegions[regionId];
-      if (!reg) return;
       runPeLifecycleForRegion(regionId, reg, ctx, ctx.nextWeek);
       const born = runFirmBirthsForRegion(regionId, reg, ctx, ctx.nextWeek, generatePrivateCompanies);
       if (born.length > 0) {

@@ -65,7 +65,6 @@ function printedWeeklyReturn(ctx: WeeklyStepContext, billId: InstrumentId): numb
 export function runBillAccretionStage(ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     const returnByBill = new Map<string, number>();
     materializeGovLadder(ctx.v2, regionId)
       .filter((t) => t.maturityWeek > ctx.nextWeek && isDiscountBill(t.tenorAtIssuanceYears))

@@ -299,7 +299,7 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
       if (held <= 0) return c;
       return Object.assign(c, { mmfSharesLocal: held + issuedLocal * (held / totalHeldLocal) });
     });
-    if (reg?.householdState && hhSharesLocal > 0) {
+    if (hhSharesLocal > 0) {
       reg.householdState.mmfSharesLocal = hhSharesLocal + issuedLocal * (hhSharesLocal / totalHeldLocal);
     }
   });

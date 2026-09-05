@@ -29,8 +29,8 @@ export class CentralBankIdentityTrace {
     const parts = new Map<RegionId, Record<string, number>>();
     REGION_IDS.forEach((r) => {
       const reg = ctx.updatedRegions[r];
-      const cb = reg?.centralBankSheet;
-      if (!reg || !cb) return;
+      const cb = reg.centralBankSheet;
+      if (!cb) return;
       let reserves = 0;
       ctx.updatedCompanies.forEach((c) => {
         if (!c.isBankEntity || c.region !== r || c.isDefaulted || c.mergerAcquired) return;

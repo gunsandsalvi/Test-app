@@ -655,7 +655,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       // sector: the money leaves the fund and arrives as real household deposits, so the purchase
       // price is not destroyed on its way out of the institutional book.
       const sellerRegion = ctx.updatedRegions[comp.region];
-      if (sellerRegion?.householdState) {
+      {
         // C4: a PAYMENT. The LPs' calls above landed on the sponsor's own book, so the
         // sponsor is the one payer of the purchase price and the founders' household sector is
         // the payee — settlement credits the deposit and records the banks' T+1 leg itself.
@@ -842,7 +842,7 @@ export function runFirmBirthsForRegion(
 ): Company[] {
   // Quarterly, like every other structural event in this simulation.
   if (nextWeek % 13 !== 0) return [];
-  const segs = reg.smePools || [];
+  const segs = reg.smePools;
   if (segs.length === 0) return [];
 
   // The pool that has grown the most relative to the named tier it feeds — a real formation

@@ -56,7 +56,7 @@ function runOptionMarket({ ctx, week, standing, view }: DerivativeMarketRun): vo
     const reg = ctx.updatedRegions[regionId];
     const level = view.indexLevel(regionId);
     const realisedVol = view.indexAnnualVol(regionId);
-    if (!reg || !(level > 0) || realisedVol === undefined || !(realisedVol > 0)) return;
+    if (!(level > 0) || realisedVol === undefined || !(realisedVol > 0)) return;
     const money = currencyOf(regionId);
     const marginRate = initialMarginRateOf({ classId: 'OPTION', regionId, reference: { kind: 'INDEX', regionId }, termKey: 'PUT', maturityWeek: week + OPTION_TENOR_WEEKS }, view);
     const oneSigma = realisedVol * Math.sqrt(tenorYears);

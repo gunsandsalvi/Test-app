@@ -44,7 +44,6 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
     // this round's fills included.
     (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
       const reg = ctx.updatedRegions[regionId];
-      if (!reg) return;
       const banks = banksOf(ctx.updatedCompanies, regionId).filter((b) => isActiveCompany(b));
       if (banks.length === 0) return;
       const session = runRegionalRepoSession(regionId, reg, banks, ctx);
@@ -78,7 +77,6 @@ export function runBankFundingCloseStage(state: GameState, ctx: WeeklyStepContex
 export function recordFundingShortfalls(ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     const short: Record<string, number> = {};
     const streak: Record<string, number> = {};
     banksOf(ctx.updatedCompanies, regionId).forEach((bank) => {

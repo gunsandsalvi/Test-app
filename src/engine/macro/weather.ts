@@ -220,7 +220,7 @@ export function weatherYieldLossShareOf(weather: WeatherAnomaly, commodityId: st
 export function subUnitYieldLossShareOf(weather: WeatherAnomaly, subUnitId: string): number {
   let loss = 0;
   Object.entries(COMMODITY_CATEGORY_LINKAGE).forEach(([commodityId, l]) => {
-    if (l.subUnitId !== subUnitId) return;
+    if (!l || l.subUnitId !== subUnitId) return;
     loss += l.intensityShare * weatherYieldLossShareOf(weather, commodityId);
   });
   return Math.min(1, loss);

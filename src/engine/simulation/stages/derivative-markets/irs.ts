@@ -70,7 +70,6 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
 
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg?.zeroRates) return;
 
     const moveBps = twoSigmaYieldMoveBps(reg);
     const regionBanks = banksOf(ctx.prevActiveFirms, regionId);

@@ -89,8 +89,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
 
   REGION_IDS.forEach((region) => {
     const reg = ctx.updatedRegions[region];
-    const hs = reg?.householdState;
-    if (!hs) return;
+    const hs = reg.householdState;
 
     // ---- 2. Index-fund shares bought this week settle onto the household register. ----
     const etfShares = [...(hs.etfShares ?? [])];
@@ -153,7 +152,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // stated primitives (SCF-shaped); what they split is real, so when home prices move it is
     // the middle tiers' net worth that moves, and when equities rally it is the top's — the
     // difference the tier wealth-effect MPCs exist to price.
-    if (reg.wealthDistribution) {
+    {
       const consumerDebtLocal = (hs.creditCardDebtLocal ?? 0) + (hs.otherConsumerLoanDebtLocal ?? 0);
 
       // THE DEPOSIT SPLIT IS AN OUTCOME OF WHO SAVED, not a stated weight.

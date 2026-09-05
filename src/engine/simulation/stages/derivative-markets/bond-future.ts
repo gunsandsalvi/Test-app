@@ -50,7 +50,6 @@ function runBondFuturesMarket({ ctx, week, view, standing }: DerivativeMarketRun
   const capacity = openMemberCapacity();
   REGION_IDS.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     // ---- 1. THE DELIVERABLE, and its carry. ----
     const deliveryWeek = nextDeliveryWeek(week);
     const bond = deliverableOf(materializeGovLadder(ctx.v2, regionId), deliveryWeek);

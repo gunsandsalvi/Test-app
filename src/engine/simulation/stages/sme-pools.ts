@@ -49,7 +49,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
 
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    (reg?.smePools || []).forEach((pool) => {
+    reg.smePools.forEach((pool) => {
       const byReason = flows.get(`${regionId}:${pool.industry}`);
 
       // ---- 1. The week's measured P&L. Receipts are what the pool was paid; costs are what it

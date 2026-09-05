@@ -318,7 +318,7 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
     });
     // Published: the basis a forward in this region costs against each money — the funding
     // basis plus the desks' charge — so the spot desks quote off it and it can be watched.
-    if (reg) reg.crossCurrencyBasisBps = byIssuer;
+    reg.crossCurrencyBasisBps = byIssuer;
   });
 
   // ---- STRIKE. Each holder re-hedges to the book that actually exists — as far as a dealer will

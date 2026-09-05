@@ -173,7 +173,6 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
 
   REGION_IDS.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     // §3.13-SOV row 2: the sovereign ladder comes from the ONE store.
     const ladder = materializeGovLadder(ctx.v2, regionId);
     const couponByBond = sovereignCouponByBond(ladder);

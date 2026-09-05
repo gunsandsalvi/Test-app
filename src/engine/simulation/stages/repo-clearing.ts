@@ -94,7 +94,7 @@ export function computeSovereignRepoHaircuts(
   reg: Region,
   tenorYearsOf: (bondId: string) => number | undefined
 ): (bondId: string) => number | undefined {
-  const hist = reg.historicalZeroCurves || [];
+  const hist = reg.historicalZeroCurves;
   /** The weekly repricing volatility at a tenor, from the nearest curve point's own history. */
   const repricingBpsAt = (years: number): number => {
     const field = nearestCurvePoint(years);
@@ -764,8 +764,8 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
   const repoIndex = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    const book = reg ? repoBookOf(ctx.v2, regionId) : [];
-    if (!reg || book.length === 0) return;
+    const book = repoBookOf(ctx.v2, regionId);
+    if (book.length === 0) return;
     const borrowers = new Set(book.map((c) => c.borrowerId));
     borrowers.forEach((bankId) => {
       // §3.13-BOOK (c-then-3b): a repo borrower is named by its ENTITY id; a lookup, not a scan.

@@ -559,9 +559,13 @@ written from here):
     or a type that LIES, where the guard is the only thing catching a runtime `undefined` the
     declaration denies, and the fix is the declaration (an optional field, a `Partial<Record>` for
     a sparse store), never the guard. One directory at a time (rule 10), the budget falling with
-    each: **a** domain, engine2 and test (26) and **b** `src/engine` outside the simulation (69)
-    are DONE; **c** `src/engine/simulation` (151: `shared-helpers.ts` 15, `02b` 12,
-    `bank-lending.ts` 12, `labor-market.ts` 12, `05` 9); **d** `src/ui` and `scripts/harness.ts`
+    each: **a** domain, engine2 and test (26), **b** `src/engine` outside the simulation (69) and
+    **c-i** the simulation's guards on total stores and its `|| []` fallbacks (113) are DONE;
+    **c-ii** the simulation's 38 reads of SPARSE stores whose types say total — `ctx.companyUpdates`
+    (a company is touched or not: `Partial<Record>`), `Region.categoryDemand` (a category is carried
+    or not — the type 29-iv's `?.` reads are also right about), the settlement's `net` map, the
+    memo arrays and the tenor/kind lookups in `shared-helpers.ts`, `holdings-view.ts`,
+    `derivative-lifecycle.ts` and `securities-lending.ts`; **d** `src/ui` and `scripts/harness.ts`
     (96).
 29-iv. **The defensive reads.** The 1,223 `??` and `?.` on values the types say are never nullish
     are the same choice per site: a fallback that cannot run (delete it — a `?? 0` that never
@@ -1208,7 +1212,7 @@ none of them steps a week of the simulation. Green before every commit.
 | Command | Note |
 |---|---|
 | `npx tsc --noEmit` | |
-| `npx eslint src scripts test --no-warn-ignored --max-warnings 1425` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
+| `npx eslint src scripts test --no-warn-ignored --max-warnings 1300` | **THE RATCHET, again.** The number is the `no-unnecessary-condition` backlog (1,565 when §9.29-ii turned the type-aware rules on); it may fall and never rise, every other rule stands at zero, and 29-iii/iv pay it down — lower it here and in `package.json` with each payment |
 | `npm test` | the unit suite: contracts and arithmetic, never a run |
 | `bash scripts/check-hygiene.sh` | carries `check-atlas.sh` and the stated-literal ratchets |
 | `npm run build` | |
@@ -1335,6 +1339,18 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**29-iii-c-i — THE SIMULATION'S DEAD GUARDS ON TOTAL STORES.** One hundred and thirteen, in one
+  shape: `if (!reg) return` on `ctx.updatedRegions[r]` and its `reg?.` cousins across thirty
+  stages, `(reg.smePools || [])` twenty-two times, `(sheet.businessLoans || [])` and its household
+  twin fourteen times, `(c.debtTranches || [])`, `reg.historicalZeroCurves || []`, the
+  `householdState`, `wealthDistribution`, `housingMarket` and `occupationPools` guards on fields
+  the region always has, `ctx.paymentJournal &&` where the journal is always there, and the
+  `borrowerKind === 'SME_POOL'` tests on a loan whose only kind that is. Deleted, with the `?.`
+  they carried. Two closure-set flags (`touched`, `delivered`) that narrowing could not see set
+  read as always false: one became a compare-by-identity, the other says `as boolean`. The
+  commodity linkage table is `Partial<Record>` — a commodity with no link has no row. 1,425 →
+  1,300. Gates green; no run (rule 11).
 
 **29-iii-b — THE DEAD CONDITIONS IN THE ENGINE OUTSIDE THE SIMULATION.** Sixty-nine. The largest
   family was `if (!reg) return` on `state.regions[r]` and its `reg?.zeroRates` cousins — twenty

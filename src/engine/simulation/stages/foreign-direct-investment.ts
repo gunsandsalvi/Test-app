@@ -38,7 +38,6 @@ import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { convertLocal } from '../../../domain/currency';
 import { TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../../../domain/company';
 import { PrivateFirmSeed } from '../../bootstrap/private-firms';
-import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { cashOf, openingCashOf } from '../../ledger/accounts';
 import type { Ticker } from '../../../domain/ids';
 
@@ -119,7 +118,6 @@ export function runForeignDirectInvestment(
       const revenuePerHead = comp.employeeCount > 0 ? comp.annualRevenue / comp.employeeCount : 0;
       const employees = revenuePerHead > 0 ? Math.max(10, Math.round(revenueLocal / revenuePerHead)) : 10;
       const industry = comp.productLines![0].industry;
-      if (!INDUSTRY_REGISTRY[industry]) continue;
 
       const tickers = new Set(ctx.updatedCompanies.map((c) => c.ticker));
       const names = new Set(ctx.updatedCompanies.map((c) => c.name));

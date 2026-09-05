@@ -198,7 +198,6 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   estates.forEach((estate) => {
     if (estate.closedWeek !== undefined) return;
     const reg = ctx.updatedRegions[estate.regionId];
-    if (!reg) return;
     const comp = index.companyById.get(estate.companyId);
 
     // Receivables are the REAL invoice book now, not a schedule beside it. The

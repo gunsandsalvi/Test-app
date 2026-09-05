@@ -138,7 +138,7 @@ export function migrateSmeDebtAtSeed(
   reg: Region,
   banks: Company[]
 ): void {
-  const segs = reg.smePools || [];
+  const segs = reg.smePools;
   const segEbitdaLocal = segs.map((s) => Math.max(0, s.annualRevenueLocal * s.marginPct));
   const totalEbitdaLocal = segEbitdaLocal.reduce((a, b) => a + b, 0);
   if (!(totalEbitdaLocal > 0) || banks.length === 0) return;
@@ -243,9 +243,9 @@ export function planSmeShopping(
       bank,
       hurdle: bankRequiredReturnAnnual(bank, reg),
       headroomLocal: Math.max(0, sheet.bankEquityLocal / BANK_MIN_CAPITAL_RATIO
-        - ((sheet.businessLoans || []).reduce((a, l) => a + l.principalLocal, 0) + householdBookRwaLocal(sheet.householdLoans))),
+        - (sheet.businessLoans.reduce((a, l) => a + l.principalLocal, 0) + householdBookRwaLocal(sheet.householdLoans))),
     }));
-  (reg.smePools || []).forEach((seg) => {
+  reg.smePools.forEach((seg) => {
     const ebitdaLocal = Math.max(0, seg.annualRevenueLocal * seg.marginPct);
     const ceilingLocal = ebitdaLocal * SME_SERVICEABLE_LEVERAGE;
     const weekDemandLocal = Math.max(0, ceilingLocal - (seg.debtLocal || 0)) * SME_WEEKLY_DEMAND_TAKEUP;
@@ -290,7 +290,7 @@ export function runBankWeeklyLending(
   const policyRate = reg.policyRate;
   // G3c: every price this bank quotes below rides on ITS OWN cost of equity.
   const bankHurdle = bankRequiredReturnAnnual(bank, reg);
-  let loans = [...(sheet.businessLoans || [])];
+  let loans = [...sheet.businessLoans];
 
   // ---- Interest at each pool's own terms; the payer is the pool's own account (02b pays it
   // SEGMENT → BANK through settlement). ----
@@ -303,9 +303,8 @@ export function runBankWeeklyLending(
   // ---- SME losses at the pool's own real default rate — the bank's measured loss experience,
   // replacing the contagion formula for the itemized book. ----
   let loanLossWeeklyLocal = 0;
-  const segByPool = new Map((reg.smePools || []).map((s) => [smePoolId(regionId, s.industry), s]));
+  const segByPool = new Map(reg.smePools.map((s) => [smePoolId(regionId, s.industry), s]));
   loans = loans.map((l) => {
-    if (l.borrowerKind !== 'SME_POOL') return l;
     const seg = segByPool.get(l.borrowerId);
     if (!seg) return l;
     const lossLocal = (l.principalLocal * smePoolAnnualPd(seg) * (1 - creditRecoveryRate(reg))) / 52;
@@ -319,9 +318,9 @@ export function runBankWeeklyLending(
   // plan's too: a bank whose book loses money quoted nothing. ----
   const declinedOriginationLocal = 0;
   const smeOriginationBySegment = new Map<string, number>();
-  (reg.smePools || []).forEach((seg) => {
+  reg.smePools.forEach((seg) => {
     const poolId = smePoolId(regionId, seg.industry);
-    const poolLoan = loans.find((l) => l.borrowerId === poolId && l.borrowerKind === 'SME_POOL');
+    const poolLoan = loans.find((l) => l.borrowerId === poolId);
     const grantedLocal = shoppedByIndustry.get(seg.industry) ?? 0;
     if (grantedLocal <= 0) return;
 
@@ -406,7 +405,7 @@ export function migrateHouseholdDebtAtSeed(
   banks: Company[]
 ): void {
   const hs = reg.householdState;
-  if (!hs || banks.length === 0) return;
+  if (banks.length === 0) return;
   const mortgageRate = currentMortgageRateAnnual(reg);
   const lossRate = consumerAnnualLossRate(reg.unemploymentRate, hs.creditTierBooks);
   // G3c: the seed's quote is made by the banks that will carry the book, at their own average
@@ -521,7 +520,7 @@ export function migrateHouseholdDebtAtSeed(
   // The household lines become the derived sums they will be every week from here on, and the
   // seed carries the flows the books imply so week 1 opens in the engine's shape, not at zero.
   const sumKind = (kind: HouseholdLoanKind) => banks.reduce(
-    (a, b) => a + (b.bankBalanceSheet!.householdLoans || []).filter((pl) => pl.kind === kind).reduce((x, pl) => x + pl.principalLocal, 0),
+    (a, b) => a + b.bankBalanceSheet!.householdLoans.filter((pl) => pl.kind === kind).reduce((x, pl) => x + pl.principalLocal, 0),
     0
   );
   hs.mortgageDebtLocal = sumKind('MORTGAGE');
@@ -603,7 +602,7 @@ export function runBankHouseholdLending(
   // G3c: this bank's own cost of equity prices the consumer credit it writes.
   const bankHurdle = bankRequiredReturnAnnual(bank, reg);
   const hs = reg.householdState;
-  const pools: HouseholdLoanPool[] = (sheet.householdLoans || []).map((pl) => ({ ...pl }));
+  const pools: HouseholdLoanPool[] = sheet.householdLoans.map((pl) => ({ ...pl }));
 
   let interestWeeklyLocal = 0;
   let principalWeeklyLocal = 0;
@@ -695,7 +694,7 @@ export function runBankHouseholdLending(
   });
 
   const equityLocal = sheet.bankEquityLocal;
-  const otherRwaLocal = (sheet.businessLoans || []).reduce((a, l) => a + l.principalLocal, 0);
+  const otherRwaLocal = sheet.businessLoans.reduce((a, l) => a + l.principalLocal, 0);
   // §3.20c-i: a bank whose book loses money writes nothing new — it runs the book off.
   const headroomLocal = () => bankRunsOffItsBook(sheet) ? 0 : Math.max(0, equityLocal / 0.08 - (otherRwaLocal + householdBookRwaLocal(pools)));
 

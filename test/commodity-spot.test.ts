@@ -5,7 +5,7 @@ import { worldPrintOf, markCommodityToAuction, goodsUnitsPerCommodityUnitOf } fr
 import { weatherYieldLossShareOf, subUnitYieldLossShareOf } from '../src/engine/macro/weather';
 import { COMMODITY_CATEGORY_LINKAGE, Commodity, Region, RegionId, WeatherAnomaly } from '../src/types';
 
-const SUB = COMMODITY_CATEGORY_LINKAGE.CRUDE_OIL.subUnitId;
+const SUB = COMMODITY_CATEGORY_LINKAGE.CRUDE_OIL!.subUnitId;
 const fx = (r: RegionId) => (r === 'EUR' ? 2 : 1);
 
 function regionsWith(cd: Partial<Record<RegionId, { supplied: number; demanded: number; exWorks: number }>>): Record<RegionId, Region> {
@@ -34,7 +34,7 @@ test('the world print is every origin\'s gate price in the numéraire, weighted 
 
 test('spot is the world print in the commodity\'s own unit; the quantities are the auction\'s, in its share', () => {
   const regions = regionsWith({ USA: { supplied: 100, demanded: 150, exWorks: 10 }, EUR: { supplied: 300, demanded: 100, exWorks: 5 } });
-  const share = COMMODITY_CATEGORY_LINKAGE.CRUDE_OIL.intensityShare;
+  const share = COMMODITY_CATEGORY_LINKAGE.CRUDE_OIL!.intensityShare;
   const marked = markCommodityToAuction(comm(), regions, fx);
   assert.equal(marked.spotPrice, 5);                       // $10 per sub-unit unit × 0.5 units per barrel
   assert.equal(marked.change1W, -35);
@@ -72,7 +72,7 @@ test('a weather event destroys its stated share of the commodity it names, decay
   assert.equal(weatherYieldLossShareOf(drought(1), 'CORN'), 0);
   assert.equal(weatherYieldLossShareOf(drought(1, 1.7), 'WHEAT'), 1);
   // The sub-unit loses wheat's value share of the loss, and nothing of a sub-unit wheat is no part of.
-  const wheatSub = COMMODITY_CATEGORY_LINKAGE.WHEAT;
+  const wheatSub = COMMODITY_CATEGORY_LINKAGE.WHEAT!;
   assert.ok(Math.abs(subUnitYieldLossShareOf(drought(1), wheatSub.subUnitId) - wheatSub.intensityShare * 0.4) < 1e-12);
   assert.equal(subUnitYieldLossShareOf(drought(1), SUB), 0);
 });

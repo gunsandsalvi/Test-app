@@ -185,15 +185,13 @@ export function computeOccupationDemand(companies: Company[], privateSegments: S
 
   companies.filter(c => c.region === regionId && isActiveCompany(c)).forEach(c => {
     const mix = SECTOR_OCCUPATION_MIX[c.sector];
-    if (!mix) { demand.GENERAL += c.employeeCount; return; }
     (Object.keys(mix) as OccupationType[]).forEach((occ) => {
       demand[occ] += c.employeeCount * (mix[occ] ?? 0);
     });
   });
 
-  (privateSegments || []).forEach(seg => {
+  privateSegments.forEach(seg => {
     const mix = SECTOR_OCCUPATION_MIX[INDUSTRY_REGISTRY[seg.industry].sector as keyof typeof SECTOR_OCCUPATION_MIX];
-    if (!mix) { demand.GENERAL += seg.employment; return; }
     (Object.keys(mix) as OccupationType[]).forEach((occ) => {
       demand[occ] += seg.employment * (mix[occ] ?? 0);
     });
@@ -521,7 +519,7 @@ export function applyPendingCorporateActionSettlements(
   // leg (the issuer redeems, or is paid) and the paper wired against the house. Otherwise the
   // desks' positions stand until the next auction's paydown catches them up a week late, and
   // the clearing house is short by exactly the desks' share of each week's retirements.
-  if (ctx.updatedCompanies && ctx.paymentJournal) {
+  if (ctx.updatedCompanies) {
     const { companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
     pendingByType.forEach((byId, type) => {
       const book = type === 'CORP_BOND' || type === 'LEVERAGED_LOAN' ? DESK_BOOK_BY_TYPE[type] : undefined;
@@ -641,7 +639,7 @@ export function applyPendingCorporateActionSettlements(
         const denomLocal = Math.max(registerLocal + deskLocal, issuedLocal);
         if (!(denomLocal > 0)) return;
         denomByPair.set(k, denomLocal);
-        if (!issuerTicker || !ctx.paymentJournal) return;
+        if (!issuerTicker) return;
         const payer = companyPartyOf(issuerTicker);
         // §9.13-EQUITY — THE REASON SAYS WHICH PAYMENT THIS IS. Every holder of record used to be
         // paid under one reason while the household sector was paid its share under a second
@@ -703,7 +701,7 @@ export function applyPendingCorporateActionSettlements(
           const issuerTicker = issuerPartyIdOf(instrumentIdAt(v2, r));
           // A holder paid by an issuer nobody can name is money from nobody: a defect at the
           // site that recorded the action, never a credit.
-          if (!ctx.paymentJournal || !issuerTicker) {
+          if (!issuerTicker) {
             defect(`security payment of ${(shareLocal / 1e6).toFixed(3)}M to ${entity.id} from an issuer with no ticker (${instrumentIdAt(v2, r)})`);
           }
           journalPayment(ctx, {
@@ -735,9 +733,7 @@ export function applyPendingCorporateActionSettlements(
       // funded, and the issuer's proceeds shrink by the same amount on the same instruction.
       let effectiveRatio = ratio;
       if (principalCashLocal < 0) {
-        const pendingLocal = ctx.pendingNetById
-          ? (ctx.pendingNetById[partyId(entity.payee)] ?? 0)
-          : 0;
+        const pendingLocal = ctx.pendingNetById[partyId(entity.payee)] ?? 0;
         const availableLocal = Math.max(0, entityCashOf(v2, entity) + pendingLocal
           - committedPlacementLocal);
         const owedLocal = -principalCashLocal;
@@ -751,7 +747,7 @@ export function applyPendingCorporateActionSettlements(
       // CASH: and it comes FROM THE ISSUER, by name — a float INCREASE runs the same
       // instruction backwards, because a placement is paid for.
       const principalIssuerTicker = issuerPartyIdOf(instrumentIdAt(v2, r));
-      if (ctx.paymentJournal && principalIssuerTicker && Math.abs(principalCashLocal) > 0) {
+      if (principalIssuerTicker && Math.abs(principalCashLocal) > 0) {
         journalPayment(ctx, principalCashLocal > 0
           ? {
             payer: companyPartyOf(principalIssuerTicker),
@@ -1086,7 +1082,7 @@ export function applyHolderInterestAccruals(
     let set = payingRefs.get(tRef); if (!set) { set = new Set(); payingRefs.set(tRef, set); }
     set.add(iRef);
     const issuer = issuersById.get(issuerIdOf(ctx.v2, paperId))?.id; // §3.13-BOOK (c-then-3b): the issuer's entity id
-    if (!issuer || !ctx.paymentJournal) return defect(`coupon due on ${instrumentKey} from an issuer with no ticker`);
+    if (!issuer) return defect(`coupon due on ${instrumentKey} from an issuer with no ticker`);
     payerOf.set(`${tRef}|${iRef}`, {
       payer: companyPartyOf(issuer) as import('./settlement').PartyRef,
       // §3.13-BOOK (dI): a coupon is paid in the paper's own money, which the instrument index states.

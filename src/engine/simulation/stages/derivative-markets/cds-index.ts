@@ -53,7 +53,6 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
   const capacity = openMemberCapacity();
   REGION_IDS.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     const series = reg.creditIndexSeries ?? (reg.creditIndexSeries = {});
     const current = reg.creditIndexSeriesId === undefined ? undefined : series[reg.creditIndexSeriesId];
 

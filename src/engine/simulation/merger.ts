@@ -68,7 +68,7 @@ export function checkForMerger(
         t.ticker !== acquirer.ticker && isActiveCompany(t) && t.region === acquirer.region
         && (t.productLines ?? []).some((l) => l.subUnitId === rel.category)
         && marketCapAt(v2, acquirer) >= 3 * Math.max(1, marketCapAt(v2, t)));
-      const target = candidates.sort((a, b) => (b.deliveryReliability ?? 1) - (a.deliveryReliability ?? 1))[0];
+      const target = candidates.sort((a, b) => (b.deliveryReliability ?? 1) - (a.deliveryReliability ?? 1)).at(0);
       if (target && random() < 0.20) {
         const valStr = formatCurrency(marketCapAt(v2, target) * 1.15, { compact: true, precision: 1 });
         return {

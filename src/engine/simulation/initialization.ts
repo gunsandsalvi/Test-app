@@ -549,7 +549,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const allNames = new Set(companies.map(c => c.name));
     (Object.keys(regions) as RegionId[]).forEach(regionId => {
       const reg = regions[regionId];
-      const segs = reg.smePools || [];
+      const segs = reg.smePools;
       const seeds = generatePrivateFirmSeeds(regionId, segs);
       const firms = generatePrivateCompanies(regionId, seeds, reg.policyRate, allTickers, allNames, SEED_WEEK);
 
@@ -670,7 +670,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // ladder's wires name; the per-issuer weight the books clear by is the sum of its tranches.
     const corpCandidates: { id: InstrumentId; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
-      .flatMap(c => (c.debtTranches || []).filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper && !t.isBankFacility)
+      .flatMap(c => c.debtTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper && !t.isBankFacility)
         .map(t => ({ id: t.id, type: 'CORP_BOND' as const, region: regionId, outstandingLocal: t.principalLocal })))
       .filter(c => c.outstandingLocal > 0);
     const totalCorpCandidatesLocal = corpCandidates.reduce((s, c) => s + c.outstandingLocal, 0) || 1;
@@ -681,7 +681,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
 
     const loanCandidates: { id: InstrumentId; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingLocal: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
-      .flatMap(c => (c.debtTranches || []).filter(t => t.rateType === 'FLOATING' && !t.isBankFacility && !t.isCommercialPaper)
+      .flatMap(c => c.debtTranches.filter(t => t.rateType === 'FLOATING' && !t.isBankFacility && !t.isCommercialPaper)
         .map(t => ({ id: t.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingLocal: t.principalLocal })))
       .filter(c => c.outstandingLocal > 0);
     const totalLoanCandidatesLocal = loanCandidates.reduce((s, c) => s + c.outstandingLocal, 0) || 1;
@@ -898,7 +898,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const tierRevenueLocal = namedPrivate.reduce((a, c) => a + Math.max(0, c.annualRevenue), 0);
         const tierCashLocal = namedPrivate.reduce((a, c) => a + Math.max(0, openingCashOf(c)), 0);
         const cashToRevenue = tierRevenueLocal > 0 ? tierCashLocal / tierRevenueLocal : 0.08;
-        (reg.smePools || []).forEach(seg => {
+        reg.smePools.forEach(seg => {
           stashOpeningCash(seg, Math.round(Math.max(0, seg.annualRevenueLocal) * cashToRevenue));
         });
       }
@@ -908,7 +908,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // §5-WIRES A3.3: each pool's row at this bank opens at its share of the pool's opening
         // cash, and the bank's SME line is the sum of those rows — one number, two views.
         let smeLocal = 0;
-        (reg.smePools || []).forEach((seg) => {
+        reg.smePools.forEach((seg) => {
           const rowLocal = bankShareTotal > 0
             ? Math.round(openingCashOf(seg) * ((b.bankMarketShare ?? 0) / bankShareTotal))
             : Math.round(openingCashOf(seg) / regionBanksForLending.length);
@@ -1300,7 +1300,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const regionFirms = regionCompanies.filter(isActiveCompany);
     const trackedInvestmentLocal = regionFirms.reduce((sum, c) => sum + c.maintenanceCapex + c.growthCapex, 0);
     const trackedEmployment = regionFirms.reduce((sum, c) => sum + c.employeeCount, 0);
-    const privateEmployment = (reg.smePools || []).reduce((sum, seg) => sum + seg.employment, 0);
+    const privateEmployment = reg.smePools.reduce((sum, seg) => sum + seg.employment, 0);
     const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + privateEmployment) / trackedEmployment : 1;
     const { gdpLocal: bottomUpGdpLocal } = computeExpenditureGdpLocal({
       householdIncomeLocal: reg.estimatedHouseholdIncomeLocal,
@@ -1375,7 +1375,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       const transit = Math.round(laneTransitWeeks(b.from, b.to, laneDistanceNm(b.from, b.to)));
       if (transit <= 0) return;
       const pool = buyersByRegion[b.to];
-      if (!pool || pool.length === 0) return;
+      if (pool.length === 0) return;
       const exWorks = Number(regions[b.from].categoryDemand[b.subUnitId]?.unitPriceLocal) || 0;
       const perUnit = convertLocal(exWorks, b.from, b.to, seedFxToUsd);
       // One week's worth arriving in each of the next `transit` weeks: what a lane in steady
@@ -1671,7 +1671,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     firms.forEach(f => {
       const ig = IG.includes(f.creditRating);
       (['CORP_BOND', 'LEVERAGED_LOAN'] as const).forEach(kind => {
-        const tranches = (f.debtTranches || []).filter(t => KIND_TRANCHES[kind](t) && t.principalLocal > 0);
+        const tranches = f.debtTranches.filter(t => KIND_TRANCHES[kind](t) && t.principalLocal > 0);
         const outstanding = tranches.reduce((a, t) => a + t.principalLocal, 0);
         if (outstanding <= 0) return;
         const weights = regionEntities.map(e => seedInstitutionTotalAssetsLocal(e, openingCashOf(e)) * KIND_PCT[kind](e) * sleeve(e.entityType, ig));

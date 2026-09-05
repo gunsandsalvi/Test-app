@@ -79,8 +79,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
 
   REGION_IDS.forEach((region) => {
     const reg = ctx.updatedRegions[region];
-    const hs = reg?.householdState;
-    if (!hs) return;
+    const hs = reg.householdState;
 
     // ---- §3.16b-i — EACH INSURER'S OWN WEEK, from its already-struck P&L: the premiums its book
     // earns at ITS price, the claims ITS book brought. There is no pool: what a policyholder pays

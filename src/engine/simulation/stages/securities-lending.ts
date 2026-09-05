@@ -60,12 +60,11 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
   const v2sl = ensureV2(state);
   void state;
   const regionIds = REGION_IDS;
-  const store = ctx.holdingsStore!;
+  const store = ctx.holdingsStore;
   if (!store) return;
 
   regionIds.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     // §3.17e-iii-b: the region's book holds share loans and bond loans; this pass is the shares'.
     const wholeBook: SecurityLoan[] = securityLoanBookOf(ctx.v2, regionId); // §3.13-BOOK d4c-iii: the store's rows
     const bondLoans = wholeBook.filter((l) => isTrancheId(ctx.v2, l.instrumentId));
@@ -594,11 +593,10 @@ function publishLent(ctx: WeeklyStepContext, book: SecurityLoan[]): void {
  */
 export function runBondLendingPass(state: GameState, ctx: WeeklyStepContext): void {
   const v2 = ensureV2(state);
-  const store = ctx.holdingsStore!;
+  const store = ctx.holdingsStore;
   if (!store) return;
   REGION_IDS.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     const wholeBook = securityLoanBookOf(ctx.v2, regionId);
     const shareLoans = wholeBook.filter((l) => !isTrancheId(ctx.v2, l.instrumentId));
     const priorBook = wholeBook.filter((l) => isTrancheId(ctx.v2, l.instrumentId));

@@ -31,7 +31,6 @@ const PUBLISHED_TENORS = [
 export function runSovereignCurveStage(ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     const points = ctx.sovereignCurvePoints.get(regionId) ?? [];
     if (points.length === 0) return;
     // `lambda` is the curve's shape parameter and is not fitted here — it is the one thing about a

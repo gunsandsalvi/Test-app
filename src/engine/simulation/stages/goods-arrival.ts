@@ -112,7 +112,7 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     // What arrives is routed by what it IS — a machine crossing an ocean becomes PP&E the
     // week it lands, not a lot nobody consumes.
     // §3.26-f-iv-b: what the purchase IS is the buyer's question — its own recipe, or a capital good.
-    const kind = purchaseKindOf(shipment.subUnitId, buyer?.productLines, buyer ? profileKeyOf(buyer) : 'OPERATING');
+    const kind = purchaseKindOf(shipment.subUnitId, buyer.productLines, profileKeyOf(buyer));
     if (toEstate && kind !== 'RECIPE_INPUT') {
       // A machine or an operating purchase landing at a receivership has no plant to enter and
       // no week to be used in: scrapped by wire on landing (the estate's own account paid for it).

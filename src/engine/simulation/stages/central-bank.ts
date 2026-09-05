@@ -24,8 +24,8 @@ import {
 export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    const cb = reg?.centralBankSheet;
-    if (!reg || !cb) return;
+    const cb = reg.centralBankSheet;
+    if (!cb) return;
 
     // ---- 1. The CB earns its own coupons and pays interest on reserves; the difference is
     // remitted to the treasury. Negative when policy exceeds the portfolio yield — a central bank

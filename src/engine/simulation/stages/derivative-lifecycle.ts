@@ -364,7 +364,7 @@ export function resolveMemberDefault(ctx: WeeklyStepContext, view: DerivativeLif
     }
     const record: WaterfallRound = { week: view.week, regionId: region, member, ...round };
     const reg = ctx.updatedRegions[region];
-    if (reg) reg.lastWaterfall = record;
+    reg.lastWaterfall = record;
     rounds.push(record);
   });
   return rounds;
@@ -528,7 +528,7 @@ export function admitContract(ctx: WeeklyStepContext, cap: MemberCapacity, c: De
   const refusedLocal = c.notional * (1 - (share < MIN_ADMITTED_SHARE ? 0 : share));
   if (refusedLocal > 0) {
     const reg = ctx.updatedRegions[c.regionId];
-    if (reg) reg.ccpRefusedNotionalLocal = (reg.ccpRefusedNotionalLocal ?? 0) + refusedLocal;
+    reg.ccpRefusedNotionalLocal = (reg.ccpRefusedNotionalLocal ?? 0) + refusedLocal;
   }
   if (share < MIN_ADMITTED_SHARE) return undefined;
   sides.forEach((s) => cap.remainingByKey.set(s.key, Math.max(0, s.remaining - s.marginHome * share)));

@@ -166,7 +166,6 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
   const v2L = ensureV2(state);
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
 
     const employers = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms]
       .filter((c) => c.region === regionId && isActiveCompany(c));
@@ -400,7 +399,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
 
     // The private segments are employers too — the SME residual hires on the same logic, off
     // its own revenue and its own productivity.
-    (reg.smePools || []).forEach((seg) => {
+    reg.smePools.forEach((seg) => {
       const current = Math.max(0, seg.employment);
       if (current <= 0) return;
       // Same growth-on-growth rule as a named firm, off the segment's own revenue history.
@@ -462,7 +461,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     // Rule 3 does not stop applying because both copies are mine.) ----
     const totalLaborForce = Math.max(1,
       laborForceCount(reg));
-    const shares = reg.occupationLaborForceShare || BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
+    const shares = reg.occupationLaborForceShare;
     const pools = reg.occupationPools;
 
     const employedByOccBefore: Record<OccupationType, number> = {
@@ -473,7 +472,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const mix = occupationMixFor(comp.sector);
       OCCUPATIONS.forEach((occ) => { employedByOccBefore[occ] += Math.max(0, comp.employeeCount) * (mix[occ] ?? 0); });
     });
-    (reg.smePools || []).forEach((seg) => {
+    reg.smePools.forEach((seg) => {
       const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector);
       OCCUPATIONS.forEach((occ) => {
         employedByOccBefore[occ] += Math.max(0, seg.employment) * ((mix as Partial<Record<OccupationType, number>>)[occ] ?? 0);
@@ -740,7 +739,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         wageDenomByOcc[occ] += w;
       });
     });
-    (reg.smePools || []).forEach((seg) => {
+    reg.smePools.forEach((seg) => {
       const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector) as Partial<Record<OccupationType, number>>;
       OCCUPATIONS.forEach((occ) => {
         const w = Math.max(0, seg.employment) * (mix[occ] ?? 0);
@@ -821,10 +820,9 @@ export function reconcileEmploymentView(
   nextTenureStrataByOcc?: Record<OccupationType, TenureStratum[]>
 ): void {
   const pools = reg.occupationPools;
-  if (!pools) return;
   const totalLaborForce = Math.max(1,
     laborForceCount(reg));
-  const shares = reg.occupationLaborForceShare || BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
+  const shares = reg.occupationLaborForceShare;
 
   const employedByOcc: Record<OccupationType, number> = {
     GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0,
@@ -834,7 +832,7 @@ export function reconcileEmploymentView(
     const mix = occupationMixFor(comp.sector);
     OCCUPATIONS.forEach((occ) => { employedByOcc[occ] += Math.max(0, comp.employeeCount) * (mix[occ] ?? 0); });
   });
-  (reg.smePools || []).forEach((seg: SmePool) => {
+  reg.smePools.forEach((seg: SmePool) => {
     const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector) as Partial<Record<OccupationType, number>>;
     OCCUPATIONS.forEach((occ) => {
       employedByOcc[occ] += Math.max(0, seg.employment) * (mix[occ] ?? 0);
@@ -891,7 +889,6 @@ export function reconcileEmploymentView(
 export function runLaborReconciliationStage(state: GameState, ctx: WeeklyStepContext): void {
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    if (!reg) return;
     const employers = ctx.updatedCompanies.filter((c) => c.region === regionId && isActiveCompany(c));
     reconcileEmploymentView(reg, employers);
   });

@@ -146,8 +146,6 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
     for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
       if (H.typeRef[r] !== govBondRef) continue;
       const issuerRegion = regionOf(ctx.v2, H.regionRef[r]) as RegionId;
-      const issuerReg = ctx.updatedRegions[issuerRegion];
-      if (!issuerReg) continue;
       // §3.13-SOV row 3: the coupon is THIS BOND's, off the ladder. It used to be the
       // face-weighted average of whatever group the id parsed into, so a holder of a 2% rung
       // was paid its neighbours' coupon.

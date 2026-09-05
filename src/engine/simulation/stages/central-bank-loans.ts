@@ -84,7 +84,7 @@ export function reseatCentralBankLoans(ctx: WeeklyStepContext, regionId: RegionI
   if (!book.some((c) => c.bankId === fromBankId)) return;
   publishCentralBankLoanBook(ctx.v2, regionId, book.map((c) => (c.bankId === fromBankId ? { ...c, bankId: toBankId } : c)));
   const reg = ctx.updatedRegions[regionId];
-  if (reg) syncCentralBankLoanSheets(ctx, regionId, reg, ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet && c.region === regionId));
+  syncCentralBankLoanSheets(ctx, regionId, reg, ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet && c.region === regionId));
 }
 
 /**
