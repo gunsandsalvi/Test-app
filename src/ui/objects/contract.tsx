@@ -22,7 +22,7 @@ export function partyName(world: World, p: DerivativeParty): string {
   return world.state.companies.find((c) => c.id === p.id)?.ticker ?? p.id;
 }
 
-const CLASS_WORDS: Record<string, string> = { IRS: 'interest-rate swap', CDS: 'credit default swap', COMMODITY_FUTURE: 'commodity future', FX_FORWARD: 'fx forward', OPTION: 'option', XCS: 'cross-currency swap' };
+const CLASS_WORDS: Record<string, string> = { IRS: 'interest-rate swap', CDS: 'credit default swap', CDS_INDEX: 'credit index', COMMODITY_FUTURE: 'commodity future', BOND_FUTURE: 'bond future', FX_FORWARD: 'fx forward', OPTION: 'option', XCS: 'cross-currency swap' };
 export const classWord = (id: string): string => CLASS_WORDS[id] ?? words(id);
 
 export const contract = defineObject<DerivativeContract>({

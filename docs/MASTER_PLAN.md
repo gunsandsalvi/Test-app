@@ -547,13 +547,16 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17e. **Futures on government bonds, and the basis trade** (user). `commodity-future.ts` is the
-    only future in the tree. A deliverable govie future plus the cash-futures basis is the largest
-    single source of real repo demand in a real market: the basis trader is long the cash bond,
-    financed in repo, and short the future. **Step 7 made the repo and reverse-repo flows
-    load-bearing for the whole banking system's liquidity, and step 30b is about to make the
-    overnight sleeve a decision — this is the demand side those two are missing.** Requires
-    step 13 (the future prices off a real cash price) and pairs with 17's margin.
+17e-ii. **The basis trade** (user; 17e-i built the future and prints the basis — §9). The
+    basis trader is long the cash bond, financed in repo, and short the future when the net basis
+    (`Region.bondFuturesBasis`) pays for the financing and the margin: **the largest single source
+    of real repo demand in a real market. Step 7 made the repo and reverse-repo flows load-bearing
+    for the whole banking system's liquidity, and step 30b is about to make the overnight sleeve a
+    decision — this is the demand side those two are missing.** It is 17f's FIRST comparable (a
+    future against spot plus carry — `X2`), and it is built there as that book's first trade, not
+    as a strategy flag: a hedge fund buys the deliverable in 07c, finances it in prime brokerage
+    (`domain/prime-brokerage.ts:maxDrawnLocal`, the fund's repo), shorts the line, posts real
+    margin, and is cut when it draws down (atlas sovereign-credit I3/I3.a).
 17f. **The relative-value book, and it need not be written strategy by strategy** (user: "is there
     a programmatic way to do that across asset classes?"). **There is, and the model already holds
     the list.** Today a hedge fund's strategy is a row of hand-written boolean flags in
@@ -1590,7 +1593,25 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17d-iii — THE CDS CURVE.** Four tenors (`CDS_TENORS` c1/c3/c5/c10, `CDS_BENCHMARK_TENOR` c5
+**17e-i — THE GOVERNMENT BOND FUTURE.** A new class, `BOND_FUTURE` (`classes/bond-future.ts`):
+  the DELIVERABLE is a named rung of the region's sovereign ladder (reference `{ kind:
+  'SOVEREIGN', regionId, bondId }`, `REF_KINDS` 'SOVEREIGN'), the one nearest ten years from the
+  next quarterly delivery (`deliverableOf`, `nextDeliveryWeek` on 13-week clock); price per unit
+  of face, face as `units`; marks to the line's own print (`Region.bondFuturesPriceHistory` via
+  the view's `bondFuturePrint`) and on the delivery week to the deliverable's cleared cash price
+  (`sovereignBondPrice` → `trancheClearedPricePerFace`): cash settlement to the bond the short
+  would have delivered. Margin = the ten-year rate's weekly move on the deliverable's modified
+  duration (`bondDurationYears`), CEM add-on 0.015. The market (`derivative-markets/
+  bond-future.ts`, one line per region, PRICE_LIKE): desks two-way at the CARRY price
+  (`bondFuturesCarryPrice` = cash × (1 + repo × T) − coupon × T) sized by their derivative
+  budget; duration mandates by the swap book's gap read (assets − duration paper − IRS cover −
+  futures cover) long below carry, holders over their `govBondPct` target short above it
+  (`bondFutureHolderQuote`, one side each; `twoWayPriceQuote` the price-like two-way). The
+  print joins the history and `Region.bondFuturesBasis` = print − carry (`bondFuturesNetBasis`)
+  is measured. Split per rule 1.10: the basis TRADER is 17e-ii, built as 17f's first comparable
+  book. Atlas: sovereign-credit section I added and mapped (I1/I1.a/I2 ✅, I3 ❌). Gates green;
+  no run.
+- **17d-iii — THE CDS CURVE.** Four tenors (`CDS_TENORS` c1/c3/c5/c10, `CDS_BENCHMARK_TENOR` c5
   the one a name is quoted by and P2's cash comparison was at), one instrument per (name,
   tenor) (`cdsInstrumentId` takes the tenor), `CDS_TENOR_WEEKS` deleted for `cdsTenorWeeksOf`.
   A hedger's need is struck at the tenor nearest its exposure's size-weighted remaining life

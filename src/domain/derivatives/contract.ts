@@ -16,7 +16,7 @@
 import { RegionId, CurrencyCode } from '../geography';
 import { bankPartyOf, companyPartyOf } from '../party';
 import type { CounterpartyRef } from '../party';
-import type { EntityId } from '../ids';
+import type { EntityId, InstrumentId } from '../ids';
 import { defect } from '../defect';
 
 /**
@@ -55,7 +55,7 @@ export const companyPartyKey = (companyId: EntityId): string => derivativePartyK
 export const institutionPartyKey = (id: EntityId): string => derivativePartyKey({ kind: 'INSTITUTION', id });
 
 /** The classes the registry knows. A new derivative adds a member here and a profile module. */
-export type DerivativeClassId = 'IRS' | 'CDS' | 'CDS_INDEX' | 'COMMODITY_FUTURE' | 'FX_FORWARD' | 'OPTION' | 'XCS';
+export type DerivativeClassId = 'IRS' | 'CDS' | 'CDS_INDEX' | 'COMMODITY_FUTURE' | 'BOND_FUTURE' | 'FX_FORWARD' | 'OPTION' | 'XCS';
 
 /**
  * §3.13-BOOK dIIb — WHAT A CONTRACT IS ON, typed by class. This was `referenceId: string`, four
@@ -82,12 +82,14 @@ export type DerivativeReference =
   | { kind: 'INDEX'; regionId: RegionId }
   /** §3.17d-i — a credit index: the SERIES of a region's basket (`Region.creditIndexSeries`),
    *  whose fixed names and settled events every contract on the line reads. */
-  | { kind: 'BASKET'; regionId: RegionId; seriesId: string };
+  | { kind: 'BASKET'; regionId: RegionId; seriesId: string }
+  /** §3.17e-i — a bond future: the DELIVERABLE, a named rung of the region's sovereign ladder. */
+  | { kind: 'SOVEREIGN'; regionId: RegionId; bondId: InstrumentId };
 
 /** The standing book keys cover by reference; this is that key — the string the field used to
  *  hold, so a cover lookup by `issuer.id`, `comm.id` or a region still finds its contracts. */
 export const referenceKeyOf = (r: DerivativeReference): string =>
-  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' || r.kind === 'INDEX' ? r.regionId : r.kind === 'BASKET' ? r.seriesId : '';
+  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' || r.kind === 'INDEX' ? r.regionId : r.kind === 'BASKET' ? r.seriesId : r.kind === 'SOVEREIGN' ? r.bondId : '';
 
 export const issuerReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): EntityId =>
   c.reference.kind === 'ISSUER' ? c.reference.issuerId : defect(`${c.classId} contract read as if it named an issuer`);
@@ -101,6 +103,8 @@ export const indexReferenceOf = (c: { classId: DerivativeClassId; reference: Der
   c.reference.kind === 'INDEX' ? c.reference.regionId : defect(`${c.classId} contract read as if it named an index`);
 export const basketReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): { regionId: RegionId; seriesId: string } =>
   c.reference.kind === 'BASKET' ? c.reference : defect(`${c.classId} contract read as if it named a basket`);
+export const sovereignReferenceOf = (c: { classId: DerivativeClassId; reference: DerivativeReference }): { regionId: RegionId; bondId: InstrumentId } =>
+  c.reference.kind === 'SOVEREIGN' ? c.reference : defect(`${c.classId} contract read as if it named a sovereign bond`);
 /** §3.17b-i — the option's kind, as its `termKey` carries it. */
 export type OptionType = 'CALL' | 'PUT';
 export const optionTypeOf = (c: { classId: DerivativeClassId; termKey: string }): OptionType =>

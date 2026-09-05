@@ -59,6 +59,10 @@ export const cdsInstrumentId = (regionId: RegionId, issuerId: string, termKey: s
 /** §3.17d-ii — one credit index SERIES as the line it clears on (the series id names its region). */
 export const creditIndexInstrumentId = (seriesId: string): InstrumentId => asInstrumentId(seriesId);
 
+/** §3.17e-i — one region's government bond future for one quarterly delivery week. */
+export const bondFutureInstrumentId = (regionId: RegionId, deliveryWeek: number): InstrumentId =>
+  asInstrumentId(`${regionId}-BF-${deliveryWeek}`);
+
 /** One region's par interest-rate swap at one of the three quoted tenors. */
 export const swapInstrumentId = (regionId: RegionId, tenorKey: string): InstrumentId =>
   asInstrumentId(`${regionId}-IRS-${tenorKey}`);

@@ -100,6 +100,6 @@ export function registerFundShares(v2: V2World, e: { id: EntityId; region: Regio
 /** §3.13-BOOK dII — A BOOK THE ADAPTER MINTS AN ID FOR, declared where it is built: kind and
  *  money, no issuer. Idempotent, so an adapter that builds the same book every week declares it
  *  once and reads it thereafter. */
-export function registerBook(v2: V2World, id: InstrumentId, kind: 'IRS' | 'CDS' | 'CDS_INDEX' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'REPO' | 'SBL' | 'OPTION', currency: CurrencyCode): InstrRef {
+export function registerBook(v2: V2World, id: InstrumentId, kind: 'IRS' | 'CDS' | 'CDS_INDEX' | 'FX_SPOT' | 'XCS' | 'COMMODITY_FUTURE' | 'BOND_FUTURE' | 'REPO' | 'SBL' | 'OPTION', currency: CurrencyCode): InstrRef {
   return registerInstrument(v2, { id, kind, currency });
 }

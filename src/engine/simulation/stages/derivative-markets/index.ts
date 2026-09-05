@@ -12,6 +12,7 @@ import { IRS_MARKET } from './irs';
 import { CDS_MARKET } from './cds';
 import { CDS_INDEX_MARKET } from './cds-index';
 import { COMMODITY_FUTURE_MARKET } from './commodity-future';
+import { BOND_FUTURE_MARKET } from './bond-future';
 import { FX_FORWARD_MARKET } from './fx-forward';
 import { OPTION_MARKET } from './option';
 import { XCS_MARKET } from './xcs';
@@ -21,6 +22,7 @@ export const DERIVATIVE_MARKETS: Record<DerivativeClassId, DerivativeMarket> = {
   CDS: CDS_MARKET,
   CDS_INDEX: CDS_INDEX_MARKET,
   COMMODITY_FUTURE: COMMODITY_FUTURE_MARKET,
+  BOND_FUTURE: BOND_FUTURE_MARKET,
   FX_FORWARD: FX_FORWARD_MARKET,
   OPTION: OPTION_MARKET,
   XCS: XCS_MARKET,

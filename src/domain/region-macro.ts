@@ -742,6 +742,15 @@ export interface Region {
   /** §3.17d-ii — the index-versus-single-name basis the line last cleared: its print against the
    *  constituents' average print, bps. A measured number (`cds-index.ts:indexBasisBps`). */
   creditIndexBasisBps?: number;
+  /** §3.17e-i — the bond futures line's cleared price per unit of face, per delivery line, the
+   *  last `MEASURE_WINDOW_WEEKS` prints: what the class marks at. Written by
+   *  `derivative-markets/bond-future.ts`. */
+  bondFuturesPriceHistory?: Record<string, number[]>;
+  /** The deliverable the front contract was last struck on, and the NET BASIS it cleared at:
+   *  the print against the cash bond carried at the repo rate less its coupon, per unit of face.
+   *  A measured number (`bond-future.ts:bondFuturesNetBasis`). */
+  bondFuturesDeliverableId?: string;
+  bondFuturesBasis?: number;
   /**
    * CAL/DER — the SECURED OVERNIGHT INDEX: the cleared GC repo rate compounded week by week, the
    * way a published overnight benchmark actually is. It is a level, not a rate: the ratio of two

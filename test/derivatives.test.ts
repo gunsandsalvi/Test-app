@@ -15,7 +15,8 @@ import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, standingPfeChargeLocal, 
   from '../src/domain/derivatives/registry';
 import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivatives/hedging';
 import { StandingBook } from '../src/domain/derivatives/standing-book';
-import { asEntityId } from '../src/domain/ids';
+import { asEntityId, asInstrumentId } from '../src/domain/ids';
+import { nextDeliveryWeek, deliverableOf, bondDurationYears, bondFuturesCarryPrice, bondFuturesNetBasis, bondFutureHolderQuote, twoWayPriceQuote } from '../src/domain/derivatives/classes/bond-future';
 import { writerReservationVol, ATM_PRICE_PER_VOL_SQRT_T } from '../src/domain/derivatives/classes/option';
 import { lenderReservationBps } from '../src/domain/derivatives/classes/xcs';
 import { protectionNeedLocal, twoWayProtectionQuote, nearestCdsTenor, cdsTenorWeeksOf, CDS_TENORS, CDS_BENCHMARK_TENOR, LARGE_EXPOSURE_LIMIT_OF_CAPITAL } from '../src/domain/derivatives/classes/cds';
@@ -61,6 +62,9 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
   creditIndexSeries: () => SERIES,
   creditIndexSpreadBps: () => 120,
   creditIndexWeeklyMoveBps: () => 10,
+  sovereignBondPrice: () => 0.97,
+  sovereignBondTerms: () => ({ couponRate: 0.04, maturityWeek: 600 }),
+  bondFuturePrint: () => 0.95,
   ...over,
 });
 
@@ -68,6 +72,7 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
 const referenceFor = (classId: DerivativeContract['classId']): DerivativeReference =>
   classId === 'CDS' ? { kind: 'ISSUER', issuerId: asEntityId('X') }
     : classId === 'CDS_INDEX' ? { kind: 'BASKET', regionId: 'USA', seriesId: SERIES.seriesId }
+    : classId === 'BOND_FUTURE' ? { kind: 'SOVEREIGN', regionId: 'USA', bondId: asInstrumentId('USA-GOV-10Y') }
     : classId === 'OPTION' ? { kind: 'SHARES', issuerId: asEntityId('X') }
     : classId === 'COMMODITY_FUTURE' ? { kind: 'COMMODITY', commodityId: 'X' }
       : classId === 'FX_FORWARD' || classId === 'XCS' ? { kind: 'REGION', regionId: 'EUR' } : { kind: 'RATE' };
@@ -208,7 +213,7 @@ test('every registered class states both roles and admissible facts — the comp
   for (const p of Object.values(DERIVATIVE_CLASSES)) {
     assert.ok(p.roleA && p.roleB);
     assert.ok(p.pfeAddOnRate > 0 && p.pfeAddOnRate < 1);
-    const termKey = p.id === 'OPTION' ? 'CALL' : p.id === 'XCS' || p.id === 'CDS_INDEX' ? '' : p.id === 'CDS' ? 'c5' : 's5';
+    const termKey = p.id === 'OPTION' ? 'CALL' : p.id === 'XCS' || p.id === 'CDS_INDEX' ? '' : p.id === 'CDS' ? 'c5' : p.id === 'BOND_FUTURE' ? 'F' : 's5';
     const move = p.closeOutMoveOf(base({ classId: p.id, reference: referenceFor(p.id), termKey }), view());
     assert.ok(move !== undefined && move > 0 && move < 1, `${p.id}: the reference's move sizes its margin`);
     const marks = p.markToMarketUSDToA(base({ classId: p.id, units: 1, reference: referenceFor(p.id), termKey, settledMarkLocal: 0 }), view()) !== null;
@@ -475,4 +480,47 @@ test('CDS curve: a hedge is struck at the tenor nearest its exposure\'s remainin
   assert.equal(DERIVATIVE_CLASSES.CDS.markToMarketUSDToA(c, m), 0, 'flat at its own tenor whatever the five-year prints');
   const move = DERIVATIVE_CLASSES.CDS.closeOutMoveOf(c, view({ cdsSpreadWeeklyMoveBps: (_id, termKey) => (termKey === 'c1' ? 10 : undefined) }));
   assert.ok(move !== undefined && move > 0);
+});
+
+// §3.17e-i — the bond future: a deliverable rung, a carry price, and a mark that is the cash
+// price on the delivery day.
+test('bond future: the deliverable is the rung nearest ten years from the next quarterly delivery', () => {
+  assert.equal(nextDeliveryWeek(10), 13);
+  assert.equal(nextDeliveryWeek(13), 26);
+  const rungs = [{ id: 'a', maturityWeek: 13 + 2 * 52 }, { id: 'b', maturityWeek: 13 + 9 * 52 }, { id: 'c', maturityWeek: 13 + 30 * 52 }, { id: 'd', maturityWeek: 5 }];
+  assert.equal(deliverableOf(rungs, 13)?.id, 'b');
+  assert.equal(deliverableOf([{ maturityWeek: 5 }], 13), undefined, 'a rung matured before delivery cannot be delivered');
+  assert.ok(Math.abs(bondDurationYears(0.05, 10) - (1 - Math.pow(1.05, -10)) / 0.05) < 1e-12);
+  assert.equal(bondDurationYears(0, 10), 10);
+});
+
+test('bond future: carry is the cash price financed at repo less the coupon accrued, and the basis is the print against it', () => {
+  const carry = bondFuturesCarryPrice({ cashPrice: 0.98, couponRate: 0.04, repoRateAnnual: 0.05, yearsToDelivery: 0.25 });
+  assert.ok(Math.abs(carry - (0.98 * 1.0125 - 0.01)) < 1e-12);
+  assert.ok(Math.abs(bondFuturesNetBasis(0.985, carry) - (0.985 - carry)) < 1e-12);
+  // A holder short of duration goes long below carry; one over its target shorts above it.
+  const long = bondFutureHolderQuote({ carryPrice: carry, rangePrice: 0.01, gapLocal: 500 });
+  assert.deepEqual(long, { reservationStat: carry, fullSizeStatRange: 0.01, maxHoldingLocal: 500, currentHoldingLocal: 0 });
+  const short = bondFutureHolderQuote({ carryPrice: carry, rangePrice: 0.01, gapLocal: -300 });
+  assert.equal(short.currentHoldingLocal, 300);
+  // Price-like: the engine's target falls as the price rises from the reservation.
+  const target = (px: number) => short.maxHoldingLocal * Math.max(0, Math.min(1, (short.reservationStat - px) / short.fullSizeStatRange));
+  assert.ok(Math.abs(target(carry) - 300) < 1e-9, 'at carry it keeps its excess');
+  assert.ok(Math.abs(target(carry + 0.01)) < 1e-9, 'a range above carry it has sold it all');
+  const desk = twoWayPriceQuote({ carryPrice: carry, rangePrice: 0.01, sizeLocal: 1000 });
+  const deskTarget = (px: number) => desk.maxHoldingLocal * Math.max(0, Math.min(1, (desk.reservationStat - px) / desk.fullSizeStatRange));
+  assert.ok(Math.abs(deskTarget(carry) - desk.currentHoldingLocal) < 1e-9, 'flat at carry');
+  assert.ok(Math.abs(deskTarget(carry - 0.01) - desk.currentHoldingLocal - 1000) < 1e-9, 'long below');
+  assert.ok(Math.abs(deskTarget(carry + 0.01) - desk.currentHoldingLocal + 1000) < 1e-9, 'short above');
+});
+
+test('bond future: marks to its own print, settles to the deliverable\'s cash price at delivery, and margins off the rate move on the duration', () => {
+  const c = base({ classId: 'BOND_FUTURE', strike: 0.96, units: 1_000_000, notional: 1_000_000, reference: referenceFor('BOND_FUTURE'), termKey: 'F', maturityWeek: 26 });
+  assert.ok(Math.abs(DERIVATIVE_CLASSES.BOND_FUTURE.markToMarketUSDToA(c, view())! - (0.95 - 0.96) * 1_000_000) < 1e-6);
+  assert.ok(Math.abs(DERIVATIVE_CLASSES.BOND_FUTURE.markToMarketUSDToA(c, view({ week: 26 }))! - (0.97 - 0.96) * 1_000_000) < 1e-6, 'cash settlement to the bond');
+  assert.equal(DERIVATIVE_CLASSES.BOND_FUTURE.markToMarketUSDToA(c, view({ bondFuturePrint: () => Number.NaN })), null);
+  const move = DERIVATIVE_CLASSES.BOND_FUTURE.closeOutMoveOf(c, view())!;
+  assert.ok(Math.abs(move - (12 / 10000) * bondDurationYears(0.03, (600 - 10) / 52)) < 1e-12);
+  assert.equal(DERIVATIVE_CLASSES.BOND_FUTURE.eventTermination(c, view()), null);
+  assert.ok(leg(DERIVATIVE_CLASSES.BOND_FUTURE.eventTermination(c, view({ sovereignBondTerms: () => undefined }))!).reason.includes('gone'));
 });

@@ -142,6 +142,20 @@ exactly as a corporate bond does, and they are not repeated here. Where it answe
 - **H5** VERIFY — debt held by the central bank is economically consolidated away and
   accounting-wise is not, and both statements must remain true of the books
 
+### I. THE FUTURE *(added 2026-09-05 from §3 step 17e, the user's words)*
+- **I1** REASON — a **deliverable future on the benchmark bond**: a named rung is the deliverable,
+  the price is per unit of face, and at delivery the contract settles to that bond's own cleared
+  cash price
+  - I1.a the **carry** ties it to the cash market: the bond financed in repo to delivery earns its
+    coupon and pays the financing, and the print against that is the **net basis** — measured,
+    never set
+- **I2** REASON — who is on the line: a duration mandate short of duration goes **long** the future
+  below carry (the bond financed would cost it more), a holder over its sovereign target **shorts**
+  the excess above it, and a dealer quotes **both ways** at carry
+- **I3** REASON — the **basis trade**: long the cash bond, financed in repo, short the future when
+  the basis pays for it — the largest single source of real repo demand in a real market
+  - I3.a FORBID — no basis trader that cannot lose: it is funded, margined and cut on a drawdown
+
 ---
 
 ## 2. THE MAPPING
@@ -220,12 +234,17 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | H3.a the coupon accrues and is paid on the calendar, like every holder's | `src/engine/simulation/stages/sovereign-calendar.ts:accrueSovereignHolders` | ✅ |
 | **H4 monetary financing vs OMO is a POLICY constraint** | `src/engine/ledger/accounts.ts:waysAndMeansOf` | ❌ |
 | H5 VERIFY consolidated economically, not accounting-wise | — | ❌ |
+| I1 a deliverable future on the benchmark bond, settled to its cash price | `src/domain/derivatives/classes/bond-future.ts:BOND_FUTURE_PROFILE` · `src/domain/derivatives/classes/bond-future.ts:deliverableOf` | ✅ |
+| I1.a the carry, and the net basis measured | `src/domain/derivatives/classes/bond-future.ts:bondFuturesCarryPrice` · `src/domain/derivatives/classes/bond-future.ts:bondFuturesNetBasis` | ✅ |
+| I2 duration mandates long below carry, holders over target short above it, dealers two-way | `src/engine/simulation/stages/derivative-markets/bond-future.ts:runBondFuturesMarket` · `src/domain/derivatives/classes/bond-future.ts:bondFutureHolderQuote` | ✅ |
+| **I3 the basis trade — long cash in repo, short the future** | — | ❌ |
+| I3.a FORBID no basis trader that cannot lose | — | ❌ |
 
 ---
 
 ## 3. THE DIFF
 
-**69 rows: 33 ✅, 11 ⚠️, 25 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
+**74 rows: 36 ✅, 11 ⚠️, 27 ❌** — counted by `test/atlas-marks.test.ts` on every commit now. It had
 drifted three times by hand (25/15/27 against 28/12/27, then 30/13/25 against 31/12/25 in the very
 paragraph that lectured about drift): `check-atlas.sh` proves a citation RESOLVES and can say
 nothing about whether a mark is TRUE, which is §5's lesson, and the test is the answer to it.
@@ -463,3 +482,17 @@ is a literal `sovereignLocal * 0.0` in the RWA sum, which is exactly why E2.a's 
 - **E2.e ❌** — funds hold sovereigns for duration fit, never for relative value — 17f.
 - **F4 ⚠️** — the refinancing issue's coupon is read off the fitted curve — `the-treasury.md` E3, step 25.
 - **G2 / G3 / G4 ❌** — no foreign-money debt, no negotiated default, no exchange offer — the A4/G entry above, 37-OVERDRAFT.
+
+### ✅ I1 / I1.a / I2 / ❌ I3 / I3.a — THE FUTURE EXISTS AND PRINTS A BASIS; NOBODY TRADES IT YET
+
+*2026-09-05 (§9.17e-i).* One line per region, the front quarterly contract on the rung nearest ten
+years from delivery (`deliverableOf`), price-like per unit of face, settling to the deliverable's
+own cleared cash price on the delivery week (`BOND_FUTURE_PROFILE`). The desks quote two-way at
+the carry price — the cash price financed at the repo rate to delivery less the coupon accrued
+(`bondFuturesCarryPrice`) — and the duration mandates are on it by the swap book's own gap read,
+long for the gap below carry and short for a sovereign excess above it (`bondFutureHolderQuote`).
+The print joins `Region.bondFuturesPriceHistory` and the net basis is `Region.bondFuturesBasis`
+(`bondFuturesNetBasis`), measured. **What is absent is I3**: the basis trader — long the bond,
+financed in repo or prime brokerage, short the future when the basis pays for the financing and
+the margin, cut on a drawdown — is the first comparable of §3 step 17f's relative-value book, and
+the repo demand step 7 and 30b are missing arrives with it.

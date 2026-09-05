@@ -31,7 +31,7 @@ import { ccpParty } from '../domain/party';
 import { partyFromKey, partyKey } from '../engine/ledger/party';
 import { defect } from '../domain/defect';
 import type { RegionId } from '../domain/geography';
-import { asEntityId } from '../domain/ids';
+import { asEntityId, asInstrumentId } from '../domain/ids';
 
 export interface ObligationStore {
   cap: number;
@@ -208,10 +208,10 @@ function freeRow(S: ObligationStore, r: number): void {
   S.next[r] = S.freeHead; S.freeHead = r;
 }
 
-const REF_KINDS = ['RATE', 'ISSUER', 'COMMODITY', 'REGION', 'SHARES', 'INDEX', 'BASKET'] as const;
+const REF_KINDS = ['RATE', 'ISSUER', 'COMMODITY', 'REGION', 'SHARES', 'INDEX', 'BASKET', 'SOVEREIGN'] as const;
 const refKindIdOf = (r: DerivativeReference): number => REF_KINDS.indexOf(r.kind);
 const refTextOf = (r: DerivativeReference): string | undefined =>
-  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' || r.kind === 'INDEX' ? r.regionId : r.kind === 'BASKET' ? r.seriesId : undefined;
+  r.kind === 'ISSUER' || r.kind === 'SHARES' ? r.issuerId : r.kind === 'COMMODITY' ? r.commodityId : r.kind === 'REGION' || r.kind === 'INDEX' ? r.regionId : r.kind === 'BASKET' ? r.seriesId : r.kind === 'SOVEREIGN' ? r.bondId : undefined;
 /** §3.17d-i: a basket's region is the contract's own (the row's region), so only the series is text. */
 function referenceAt(v2: V2World, S: ReadonlyObligationStore, r: number): DerivativeReference {
   const kind = REF_KINDS[S.refKind[r]];
@@ -220,7 +220,8 @@ function referenceAt(v2: V2World, S: ReadonlyObligationStore, r: number): Deriva
     : kind === 'COMMODITY' ? { kind, commodityId: text }
       : kind === 'REGION' || kind === 'INDEX' ? { kind, regionId: text as RegionId }
         : kind === 'BASKET' ? { kind, regionId: regionOf(v2, S.regionRef[r]) as RegionId, seriesId: text }
-          : { kind: 'RATE' };
+          : kind === 'SOVEREIGN' ? { kind, regionId: regionOf(v2, S.regionRef[r]) as RegionId, bondId: asInstrumentId(text) }
+            : { kind: 'RATE' };
 }
 
 /** Write one derivative as a row of the store (ledger-internal). Returns the row. */

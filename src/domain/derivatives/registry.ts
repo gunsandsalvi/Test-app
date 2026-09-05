@@ -16,6 +16,7 @@ import { IRS_PROFILE } from './classes/irs';
 import { CDS_PROFILE } from './classes/cds';
 import { CDS_INDEX_PROFILE } from './classes/cds-index';
 import { COMMODITY_FUTURE_PROFILE } from './classes/commodity-future';
+import { BOND_FUTURE_PROFILE } from './classes/bond-future';
 import { FX_FORWARD_PROFILE } from './classes/fx-forward';
 import { OPTION_PROFILE } from './classes/option';
 import { XCS_PROFILE } from './classes/xcs';
@@ -25,6 +26,7 @@ export const DERIVATIVE_CLASSES: Record<DerivativeClassId, DerivativeClassProfil
   CDS: CDS_PROFILE,
   CDS_INDEX: CDS_INDEX_PROFILE,
   COMMODITY_FUTURE: COMMODITY_FUTURE_PROFILE,
+  BOND_FUTURE: BOND_FUTURE_PROFILE,
   FX_FORWARD: FX_FORWARD_PROFILE,
   OPTION: OPTION_PROFILE,
   XCS: XCS_PROFILE,

@@ -18,7 +18,7 @@
 
 import { RegionId, CurrencyCode } from '../geography';
 import { DerivativeClassId, DerivativeContract } from './contract';
-import type { EntityId } from '../ids';
+import type { EntityId, InstrumentId } from '../ids';
 import type { CreditIndexSeries } from './classes/cds-index';
 
 export type IssuerWorkout = { state: 'OPEN' } | { state: 'CLOSED'; recovery: number };
@@ -82,6 +82,12 @@ export interface DerivativeMarketView {
   /** Last cleared spread of the series; NaN when none has printed. */
   creditIndexSpreadBps(regionId: RegionId, seriesId: string): number;
   creditIndexWeeklyMoveBps(regionId: RegionId, seriesId: string): number | undefined;
+  // §3.17e-i — THE DELIVERABLE a bond future settles to: the sovereign rung's cleared cash price
+  // per unit of face, its terms, and the line's own last print.
+  sovereignBondPrice(regionId: RegionId, bondId: InstrumentId): number;
+  sovereignBondTerms(regionId: RegionId, bondId: InstrumentId): { couponRate: number; maturityWeek: number } | undefined;
+  /** The front contract's last print for a delivery week; NaN when none has printed. */
+  bondFuturePrint(regionId: RegionId, termKey: string, deliveryWeek: number): number;
 }
 
 export interface DerivativeLeg {

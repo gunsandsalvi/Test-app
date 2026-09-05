@@ -46,6 +46,9 @@ import { currencyOf } from '../../../domain/geography';
 import { creditRecoveryRate } from './shared-helpers';
 import { realisedUnsecuredRecoveryRate } from '../../../domain/estate';
 import type { EntityId } from '../../../domain/ids';
+import { trancheClearedPricePerFace } from '../../credit-price';
+import { materializeGovLadder } from '../../../engine2/tranches';
+import { bondFutureInstrumentId } from '../../../domain/instrument-keys';
 
 
 /** Legs under a dollar are dust; every book skipped them and the ledger need not carry them. */
@@ -207,6 +210,17 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
       return typeof v === 'number' && v > 0 ? v : Number.NaN;
     },
     creditIndexWeeklyMoveBps: (r, seriesId) => measuredWeeklyBpsMove(region(r)?.creditIndexSpreadHistoryBySeries?.[seriesId]),
+    // §3.17e-i — the deliverable: its cleared cash price and its terms off the sovereign ladder.
+    sovereignBondPrice: (_r, bondId) => trancheClearedPricePerFace(ctx.v2, bondId) ?? Number.NaN,
+    sovereignBondTerms: (r, bondId) => {
+      const rung = materializeGovLadder(ctx.v2, r).find((t) => t.id === bondId);
+      return rung ? { couponRate: rung.couponRate, maturityWeek: rung.maturityWeek } : undefined;
+    },
+    bondFuturePrint: (r, _termKey, deliveryWeek) => {
+      const hist = region(r)?.bondFuturesPriceHistory?.[bondFutureInstrumentId(r, deliveryWeek)];
+      const v = hist?.[hist.length - 1];
+      return typeof v === 'number' && v > 0 ? v : Number.NaN;
+    },
   };
 }
 
