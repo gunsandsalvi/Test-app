@@ -443,11 +443,6 @@ function o8(state: GameState, week: number): AuditFinding[] {
   });
   // §3.13-BOOK f4a: corporate accrued interest is a column of the register row it accrues on —
   // its holder is the row's book, which O3 and O14 hold to account; nothing to check here.
-  // The sovereign accrual ledger's key ends in a `partyKey`.
-  state.sovereignAccruedInterestLocal.forEach((_v, k) => {
-    const ref = partyFromKey(k.slice(k.lastIndexOf('|') + 1));
-    if (ref === undefined || !partyExists(ref)) bump('sovereign accrual holders');
-  });
   // The account store's own party table: every key it ever interned is a party that exists.
   // (A resolved bank keeps its rows until the merger's `moveBankReserves` empties them, so this is
   // the arm that will fire on a re-key that missed the ledger — the failure `rekeyBankLinks`

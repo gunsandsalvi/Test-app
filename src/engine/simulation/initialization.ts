@@ -497,8 +497,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   // ladders have actually accrued, on the rows the seed just wired; and every seeded bond opens
   // with a PRICE, so week 1's session prices each piece of paper from what its own aged cash flows
   // are worth rather than from one spread per borrower.
-  seedOpeningAccruals(state.regions, state.companies, state.institutionalEntities, seedV2, 1,
-    state.sovereignAccruedInterestLocal);
+  seedOpeningAccruals(state.regions, state.companies, state.institutionalEntities, seedV2, 1);
   seedOpeningCreditPrices(state.regions, state.companies, seedV2, 1);
   projectSeededSectorViews(state);
   // §5-STRUCT step 6 — OFF unless asked for. Burn-in hands back a world the ENGINE produced rather
@@ -1735,12 +1734,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // every sovereign bond has a holder. Runs after every book exists and before the projection.
   closeSeedMoney(regions, companies, institutionalEntities, seedV2);
 
-  // §3.37-SEED / D2: the accrual ledger opens at what the aged ladders have actually accrued
-  // (the map stays REQUIRED, §7.274) — filled by `seedOpeningAccruals` in `createInitialGameState`,
-  // AFTER `openSeededBooks` has issued the rows it walks (§3.13-BOOK d3b found it running here,
-  // against a store with no rows in it, so every institution opened at zero accrued). §3.13-BOOK
-  // f4a: the corporate side is a column of the rows themselves now.
-  const openingSovereignAccruals = new Map<string, number>();
+  // §3.37-SEED / D2: the accruals open at what the aged ladders have actually accrued — on the
+  // rows themselves (§3.13-BOOK f4a/f4b), written by `seedOpeningAccruals` in
+  // `createInitialGameState` AFTER `openSeededBooks` has issued the rows it walks.
 
   const state: GameState = {
     currentWeek: 1,
@@ -1751,7 +1747,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // §7.274: the workout and accrual ledgers open EMPTY and REQUIRED — a state without them
     // no longer compiles, so no load or construction path can silently reset them again.
     estates: [],
-    sovereignAccruedInterestLocal: openingSovereignAccruals,
     unitMassTonnes: seededUnitMassTonnes,
     freightRatePerTonneLaneMoneyByLane: seededFreightRates,
     // Opens empty: no pair has traded yet, so none has revealed its depth.

@@ -18,7 +18,7 @@
 import { GameState, RegionId } from '../../../types';
 import { bankSovereignBookLocal } from '../../sovereign-register';
 import { bankBookAssetsLocal, deskGrossLocal } from '../../desk-register';
-import { bankParty, bankSecuritiesParty, companyParty } from '../../../domain/party';
+import { bankParty, companyParty } from '../../../domain/party';
 import { currencyOf } from '../../../domain/geography';
 import { BankingSector, DepositLines } from '../../../domain/banking';
 import { BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
@@ -27,7 +27,6 @@ import { assumeBankBooks } from '../../ledger/bank-transfer';
 import { reassignConsignments } from './goods-arrival';
 import { DerivativeParty } from '../../../domain/derivatives/contract';
 import { banksOf } from '../../../domain/company';
-import { partyKey } from '../../ledger/party';
 import { getSimulationDate } from '../../formatters';
 import { WeeklyStepContext } from './context';
 import { novateDerivatives, publishRepoBook, repoBookOf, primeBrokerageBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
@@ -79,16 +78,8 @@ export function rekeyBankLinks(
   })));
   publishPrimeBrokerageBook(ctx.v2, regionId, primeBrokerageBookOf(ctx.v2, regionId).map((l) => ({ ...l, brokerId: rekeyId(l.brokerId) ?? l.brokerId })));
   ctx.primaryOfferingsWorking = ctx.primaryOfferingsWorking.map((o) => ({ ...o, leadBankId: rekeyId(o.leadBankId) ?? o.leadBankId }));
-  // The treasury's accrued-coupon ledger is keyed by holder; the failed bank's accruals are the
-  // assuming bank's receivable now (its sheet already carries them).
-  const fromKey = `|${partyKey(bankSecuritiesParty(fromBank))}`;
-  const toKey = `|${partyKey(bankSecuritiesParty(toBank))}`;
-  Array.from(ctx.sovereignAccruedInterestLocal.entries()).forEach(([k, usd]) => {
-    if (!k.endsWith(fromKey)) return;
-    const k2 = k.slice(0, k.length - fromKey.length) + toKey;
-    ctx.sovereignAccruedInterestLocal.set(k2, (ctx.sovereignAccruedInterestLocal.get(k2) ?? 0) + usd);
-    ctx.sovereignAccruedInterestLocal.delete(k);
-  });
+  // §3.13-BOOK f4b: the failed bank's sovereign accruals are on its rows and moved with them when
+  // `absorbBankSheet` transferred its book — nothing to re-key here.
   // §3.13-BOOK f4a: the desk's unpaid coupons are on its rows and moved with them when
   // `absorbBankSheet` transferred the inventory — nothing to re-key here.
   // §3.13-BOOK (c-then-3b): a contract's counterparty is `CounterpartyRef` — every arm an

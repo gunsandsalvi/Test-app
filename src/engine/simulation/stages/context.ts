@@ -332,10 +332,6 @@ export interface WeeklyStepContext {
   /** §3.13-BOOK f4a — the interest a clearing book moved with each participant's fills, waiting
    *  for the write-back to make the rows it lands on (`finalizeHoldingsStore`). */
   pendingAccruedMoves: { bookId: string; instrumentType: string; instrumentId: string; usd: number }[];
-  /** CAL — the same receivable for GOVERNMENT paper, keyed `<region>|<bucket>|<partyKey>` because
-   *  its holders are not all on the institutional register: a bank holds sovereigns directly, per
-   *  tenor, on its own balance sheet, and so do the central bank and the corporate treasuries. */
-  sovereignAccruedInterestLocal: Map<string, number>;
   tradeInvoiceFxGainLocal: number;
   tradeInvoiceWriteOffLocal: number;
   /** XB3a-2 — what the freight market cleared, read by stage 08 for the carriers' P&L. */
@@ -472,7 +468,6 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     rrpIntendedByEntity: new Map(),
     rrpRateAnnualByRegion: new Map(),
     pendingAccruedMoves: [],
-    sovereignAccruedInterestLocal: state.sovereignAccruedInterestLocal,
     tradeInvoiceFxGainLocal: 0,
     tradeInvoiceWriteOffLocal: 0,
     sovereignCurvePoints: new Map(),

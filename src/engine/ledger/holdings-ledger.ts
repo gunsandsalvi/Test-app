@@ -237,7 +237,7 @@ function creditRow(v2: V2World, holderId: string, spec: HoldingSpec, accruedIn =
  * stays a debit (`debitRow`), which refuses to go below zero — that is C4 ("no short by
  * accident"), and this is the deliberate short the node allows for.
  */
-function adjustDeskRow(v2: V2World, holderId: string, spec: HoldingSpec, sign: 1 | -1, accruedIn = 0): number {
+function adjustDeskRow(v2: V2World, holderId: string, spec: HoldingSpec, sign: 1 | -1, accruedIn = 0, carryAccrued = true): number {
   const H = mutableHoldings(v2);
   const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
   const dValue = sign * spec.valueLocal;
@@ -248,7 +248,7 @@ function adjustDeskRow(v2: V2World, holderId: string, spec: HoldingSpec, sign: 1
     const priorUnits = rowUnits(H, r);
     // §3.13-BOOK f4a: what the desk is owed moves with what it sells, pro rata; what it buys
     // brings its own.
-    if (sign < 0 && priorUnits > 0 && H.accruedLocal[r] !== 0) {
+    if (carryAccrued && sign < 0 && priorUnits > 0 && H.accruedLocal[r] !== 0) {
       accruedOut = H.accruedLocal[r] * Math.min(1, unitsOf(spec) / priorUnits);
       H.accruedLocal[r] -= accruedOut;
     }
@@ -330,7 +330,7 @@ const keepsRow = (H: ReturnType<typeof mutableHoldings>, r: number): boolean =>
  *  pays the seller for it beside the paper, and the balance follows the paper); a RETIREMENT
  *  leaves it on the row — the paper is gone, the coupon is still due, and the row stays until it
  *  is paid. Returns what left. */
-function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien: boolean): number {
+function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien: boolean, carryAccrued = enforceLien): number {
   const H = mutableHoldings(v2);
   const tRef = internType(v2, spec.instrumentType), iRef = internInstrument(v2, spec.instrumentId);
   const askedUnits = unitsOf(spec);
@@ -358,7 +358,7 @@ function debitRow(v2: V2World, holderId: string, spec: HoldingSpec, enforceLien:
       H.units[r] = nextUnits;
       // A share-counted row's units ARE its shares (`unitsOf` says so on the way in).
       if (!Number.isNaN(H.shares[r])) H.shares[r] = nextUnits;
-      if (enforceLien && unitsHere > 0 && H.accruedLocal[r] !== 0) {
+      if (carryAccrued && unitsHere > 0 && H.accruedLocal[r] !== 0) {
         const share = H.accruedLocal[r] * (takeUnits / unitsHere);
         H.accruedLocal[r] -= share; accruedOut += share;
       }
@@ -412,9 +412,14 @@ export function transferHolding(v2: V2World, from: PartyRef, to: PartyRef, spec:
   if (!(spec.valueLocal > 0) && !((spec.shares ?? 0) > 0)) return -1;
   const fromId = holderIdOf(v2, from, spec), toId = holderIdOf(v2, to, spec);
   const n = wireHolding(from, to, spec, reason);
-  // §3.13-BOOK f4a: the interest owed on the paper travels with it, from the one row to the other.
+  // §3.13-BOOK f4a: the interest owed on the paper travels with it, from the one row to the other
+  // — BETWEEN TWO BOOKS. A fill against the clearing house is the exception (f4b): the house holds
+  // no row, and the book that cleared moves the accrued explicitly, per participant, at the
+  // paper's own per-face rate (`accruedOnFills`), so the seller's balance waits on its row for
+  // that move rather than leaving with the wire.
+  const carry = fromId !== undefined && toId !== undefined;
   let accrued = 0;
-  if (fromId) accrued = isDeskBook(fromId) ? adjustDeskRow(v2, fromId, spec, -1) : debitRow(v2, fromId, spec, true);
+  if (fromId) accrued = isDeskBook(fromId) ? adjustDeskRow(v2, fromId, spec, -1, 0, carry) : debitRow(v2, fromId, spec, true, carry);
   if (toId) { if (isDeskBook(toId)) adjustDeskRow(v2, toId, spec, 1, accrued); else creditRow(v2, toId, spec, accrued); }
   return n;
 }

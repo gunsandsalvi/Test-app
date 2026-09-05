@@ -457,7 +457,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   cbTrace?.report(baseCtx.nextWeek);
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
-    sovereignAccruedInterestLocal: ctx.sovereignAccruedInterestLocal,
     lastCashOverdraftLocal: ctx.cashOverdraftLocal,
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.

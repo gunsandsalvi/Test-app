@@ -517,15 +517,9 @@ written from here):
        the accrual and the goods stock are four writers' worth of work, and the plan itself says
        writers first). f1 (every register row is a chain of lots the writers keep; `O14` holds
        the sum), f2 (the debit takes the wire's units, fills carry the cleared price, and the
-       basis, the unrealised and the realised results are read) and f3 (the goods lots are the
-       register's lots) are in §9. What is left, in order:
-    f4. **ACCRUED INTEREST IS A RECEIVABLE BESIDE THE LOT IT ACCRUES ON** — split 2026-09-05;
-        f4a (the corporate ledger, `holderAccruedInterestLocal`, is the row's `accruedLocal`) is
-        in §9. What is left:
-    f4b. **THE SOVEREIGN TWIN.** `sovereignAccruedInterestLocal` (party-keyed, 13f) becomes the
-        same column on the sovereign rows — the banks' own books, the central bank's, the
-        desks', the treasuries', the households' — and the banks' `sovereignAccruedCouponLocal`
-        is a read of it; an institution shows its receivable on its sheet (13f).
+       basis, the unrealised and the realised results are read), f3 (the goods lots are the
+       register's lots) and f4 (accrued interest is a column of the row, corporate and sovereign)
+       are in §9. What is left:
     f5. **THE LAST GOODS STOCK OUTSIDE THE GOODS LEDGER GETS A HOLDER** (`categoryDemand[c].inventoryLevelLocal`,
         a value with no holder and no units).
     g. **PLANT AND HOUSING JOIN** — BLOCKED on step 26 deciding what a unit of plant is. Not a
@@ -1706,6 +1700,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK f4b — SOVEREIGN ACCRUED INTEREST IS THE SAME COLUMN.** `GameState.
+sovereignAccruedInterestLocal` (keyed `region|bond|party`) is deleted; a sovereign holder's
+receivable is `accruedLocal` on its GOV_BOND row, on whichever book holds the bond — an
+institution's, a bank's own, a desk's, a treasury's. The calendar accrues onto the rows it
+walks, pays every register book's rows of a due bond to the book's own party and clears them,
+reads the treasury's payable off every row of its paper (`sovereignAccruedPayableLocal`) and a
+bank's `sovereignAccruedCouponLocal` off its own book (`bookAccruedLocal`); a resolution needs
+no re-key; `O8`'s sovereign arm goes. Two things found writing it: an institution accrued on its
+row's marked VALUE while a bank accrued on FACE (a coupon follows face; both do now), and a
+fill against the clearing house must not carry the row's accrued with the wire — the house
+holds no row and the book moves the accrued explicitly at the paper's per-face rate — so a
+transfer carries it only between two books. This closes f4. Gates green; no run.
 
 **13-BOOK f4a — CORPORATE ACCRUED INTEREST IS A COLUMN OF THE ROW IT ACCRUES ON.**
 `GameState.holderAccruedInterestLocal` (≈105k keys, a nested map beside the register) is

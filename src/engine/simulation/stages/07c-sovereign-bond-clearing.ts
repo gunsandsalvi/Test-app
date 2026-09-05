@@ -665,7 +665,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       participants, result.newParticipantHoldings,
       (id) => accruedPerFaceById.get(id) ?? 0,
       (bondId, participantId, usd) => moveSovereignAccrued(
-        ctx.sovereignAccruedInterestLocal, regionId, bondId,
+        ctx, regionId, bondId,
         partyOfParticipant(participantId)
           ?? defect(`${BOOK} accrued: participant '${participantId}' names no holder of record`),
         usd)

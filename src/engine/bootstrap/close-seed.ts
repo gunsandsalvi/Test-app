@@ -222,7 +222,6 @@ export function seedOpeningAccruals(
   institutionalEntities: InstitutionalEntity[],
   v2: V2World,
   currentWeek: number,
-  sovereignAccruedInterestLocal: Map<string, number>,
 ): void {
   const TS = v2.tranches;
   const pendingHolderAccrualLocal = new Map<string, number>();
@@ -258,8 +257,7 @@ export function seedOpeningAccruals(
     // counted `since % 26` itself — one more copy of "where is this bond in its period".
     const elapsedByBond = new Map<string, number>(ladder.map((b) => [b.id, weeksAccrued(b, currentWeek)]));
     accrueSovereignHolders(
-      { v2, updatedInstitutionalEntities: institutionalEntities, updatedCompanies: companies,
-        sovereignAccruedInterestLocal },
+      { v2, updatedInstitutionalEntities: institutionalEntities, updatedCompanies: companies },
       regionId, couponByBond, (bondId) => elapsedByBond.get(bondId) ?? 0,
     );
   });

@@ -124,6 +124,11 @@ test('§3.13-BOOK f4a: accrued interest is a column of the row — it travels pr
     addAccrued(v2, ra, -3);
     transferHolding(v2, b, a, spec(1, 1.0), 'a fresh position, which relinks the book');
     assert.equal(bookRowsOf(v2, a.id).length, 1, 'the paid-out empty row was pruned when the book relinked');
+    // §3.13-BOOK f4b: a fill against the clearing house does NOT carry the balance — the house
+    // holds no row, and the book that cleared moves the accrued explicitly, per participant.
+    transferHolding(v2, b, house, spec(10, 1.0), 'a fill');
+    // (b had 2 on 40 units and moved one fortieth of it with the unit it sold to a: 1.95 stays.)
+    assert.ok(Math.abs(bookAccruedLocal(v2, b.id) - 1.95) < 1e-12, 'the seller keeps what it is owed until the book moves it');
   } finally {
     setActiveWireJournal(undefined);
     setActiveWireWorld(undefined);

@@ -15,10 +15,12 @@
  *     on the institutional register.** It holds sovereigns directly, bond by bond, on its own
  *     balance sheet. So the accrual cannot be keyed by institution id; it is keyed by PARTY.
  *
- * One ledger, keyed `<region>|<bondId>|<partyKey>`, and it is the ONLY writer of the receivable
- * on either book — the bank's `sovereignAccruedCouponLocal` and the treasury's
- * `sovereignCouponPayableLocal` are the same balance seen from two sides. That is what makes them
- * incapable of drifting: the treasury pays exactly the sum of what its holders accrued.
+ * §3.13-BOOK f4b: the receivable is a COLUMN OF THE REGISTER ROW it accrues on
+ * (`holdings.ts:accruedLocal`), on whichever book holds the bond — an institution's, a bank's
+ * own, a desk's — and this stage is its only writer on the sovereign side. The bank's
+ * `sovereignAccruedCouponLocal` and the treasury's `sovereignCouponPayableLocal` are reads of the
+ * same rows from two sides. That is what makes them incapable of drifting: the treasury pays
+ * exactly the sum of what its holders accrued.
  *
  * **The P&L stays smooth on both sides and only CASH is lumpy** — the same result the corporate
  * half reached (rule 8: an expense and a payment are different numbers with different periods).
@@ -38,20 +40,21 @@
  */
 
 import { RegionId } from '../../../types';
-import { bankPartyOf } from '../../../domain/party';
 import { bankSovereignPositions } from '../../sovereign-register';
 import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
-import { PartyRef, pay, partyKey, partyFromKey } from './settlement';
+import { accrueInterestOnRow, settleAccruedOnRow, closeEmptyPositions, registerBooks, bookIdOfParty } from '../../ledger/holdings-ledger';
+import { bookAccruedLocal, rowUnits } from '../../../engine2/holdings';
+import { typeRefOf, instrumentRefOf } from '../../../engine2/world';
+import { defect } from '../../../domain/defect';
+import { PartyRef, pay, partyKey } from './settlement';
 import { sovereignCouponByBond, sovereignCouponDueShare } from '../../../domain/government';
 import { isActiveCompany } from '../../../domain/company';
 import { REGION_IDS, currencyOf } from '../../../domain/geography';
 import { bookHeadOf, instrumentIdAt } from '../../../engine2/holdings';
 import { internType, internRegion } from '../../../engine2/world';
 import { materializeGovLadder } from '../../../engine2/tranches';
-import { asInstrumentId } from '../../../domain/ids';
 
-/** `<region>|<bondId>|<partyKey>` — the receivable one holder has against one bond. */
 
 /**
  * THE HOLDER WALK, shared by the week and the seed. Every holder of record of a region's
@@ -71,22 +74,20 @@ export function accrueSovereignHolders(
     v2: WeeklyStepContext['v2'];
     updatedInstitutionalEntities: WeeklyStepContext['updatedInstitutionalEntities'];
     updatedCompanies: WeeklyStepContext['updatedCompanies'];
-    sovereignAccruedInterestLocal: Map<string, number>;
   },
   regionId: RegionId,
   couponByBond: Record<string, number>,
   weeksOf: (bondId: string) => number,
 ): Map<string, number> {
-  const accrued = ctx.sovereignAccruedInterestLocal;
   const bankEarnedLocal = new Map<string, number>();
-  const accrue = (bondId: string, party: PartyRef, notional: number): number => {
+  // §3.13-BOOK f4b: onto the ROW that holds the bond.
+  const accrue = (bondId: string, row: number, notional: number): number => {
     const coupon = couponByBond[bondId] ?? 0;
     const weeks = weeksOf(bondId);
     if (!(coupon > 0) || !(notional > 0) || !(weeks > 0)) return 0;
     const usd = (notional * coupon * weeks) / 52;
     if (!(usd > 0)) return 0;
-    const k = accrualKey(regionId, bondId, party);
-    accrued.set(k, (accrued.get(k) ?? 0) + usd);
+    accrueInterestOnRow(ctx.v2, row, usd);
     return usd;
   };
   // §7.307 holdings flip: row walk — a non-GOV_BOND or foreign row costs two int compares.
@@ -97,8 +98,10 @@ export function accrueSovereignHolders(
     if (entity.isDefaulted) return;
     for (let r = bookHeadOf(ctx.v2, entity.id); r >= 0; r = H.next[r]) {
       if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef) continue;
-      // §3.13-SOV row 3: the coupon accrues to the BOND the row names.
-      accrue(instrumentIdAt(ctx.v2, r), { kind: 'INSTITUTION', id: entity.id }, H.qtyLocal[r]);
+      // §3.13-SOV row 3: the coupon accrues to the BOND the row names — on its FACE (§3.13-BOOK
+      // f4b: this read the row's marked VALUE while the banks below accrued on face, so the same
+      // bond paid a discounted holder less of the same coupon; a coupon follows face).
+      accrue(instrumentIdAt(ctx.v2, r), r, rowUnits(H, r));
     }
   });
   ctx.updatedCompanies.forEach((c) => {
@@ -107,15 +110,12 @@ export function accrueSovereignHolders(
     // §3.13-BOOK d3b: the bank's own book is its register rows, held by the BANK party (its
     // reserves buy it and its coupons land there) — the accrual is on FACE.
     bankSovereignPositions(ctx.v2, c.id).forEach((p) => {
-      earnedLocal += accrue(p.bondId, bankPartyOf(c.id), p.faceLocal);
+      earnedLocal += accrue(p.bondId, p.row, p.faceLocal);
     });
     if (earnedLocal > 0) bankEarnedLocal.set(c.ticker, earnedLocal);
   });
   return bankEarnedLocal;
 }
-
-const accrualKey = (regionId: RegionId, bondId: string, party: PartyRef) =>
-  `${regionId}|${bondId}|${partyKey(party)}`;
 
 /**
  * §3.13b / `../../../../docs/instruments/bond.md` N9.b — THE ACCRUED RE-KEYS WHEN THE PAPER MOVES.
@@ -129,12 +129,16 @@ const accrualKey = (regionId: RegionId, bondId: string, party: PartyRef) =>
  * A balance that reaches zero leaves the ledger, exactly as the payout path leaves it.
  */
 export function moveSovereignAccrued(
-  accrued: Map<string, number>, regionId: RegionId, bondId: string, party: PartyRef, deltaLocal: number
+  ctx: { pendingAccruedMoves: { bookId: string; instrumentType: string; instrumentId: string; usd: number }[] },
+  regionId: RegionId, bondId: string, party: PartyRef, deltaLocal: number
 ): void {
+  void regionId;
   if (!Number.isFinite(deltaLocal) || deltaLocal === 0) return;
-  const k = accrualKey(regionId, bondId, party);
-  const next = (accrued.get(k) ?? 0) + deltaLocal;
-  if (next === 0) accrued.delete(k); else accrued.set(k, next);
+  // §3.13-BOOK f4b: onto the holder's row of the bond, once the write-back has made it
+  // (`finalizeHoldingsStore`). A company's treasury book is its own id (`holderIdOf`).
+  const bookId = bookIdOfParty(party) ?? (party.kind === 'COMPANY' ? party.id : undefined);
+  if (bookId === undefined) return defect(`sovereign accrued moved to ${partyKey(party)}, which holds on no register book`);
+  ctx.pendingAccruedMoves.push({ bookId, instrumentType: 'GOV_BOND', instrumentId: bondId, usd: deltaLocal });
 }
 
 /**
@@ -144,7 +148,9 @@ export function moveSovereignAccrued(
  * interest line is struck against the same holdings.
  */
 export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
-  const accrued = ctx.sovereignAccruedInterestLocal;
+  const H = ctx.v2.holdings;
+  const govBondRef = typeRefOf(ctx.v2, 'GOV_BOND');
+  const books = registerBooks(ctx.updatedInstitutionalEntities.map((e) => e.id), ctx.updatedCompanies);
   /** What each BANK earned this week — its equity leg, posted once at the end. */
   const bankEarnedLocal = new Map<string, number>();
 
@@ -168,37 +174,38 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
         .map((b) => b.id)
     );
     let paidLocal = 0;
-    if (dueBonds.size > 0) {
-      const cleared: string[] = [];
-      accrued.forEach((amountLocal, k) => {
-        const firstBar = k.indexOf('|');
-        if (k.slice(0, firstBar) !== regionId) return;
-        const secondBar = k.indexOf('|', firstBar + 1);
-        // The accrual ledger keys `region|instrument|party` in one string; the middle field is
-        // an instrument id and this is where it is read back as one (§3.13-BOOK slice (a)).
-        if (!dueBonds.has(asInstrumentId(k.slice(firstBar + 1, secondBar))) || !(amountLocal > 0)) return;
-        const payee = partyFromKey(k.slice(secondBar + 1));
-        if (!payee) return;
-        // A BANK is paid as BANK_SECURITIES rather than BANK: the coupon is not income arriving
-        // now — the equity leg was posted the week it was EARNED — so this is one of the bank's
-        // assets becoming another, the receivable turning into reserves. Routing it as BANK would
-        // credit equity a second time, which is exactly the shape §7.62 caught in the CB stage.
-        pay(ctx, {
-          payer: { kind: 'GOVERNMENT', region: regionId },
-          payee,
-          amount: amountLocal,
-          currency: currencyOf(regionId),
-          reason: 'sovereign coupon',
-        });
-        paidLocal += amountLocal;
-        cleared.push(k);
+    if (dueBonds.size > 0 && govBondRef >= 0) {
+      // §3.13-BOOK f4b: every register book's rows of a due bond are paid what they are owed, to
+      // the book's own party, and cleared. A BANK's own book is paid as BANK: the coupon is not
+      // income arriving now — the equity leg was posted the week it was EARNED — so this is one
+      // of the bank's assets becoming another, the receivable turning into reserves.
+      const dueRefs = new Set<number>();
+      dueBonds.forEach((id) => { const ref = instrumentRefOf(ctx.v2, id); if (ref >= 0) dueRefs.add(ref); });
+      const regionRef = internRegion(ctx.v2, regionId);
+      const touched = new Set<string>();
+      books.forEach((book) => {
+        for (let r = bookHeadOf(ctx.v2, book.id); r >= 0; r = H.next[r]) {
+          if (H.typeRef[r] !== govBondRef || H.regionRef[r] !== regionRef || !dueRefs.has(H.instrRef[r])) continue;
+          const amountLocal = H.accruedLocal[r];
+          if (!(amountLocal > 0)) { if (amountLocal !== 0) settleAccruedOnRow(ctx.v2, r, amountLocal); continue; }
+          pay(ctx, {
+            payer: { kind: 'GOVERNMENT', region: regionId },
+            payee: book.payee,
+            amount: amountLocal,
+            currency: currencyOf(regionId),
+            reason: 'sovereign coupon',
+          });
+          paidLocal += amountLocal;
+          settleAccruedOnRow(ctx.v2, r, amountLocal);
+          touched.add(book.id);
+        }
       });
-      cleared.forEach((k) => accrued.delete(k));
+      touched.forEach((bookId) => closeEmptyPositions(ctx.v2, bookId));
     }
 
     // ---- 4. The treasury's own side of the same balance, so its expense can stay smooth while
     // its account moves on the dates (stages/central-bank.ts reads the change in this level). ----
-    reg.sovereignCouponPayableLocal = Math.round(sovereignAccruedPayableLocal(accrued, regionId));
+    reg.sovereignCouponPayableLocal = Math.round(sovereignAccruedPayableLocal(ctx.v2, regionId));
     reg.sovereignCouponPaidLocal = Math.round(paidLocal);
   });
 
@@ -208,9 +215,8 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
   ctx.updatedCompanies.forEach((c) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
     const earnedLocal = bankEarnedLocal.get(c.ticker) ?? 0;
-    const key = `|${partyKey(bankPartyOf(c.id))}`;
-    let heldLocal = 0;
-    accrued.forEach((usd, k) => { if (k.endsWith(key)) heldLocal += usd; });
+    // §3.13-BOOK f4b: what the bank's own book is owed — its rows' receivable, read.
+    const heldLocal = bookAccruedLocal(ctx.v2, c.id);
     if (earnedLocal === 0 && heldLocal === (c.bankBalanceSheet.sovereignAccruedCouponLocal ?? 0)) return;
     c.bankBalanceSheet = {
       ...bookPnL(c.bankBalanceSheet, earnedLocal, 'sovereign coupon accrual', c.ticker),
@@ -223,10 +229,15 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
  * What the treasury has ACCRUED but not yet paid on its bond stack — its own side of the same
  * receivable, so the reported interest line stays smooth while the cash is lumpy.
  */
-export function sovereignAccruedPayableLocal(
-  accrued: Map<string, number>, regionId: RegionId
-): number {
+export function sovereignAccruedPayableLocal(v2: WeeklyStepContext['v2'], regionId: RegionId): number {
+  // §3.13-BOOK f4b: every GOV_BOND row of this region's paper, whoever holds it.
+  const H = v2.holdings;
+  const govBondRef = typeRefOf(v2, 'GOV_BOND');
+  if (govBondRef < 0) return 0;
+  const regionRef = internRegion(v2, regionId);
   let total = 0;
-  accrued.forEach((usd, k) => { if (k.startsWith(`${regionId}|`)) total += usd; });
+  for (let r = 0; r < H.used; r++) {
+    if (H.typeRef[r] === govBondRef && H.regionRef[r] === regionRef) total += H.accruedLocal[r];
+  }
   return total;
 }

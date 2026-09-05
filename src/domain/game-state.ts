@@ -69,10 +69,8 @@ export interface GameState {
   estates: import('./estate').Estate[];
   // §3.13-BOOK f4a: accrued-but-unpaid interest on corporate paper is `holdings.ts:accruedLocal`,
   // a column of the register row it accrues on; not a field.
-  /** CAL — accrued-but-unpaid SOVEREIGN interest by (region, tenor bucket, party); see
-   *  stages/sovereign-calendar.ts. Party-keyed rather than holder-keyed because a bank holds
-   *  government paper on its own balance sheet and is not on the institutional register. */
-  sovereignAccruedInterestLocal: Map<string, number>;
+  // §3.13-BOOK f4b: accrued-but-unpaid SOVEREIGN interest is `holdings.ts:accruedLocal` too, on
+  // whichever register book holds the bond; not a field.
   /** CASH — clamped negative balances, summed over the week's reconciliations. */
   lastCashOverdraftLocal?: number;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
