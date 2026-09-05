@@ -36,6 +36,7 @@ import { bankRequiredReturnAnnual } from '../bank-lending';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
+import { postInitialMargin, initialMarginAtStrike } from '../derivative-lifecycle';
 import { institutionTotalAssetsLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf, facilityRowsOf } from '../../../../engine2/tranches';
@@ -267,6 +268,8 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
             termKey: '',
             // §3.13c: the market it clears in.
             currency: currencyOf(regionId),
+            // §3.17-i: what this strike posts, carried on the contract.
+            initialMarginLocal: initialMarginAtStrike({ classId: 'CDS', notional: Math.round(notional) }),
             struckWeek: week,
             maturityWeek: week + CDS_TENOR_WEEKS,
           });
@@ -274,6 +277,7 @@ function runCdsMarket({ state, ctx, week, standing }: DerivativeMarketRun): void
       });
     });
     strikeDerivatives(ctx, struck);
+    struck.forEach((c) => postInitialMargin(ctx, c));
   });
 }
 

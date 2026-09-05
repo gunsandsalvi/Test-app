@@ -87,11 +87,11 @@ test('§3.13-BOOK d4c-i: a struck derivative is a row of the contract store, and
   try {
     const swap: DerivativeContract = {
       id: 'USA-IRS-s5-1-0', classId: 'IRS', regionId: 'USA', currency: 'USD', a, b, notional: 1e6, strike: 0.04,
-      reference: { kind: 'RATE' }, termKey: 's5', struckWeek: 1, maturityWeek: 261,
+      reference: { kind: 'RATE' }, termKey: 's5', initialMarginLocal: 0, struckWeek: 1, maturityWeek: 261,
     };
     const future: DerivativeContract = {
       id: 'FUT-OIL-3M-1-0', classId: 'COMMODITY_FUTURE', regionId: 'USA', currency: 'USD', a: b, b: a, notional: 7e5, strike: 100,
-      reference: { kind: 'COMMODITY', commodityId: 'OIL' }, termKey: '3M', units: 7000, settledMarkLocal: 0, struckWeek: 1, maturityWeek: 14,
+      reference: { kind: 'COMMODITY', commodityId: 'OIL' }, termKey: '3M', units: 7000, settledMarkLocal: 0, initialMarginLocal: 0, struckWeek: 1, maturityWeek: 14,
     };
     strikeDerivatives(ctx, [swap, future]);
     assert.deepEqual(derivativesOf(v2), [swap, future], 'the store materializes exactly what was struck, in order');
@@ -237,7 +237,8 @@ test('§3.13-BOOK d5c: a client\'s initial margin is a lien on the dealer\'s sec
   try {
     const forward: DerivativeContract = {
       id: 'USA-FXF-1-0', classId: 'FX_FORWARD', regionId: 'USA', currency: 'USD', a, b: { kind: 'BANK', id: dealer }, notional: 1e6, strike: 1.1,
-      reference: { kind: 'REGION', regionId: 'EUR' }, termKey: '', settledMarkLocal: 0, struckWeek: 1, maturityWeek: 14,
+      // §3.17-i: the margin is what was POSTED, a fact of the contract — the lien is that number.
+      reference: { kind: 'REGION', regionId: 'EUR' }, termKey: '', settledMarkLocal: 0, initialMarginLocal: 1e6 * 0.02, struckWeek: 1, maturityWeek: 14,
     };
     strikeDerivatives(ctx, [forward]);
     const marginLocal = 1e6 * 0.02;

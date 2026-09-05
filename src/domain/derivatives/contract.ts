@@ -123,6 +123,14 @@ export interface DerivativeContract {
    * pays the CHANGE in the mark, never the whole mark). Only mark-leg classes carry it.
    */
   settledMarkLocal?: number;
+  /**
+   * §3.17-i — THE INITIAL MARGIN POSTED, a fact of the contract like its strike: sized at strike
+   * (`registry.ts:initialMarginAtStrike`), paid by A to the dealer's securities account, held as a
+   * lien on it for the contract's life (`contract-ledger.ts:syncMarginLiens`) and returned when
+   * the contract ends. It used to be re-derived from the class's stated rate on every read, so a
+   * margin could not be anything but that rate — and 17-ii sizes it from the reference's own move.
+   */
+  initialMarginLocal: number;
   struckWeek: number;
   maturityWeek: number;
 }

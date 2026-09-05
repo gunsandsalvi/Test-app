@@ -25,7 +25,7 @@ import { bankSecuritiesParty } from '../../../domain/party';
 import { isActiveCompany, isInvestmentGradeRating, CreditRating } from '../../../domain/company';
 import { DerivativeClassId, DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../domain/derivatives/contract';
 import { DerivativeMarketView } from '../../../domain/derivatives/profile';
-import { derivativeProfile, initialMarginLocal } from '../../../domain/derivatives/registry';
+import { derivativeProfile, initialMarginLocal, initialMarginAtStrike } from '../../../domain/derivatives/registry';
 import { StandingBook } from '../../../domain/derivatives/standing-book';
 import { WeeklyStepContext } from './context';
 import { buildEntityIndex, companyOfParty } from '../../ledger/entity-index';
@@ -188,6 +188,19 @@ export function closeOutDerivativesOfParty(ctx: WeeklyStepContext, state: GameSt
  * margin liability only ever grew. It was found by following the wires behind M6: the money stock
  * moved by the week's margin with no creator that could explain it.
  */
+/**
+ * §3.17-i — THE POSTING, in one place for every class. Initial margin is the CLIENT'S money
+ * sitting with the desk: A pays it to the dealer's securities account, reserves move and equity
+ * does not, and the ledger holds it as a lien on that account for the contract's life
+ * (`contract-ledger.ts:syncMarginLiens`) until `releaseInitialMargin` returns it. Only a bank on
+ * the B side holds margin; a contract with none to post posts none.
+ */
+export function postInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract): void {
+  const marginLocal = initialMarginLocal(c);
+  if (!(marginLocal > MIN_LEG_LOCAL) || c.b.kind !== 'BANK') return;
+  pay(ctx, { payer: c.a, payee: bankSecuritiesParty(c.b), amount: marginLocal, currency: c.currency, reason: 'initial margin posted' });
+}
+
 function releaseInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract, view: DerivativeLifecycleView): void {
   const marginLocal = initialMarginLocal(c);
   // Held on the desk's own securities account, which is where the posting put it; a party that
@@ -265,5 +278,6 @@ export function settleDerivativeClass(
   return net;
 }
 
-// §3.13-BOOK d5c: sized with the class profile it reads (`registry.ts:initialMarginLocal`).
-export { initialMarginLocal };
+// §3.13-BOOK d5c / §3.17-i: the margin a contract carries (`registry.ts:initialMarginLocal`), and
+// what a strike posts (`initialMarginAtStrike`).
+export { initialMarginLocal, initialMarginAtStrike };

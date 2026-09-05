@@ -111,7 +111,7 @@ checked by `scripts/check-atlas.sh`.
 | **C4 a stated default waterfall, in order** | — | ❌ |
 | C4.a a member's loss can come from another member's default | — | ❌ |
 | **C5 FORBID the CCP is not a guarantor of last resort** | — | ❌ |
-| D1 initial margin, sized from the risk of the position | `src/domain/derivatives/profile.ts:initialMarginRate` | ⚠️ |
+| D1 initial margin, sized from the risk of the position | `src/domain/derivatives/registry.ts:initialMarginAtStrike` | ⚠️ |
 | **D2 variation margin: the change in the mark, in cash, every period** | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ⚠️ |
 | D2.a real money leaving one account and arriving in another | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
 | **D2.b VERIFY Σ VM paid = Σ received, every period** | — | ❌ |
@@ -205,6 +205,13 @@ The missing marks are **Already §3 step 17**. The missing measurement is
 produces either number.
 
 ### ⚠️ D1 / F2 / ❌ D5 — MARGIN IS A STATED RATE, SO IT CANNOT RISE WHEN IT MATTERS
+
+*2026-09-05 (§9.17-i): the margin a contract carries is now the amount POSTED at strike, a fact
+of the contract (`contract.ts:initialMarginLocal`, a column of the obligation store), posted
+through one path for every class (`derivative-lifecycle.ts:postInitialMargin`) and read — never
+re-derived — by the lien, the audit and the release. What a strike posts is still the class's
+stated rate (`registry.ts:initialMarginAtStrike`); §3.17-ii sizes it from the reference's own
+move, which is what this section is about.*
 
 `profile.ts:initialMarginRate` is a flat per-class constant: `0` for IRS, CDS and commodity
 futures, `0.02` for FX forwards (`classes/*.ts`). Nothing reads volatility, a close-out horizon or

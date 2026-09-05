@@ -79,6 +79,8 @@ export interface ObligationStore {
   /** §3.13-BOOK d4c-vi — what a capital commitment has DRAWN so far, against `notional` committed;
    *  NaN for every other kind. */
   drawn: Float64Array;
+  /** §3.17-i — a derivative's initial margin as POSTED at strike; NaN for every other kind. */
+  initialMargin: Float64Array;
   /** Bumped by every write, so a materialized view can tell whether it is current. */
   epoch: number;
   /** d4c-v — the same, per kind: a memo of one kind's rows need not rebuild when another kind moved. */
@@ -119,6 +121,7 @@ export function newObligationStore(): ObligationStore {
     pledges: new Array(cap), epoch: 0,
     instrRef: newRefColumn<InstrRef>(cap, -1), positionAtStrike: new Float64Array(cap).fill(Number.NaN), recalledWeek: new Int32Array(cap).fill(-1),
     haircut: new Float64Array(cap).fill(Number.NaN), toRegionRef: newRefColumn<RegionRef>(cap, -1), drawn: new Float64Array(cap).fill(Number.NaN), kindEpoch: new Map(),
+    initialMargin: new Float64Array(cap).fill(Number.NaN),
     next: new Int32Array(cap).fill(-1),
     headByKind: new Map(), tailByKind: new Map(), rowById: new Map(),
   };
@@ -138,6 +141,7 @@ function grow(S: ObligationStore): void {
   S.refText.length = cap; S.termKey.length = cap; S.id.length = cap; S.pledges.length = cap;
   S.instrRef = gR(S.instrRef); S.positionAtStrike = gF(S.positionAtStrike, Number.NaN); S.recalledWeek = gI(S.recalledWeek, -1);
   S.haircut = gF(S.haircut, Number.NaN); S.toRegionRef = gR(S.toRegionRef); S.drawn = gF(S.drawn, Number.NaN);
+  S.initialMargin = gF(S.initialMargin, Number.NaN);
   S.next = gI(S.next, -1);
   S.cap = cap;
 }
@@ -198,7 +202,7 @@ function freeRow(S: ObligationStore, r: number): void {
   S.notional[r] = 0; S.strike[r] = 0; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
   S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = ''; S.pledges[r] = undefined;
   S.instrRef[r] = ABSENT_REF; S.positionAtStrike[r] = Number.NaN; S.recalledWeek[r] = -1;
-  S.haircut[r] = Number.NaN; S.toRegionRef[r] = ABSENT_REF; S.drawn[r] = Number.NaN;
+  S.haircut[r] = Number.NaN; S.toRegionRef[r] = ABSENT_REF; S.drawn[r] = Number.NaN; S.initialMargin[r] = Number.NaN;
   S.next[r] = S.freeHead; S.freeHead = r;
 }
 
@@ -226,6 +230,7 @@ export function writeDerivativeRow(v2: V2World, c: DerivativeContract): number {
   S.aRef[r] = internPartyKey(v2, partyKey(c.a)); S.bRef[r] = internPartyKey(v2, partyKey(c.b));
   S.notional[r] = c.notional; S.strike[r] = c.strike; S.units[r] = c.units === undefined ? Number.NaN : c.units;
   S.settledMark[r] = c.settledMarkLocal === undefined ? Number.NaN : c.settledMarkLocal;
+  S.initialMargin[r] = c.initialMarginLocal;
   S.struckWeek[r] = c.struckWeek | 0; S.maturityWeek[r] = c.maturityWeek | 0;
   S.refKind[r] = refKindIdOf(c.reference); S.refText[r] = refTextOf(c.reference);
   S.termKey[r] = c.termKey; S.id[r] = c.id;
@@ -518,6 +523,7 @@ export function materializeDerivative(v2: V2World, r: number): DerivativeContrac
     id: S.id[r], classId: typeOf(v2, S.classRef[r]) as DerivativeContract['classId'], regionId: regionOf(v2, S.regionRef[r]) as RegionId,
     currency: currencyOfId(S.currencyId[r]), a, b, notional: S.notional[r], strike: S.strike[r],
     reference: referenceAt(S, r), termKey: S.termKey[r], struckWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
+    initialMarginLocal: Number.isNaN(S.initialMargin[r]) ? 0 : S.initialMargin[r],
   };
   if (!Number.isNaN(S.units[r])) c.units = S.units[r];
   if (!Number.isNaN(S.settledMark[r])) c.settledMarkLocal = S.settledMark[r];

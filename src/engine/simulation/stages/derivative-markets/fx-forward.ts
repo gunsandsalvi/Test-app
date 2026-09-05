@@ -28,7 +28,7 @@ import { InstitutionalEntity } from '../../../../domain/institutions';
 import { hedgedAsFixedIncome } from '../../../../domain/assets';
 import { bookHeadOf } from '../../../../engine2/holdings';
 import { V2World, regionOf, typeOf } from '../../../../engine2/world';
-import { pay, pendingSettlementLocal, institutionSpendableLocal } from '../settlement';
+import { pendingSettlementLocal, institutionSpendableLocal } from '../settlement';
 import { isActiveCompany } from '../../../../domain/company';
 import { invoiceCurrencyOf } from '../../../../domain/invoice-currency';
 import { exposureToHedgeLocal } from '../corporate-financing';
@@ -42,7 +42,7 @@ import { leverageHeadroomLocal } from '../../../macro/banking';
 import { fxWeeklySigma } from '../../../../domain/fx-market';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
-import { initialMarginLocal } from '../derivative-lifecycle';
+import { initialMarginLocal, initialMarginAtStrike, postInitialMargin } from '../derivative-lifecycle';
 import { derivativesBookOf, strikeDerivatives, tradeInvoicesOf } from '../../../ledger/contract-ledger';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { cashOf, bankReservesOf, partyLienLocal } from '../../../ledger/accounts';
@@ -365,17 +365,18 @@ function runFxForwardMarket({ state, ctx, week, standing, settledNetByParty }: D
         settledMarkLocal: 0,
         // §3.13c: the holder settles in its own money.
         currency: currencyOf(holderRegion),
+        // §3.17-i: what this strike posts, carried on the contract.
+        initialMarginLocal: initialMarginAtStrike({ classId: 'FX_FORWARD', notional: writableLocal }),
         struckWeek: week,
         maturityWeek: week + FX_FORWARD_TENOR_WEEKS,
       };
       const marginLocal = initialMarginLocal(contract);
       if (marginLocal > budgetLocal) return;
       budgetLocal -= marginLocal;
-      // Initial margin is the CLIENT'S money sitting with the desk: reserves move, equity does
-      // not, and the desk carries it on its funding line as the liability it is.
-      if (marginLocal > 0) {
-        pay(ctx, { payer: holder, payee: bankSecuritiesPartyOf(dealer), amount: marginLocal, currency: contract.currency, reason: 'fx forward initial margin' });
-      }
+      // Initial margin is the CLIENT'S money sitting with the desk (§3.17-i: posted through the
+      // one path every class uses): reserves move, equity does not, and the desk carries it on
+      // its funding line as the liability it is.
+      postInitialMargin(ctx, contract);
       desk.chargedPfeLocal += writableLocal * FX.pfeAddOnRate;
       desk.book.grossNotionalLocal += writableLocal;
       // The client SELLS the foreign currency forward to hedge a long foreign asset, so the desk

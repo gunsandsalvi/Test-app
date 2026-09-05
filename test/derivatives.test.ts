@@ -42,7 +42,7 @@ const base = (over: Partial<DerivativeContract>): DerivativeContract => ({
   id: 'c', classId: 'IRS', regionId: 'USA', currency: 'USD',
   a: bankPartyOf(asEntityId('AAA')), b: { kind: 'INSTITUTION', id: asEntityId('INS1') },
   notional: 1_000_000, strike: 0.05, reference: { kind: 'RATE' }, termKey: 's5',
-  struckWeek: 0, maturityWeek: 260, ...over,
+  initialMarginLocal: 0, struckWeek: 0, maturityWeek: 260, ...over,
 });
 
 test('IRS: the periodic leg is fixed-minus-overnight on the notional, weekly, to the receiver', () => {

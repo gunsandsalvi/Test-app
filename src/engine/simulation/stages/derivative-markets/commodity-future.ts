@@ -39,6 +39,7 @@ import { exposureToHedgeLocal } from '../corporate-financing';
 import { leverageHeadroomLocal } from '../../../macro/banking';
 import { EQUITY_RISK_PREMIUM } from '../../../equity-valuation';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
+import { postInitialMargin, initialMarginAtStrike } from '../derivative-lifecycle';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
@@ -276,6 +277,8 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
             settledMarkLocal: 0,
             // §3.13c: commodities are quoted in the numeraire, which is what `regionId: 'USA'` was standing in for.
             currency: NUMERAIRE,
+            // §3.17-i: what this strike posts, carried on the contract.
+            initialMarginLocal: initialMarginAtStrike({ classId: 'COMMODITY_FUTURE', notional: sizeUnits * strike }),
             struckWeek: week,
             maturityWeek: week + Math.round(tenorMonths * (52 / 12)),
           });
@@ -285,6 +288,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing }: DerivativeMar
   });
 
   strikeDerivatives(ctx, struck);
+  struck.forEach((c) => postInitialMargin(ctx, c));
   // The standing book then marks at the week's fresh prints (the stage settles this class AFTER
   // the market): every open position's move settles in cash between its two named parties, a
   // contract in its delivery week settles to spot and closes, a dead counterparty closes out.

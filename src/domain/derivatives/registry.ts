@@ -28,9 +28,16 @@ export const derivativeProfile = (id: DerivativeClassId): DerivativeClassProfile
   DERIVATIVE_CLASSES[id];
 
 /** Initial margin on a contract: the A side's cash, held by the B side for the contract's life.
- *  §3.13-BOOK d5c: the ledger writes it as a lien on the dealer's account, so it lives with the
- *  profile it is sized from rather than in a stage. */
-export function initialMarginLocal(c: Pick<DerivativeContract, 'classId' | 'notional'>): number {
+ *  §3.13-BOOK d5c: the ledger writes it as a lien on the dealer's account. §3.17-i: it is the
+ *  amount POSTED, a fact of the contract, read here — never re-derived from a rate on a read. */
+export function initialMarginLocal(c: Pick<DerivativeContract, 'initialMarginLocal'>): number {
+  return c.initialMarginLocal;
+}
+
+/** §3.17-i — what a strike posts: the class's stated rate on the notional, until 17-ii sizes it
+ *  from the reference's own move over a close-out horizon. Called once, at strike, by the market
+ *  that writes the contract; from then on the contract carries the number. */
+export function initialMarginAtStrike(c: Pick<DerivativeContract, 'classId' | 'notional'>): number {
   return c.notional * derivativeProfile(c.classId).initialMarginRate;
 }
 

@@ -547,22 +547,36 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17. **Derivatives are centrally cleared, and margin is risk-based** (user). Today a contract is
-    bilateral (`contract.ts:39-41`, parties `a`/`b`) and `initialMarginRate` is a flat stated
-    number per class — **0 for CDS, IRS and commodity futures, 0.02 for FX forwards**
-    (`classes/*.ts`), so three of the four classes are uncollateralised and the fourth charges
-    every ticket the same 2% whatever it is. **Margin does not work that way and must not be a
-    stated shape** (user, rule 2): initial margin covers the move a position can make before it
-    can be closed — the reference's own volatility over a close-out horizon, scaled by the
-    portfolio's netting — and variation margin is the mark, daily. Both fall out of quantities
-    this model already clears, so neither needs a number. Novate every
-    contract to the region's CCP: each side faces the CCP, initial margin is posted TO it, variation
-    flows THROUGH it, and a default is its waterfall (IM → default fund → mutualisation) rather than
-    a bilateral close-out. Capacity becomes a clearing-member limit, keeping rule 5. Then the market
-    view is open interest, margin held and net position per member, by class — the "stats on the
-    derivative markets overall" the user asked for. While here: the close-out replacement values are
-    undiscounted (`irs.ts:47`, `cds.ts:69`) and a credit event pays a REGIONAL AVERAGE recovery
-    (`cds.ts:58` + `derivative-lifecycle.ts:122`) instead of the estate's own workout on that issuer.
+17. **Derivatives are centrally cleared, and margin is risk-based** (user) — split 2026-09-05,
+    one commit each; 17-i (the margin a contract carries is the amount posted, a fact of the
+    contract, posted through one path) is in §9. What is left, in order:
+17-ii. **INITIAL MARGIN IS THE REFERENCE'S OWN MOVE.** `initialMarginRate` is a flat stated
+    number per class — 0 for CDS, IRS and commodity futures, 0.02 for FX forwards — so three
+    classes are uncollateralised and the fourth charges every ticket the same 2%. **Margin must
+    not be a stated shape** (user, rule 2): initial margin covers the move a position can make
+    before it can be closed — the reference's own realised volatility over a close-out horizon
+    of one session (the model's clock), on the notional. Each class profile states where its
+    reference's history is: a commodity's own `volatility` and prints, a pair's `historicalRates`,
+    a tenor's par-rate prints and an issuer's spread prints (two rings the swap and CDS books
+    must start keeping). `initialMarginRate` is deleted. D5 follows: margin rises when volatility
+    rises.
+17-iii. **VARIATION MARGIN IS THE MARK, FOR EVERY CLASS.** IRS and CDS carry no mark, so half the
+    book pays no variation margin and A4/D2.b cannot be measured: give the two rate-leg classes
+    a mark (the swap's fixed-versus-par value over its remaining life; the CDS's spread change on
+    its risky duration), settle the delta weekly through the one lifecycle, and measure Σ paid =
+    Σ received.
+17-iv. **THE CCP.** Novate every contract to the region's clearing house: each side faces the
+    CCP, initial margin is posted TO it, variation flows THROUGH it, and a member's default is
+    its waterfall (the defaulter's margin, then a default fund the members contribute to, then
+    mutualisation) rather than a bilateral close-out. The CCP is a real entity with a balance
+    sheet (C3), and C5 holds: its resources are finite.
+17-v. **CAPACITY IS A CLEARING-MEMBER LIMIT (rule 5), and the market view:** open interest,
+    margin held and net position per member, by class — the "stats on the derivative markets
+    overall" the user asked for.
+17-vi. **The close-out replacement values are undiscounted** (`irs.ts:47`, `cds.ts:69`) **and a
+    credit event pays a REGIONAL AVERAGE recovery** (`cds.ts:58` + `derivative-lifecycle.ts:122`)
+    instead of the estate's own workout on that issuer. Discount the replacement value over the
+    remaining life; settle the credit event off the estate's realised recovery when it closes.
 
 17b. **An options class, and the FX swap lines.** Premium is a periodic leg paid once and
     exercise is an event termination at intrinsic value — two profile methods on the one contract.
@@ -1628,6 +1642,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17-i — THE MARGIN A CONTRACT CARRIES IS WHAT WAS POSTED.** `initialMarginLocal(c)` re-derived
+every contract's margin from its class's stated rate on every read — the lien on the dealer's
+account, the audit's claim, the release at the end — so a margin could never be anything but
+that rate, and sizing it from risk had nowhere to live. Now the margin is a FIELD of the
+contract, `contract.ts:initialMarginLocal` (a column of the obligation store, written at strike,
+materialised with the row): the four markets size it once at strike
+(`registry.ts:initialMarginAtStrike`, still the stated rate until 17-ii) and post it through one
+path for every class, `derivative-lifecycle.ts:postInitialMargin` (A pays the dealer's securities
+account; the FX book's inline posting and its budget test now use it; the three classes with
+nothing to post post nothing); `initialMarginLocal` reads the field; the lien, the audit (O13)
+and the release read exactly what was posted. Step 17 is split into 17-i..vi, inserted in
+order. Fixtures carry the field; the ledger test's lien is the posted amount. Gates green; no
+run.
 
 **16b-iii — THE INSURANCE MARKET, MEASURED.** `scripts/harness.ts:printInsuranceMarket`
 (`INS_TRACE=1`): per region and week, each insurer's share of the cover written and its

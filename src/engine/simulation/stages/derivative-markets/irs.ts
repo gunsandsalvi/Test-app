@@ -36,6 +36,7 @@ import { isActiveCompany, banksOf } from '../../../../domain/company';
 import { BANK_WORKING_CAPITAL_RATIO } from '../bank-lending';
 import { COVENANT_INTEREST_COVERAGE } from '../corporate-financing';
 import { strikeDerivatives } from '../../../ledger/contract-ledger';
+import { postInitialMargin, initialMarginAtStrike } from '../derivative-lifecycle';
 import { institutionTotalAssetsLocal, institutionBookLocal } from '../institutional-balance-sheet';
 import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 
@@ -254,6 +255,8 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
             termKey: k,
             // §3.13c: the market it clears in.
             currency: currencyOf(regionId),
+            // §3.17-i: what this strike posts, carried on the contract.
+            initialMarginLocal: initialMarginAtStrike({ classId: 'IRS', notional: Math.round(notional) }),
             struckWeek: week,
             maturityWeek: week + Math.round(SWAP_TENOR_YEARS[k] * 52),
           });
@@ -261,6 +264,7 @@ function runSwapMarket({ state, ctx, week, standing }: DerivativeMarketRun): voi
       });
     });
     strikeDerivatives(ctx, struck);
+    struck.forEach((c) => postInitialMargin(ctx, c));
 
     reg.swapParRateByTenor = parByTenor;
     // The published benchmark: the overnight print compounded, exactly as an overnight index is.
