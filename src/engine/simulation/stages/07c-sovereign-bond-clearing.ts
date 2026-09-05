@@ -43,6 +43,7 @@
  */
 
 import { bankReservesOf, bankDepositLines, householdDepositsAt } from '../../ledger/accounts';
+import { repoBookOf } from '../../ledger/contract-ledger';
 import { bankSecuritiesParty, bankPartyOf } from '../../../domain/party';
 
 import { GameState, RegionId, ItemizedHolding } from '../../../types';
@@ -435,7 +436,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const repoHaircuts = computeSovereignRepoHaircuts(reg, (id) => bonds.find((b) => b.id === id)?.years);
     const bankParticipants: ClearingParticipant[] = regionBanks.map((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-      const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.id);
+      const encumberedFace = encumberedFaceByBond(repoBookOf(ctx.v2, regionId), bank.id);
       // §3.13-BOOK d3b: what it holds is its register rows' FACE — the auction clears face.
       const currentByBond = new Map<InstrumentId, number>();
       bankSovereignFaceByBond(ctx.v2, bank.id).forEach((faceLocal, id) => {

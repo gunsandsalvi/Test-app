@@ -14,7 +14,8 @@
  * columnar store for the six is slice d4c's.
  */
 import type { V2World } from '../../engine2/world';
-import { rowsOfKind, relinkKind, materializeDerivative, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties } from '../../engine2/obligations';
+import { rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms } from '../../engine2/obligations';
+import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import type { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
 import type { RepoContract } from '../../domain/repo';
@@ -97,10 +98,34 @@ export function novateDerivatives(ctx: WeeklyStepContext, rekey: (p: DerivativeP
   });
 }
 
-/** The region's repo book, as the session or a novation leaves it: every lender and borrower resolves. */
-export function publishRepoBook(reg: { repoBook?: RepoContract[] }, book: RepoContract[]): void {
-  book.forEach((c) => { resolvePartyRef(c.lender, `repo ${c.id} lender`); resolvePartyRef(bankPartyOf(c.borrowerId), `repo ${c.id} borrower`); });
-  reg.repoBook = book;
+/**
+ * §3.13-BOOK d4c-ii — THE REPO BOOK IS ROWS OF THE CONTRACT STORE. A region's book is read as the
+ * objects the session and the domain helpers walk (`repoBookOf`: the rows materialized, memoised
+ * on the store's epoch so a week's many readers share one copy), and written back whole
+ * (`publishRepoBook`: every contract resolves its parties; a contract the store holds takes its
+ * current terms, a new one gets a row, and the region's rows the book no longer names are freed).
+ * `Region.repoBook` is gone.
+ */
+const repoBookMemo = new WeakMap<V2World, { epoch: number; byRegion: Map<string, RepoContract[]> }>();
+export function repoBookOf(v2: V2World, regionId: RegionId): RepoContract[] {
+  let memo = repoBookMemo.get(v2);
+  if (!memo || memo.epoch !== v2.obligations.epoch) { memo = { epoch: v2.obligations.epoch, byRegion: new Map() }; repoBookMemo.set(v2, memo); }
+  let book = memo.byRegion.get(regionId);
+  if (!book) { book = rowsOfKindInRegion(v2, 'REPO', regionId).map((r) => materializeRepo(v2, r)); memo.byRegion.set(regionId, book); }
+  return book;
+}
+
+/** The region's repo book, as the session, a call or a novation leaves it. */
+export function publishRepoBook(v2: V2World, regionId: RegionId, book: RepoContract[]): void {
+  const rows = book.map((c) => {
+    if (c.regionId !== regionId) return defect(`repo ${c.id} of ${c.regionId} published on ${regionId}'s book`);
+    resolvePartyRef(c.lender, `repo ${c.id} lender`); resolvePartyRef(bankPartyOf(c.borrowerId), `repo ${c.id} borrower`);
+    const r = derivativeRowOf(v2, c.id);
+    if (r === undefined) return writeRepoRow(v2, c);
+    writeRepoTerms(v2, r, c);
+    return r;
+  });
+  relinkKindInRegion(v2, 'REPO', regionId, rows);
 }
 
 /** The region's stock-loan book: every lender and borrower resolves. */

@@ -40,7 +40,7 @@
  */
 
 import { bankReservesOf, householdDepositsAt } from '../../ledger/accounts';
-import { publishRepoBook } from '../../ledger/contract-ledger';
+import { publishRepoBook, repoBookOf } from '../../ledger/contract-ledger';
 import { bankSovereignFaceByBond } from '../../sovereign-register';
 import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
@@ -307,7 +307,7 @@ export function runRegionalRepoSession(
   // ---- REPO1: last week's contracts. What matured has settled (bank legs inside
   // evolveBankingSector, institutional legs below); what has not matured is still outstanding
   // and still encumbers its own collateral. ----
-  const priorBook = reg.repoBook ?? [];
+  const priorBook = repoBookOf(ctx.v2, regionId); // §3.13-BOOK d4c-ii: the store's rows
   const maturedNow = priorBook.filter((c) => c.maturityWeek <= week);
   const carriedBook = priorBook.filter((c) => c.maturityWeek > week);
 
@@ -388,7 +388,7 @@ export function runRegionalRepoSession(
 
   const finish = (book: RepoContract[], onRateAnnual: number, termRateAnnual: number | undefined,
                   clearedVolumeLocal: number): RepoSessionResult => {
-    publishRepoBook(reg, book); // §3.13-BOOK d4b: the contract ledger's door
+    publishRepoBook(ctx.v2, regionId, book); // §3.13-BOOK d4b/d4c-ii: the contract ledger's door
     // C5: the window's lending is the central bank's ASSET, derived from the same book.
     if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentLocal = Math.round(repoLentLocal(book, { kind: 'CENTRAL_BANK', region: regionId }));
     reg.repoTermRateAnnual = termRateAnnual === undefined ? undefined : Number(termRateAnnual.toFixed(6));
@@ -768,8 +768,8 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
   const repoIndex = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    const book = reg?.repoBook;
-    if (!reg || !book || book.length === 0) return;
+    const book = reg ? repoBookOf(ctx.v2, regionId) : [];
+    if (!reg || book.length === 0) return;
     const borrowers = new Set(book.map((c) => c.borrowerId));
     borrowers.forEach((bankId) => {
       // §3.13-BOOK (c-then-3b): a repo borrower is named by its ENTITY id; a lookup, not a scan.
@@ -827,7 +827,7 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       });
     });
     const survivors = book.filter((c) => c.principalLocal > 1);
-    publishRepoBook(reg, survivors);
+    publishRepoBook(ctx.v2, regionId, survivors);
     if (reg.centralBankSheet) reg.centralBankSheet.standingFacilityLentLocal = Math.round(repoLentLocal(survivors, { kind: 'CENTRAL_BANK', region: regionId }));
   });
 }

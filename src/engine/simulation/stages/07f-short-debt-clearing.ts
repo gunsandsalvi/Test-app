@@ -32,6 +32,7 @@
  */
 
 import { riskAversionOf } from '../../../domain/preferences';
+import { repoBookOf } from '../../ledger/contract-ledger';
 import { deskRowsOf, deskGrossLocal } from '../../desk-register';
 import { asEntityId } from '../../../domain/ids';
 import { bankCreditPartyOf, bankSecuritiesParty, bankSecuritiesPartyOf, bankPartyOf, companyParty } from '../../../domain/party';
@@ -233,7 +234,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const settledCashLocal = reservesLocal
           + pendingSettlementLocal(ctx, bankSecuritiesParty(bank));
         // REPO2: the floor is the face of THIS BILL actually pledged, not a blended share.
-        const encumberedFace = encumberedFaceByBond(reg.repoBook ?? [], bank.id);
+        const encumberedFace = encumberedFaceByBond(repoBookOf(ctx.v2, regionId), bank.id);
         const fundableLocal = Math.min(
           Math.max(0, settledCashLocal - householdDepositsAt(ctx.v2, bank.ticker, currencyOf(bank.region)) * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityLocal(sheet, heldFaceByBond, repoHaircuts, encumberedFace),

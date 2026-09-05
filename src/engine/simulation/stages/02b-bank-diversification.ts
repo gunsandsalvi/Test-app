@@ -21,6 +21,7 @@
  */
 
 import { currencyOf } from '../../../domain/geography';
+import { repoBookOf } from '../../ledger/contract-ledger';
 import type { EntityId } from '../../../domain/ids';
 import { buildEntityIndex } from '../../ledger/entity-index';
 import { defect } from '../../../domain/defect';
@@ -204,7 +205,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const sovCouponByBond = sovereignCouponByBond(materializeGovLadder(ctx.v2, regionId));
 
     // What each bank owes and is owed on contracts that come due this week.
-    const dueThisWeek = maturingAt(reg.repoBook ?? [], ctx.nextWeek);
+    const dueThisWeek = maturingAt(repoBookOf(ctx.v2, regionId), ctx.nextWeek); // §3.13-BOOK d4c-ii
     const maturingRepo = (bankId: EntityId) => {
       let borrowPrincipalLocal = 0, borrowInterestLocal = 0, lendPrincipalLocal = 0, lendInterestLocal = 0;
       dueThisWeek.forEach((c) => {

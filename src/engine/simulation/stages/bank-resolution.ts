@@ -31,7 +31,7 @@ import { partyKey } from '../../ledger/party';
 import { deskBookId } from '../../ledger/holdings-ledger';
 import { getSimulationDate } from '../../formatters';
 import { WeeklyStepContext } from './context';
-import { novateDerivatives, publishRepoBook, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
+import { novateDerivatives, publishRepoBook, repoBookOf, publishPrimeBrokerageBook } from '../../ledger/contract-ledger';
 import { pay, runSettlementStage } from './settlement';
 import { fieldsOf, residualOf } from '../bank-identity-trace';
 import { ladderRowsOf, facilityBookOf } from '../../../engine2/tranches';
@@ -74,13 +74,11 @@ export function rekeyBankLinks(
   });
   const reg = ctx.updatedRegions[regionId];
   // §3.13-BOOK d4b: the novated books go back through the contract ledger's door.
-  if (reg?.repoBook) {
-    publishRepoBook(reg, reg.repoBook.map((c) => ({
-      ...c,
-      borrowerId: rekeyId(c.borrowerId) ?? c.borrowerId,
-      lender: c.lender.kind === 'BANK' ? { ...c.lender, id: rekeyId(c.lender.id) ?? c.lender.id } : c.lender,
-    })));
-  }
+  publishRepoBook(ctx.v2, regionId, repoBookOf(ctx.v2, regionId).map((c) => ({
+    ...c,
+    borrowerId: rekeyId(c.borrowerId) ?? c.borrowerId,
+    lender: c.lender.kind === 'BANK' ? { ...c.lender, id: rekeyId(c.lender.id) ?? c.lender.id } : c.lender,
+  })));
   if (reg?.primeBrokerageBook) {
     publishPrimeBrokerageBook(reg, reg.primeBrokerageBook.map((l) => ({ ...l, brokerId: rekeyId(l.brokerId) ?? l.brokerId })));
   }

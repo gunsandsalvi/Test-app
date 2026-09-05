@@ -18,6 +18,9 @@ import type { V2World } from './world';
 import { internType, typeOf, internRegion, regionOf, internPartyKey, partyKeyOf, CURRENCY_ID, currencyOfId } from './world';
 import { ABSENT_REF, newRefColumn, type RefColumn, type TypeRef, type RegionRef, type PartyKeyRef } from './refs';
 import type { DerivativeContract, DerivativeReference, DerivativeParty } from '../domain/derivatives/contract';
+import type { RepoContract, RepoPledge, RepoParty } from '../domain/repo';
+import { bankPartyOf } from '../domain/party';
+import { currencyOf } from '../domain/geography';
 import { partyFromKey, partyKey } from '../engine/ledger/party';
 import { defect } from '../domain/defect';
 import type { RegionId } from '../domain/geography';
@@ -52,6 +55,10 @@ export interface ObligationStore {
   termKey: string[];
   /** The contract's own id — the string every reader and the UI address it by. */
   id: string[];
+  /** §3.13-BOOK d4c-ii — a repo's pledges: which bond, how much face; undefined for every other kind. */
+  pledges: (RepoPledge[] | undefined)[];
+  /** Bumped by every write, so a materialized view can tell whether it is current. */
+  epoch: number;
   next: Int32Array;
   /** Live chain per kind ref, in insertion order. */
   headByKind: Map<TypeRef, number>;
@@ -85,6 +92,7 @@ export function newObligationStore(): ObligationStore {
     notional: new Float64Array(cap), strike: new Float64Array(cap), units: new Float64Array(cap).fill(Number.NaN), settledMark: new Float64Array(cap).fill(Number.NaN),
     struckWeek: new Int32Array(cap), maturityWeek: new Int32Array(cap),
     refKind: new Int8Array(cap), refText: new Array(cap), termKey: new Array(cap), id: new Array(cap),
+    pledges: new Array(cap), epoch: 0,
     next: new Int32Array(cap).fill(-1),
     headByKind: new Map(), tailByKind: new Map(), rowById: new Map(),
   };
@@ -101,7 +109,7 @@ function grow(S: ObligationStore): void {
   S.notional = gF(S.notional); S.strike = gF(S.strike); S.units = gF(S.units, Number.NaN); S.settledMark = gF(S.settledMark, Number.NaN);
   S.struckWeek = gI(S.struckWeek); S.maturityWeek = gI(S.maturityWeek);
   const rk = new Int8Array(cap); rk.set(S.refKind); S.refKind = rk;
-  S.refText.length = cap; S.termKey.length = cap; S.id.length = cap;
+  S.refText.length = cap; S.termKey.length = cap; S.id.length = cap; S.pledges.length = cap;
   S.next = gI(S.next, -1);
   S.cap = cap;
 }
@@ -132,6 +140,7 @@ export function rowsOfKind(v2: V2World, kind: string): number[] {
 /** Relink one kind's chain to exactly `kept` (in order), freeing every other live row of it. */
 export function relinkKind(v2: V2World, kind: string, kept: readonly number[]): void {
   const S = mutableObligations(v2);
+  S.epoch++;
   const kindRef = internType(v2, kind);
   const keep = new Set(kept);
   for (let r = S.headByKind.get(kindRef) ?? -1; r >= 0; ) {
@@ -147,7 +156,7 @@ function freeRow(S: ObligationStore, r: number): void {
   if (S.rowById.get(S.id[r]) === r) S.rowById.delete(S.id[r]);
   S.kindRef[r] = ABSENT_REF; S.classRef[r] = ABSENT_REF; S.aRef[r] = ABSENT_REF; S.bRef[r] = ABSENT_REF;
   S.notional[r] = 0; S.strike[r] = 0; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
-  S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = '';
+  S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = ''; S.pledges[r] = undefined;
   S.next[r] = S.freeHead; S.freeHead = r;
 }
 
@@ -180,18 +189,95 @@ export function writeDerivativeRow(v2: V2World, c: DerivativeContract): number {
   S.termKey[r] = c.termKey; S.id[r] = c.id;
   S.rowById.set(c.id, r);
   appendToKind(S, kindRef, r);
+  S.epoch++;
   return r;
 }
 
 /** The settled mark moves as variation margin passes (ledger-internal). */
 export function writeSettledMark(v2: V2World, r: number, markLocal: number | undefined): void {
-  mutableObligations(v2).settledMark[r] = markLocal === undefined ? Number.NaN : markLocal;
+  const S = mutableObligations(v2);
+  S.settledMark[r] = markLocal === undefined ? Number.NaN : markLocal;
+  S.epoch++;
 }
 
 /** A novation re-points a row's party (ledger-internal). */
 export function writeDerivativeParties(v2: V2World, r: number, a: DerivativeParty, b: DerivativeParty): void {
   const S = mutableObligations(v2);
   S.aRef[r] = internPartyKey(v2, partyKey(a)); S.bRef[r] = internPartyKey(v2, partyKey(b));
+  S.epoch++;
+}
+
+// ---- §3.13-BOOK d4c-ii — THE REPO BOOK: lender as A, borrower (a bank) as B, principal as the
+// size, the rate as the strike, and the pledges as the row's own list. ----
+
+/** Every live row of one kind in one region, in insertion order. */
+export function rowsOfKindInRegion(v2: V2World, kind: string, regionId: string): number[] {
+  const regionRef = v2.refs.regions.idByString.get(regionId);
+  if (regionRef === undefined) return [];
+  return rowsOfKind(v2, kind).filter((r) => v2.obligations.regionRef[r] === regionRef);
+}
+
+/** Write a repo contract as a new row (ledger-internal). Returns the row. */
+export function writeRepoRow(v2: V2World, c: RepoContract): number {
+  const S = mutableObligations(v2);
+  if (S.rowById.has(c.id)) return defect(`repo ${c.id} struck twice`);
+  const r = allocRow(S);
+  const kindRef = internType(v2, 'REPO');
+  S.kindRef[r] = kindRef; S.classRef[r] = kindRef; S.regionRef[r] = internRegion(v2, c.regionId);
+  S.currencyId[r] = CURRENCY_ID[currencyOf(c.regionId)];
+  S.aRef[r] = internPartyKey(v2, partyKey(c.lender)); S.bRef[r] = internPartyKey(v2, partyKey(bankPartyOf(c.borrowerId)));
+  S.notional[r] = c.principalLocal; S.strike[r] = c.rateAnnual; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
+  S.struckWeek[r] = c.struckWeek | 0; S.maturityWeek[r] = c.maturityWeek | 0;
+  S.refKind[r] = 0; S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = c.id;
+  S.pledges[r] = c.collateral.map((p) => ({ bondId: p.bondId, faceLocal: p.faceLocal }));
+  S.rowById.set(c.id, r);
+  appendToKind(S, kindRef, r);
+  S.epoch++;
+  return r;
+}
+
+/** A live repo row takes the contract's current terms — a call shrank it, a pledge was released,
+ *  a novation renamed a party (ledger-internal). */
+export function writeRepoTerms(v2: V2World, r: number, c: RepoContract): void {
+  const S = mutableObligations(v2);
+  S.aRef[r] = internPartyKey(v2, partyKey(c.lender)); S.bRef[r] = internPartyKey(v2, partyKey(bankPartyOf(c.borrowerId)));
+  S.notional[r] = c.principalLocal; S.strike[r] = c.rateAnnual;
+  S.struckWeek[r] = c.struckWeek | 0; S.maturityWeek[r] = c.maturityWeek | 0;
+  S.pledges[r] = c.collateral.map((p) => ({ bondId: p.bondId, faceLocal: p.faceLocal }));
+  S.epoch++;
+}
+
+/** One repo row materialized back to the contract the stages and the domain helpers read. */
+export function materializeRepo(v2: V2World, r: number): RepoContract {
+  const S = v2.obligations;
+  const lender = partyFromKey(partyKeyOf(v2, S.aRef[r])) as RepoParty | undefined;
+  const borrower = partyFromKey(partyKeyOf(v2, S.bRef[r]));
+  if (lender === undefined || borrower === undefined || borrower.kind !== 'BANK') return defect(`repo row ${r} (${S.id[r]}) names a party the key table cannot read`);
+  return {
+    id: S.id[r], regionId: regionOf(v2, S.regionRef[r]) as RegionId, lender, borrowerId: borrower.id,
+    principalLocal: S.notional[r], rateAnnual: S.strike[r], struckWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
+    collateral: (S.pledges[r] ?? []).map((p) => ({ bondId: p.bondId, faceLocal: p.faceLocal })),
+  };
+}
+
+/** Relink one kind's chain so that, within `regionId`, exactly `kept` (in order) survive; rows of
+ *  other regions keep their order and precede them. */
+export function relinkKindInRegion(v2: V2World, kind: string, regionId: string, kept: readonly number[]): void {
+  const S = mutableObligations(v2);
+  const kindRef = internType(v2, kind);
+  const regionRef = internRegion(v2, regionId);
+  const keep = new Set(kept);
+  const others: number[] = [];
+  for (let r = S.headByKind.get(kindRef) ?? -1; r >= 0; ) {
+    const nxt = S.next[r];
+    if (S.regionRef[r] !== regionRef) others.push(r);
+    else if (!keep.has(r)) freeRow(S, r);
+    r = nxt;
+  }
+  S.headByKind.delete(kindRef); S.tailByKind.delete(kindRef);
+  for (const r of others) appendToKind(S, kindRef, r);
+  for (const r of kept) appendToKind(S, kindRef, r);
+  S.epoch++;
 }
 
 /** One row materialized back to the object the class profiles price. */

@@ -1,7 +1,7 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
-import { derivativesOf } from '../ledger/contract-ledger';
+import { derivativesOf, repoBookOf } from '../ledger/contract-ledger';
 import type { CounterpartyRef } from '../../domain/party';
 import { deskRowsOf } from '../desk-register';
 import { deskBankIdOf } from '../ledger/holdings-ledger';
@@ -420,7 +420,7 @@ function o8(state: GameState, week: number): AuditFinding[] {
   });
   REGION_IDS.forEach((r) => {
     const reg = state.regions[r];
-    (reg?.repoBook ?? []).forEach((c) => {
+    repoBookOf(ensureV2(state), r).forEach((c) => { // §3.13-BOOK d4c-ii: the store's rows
       if (!entityExists(c.borrowerId)) bump('repo borrowers');
       if (!partyExists(c.lender)) bump('repo lenders'); // §3.13-BOOK d4a: the window is a party with a region
     });

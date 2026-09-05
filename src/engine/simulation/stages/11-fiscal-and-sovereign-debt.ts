@@ -8,6 +8,7 @@
  */
 
 import { treasuryAccountOf, waysAndMeansOf } from '../../ledger/accounts';
+import { publishRepoBook, repoBookOf } from '../../ledger/contract-ledger';
 import { bankSecuritiesParty, bankSecuritiesPartyOf, bankPartyOf, companyParty } from '../../../domain/party';
 import { retireTranche, issueTranche, commitLadder } from '../../ledger/tranche-ledger';
 import { materializeGovLadder, ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
@@ -234,7 +235,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // paid this same pass, settling at the close like the redemption itself.
       const collateralCalledByBorrower = new Map<string, number>();
       if (redeemedFractionByBond.size > 0) {
-        (reg.repoBook ?? []).forEach((ct) => {
+        // §3.13-BOOK d4c-ii: the region's book, off the store; the calls below shrink the
+        // contracts in place and the book goes back through the ledger's door after the pass.
+        const repoBook = repoBookOf(ctx.v2, regionId);
+        repoBook.forEach((ct) => {
           if (ct.principalLocal <= 0 || ct.collateral.length === 0) return;
           let releasedFaceLocal = 0;
           let pledgedFaceLocal = 0;
@@ -260,6 +264,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             reason: 'repo collateral call',
           });
         });
+        publishRepoBook(ctx.v2, regionId, repoBook);
       }
 
       ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
@@ -295,7 +300,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         // Collateral that matured is collateral that no longer exists, so the repo it secured
         // released it above — on the book, where the reconcile and the check read. The scalars
         // are recomputed FROM the book (rule 4: one owner), not scaled beside it.
-        const book = reg.repoBook ?? [];
+        const book = repoBookOf(ctx.v2, regionId);
         return {
           ...c,
           bankBalanceSheet: {

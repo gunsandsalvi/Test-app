@@ -8,10 +8,10 @@ import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
 import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
-import { bookTradeInvoices, publishRepoBook, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
+import { bookTradeInvoices, publishRepoBook, repoBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
 import type { WeeklyStepContext } from '../src/engine/simulation/stages/context';
 import type { DerivativeContract } from '../src/domain/derivatives/contract';
-import { asEntityId } from '../src/domain/ids';
+import { asEntityId, asInstrumentId } from '../src/domain/ids';
 import type { TradeInvoice } from '../src/domain/trade-invoice';
 import type { RepoContract } from '../src/domain/repo';
 
@@ -36,17 +36,25 @@ test('an invoice between two firms the world holds is booked; one naming a firm 
 
 test('a repo book resolves its lenders and borrowers, the window included, and needs a world', () => {
   const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
-  const reg: { repoBook?: RepoContract[] } = {};
   const contract: RepoContract = {
     id: 'USA-REPO-1-0', regionId: 'USA', lender: { kind: 'CENTRAL_BANK', region: 'USA' }, borrowerId: asEntityId('USA_BANK1'),
-    principalLocal: 1e9, rateAnnual: 0.05, struckWeek: 1, maturityWeek: 2, collateral: [],
+    principalLocal: 1e9, rateAnnual: 0.05, struckWeek: 1, maturityWeek: 2, collateral: [{ bondId: asInstrumentId('USA-GOV-2Y-INIT'), faceLocal: 1.1e9 }],
   };
-  assert.throws(() => publishRepoBook(reg, [contract]), /no world active/);
+  assert.throws(() => publishRepoBook(v2, 'USA', [contract]), /no world active/);
   setActiveWireWorld(wireWorldOf(v2, [{ id: asEntityId('USA_BANK1') }], []));
   try {
-    publishRepoBook(reg, [contract]);
-    assert.equal(reg.repoBook?.length, 1);
-    assert.throws(() => publishRepoBook(reg, [{ ...contract, borrowerId: asEntityId('USA_GHOST') }]), /no entity, region or bank/);
+    publishRepoBook(v2, 'USA', [contract]);
+    // §3.13-BOOK d4c-ii: the book is rows of the contract store, read back as the contract it was.
+    assert.deepEqual(repoBookOf(v2, 'USA'), [contract]);
+    assert.deepEqual(repoBookOf(v2, 'EUR'), [], 'another region reads its own rows');
+    assert.throws(() => publishRepoBook(v2, 'USA', [{ ...contract, borrowerId: asEntityId('USA_GHOST') }]), /no entity, region or bank/);
+    // A call shrinks the contract and releases a pledge; the row takes the new terms.
+    const called = { ...contract, principalLocal: 4e8, collateral: [{ bondId: asInstrumentId('USA-GOV-2Y-INIT'), faceLocal: 4.4e8 }] };
+    publishRepoBook(v2, 'USA', [called]);
+    assert.deepEqual(repoBookOf(v2, 'USA'), [called]);
+    // A matured contract leaves the book; its row is freed.
+    publishRepoBook(v2, 'USA', []);
+    assert.deepEqual(repoBookOf(v2, 'USA'), []);
   } finally {
     setActiveWireWorld(undefined);
   }

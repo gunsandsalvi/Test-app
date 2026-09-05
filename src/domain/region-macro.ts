@@ -2,7 +2,7 @@
  *  market, its housing stock, its government's debt, its banks and institutions, and its weather. */
 
 import { RegionId } from './geography';
-import { RepoContract } from './repo';
+
 import { PrimeBrokerageLine } from './prime-brokerage';
 import { SecurityLoan } from './securities-lending';
 import { Industry } from './industry';
@@ -711,7 +711,8 @@ export interface Region {
    * being two copies of one thing (rule 4). The sheets' `repoLentLocal`, `repoBorrowedLocal`,
    * `srfBorrowingLocal` and encumbrance are all derived from it (domain/repo.ts).
    */
-  repoBook?: RepoContract[];
+  // §3.13-BOOK d4c-ii: the repo book is rows of the world's contract store (`engine2/obligations.ts`),
+  // read through `contract-ledger.ts:repoBookOf`; not a field.
   /**
    * HF1 — this region's live prime-brokerage lines: which bank finances which fund, how much is
    * drawn, at what haircut and what rate. Stored once with both parties named, the same shape as

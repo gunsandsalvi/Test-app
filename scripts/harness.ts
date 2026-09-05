@@ -130,7 +130,7 @@ import { isPubliclyListed, isActiveCompany, banksOf } from '../src/domain/compan
 import { ensureV2 } from '../src/engine2/world';
 import { deskRowsOf, deskGrossLocal } from '../src/engine/desk-register';
 import { issuedSharesOf, etfSharesOutstandingOf } from '../src/engine2/instruments';
-import { derivativesOf } from '../src/engine/ledger/contract-ledger';
+import { derivativesOf, repoBookOf } from '../src/engine/ledger/contract-ledger';
 import { issuerSpreadAtOnCurve } from '../src/engine/credit-price';
 import { forEachContract } from '../src/engine2/contracts';
 import { sovereignCouponByBond, weeklyInterestExpenseLocal, decomposeGovernmentSpending } from '../src/domain/government';
@@ -2449,8 +2449,7 @@ function runHarness() {
     // pledged beyond what the pledger holds of that bucket (the blended-share version could hide
     // a thirty-year over-pledge behind a large two-year book).
     REGION_IDS.forEach(regionId => {
-      const reg = state.regions[regionId];
-      const book: RepoContract[] = reg.repoBook ?? [];
+      const book: RepoContract[] = repoBookOf(ensureV2(state), regionId); // §3.13-BOOK d4c-ii: the store's rows
       if (book.length === 0) return;
       const borrowedBy = new Map<EntityId, number>();
       const pledgedBy = new Map<EntityId, Map<string, number>>();

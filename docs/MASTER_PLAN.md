@@ -516,14 +516,12 @@ written from here):
         it: the derivatives are NOT in `v2.contracts`, which is the supply-contract table; they
         are `state.derivativesBook`, an object array with one lifecycle writer). d4a (one party
         union and one key across the bilateral books) is in §9. What is left, in order:
-    d4c. **ONE STORE** — one kind per commit, in this order; d4c-i (the derivatives) is in §9.
+    d4c. **ONE STORE** — one kind per commit, in this order; d4c-i (the derivatives) and d4c-ii
+        (the repo book) are in §9.
         `engine2/obligations.ts` is the store: kind, class, region, money, party A, party B,
         size, strike, units, settled mark, struck and maturity weeks, the reference and the term;
         each kind below adds its own columns where it has them and joins the same chains, door
         (`contract-ledger.ts`) and liveness check.
-    d4c-ii. **THE REPO BOOK** (`reg.repoBook`): lender, borrower, principal, rate, weeks, and the
-        pledges as a per-row collateral list; `repoBorrowedLocal`, `repoLentLocal`,
-        `srfBorrowedLocal`, `encumberedFaceByBond`, `maturingAt` read the rows.
     d4c-iii. **THE STOCK-LOAN BOOK** (`reg.securityLoanBook`): lender, borrower, the instrument,
         shares, fee, collateral, the lender's position at strike, recall week.
     d4c-iv. **THE PRIME-BROKERAGE BOOK** (`reg.primeBrokerageBook`): broker, fund, drawn, haircut, rate.
@@ -1725,6 +1723,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d4c-ii — THE REPO BOOK IS ROWS OF THE CONTRACT STORE.** `Region.repoBook` is deleted.
+A repo is a row of `engine2/obligations.ts` — the lender as party A, the borrowing bank as party
+B, the principal as the size, the rate as the strike, the weeks, and the pledges as the row's own
+list (`pledges`, the one column this kind adds). A region's book is read as the objects the session
+and the domain helpers (`repoBorrowedLocal`, `srfBorrowedLocal`, `encumberedFaceByBond`,
+`maturingAt`, …) already walk — `contract-ledger.ts:repoBookOf`, the rows materialized and
+memoised on the store's epoch, so a week's many readers (02b, 07c and 07f per bank, stage 11, the
+session, the reconcile, `O8`, the harness) share one copy — and written back whole through
+`publishRepoBook(v2, region, book)`: every party resolves, a contract the store holds takes its
+current terms (a call shrank it, a pledge was released, a resolution renamed its bank), a new one
+gets a row, and the region's rows the book no longer names are freed, the region's order kept.
+Stage 11's collateral pass, which shrank contracts in place and never wrote them anywhere, now
+publishes the book it changed. Byte-identical. Gates green; no run.
 
 **13-BOOK d4c-i — THE DERIVATIVES ARE ROWS OF THE CONTRACT STORE.** `engine2/obligations.ts` is
 the one columnar store every bilateral obligation joins, one kind at a time, and the derivatives
