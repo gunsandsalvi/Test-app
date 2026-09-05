@@ -260,3 +260,10 @@ A3: the mandate is `region.targetInflation` plus the Taylor rule's implicit outp
 number on a region, not a stated objective the institution owns, so there is no place for a second
 mandate (financial stability, employment) or for a mandate that differs by region beyond a
 parameter. Worth a row; not worth a step of its own.
+
+### ✅ C1 — THE OPEN-MARKET ORDER HAS NO CAP OF ITS OWN
+
+*2026-09-05 (§9.18-iii). `QE_MAX_PACE_ANNUAL_SHARE_OF_STOCK` and `CENTRAL_BANK_MAX_STOCK_SHARE`
+are deleted (rule 6; real-world outcomes used as bounds, rule 2 as well). The rule orders the
+purchase the blocked cut implies, and what the bank can actually buy is what 07c's float has for
+sale — an order the market cannot fill is the market's answer.*

@@ -115,7 +115,7 @@ Checked directly, because it is the node the whole system hangs on. **A fund's l
 borrowing, not a field.** `LEVERAGE_ALLOWANCE.HEDGE_FUND` — a constant share of assets a fund was
 simply allowed to borrow from nobody — is gone; `domain/prime-brokerage.ts` replaced it with a
 `PrimeBrokerageLine` carrying `brokerId`, `fundId`, `drawnLocal`, `haircutRate`, `rateAnnual`,
-and the amount is `maxDrawnLocal(fundEquity, haircut) = E × (1/h − 1)` bounded by the broker's own
+and the amount is `maxDrawnLocal(fundEquity, haircut) = E × (1/h − 1)` (§3.18-iii: no floor on `h`; an unmeasured haircut lends without limit of the fund's own) bounded by the broker's own
 `leverageHeadroomLocal`. The registry's `leverage: 'PRIME_BROKERAGE'` is a fact about the KIND (which
 lender it borrows from), not a quantity. `primeBrokerageAvailableLocal` is a field on the entity, but
 it is a cached read of the line struck this week, written only by the prime-brokerage stage. E1

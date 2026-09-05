@@ -207,32 +207,10 @@ export const EFFECTIVE_LOWER_BOUND = -0.01;
  */
 export const QE_STOCK_SHARE_PER_RATE_POINT_ANNUAL = 0.10;
 
-/**
- * The largest run rate a purchase program is announced at, as a share of the sovereign stock per
- * year. A central bank commits to a pace and holds it; it does not scale purchases without limit
- * with the depth of the rule's gap. The referent is generous — the Fed's peak Treasury purchases
- * ran near 5% of that market a year, so this is roughly double the largest real program.
- *
- * It exists because the rule below is otherwise unbounded in the blocked cut: a deflation deep
- * enough to want a -5% policy rate ordered 40% of the stock a year, and the measured result was
- * the 2Y clearing at -2.6%.
- */
-export const QE_MAX_PACE_ANNUAL_SHARE_OF_STOCK = 0.10;
 
 /** Room above the floor at which the rate tool is working again, so the book can normalize. */
 export const RATE_TOOL_HEADROOM = 0.02;
 
-/**
- * The most of its own sovereign market a central bank will own. The referent is the extreme real
- * case — the Bank of Japan, holding roughly half of all JGBs after two decades of easing — and
- * the reason it is a bound at all is that a central bank owning the whole float has destroyed the
- * market whose price it is trying to influence.
- *
- * Without it the rule is unbounded in the blocked cut: a deflation deep enough to want a -5%
- * policy rate orders 40% of the stock a year, and the measured result was the central bank
- * taking 31% of the market in 30 weeks and clearing the 2Y at -2.6%.
- */
-export const CENTRAL_BANK_MAX_STOCK_SHARE = 0.50;
 
 /**
  * The week's open-market decision: how much of what matured goes back to work, and how much new
@@ -256,12 +234,12 @@ export function openMarketPolicy(args: {
   const bookShare = args.sovereignStockLocal > 0 ? args.bookLocal / args.sovereignStockLocal : 0;
   const blockedCutPoints = Math.max(0, EFFECTIVE_LOWER_BOUND - args.taylorTargetRate) * 100;
   if (blockedCutPoints > 0) {
-    const headroomLocal = Math.max(
-      0, args.sovereignStockLocal * CENTRAL_BANK_MAX_STOCK_SHARE - args.bookLocal
-    );
-    const wantedLocal = (args.sovereignStockLocal *
-      Math.min(QE_STOCK_SHARE_PER_RATE_POINT_ANNUAL * blockedCutPoints, QE_MAX_PACE_ANNUAL_SHARE_OF_STOCK)) / 52;
-    return { reinvestmentShare: 1, netPurchaseLocal: Math.min(wantedLocal, headroomLocal) };
+    // §3.18-iii: no cap on the pace and no cap on the share of the market (rule 6; both were
+    // real-world outcomes used as bounds, rule 2 as well). The rule orders what the blocked cut
+    // implies; what the bank can actually BUY is what 07c's float has for sale — an order the
+    // market cannot fill is the market's answer, not a constant's.
+    const wantedLocal = (args.sovereignStockLocal * QE_STOCK_SHARE_PER_RATE_POINT_ANNUAL * blockedCutPoints) / 52;
+    return { reinvestmentShare: 1, netPurchaseLocal: wantedLocal };
   }
   const canNormalize = args.policyRate > EFFECTIVE_LOWER_BOUND + RATE_TOOL_HEADROOM;
   if (canNormalize && bookShare > CENTRAL_BANK_SOVEREIGN_SHARE) {

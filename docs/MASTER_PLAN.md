@@ -549,17 +549,6 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-18-iii. **Delete the small floors and caps, and make the one guard loud:**
-    `institution-profiles.ts:67,77` (hurdle [0.02, 0.30]); `prime-brokerage.ts:51` (haircut floored
-    at 0.01 → 99× leverage; the broker's own balance sheet is the real cap); `estate-resolution.ts`
-    (capital floored at 0, hiding insolvency); `domain/bank-resolution.ts:147` (`max(0, cash)`
-    hiding an overdrawn reserve account); `central-bank.ts` (QE pace and stock-share caps —
-    real-world outcomes used as bounds, rule 2 as well); `double-auction.ts:116` (a 10,000-iteration
-    guard that silently truncates a clearing: a defect at the site, never a silent break);
-    `weather.ts` if any cap remains; `02-region-macro.ts` if any remains. *(The two credit-duration
-    clamps are GONE, §9.13-CREDIT rows 1 and 3, and there is nothing left for either to be the
-    duration OF — every schedule is struck on the paper's own remaining life; deriving Macaulay
-    duration off the same cash flows is what 18-ii's half-year floors still owe.)*
 19. **Delete the dead bound machinery and the dead boundary scaffolding.** The damper never binds —
     `runClearingKernel` stopped writing `out.damper`, so `damperBoundInstrumentIds` is permanently
     empty while `setDamperStreaks`/`rollDamperStreaks`/`packed.damperStreak`/`GameState.damperBindStreakById`,
@@ -1547,7 +1536,18 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**18-ii — `stage08-back.ts`'S BOUNDS ARE GONE.** Rule 6: the payout ratio's `min(1, …)`; the
+**18-iii — THE SMALL FLOORS AND CAPS ARE GONE, AND THE GUARD IS LOUD; 18 CLOSED.** Rule 6:
+  the insurer's and pension's hurdle bands [2%, 30%] and the pension's 20% funded-ratio floor
+  (a barely funded pension needs an enormous return, and says so); the prime-brokerage haircut's
+  1% floor (an unmeasured haircut lends without limit of the fund's own; the broker's room is
+  the limit that stands); the estate's floor at zero on a holder's equity (a loss past it is
+  insolvency); `restateBankSheetStatistics`'s `max(0, cash)` on the reserve account (an overdraft
+  reads as one); the central bank's QE pace cap and max-stock-share cap, both deleted — the rule
+  orders what the blocked cut implies and 07c's float answers; `double-auction.ts`'s 10,000-step
+  guard is now a defect past one step per order. `weather.ts` and `02-region-macro.ts` held
+  nothing but divide guards. Atlas: the-central-bank C1 noted, hedge-funds D1 text. Gates
+  green; no run.
+- **18-ii — `stage08-back.ts`'S BOUNDS ARE GONE.** Rule 6: the payout ratio's `min(1, …)`; the
   ten-employee floor; the three `max(0.5, remainingYears)` pricing floors → the rung's own life
   with the clock's one week as its least; the two `max(50, …)` revolver-spread walk-aways; the
   5%-of-ladder prepayment pace; the CFO's walk-away floored at the current five-year print; the

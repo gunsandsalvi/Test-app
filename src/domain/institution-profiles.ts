@@ -64,7 +64,8 @@ function insurerHurdle(entity: InstitutionalEntity, stated: number): number | un
   const liabilityLocal = entity.beneficiaryLiabilityLocal ?? 0;
   if (!(liabilityLocal > 0) || entity.lastAnnualUnderwritingResultLocal === undefined) return undefined;
   const costOfFloatAnnual = -entity.lastAnnualUnderwritingResultLocal / liabilityLocal;
-  return Math.max(0.02, Math.min(0.30, stated + costOfFloatAnnual));
+  // §3.18-iii: no [2%, 30%] band (rule 6) — the hurdle is what the float costs.
+  return stated + costOfFloatAnnual;
 }
 /** A pension's hurdle is the return its benefit outflow needs on the assets it has, scaled by
  *  how far funded it is. */
@@ -73,8 +74,10 @@ function pensionHurdle(entity: InstitutionalEntity, _stated: number, totalAssets
   const benefitOutflowAnnual = entity.lastAnnualBenefitOutflowLocal ?? 0;
   if (!(liabilityLocal > 0) || !(benefitOutflowAnnual > 0)) return undefined;
   const fundedRatio = totalAssetsLocal / liabilityLocal;
-  const need = (benefitOutflowAnnual / Math.max(1, totalAssetsLocal)) / Math.max(0.2, fundedRatio);
-  return Math.max(0.02, Math.min(0.30, need));
+  if (!(fundedRatio > 0)) return undefined;
+  // §3.18-iii: no 20% floor on the funded ratio and no [2%, 30%] band on the need (rule 6) — a
+  // fund that is barely funded needs an enormous return, and saying so is the point.
+  return (benefitOutflowAnnual / totalAssetsLocal) / fundedRatio;
 }
 
 export const INSTITUTION_PROFILES: Record<InstitutionalEntityType, InstitutionProfile> = {

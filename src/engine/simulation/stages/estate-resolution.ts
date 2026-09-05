@@ -508,7 +508,9 @@ function reduceHolding(
       });
       index.touchedEntityIds.add(id);
     }
-    e.equityCapitalLocal = Math.max(0, (e.equityCapitalLocal ?? 0) - (isLoss ? amountLocal : 0));
+    // §3.18-iii: no floor at zero (rule 6) — a loss past its equity leaves the holder insolvent,
+    // and hiding that is what the floor did.
+    e.equityCapitalLocal = (e.equityCapitalLocal ?? 0) - (isLoss ? amountLocal : 0);
     return;
   }
   // §3.17-iv-c-ii: the clearing house holds no paper of the dead firm — its claim is the close-out

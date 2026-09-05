@@ -144,6 +144,8 @@ export function mergeHouseholdPool(mine: HouseholdLoanPool, theirs: HouseholdLoa
 export function restateBankSheetStatistics(sheet: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number): void {
   const rwaLocal = bankRwaLocal(sheet, facilityBookLocal);
   sheet.bankCapitalRatio = Number((rwaLocal > 0 ? sheet.bankEquityLocal / rwaLocal : 0.13).toFixed(4));
-  sheet.centralBankReservesLocal = Math.max(0, cashLocal);
+  // §3.18-iii: an overdrawn reserve account reads as overdrawn (rule 6); the overdraft sweep is
+  // the mechanism that answers it, and `max(0, …)` hid what it had to answer.
+  sheet.centralBankReservesLocal = cashLocal;
   sheet.moneySupplyM2Local = lines.householdLocal + lines.corporateLocal;
 }

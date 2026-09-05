@@ -19,6 +19,7 @@
  * market's price is not the place to find out that they did.
  */
 
+import { defect } from '../../../domain/defect';
 import { sortIndexByKey } from './financial-clearing-engine';
 
 export interface AuctionBid {
@@ -113,7 +114,9 @@ export function clearDoubleAuction(
     const remainingOffer = offers.map(o => o.quantity);
     let guard = 0;
     while (bidIdx < bids.length && offerIdx < offers.length) {
-      if (guard++ > 10000) break;
+      // §3.18-iii: a walk that does not advance is a defect at the site, never a silent break —
+      // every step below moves one index, so the walk cannot take more steps than there are orders.
+      if (guard++ > bids.length + offers.length) defect('double auction: the discovery walk did not advance');
       const bid = bids[bidIdx];
       const offer = offers[offerIdx];
       if (bid.maxPrice < offer.minPrice) break;

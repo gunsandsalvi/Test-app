@@ -48,7 +48,12 @@ export interface PrimeBrokerageLine {
  * a margin call is violent.
  */
 export function maxDrawnLocal(fundEquityLocal: number, haircutRate: number): number {
-  const h = Math.max(0.01, Math.min(1, haircutRate));
+  // §3.18-iii: no 1% floor on the haircut (rule 6) — a broker with nothing measured to protect
+  // itself with lends without limit of its own, and the limit that stands is its balance sheet
+  // (`prime-brokerage.ts`: the line is the smaller of this and the broker's room). A haircut
+  // above one is arithmetic: nothing is lent.
+  const h = Math.min(1, haircutRate);
+  if (!(h > 0)) return Number.POSITIVE_INFINITY;
   return Math.max(0, fundEquityLocal) * (1 / h - 1);
 }
 
