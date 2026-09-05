@@ -762,7 +762,6 @@ export function getInitialFxPairs(): FxPair[] {
       rate,
       historicalRates: generate52WeekHistory(rate, 0.015, rate * 0.8),
       change1W: 0,
-      basisSpreadBps: -15,
     };
   });
 }

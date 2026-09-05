@@ -7,6 +7,13 @@ import { ObjectHeader, ChangeSub, FunctionTiles, AllRow, RegionLink, ringed } fr
 
 type FxPair = import('../../types').GameState['fxPairs'][number];
 
+/** §3.17b-iv-b: the two bases a pair carries, both cleared — the FUNDING basis the quote region's
+ *  banks pay to borrow the base money for a term (`Region.xcsBasisBps`), and the FORWARD basis a
+ *  quote-region holder pays to hedge it, the funding basis plus the desks' charge
+ *  (`Region.crossCurrencyBasisBps`). Undefined until a book has printed. */
+const fundingBasisOf = (world: import('../world').World, p: FxPair): number | undefined => world.state.regions[p.quote as 'USA']?.xcsBasisBps?.[p.base];
+const forwardBasisOf = (world: import('../world').World, p: FxPair): number | undefined => world.state.regions[p.quote as 'USA']?.crossCurrencyBasisBps?.[p.base];
+
 /** §3.15-iii: `change1W` is an ABSOLUTE move in the rate; the move shown is that over the prior rate. */
 const weeklyMove = (p: FxPair): number | undefined => { const prior = p.rate - p.change1W; return prior > 0 ? p.change1W / prior : undefined; };
 
@@ -28,7 +35,7 @@ export const fx = defineObject<FxPair>({
       { key: 'name', label: 'pair', render: (r, _w, nav) => <Link to={{ type: 'fx', id: r.id }} nav={nav}>{r.obj.pair}</Link>, value: (r) => r.obj.pair },
       { key: 'rate', label: 'rate', render: (r) => num(r.obj.rate, 4), value: (r) => r.obj.rate },
       { key: 'move', label: '1w', render: (r) => pct(weeklyMove(r.obj), 2), value: (r) => weeklyMove(r.obj) ?? 0 },
-      { key: 'basis', label: 'basis bp', render: (r) => bps(r.obj.basisSpreadBps), value: (r) => r.obj.basisSpreadBps ?? 0 },
+      { key: 'basis', label: 'funding basis bp', render: (r, w) => bps(fundingBasisOf(w, r.obj)), value: (r, w) => fundingBasisOf(w, r.obj) ?? 0 },
     ],
   },
   overview({ world, obj: p, nav }) {
@@ -39,7 +46,8 @@ export const fx = defineObject<FxPair>({
         <StatGrid>
           <Stat label="rate" value={num(p.rate, 4)} sub={<ChangeSub series={p.historicalRates ?? []} />} />
           <Stat label="1 week" value={pct(weeklyMove(p), 2)} sub={`move · ${num(p.change1W, 4)} in the rate`} neg={p.change1W < 0} />
-          <Stat label="basis" value={`${bps(p.basisSpreadBps)}bp`} sub="cross-currency" />
+          <Stat label="funding basis" value={`${bps(fundingBasisOf(world, p))}bp`} sub={`${p.quote} banks borrowing ${p.base} money`} />
+          <Stat label="forward basis" value={`${bps(forwardBasisOf(world, p))}bp`} sub={`a ${p.quote} holder hedging ${p.base}`} />
         </StatGrid>
         <Card style={{ padding: '2px 0' }}>
           <KV k="illiquidity" hint="the dealer's measure" v={ill !== undefined ? num(ill, 3) : '—'} />

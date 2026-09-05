@@ -114,7 +114,7 @@ checked by `scripts/check-atlas.sh`.
 | E1 a market can have foreign participants with foreign money | `src/domain/cross-border.ts:HOME_BIAS_BY_ENTITY_TYPE` | ✅ |
 | E2 the register holds foreign issuers' instruments | `src/engine/simulation/stages/holdings-store.ts:buildHoldingsStore` | ✅ |
 | E3 a default reaches foreign holders in proportion | `src/engine/simulation/stages/estate-resolution.ts:distribute` | ✅ |
-| E4 a central bank's actions reach other regions | `src/engine/macro/evolution.ts:evolveFxPair` | ⚠️ |
+| E4 a central bank's actions reach other regions | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ⚠️ |
 | **F1 FORBID no region that is a closed box** | `src/engine/simulation/stages/05-unit-bidding.ts:bilateralTradeWeeklyLocal` | ✅ |
 | **F2 FORBID no netting of cross-border flows into a regional aggregate** | `src/engine/simulation/stages/06-fx-and-trade.ts:exportsWeeklyLocal` | ⚠️ |
 | **F3 FORBID no exogenous trade or capital-flow series** | `src/engine/simulation/stages/06-fx-and-trade.ts:runFxAndTradeStage` | ✅ |

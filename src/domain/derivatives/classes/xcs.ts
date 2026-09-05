@@ -18,6 +18,7 @@
 import { DerivativeClassProfile, DerivativeLeg, DerivativeMarketView } from '../profile';
 import { DerivativeContract, regionReferenceOf } from '../contract';
 import { currencyOf } from '../../geography';
+import { balanceSheetChargeBps } from '../registry';
 
 /** The listed funding term: one year. */
 export const XCS_TENOR_WEEKS = 52;
@@ -37,7 +38,7 @@ function homePerForeignRate(c: DerivativeContract, m: DerivativeMarketView): num
  * times its required return. Liquidity is the lender's SIZE (what it can spare), not its price.
  */
 export function lenderReservationBps(args: { capitalChargeRate: number; requiredReturnAnnual: number }): number {
-  return Math.max(0, args.capitalChargeRate) * Math.max(0, args.requiredReturnAnnual) * 10000;
+  return balanceSheetChargeBps(args);
 }
 
 export const XCS_PROFILE: DerivativeClassProfile = {

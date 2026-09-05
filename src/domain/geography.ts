@@ -105,5 +105,4 @@ export interface FxPair {
   rate: number; // Units of quote per 1 base (e.g. 1.0850 USD per EUR)
   historicalRates: number[];
   change1W: number;
-  basisSpreadBps: number; // Cross currency basis spread in bps (e.g. -15 bps)
 }

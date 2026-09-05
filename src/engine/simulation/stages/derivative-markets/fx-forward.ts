@@ -32,14 +32,14 @@ import { isActiveCompany } from '../../../../domain/company';
 import { invoiceCurrencyOf } from '../../../../domain/invoice-currency';
 import { exposureToHedgeLocal } from '../corporate-financing';
 import { TradeInvoice } from '../../../../domain/trade-invoice';
-import { HEDGE_RATIO_FIXED_INCOME, equityHedgeRatioFor, FX_FORWARD_TENOR_WEEKS } from '../../../../domain/derivatives/classes/fx-forward';
+import { HEDGE_RATIO_FIXED_INCOME, equityHedgeRatioFor, FX_FORWARD_TENOR_WEEKS, forwardStrikeOf } from '../../../../domain/derivatives/classes/fx-forward';
 import { hedgeToleranceBps } from '../../../../domain/derivatives/hedging';
 import { DerivativeContract, DerivativeParty, derivativePartyKey, bankPartyKey } from '../../../../domain/derivatives/contract';
-import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, initialMarginRateOf } from '../../../../domain/derivatives/registry';
+import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, initialMarginRateOf, balanceSheetChargeBps } from '../../../../domain/derivatives/registry';
 import { FxDealerBook, emptyFxDealerBook } from '../../../../domain/dealer-derivatives';
-import { leverageHeadroomLocal } from '../../../macro/banking';
+import { BASEL_MIN_LEVERAGE_RATIO, leverageHeadroomLocal } from '../../../macro/banking';
+import { bankRequiredReturnAnnual } from '../bank-lending';
 import { fxWeeklySigma } from '../../../../domain/fx-market';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from '../financial-clearing-engine';
 import { REGION_IDS, currencyOf } from '../../../../domain/geography';
 import { initialMarginLocal, withInitialMargin, postInitialMargin, openMemberCapacity, admitContract, memberNotionalCapacityLocal, reserveMemberCapacity } from '../derivative-lifecycle';
 import { derivativesBookOf, strikeDerivatives, tradeInvoicesOf } from '../../../ledger/contract-ledger';
@@ -47,9 +47,6 @@ import type { DerivativeMarket, DerivativeMarketRun } from '../derivatives';
 import { bankReservesOf } from '../../../ledger/accounts';
 import { facilityBookOf } from '../../../../engine2/tranches';
 
-import { fxBasisInstrumentId } from '../../../../domain/instrument-keys';
-import { registerBook } from '../../../ledger/instrument-ledger';
-import type { InstrumentId } from '../../../../domain/ids';
 const FX = DERIVATIVE_CLASSES.FX_FORWARD;
 
 /** What this entity holds in each foreign region, split by how much of it its mandate hedges. */
@@ -120,6 +117,9 @@ interface DeskState {
   /** PFE already charged against the one budget, EVERY class (registry.ts), advanced as it writes. */
   chargedPfeLocal: number;
   marginReceivedLocal: number;
+  /** §3.17b-iv-b: what this desk charges over its funding basis, bps a year — the return it
+   *  needs on the capital a forward consumes (`registry.ts:balanceSheetChargeBps`). */
+  premiumBps: number;
 }
 
 const deskCapacityLocal = (d: DeskState) => deskNotionalCapacityLocal(d.headroomLocal, d.chargedPfeLocal, 'FX_FORWARD');
@@ -141,6 +141,7 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
       headroomLocal: leverageHeadroomLocal(sheet, bankReservesOf(ctx.v2, c.id), facilityBookOf(ctx.v2, c.id), bankBookAssetsLocal(ctx.v2, c.id)),
       chargedPfeLocal: standing.pfeChargeLocal(bankPartyKey(c.id)),
       marginReceivedLocal: 0,
+      premiumBps: balanceSheetChargeBps({ capitalChargeRate: FX.pfeAddOnRate * BASEL_MIN_LEVERAGE_RATIO, requiredReturnAnnual: bankRequiredReturnAnnual(c, ctx.updatedRegions[c.region]) }),
     });
   });
   for (const c of book) {
@@ -245,24 +246,33 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
     }
   });
 
-  /** The cleared basis, and each holder's filled notional, per (holder region, foreign currency). */
-  const clearedBasisBps = new Map<string, number>();
+  // ---- §3.17b-iv-b — ONE BASIS. The forward is not a book that clears a basis of its own: the
+  // desk that writes it borrows the foreign money for the tenor at the FUNDING basis the swap
+  // book cleared (`Region.xcsBasisBps`, zero where nobody is short the money) and prices at
+  // parity plus that basis plus its own balance-sheet charge. Each holder then hedges as much of
+  // its gap as that all-in basis leaves worth hedging — its schedule, full size when the hedge is
+  // free and nothing at its own tolerance, the same slope the basis book used to clear against —
+  // and the desks' float per pair caps the fills pro rata. What the two books cleared before
+  // were two prints of one price with no arbitrage between them; the arbitrage is the desk's.
+  const forwardBasisBps = new Map<string, number>();
   const filledByEntityRegion = new Map<string, Map<RegionId, number>>();
   const bookKey = (holderRegion: RegionId, issuer: RegionId) => `${holderRegion}->${issuer}`;
   const holderRegions = new Set<RegionId>();
   ctx.updatedInstitutionalEntities.forEach((e) => holderRegions.add(e.region));
   ctx.updatedCompanies.forEach((c) => { if (corpGapByTicker.has(c.id)) holderRegions.add(c.region); });
   holderRegions.forEach((holderRegion) => {
-    /** The desks' float for one pair: each desk's PFE budget, and no more than it can margin at
-     *  the house at the pair's rate (§3.17-v-iii). */
-    const deskFloatLocal = (issuer: RegionId): number => {
-      let capacityLocal = 0;
+    const reg = ctx.updatedRegions[holderRegion];
+    /** The desks' float for one pair, and their capacity-weighted charge over the funding basis. */
+    const deskSide = (issuer: RegionId): { floatLocal: number; premiumBps: number } => {
+      let floatLocal = 0, weighted = 0;
       ctx.updatedCompanies.forEach((c) => {
         if (c.region !== holderRegion || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
         const desk = desks.get(c.id);
-        if (desk) capacityLocal += Math.min(deskCapacityLocal(desk), memberNotionalCapacityLocal(ctx, capacity, bankPartyOf(c.id), currencyOf(holderRegion), marginRateOf(holderRegion, issuer)));
+        if (!desk) return;
+        const capLocal = Math.min(deskCapacityLocal(desk), memberNotionalCapacityLocal(ctx, capacity, bankPartyOf(c.id), currencyOf(holderRegion), marginRateOf(holderRegion, issuer)));
+        floatLocal += capLocal; weighted += capLocal * desk.premiumBps;
       });
-      return capacityLocal;
+      return { floatLocal, premiumBps: floatLocal > 0 ? weighted / floatLocal : 0 };
     };
     const issuers = new Set<RegionId>();
     ctx.updatedInstitutionalEntities.forEach((e) => {
@@ -273,74 +283,42 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
       if (c.region !== holderRegion) return;
       (corpGapByTicker.get(c.id) ?? new Map()).forEach((_g: number, issuer: RegionId) => issuers.add(issuer));
     });
+    const byIssuer: Record<string, number> = {};
     issuers.forEach((issuer) => {
       const key = bookKey(holderRegion, issuer);
-      const capacityLocal = deskFloatLocal(issuer);
-      const instrumentId = fxBasisInstrumentId(key);
-      // §3.13-BOOK dII: the basis book is declared on the instrument index where it is built; its
-      // money is the FOREIGN one — the currency the holder is funding an asset in.
-      registerBook(ctx.v2, instrumentId, 'XCS', currencyOf(issuer));
-      const participants: ClearingParticipant[] = [];
+      const { floatLocal, premiumBps } = deskSide(issuer);
+      const allInBps = (reg?.xcsBasisBps?.[issuer] ?? 0) + premiumBps;
+      forwardBasisBps.set(key, allInBps);
+      byIssuer[issuer] = Number(allInBps.toFixed(1));
+      /** What a holder takes at this basis: its gap, scaled by how far the basis sits below its tolerance. */
+      const wants: { id: string; usd: number }[] = [];
+      const wanted = (id: string, gapLocal: number, toleranceBps: number) => {
+        if (!(gapLocal > 0) || !(toleranceBps > 0)) return;
+        const usd = gapLocal * Math.max(0, 1 - allInBps / toleranceBps);
+        if (usd > 1e6) wants.push({ id, usd });
+      };
       ctx.updatedInstitutionalEntities.forEach((e) => {
         if (e.region !== holderRegion) return;
-        const gapLocal = gapByEntityRegion.get(e.id)?.get(issuer) ?? 0;
-        if (!(gapLocal > 0)) return;
-        const toleranceBps = entityHedgeToleranceBps(e, annualSigmaFor(issuer));
-        if (!(toleranceBps > 0)) return;
-        const demand = new Map<InstrumentId, ParticipantDemand>();
-        // Full size when the hedge is free, nothing at all at its own tolerance.
-        demand.set(instrumentId, {
-          reservationStat: toleranceBps,
-          maxHoldingLocal: gapLocal,
-          fullSizeStatRange: toleranceBps,
-        });
-        participants.push({ id: e.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
+        wanted(e.id, gapByEntityRegion.get(e.id)?.get(issuer) ?? 0, entityHedgeToleranceBps(e, annualSigmaFor(issuer)));
       });
       ctx.updatedCompanies.forEach((c) => {
         if (c.region !== holderRegion) return;
-        const gapLocal = corpGapByTicker.get(c.id)?.get(issuer) ?? 0;
-        if (!(gapLocal > 0)) return;
-        const toleranceBps = corpToleranceByTicker.get(c.id)?.get(issuer) ?? 0;
-        if (!(toleranceBps > 0)) return;
-        participants.push({
-          id: `CORP-${c.ticker}`,
-          currentHoldingsByInstrumentId: new Map(),
-          demandByInstrumentId: new Map<InstrumentId, ParticipantDemand>([[instrumentId, {
-            reservationStat: toleranceBps,
-            maxHoldingLocal: gapLocal,
-            fullSizeStatRange: toleranceBps,
-          }]]),
-        });
+        wanted(`CORP-${c.ticker}`, corpGapByTicker.get(c.id)?.get(issuer) ?? 0, corpToleranceByTicker.get(c.id)?.get(issuer) ?? 0);
       });
-      if (participants.length === 0 || !(capacityLocal > 0)) { clearedBasisBps.set(key, 0); return; }
-      const instrument: ClearingInstrument = {
-        id: instrumentId,
-        outstandingLocal: capacityLocal,
-        tradableFloatLocal: capacityLocal,
-        currentStat: Math.max(1, ctx.updatedRegions[holderRegion]?.crossCurrencyBasisBps?.[issuer] ?? 10),
-        statKind: 'PRICE_LIKE',
-        durationYears: 0,
-      };
-      // Undamped: both sides are genuinely elastic here, so the level is the market's, and a
-      // damper would be the only thing that could print instead of it.
-      const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0});
-      const basisBps = Math.max(0, result.newStatById.get(instrumentId) ?? 0);
-      clearedBasisBps.set(key, basisBps);
-      result.newParticipantHoldings.forEach((byInstrument, entityId) => {
-        const filledLocal = byInstrument.get(instrumentId) ?? 0;
+      const totalLocal = wants.reduce((a, w) => a + w.usd, 0);
+      if (!(totalLocal > 0) || !(floatLocal > 0)) return;
+      const share = Math.min(1, floatLocal / totalLocal);
+      wants.forEach((w) => {
+        const filledLocal = w.usd * share;
         if (filledLocal <= 1e6) return;
-        let byRegion = filledByEntityRegion.get(entityId);
-        if (!byRegion) { byRegion = new Map(); filledByEntityRegion.set(entityId, byRegion); }
+        let byRegion = filledByEntityRegion.get(w.id);
+        if (!byRegion) { byRegion = new Map(); filledByEntityRegion.set(w.id, byRegion); }
         byRegion.set(issuer, filledLocal);
       });
     });
-    // Published so the spot desks can quote off a real price next week, and so it can be watched.
-    const reg = ctx.updatedRegions[holderRegion];
-    if (reg) {
-      const byIssuer: Record<string, number> = {};
-      issuers.forEach((issuer) => { byIssuer[issuer] = Number((clearedBasisBps.get(bookKey(holderRegion, issuer)) ?? 0).toFixed(1)); });
-      reg.crossCurrencyBasisBps = byIssuer;
-    }
+    // Published: the basis a forward in this region costs against each money — the funding
+    // basis plus the desks' charge — so the spot desks quote off it and it can be watched.
+    if (reg) reg.crossCurrencyBasisBps = byIssuer;
   });
 
   // ---- STRIKE. Each holder re-hedges to the book that actually exists — as far as a dealer will
@@ -363,7 +341,7 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
       const filledLocal = filledByEntityRegion.get(participantId)?.get(issuer) ?? 0;
       const writableLocal = Math.min(gapLocal, filledLocal, deskCapacityLocal(desk));
       if (writableLocal <= 1e6) return;
-      const basisBps = clearedBasisBps.get(bookKey(holderRegion, issuer)) ?? 0;
+      const basisBps = forwardBasisBps.get(bookKey(holderRegion, issuer)) ?? 0;
       const offered: DerivativeContract = withInitialMargin({
         id: `${holderKey}-FX-${issuer}-${week}`,
         classId: 'FX_FORWARD',
@@ -371,11 +349,12 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
         a: holder,
         b: bankPartyOf(dealer),
         notional: writableLocal,
-        // The traded rate, not the theoretical one: CIP moved AGAINST the client by the desk's
-        // basis, because the desk is charging for its balance sheet. Signing this the other way
-        // hands the hedger an instant gain at inception and the dealer an instant loss on every
-        // ticket — measured as bank NIM going to -2.2% before the sign was fixed.
-        strike: ctx.getFxToUsd(issuer) * (1 - basisBps / 10000),
+        // §3.17b-iv-b: parity — spot carried at the holder's and the issuer's overnight rates
+        // over the tenor — moved AGAINST the client by the basis, because the desk is charging
+        // for the funding it does and the balance sheet it lends. Signing the basis the other
+        // way hands the hedger an instant gain at inception and the dealer an instant loss on
+        // every ticket — measured as bank NIM going to -2.2% before the sign was fixed.
+        strike: forwardStrikeOf(ctx.getFxToUsd(issuer), view.overnightRateAnnual(holderRegion), view.overnightRateAnnual(issuer), FX_FORWARD_TENOR_WEEKS / 52, basisBps),
         reference: { kind: 'REGION', regionId: issuer },
         termKey: '',
         settledMarkLocal: 0,

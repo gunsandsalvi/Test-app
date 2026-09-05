@@ -47,6 +47,22 @@ export function hedgedReservationAdjustmentBps(holderPolicyRate: number, issuerP
   return (issuerPolicyRate - holderPolicyRate) * 10000;
 }
 
+/**
+ * §3.17b-iv-b — COVERED INTEREST PARITY, as the forward's price. A rate quoted as home money per
+ * unit of foreign: the forward for a tenor is spot carried at the two overnight rates,
+ * `spot × (1 + r_home·T) / (1 + r_foreign·T)`. Not an identity the model asserts (B2.a): the
+ * desk that writes the forward BORROWS the foreign money at the funding basis its swap book
+ * cleared, so it prices at parity plus that basis plus its own balance-sheet charge — the
+ * arbitrage the desk takes is what puts parity in the price.
+ */
+export function cipForwardRate(spot: number, rHomeAnnual: number, rForeignAnnual: number, tenorYears: number): number {
+  return spot * (1 + rHomeAnnual * tenorYears) / (1 + rForeignAnnual * tenorYears);
+}
+/** The rate a forward strikes at: parity, moved against the holder by the basis it pays. */
+export function forwardStrikeOf(spot: number, rHomeAnnual: number, rForeignAnnual: number, tenorYears: number, basisBps: number): number {
+  return cipForwardRate(spot, rHomeAnnual, rForeignAnnual, tenorYears) * (1 - basisBps / 10000);
+}
+
 export const FX_FORWARD_PROFILE: DerivativeClassProfile = {
   id: 'FX_FORWARD',
   roleA: 'HEDGER',
@@ -59,11 +75,15 @@ export const FX_FORWARD_PROFILE: DerivativeClassProfile = {
   closeOutMoveOf: (c, m) => m.fxWeeklyMove(regionReferenceOf(c)),
   periodicLegUSDToB: () => null,
   /** A holder short the foreign currency gains when it FALLS — the assets it is hedging lost
-   *  the same amount. The desk carries the mirror, so the pair nets to zero by construction. */
+   *  the same amount. The desk carries the mirror, so the pair nets to zero by construction.
+   *  §3.17b-iv-b: against the forward for the tenor LEFT, at today's spot and overnight rates —
+   *  at maturity that is spot; before it, the carry still to run is not a gain. */
   markToMarketUSDToA: (c, m) => {
-    const rate = m.fxToUsd(regionReferenceOf(c));
+    const foreign = regionReferenceOf(c);
+    const rate = m.fxToUsd(foreign);
     if (!(c.strike > 0) || !(rate > 0)) return null;
-    return c.notional * ((c.strike - rate) / c.strike);
+    const forwardNow = cipForwardRate(rate, m.overnightRateAnnual(c.regionId), m.overnightRateAnnual(foreign), Math.max(0, c.maturityWeek - m.week) / 52);
+    return c.notional * ((c.strike - forwardNow) / c.strike);
   },
   markReasonLive: 'fx forward variation margin',
   markReasonFinal: 'fx forward variation margin',

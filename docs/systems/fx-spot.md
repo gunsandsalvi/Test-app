@@ -103,7 +103,7 @@ checked by `scripts/check-atlas.sh`.
 | D4 it has a limit and stops quoting at it | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ✅ |
 | D5 Σ dealer + Σ client positions = 0 per currency | `src/engine/simulation/stages/fx-clearing.ts:recordForeignHoldingsSnapshot` | ✅ |
 | E1 FORBID no conversion without a counterparty | `src/engine/simulation/stages/fx-funding.ts:fundForeignCurrencyShortfalls` | ✅ |
-| E2 FORBID no rate from a formula | `src/engine/macro/evolution.ts:evolveFxPair` | ⚠️ |
+| E2 FORBID no rate from a formula | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
 | **E3 FORBID no free arbitrage left standing** | `src/engine/simulation/stages/06-fx-and-trade.ts:publishFxRates` | ❌ |
 | E4 no leg landed converted | `src/engine/ledger/accounts.ts:applySettledRow` | ✅ |
 
@@ -169,4 +169,4 @@ deletion must be paired with sizing the elastic side.
 
 ### Also marked, briefly
 
-- **E2 ⚠️** — the rate clears; `evolveFxPair` still walks the cross-currency basis by formula — `fx-forwards-and-xcs.md` B3, 37-SMALL.
+- **E2 ✅** (2026-09-05, §9.17b-iv-b) — the rate clears, and the basis clears in the swap book; `evolveFxPair` is gone — `fx-forwards-and-xcs.md` B3.

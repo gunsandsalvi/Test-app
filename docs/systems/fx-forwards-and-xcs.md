@@ -95,11 +95,11 @@ checked by `scripts/check-atlas.sh`.
 | A2 it settles: real amounts in real currencies on the date | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ⚠️ |
 | A3 before then it carries a mark and margin | `src/domain/derivatives/classes/fx-forward.ts:closeOutMoveOf` | ✅ |
 | **A4 the FX swap is a secured loan of one currency against another** | `src/engine/simulation/stages/fx-squaring.ts:squareInterbankFxPositions` | ❌ |
-| B1 the forward rate is cleared from what participants will do | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:clearedBasisBps` | ⚠️ |
-| **B2 VERIFY it sits near spot adjusted for the two funding costs** | — | ❌ |
-| B2.a CIP is a consequence of an arbitrage somebody takes, never an identity | `src/domain/derivatives/classes/fx-forward.ts:hedgedReservationAdjustmentBps` | ⚠️ |
+| B1 the forward rate is cleared from what participants will do | `src/domain/derivatives/classes/fx-forward.ts:forwardStrikeOf` · `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` | ⚠️ |
+| **B2 VERIFY it sits near spot adjusted for the two funding costs** | `src/domain/derivatives/classes/fx-forward.ts:cipForwardRate` | ✅ |
+| B2.a CIP is a consequence of an arbitrage somebody takes, never an identity | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:runFxForwardMarket` · `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` | ✅ |
 | B2.b the arbitrage is not free — balance sheet, capital, credit lines | `src/domain/derivatives/registry.ts:deskNotionalCapacityLocal` | ✅ |
-| **B3 the cross-currency basis is the deviation, a real price** | `src/engine/macro/evolution.ts:evolveFxPair` | ⚠️ |
+| **B3 the cross-currency basis is the deviation, a real price** | `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` | ✅ |
 | B3.a it widens when funding in one currency is scarce | `src/engine/simulation/stages/derivative-markets/fx-forward.ts:entityHedgeToleranceBps` | ✅ |
 | B4 VERIFY a region with a foreign-currency funding deficit pays the basis | `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` | ⚠️ |
 | **C1 XCS: two legs, two currencies, notionals exchanged at start and end** | `src/domain/derivatives/classes/xcs.ts:XCS_PROFILE` · `src/domain/derivatives/profile.ts:DerivativeLeg` | ✅ |
@@ -121,7 +121,17 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ⚠️ B3 / ✅ C4 — THERE ARE TWO CROSS-CURRENCY BASES AND THEY HAVE NOTHING TO DO WITH EACH OTHER
+### ✅ B3 / C4 — ONE BASIS, CLEARED WHERE THE FUNDING IS
+
+*2026-09-05 (§9.17b-iv-b). The basis is the price the swap book clears for a term loan of the
+foreign money (`Region.xcsBasisBps`), and the forward book prices OFF it: the desk that writes a
+forward borrows the money at that basis and quotes parity plus it plus its own balance-sheet
+charge (`classes/fx-forward.ts:forwardStrikeOf`, `registry.ts:balanceSheetChargeBps`), the
+holders take what that all-in basis leaves worth hedging, and the pair's forward basis is
+published as `Region.crossCurrencyBasisBps` — the funding basis plus the desks' charge, one
+number derived from the other rather than two prints of one price. `evolveFxPair` and
+`FxPair.basisSpreadBps` are gone: nothing walks a basis by formula. The paragraphs below are the
+state before it.*
 
 *2026-09-05 (§9.17b-iv-a). C4 is the swap's: the cross-currency swap strikes AT the basis its
 funding book clears (`Region.xcsBasisBps`, per foreign region). B3 stays ⚠️, and for a reason
@@ -173,7 +183,16 @@ at `reg.crossCurrencyBasisBps`. It is the last thing `evolveFxPair` still does �
 already moved to the cleared FX auction (`domain/fx-market.ts:4` says so) — so the step ends with
 the function gone.
 
-### ⚠️ A1.c / B1 / E1 — THE FORWARD RATE IS NOT CLEARED; ONLY THE BASIS IS
+### ⚠️ A1.c / B1 / E1 — THE FORWARD RATE IS PARITY ON A CLEARED BASIS, NOT ITSELF CLEARED
+
+*2026-09-05 (§9.17b-iv-b). The forward carries the interest differential now — `cipForwardRate`,
+spot carried at the holder's and the issuer's overnight rates over the tenor — moved by the
+funding basis the swap book cleared plus the desk's charge (`forwardStrikeOf`); the mark is
+against the forward for the tenor left, so the carry still to run is not a gain. What the three
+nodes still ask for and do not have: the RATE as the thing participants bid, with parity checked
+against it. Here parity is applied and the basis is the cleared part — B2 holds by construction
+and E1's forbid is honoured only in that the basis in the formula is a price somebody paid. The
+paragraph below is the state before it.*
 
 `derivative-markets/fx-forward.ts:349` is the whole price:
 
@@ -295,7 +314,10 @@ simply sits as a nostro balance that `fx-revaluation.ts` re-marks.
 **§3 step 37-FX-CROSS**, and it is the demand side that would make A4's FX swap worth building —
 `banks-funding-and-liquidity.md` E and `currency-and-fx.md` B5 both point at it.
 
-### ❌ B2 / ⚠️ B4, E4 — THE THREE MEASUREMENTS
+### ✅ B2 / ⚠️ B4, E4 — THE THREE MEASUREMENTS
+
+*2026-09-05 (§9.17b-iv-b). B2 holds by construction: the forward IS spot adjusted for the two
+overnight rates and the cleared funding basis (`cipForwardRate`, `forwardStrikeOf`).*
 
 *2026-09-05 (§9.17b-iv-a). B4 has its number now: the funding basis a region's banks pay for
 each foreign money, cleared and published per week (`Region.xcsBasisBps`). Whether a region
@@ -316,7 +338,12 @@ node's own warning.
 All three are **a measurement, for §3 step 38**. B2 additionally cannot be run until E1's forward
 rate exists.
 
-### ⚠️ B2.a / B2.b — THE ARBITRAGE IS PRICED BUT NOBODY TAKES IT
+### ✅ B2.a / B2.b — THE ARBITRAGE IS THE DESK'S
+
+*2026-09-05 (§9.17b-iv-b). Somebody takes it: the desk borrows the foreign money for the tenor in
+the swap book at the funding basis and writes the forward at parity plus that basis plus its
+charge — CIP as the consequence of that trade, with the swap book's basis as the limit to it.
+The paragraph below is the state before it.*
 
 B2.b is the node this model does best: `registry.ts:deskNotionalCapacityLocal` makes the desk's
 willingness to write forwards a function of its remaining leverage headroom through the FX PFE

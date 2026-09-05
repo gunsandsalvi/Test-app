@@ -2,7 +2,7 @@ import { levelPaymentFactor } from '../../domain/pricing';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams } from '../nelsonSiegel';
-import { RegionId, Region, FxPair, Commodity, HouseholdState, OccupationType, OccupationPool, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
+import { RegionId, Region, Commodity, HouseholdState, OccupationType, OccupationPool, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
 import { getBaseAnnualWageLocal, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
 import {
   computeHouseholdDisposableIncomeLocal,
@@ -1281,24 +1281,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
  * FX Uncovered Interest Rate Parity with stochastic drift and trade balance shocks
  */
 
-/**
- * WS9/XB2d: the RATE is no longer computed here. It clears in stages/fx-clearing.ts against every
- * participant's real demand — dealers flattening inventory, cross-border settlement, trade
- * receipts, speculators and central banks. What used to live here was a drift: an interest
- * differential, a trade-imbalance term, an attractiveness comparison and a noise term, none of
- * which had a counterparty on the other side of the trade.
- *
- * What remains is the cross-currency basis quote, which is a dealer's price and not a rate.
- */
-export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxPair {
-  const rDomestic = regions[fx.quote].policyRate;
-  const rForeign = regions[fx.base].policyRate;
-  const basisNoise = (random() - 0.5) * 2.0;
-  return {
-    ...fx,
-    basisSpreadBps: Math.round(fx.basisSpreadBps + basisNoise + (rDomestic - rForeign) * 20),
-  };
-}
 
 /**
  * Evolve Commodities with Weather & Supply/Demand shocks

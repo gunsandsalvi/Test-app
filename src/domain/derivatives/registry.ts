@@ -49,6 +49,16 @@ export function initialMarginAtStrike(c: Omit<DerivativeContract, 'initialMargin
 }
 
 /**
+ * §3.17b-iv — WHAT A BALANCE SHEET CHARGES FOR CARRYING A POSITION, in bps per year of notional:
+ * the capital the position consumes per unit (its add-on against the leverage floor) times the
+ * return the owner needs on that capital. A cross-currency lender's reservation, the forward
+ * desk's premium over its funding basis — one arithmetic.
+ */
+export function balanceSheetChargeBps(args: { capitalChargeRate: number; requiredReturnAnnual: number }): number {
+  return Math.max(0, args.capitalChargeRate) * Math.max(0, args.requiredReturnAnnual) * 10000;
+}
+
+/**
  * §3.17-v-iii — THE MARGIN RATE OF A STRIKE'S SHAPE, before there is a contract: the reference's
  * move per unit of notional (`profile.closeOutMoveOf`, which reads only the class, its reference,
  * its tenor and its remaining life). What a market sizes a party's demand and a desk's supply

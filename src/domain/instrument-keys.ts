@@ -63,13 +63,6 @@ export const swapInstrumentId = (regionId: RegionId, tenorKey: string): Instrume
 /** Spot FX for one ordered pair, as `fx-clearing` books it. */
 export const fxSpotInstrumentId = (pairKey: string): InstrumentId => asInstrumentId(`FX-${pairKey}`);
 
-/**
- * The cross-currency basis book for one holder-region/issuer-region pair. A different book from
- * the spot pair above and deliberately a different key: the basis is a term funding price, not a
- * rate, and they clear against different participants.
- */
-export const fxBasisInstrumentId = (pairKey: string): InstrumentId => asInstrumentId(`XCS-${pairKey}`);
-
 /** §3.17b-iv — the cross-currency FUNDING book for one borrower-region/foreign-region pair: the
  *  basis a term loan of the foreign money clears at. A different book from the forward's basis. */
 export const xcsFundingInstrumentId = (homeRegion: RegionId, foreignRegion: RegionId): InstrumentId =>

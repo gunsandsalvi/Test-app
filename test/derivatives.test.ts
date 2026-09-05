@@ -18,6 +18,7 @@ import { StandingBook } from '../src/domain/derivatives/standing-book';
 import { asEntityId } from '../src/domain/ids';
 import { writerReservationVol, ATM_PRICE_PER_VOL_SQRT_T } from '../src/domain/derivatives/classes/option';
 import { lenderReservationBps } from '../src/domain/derivatives/classes/xcs';
+import { cipForwardRate, forwardStrikeOf } from '../src/domain/derivatives/classes/fx-forward';
 import type { DerivativeLeg, DerivativeLegs } from '../src/domain/derivatives/profile';
 
 /** The one leg a single-leg class returns this week. */
@@ -335,4 +336,18 @@ test('§3.17b-iv XCS: two notionals in two monies, exchanged at the start and ba
   ], 'back at the original rate, and the collateral the move posted goes back');
   assert.equal(DERIVATIVE_CLASSES.XCS.eventTermination(c, later), null);
   assert.ok(Math.abs(lenderReservationBps({ capitalChargeRate: 0.0015, requiredReturnAnnual: 0.1 }) - 1.5) < 1e-9, 'the return on the capital consumed, in bps a year');
+});
+
+test('§3.17b-iv-b FX forward: the strike is parity plus the basis, and the mark is against the forward for the tenor left', () => {
+  // A dollar holder hedging euros: spot 1.10 USD per EUR, dollars at 5%, euros at 3%, a quarter.
+  const cip = cipForwardRate(1.1, 0.05, 0.03, 0.25);
+  assert.ok(Math.abs(cip - 1.1 * 1.0125 / 1.0075) < 1e-12, 'spot carried at the two rates');
+  const strike = forwardStrikeOf(1.1, 0.05, 0.03, 0.25, 20);
+  assert.ok(Math.abs(strike - cip * 0.998) < 1e-12, 'moved against the holder by the basis');
+  const c = base({ classId: 'FX_FORWARD', regionId: 'USA', currency: 'USD', reference: { kind: 'REGION', regionId: 'EUR' }, termKey: '', notional: 1_000_000, strike: cip, struckWeek: 10, maturityWeek: 23, settledMarkLocal: 0 });
+  const rates = (usd: number, eur: number) => (r: string) => (r === 'USA' ? usd : eur);
+  const atStrike = view({ week: 10, fxToUsd: rates(1, 1.1), overnightRateAnnual: rates(0.05, 0.03) });
+  assert.ok(Math.abs(DERIVATIVE_CLASSES.FX_FORWARD.markToMarketUSDToA(c, atStrike)!) < 1e-9, 'struck at parity: worth nothing, the carry still to run is not a gain');
+  const atExpiry = view({ week: 23, fxToUsd: rates(1, 1.1), overnightRateAnnual: rates(0.05, 0.03) });
+  assert.ok(Math.abs(DERIVATIVE_CLASSES.FX_FORWARD.markToMarketUSDToA(c, atExpiry)! - 1_000_000 * (cip - 1.1) / cip) < 1e-9, 'at expiry, against spot: the carry has been earned');
 });

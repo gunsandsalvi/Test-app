@@ -15,7 +15,6 @@
  */
 
 import { GameState, RegionId, FxPair } from '../../../types';
-import { evolveFxPair } from '../../macro/evolution';
 import { WeeklyStepContext } from './context';
 import { MARKET_REGION_IDS } from './05-unit-bidding';
 import { defect } from '../../../domain/defect';
@@ -60,7 +59,9 @@ export function publishFxRatesNow(v2: V2World, fxPairs: FxPair[]): void {
 }
 
 export function runFxAndTradeStage(state: GameState, ctx: WeeklyStepContext): void {
-  ctx.updatedFxPairs = state.fxPairs.map((fx) => evolveFxPair(fx, ctx.updatedRegions));
+  // §3.17b-iv-b: nothing evolves a pair by formula any more — the rate clears (fx-clearing.ts)
+  // and the basis clears (derivative-markets/xcs.ts); the week opens on copies.
+  ctx.updatedFxPairs = state.fxPairs.map((fx) => ({ ...fx }));
   ctx.getFxToUsd = (regionId: RegionId) => getFxToUsd(ctx.updatedFxPairs, regionId);
   publishFxRates(ctx.v2, ctx.updatedFxPairs);
 

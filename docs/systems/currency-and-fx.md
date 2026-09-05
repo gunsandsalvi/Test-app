@@ -116,7 +116,7 @@ checked by `scripts/check-atlas.sh`.
 | E1 it moves because somebody trades at it | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` | ✅ |
 | E2 the reasons are real | `src/domain/fx-market.ts:speculatorMaxPositionLocal` | ✅ |
 | E2.a a rate differential is a reason, hedging is its cost | `src/domain/derivatives/classes/fx-forward.ts:FX_FORWARD_PROFILE` | ✅ |
-| **E3 FORBID no exogenous rate path** | `src/engine/macro/evolution.ts:evolveFxPair` | ⚠️ |
+| **E3 FORBID no exogenous rate path** | `src/engine/simulation/stages/fx-clearing.ts:runFxClearingStage` · `src/engine/simulation/stages/derivative-markets/xcs.ts:runXcsMarket` | ✅ |
 | E4 one-way flow should move the rate | `src/engine/simulation/stages/fx-clearing.ts:recordForeignHoldingsSnapshot` | ✅ |
 
 ---
@@ -154,7 +154,12 @@ price to do it (rule 3's mirror image: a price that cleared and is used by nothi
 **§3 step 37-FX-CROSS**, and it is small: `publishFxRates` must carry the cross prints
 into a rate object the ledger can express a cross in, and `convert` must read them.
 
-### ⚠️ E3 — THE RATE IS CLEARED, THE BASIS IS STILL A FORMULA
+### ✅ E3 — CLOSED: THE RATE CLEARS, AND SO DOES THE BASIS
+
+*2026-09-05 (§9.17b-iv-b). `evolveFxPair` is deleted with `FxPair.basisSpreadBps`: the rate
+clears in `fx-clearing`, the funding basis clears in the swap book
+(`derivative-markets/xcs.ts`) and the forward basis is derived from it. Nothing about a pair
+follows a formula. The paragraph below is the state before it.*
 
 `evolution.ts:evolveFxPair` no longer moves the rate — `fx-clearing` does — but it still moves
 `basisSpreadBps` by `(rDomestic − rForeign) * 20 + noise` every week. The cross-currency basis is a

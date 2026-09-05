@@ -549,14 +549,6 @@ written from here):
 
 17b. **An options class, and the FX swap lines** — split 2026-09-05, one commit each; 17b-i
     (the option class on the one book) is in §9. What is left, in order:
-17b-iv. **THE FX FUNDING MARKET** — split 2026-09-05; 17b-iv-a (the cross-currency swap class
-    and its funding book) is in §9. What is left:
-17b-iv-b. **ONE BASIS.** The forward book prices off the funding basis the swap book clears
-    (`Region.xcsBasisBps`) instead of clearing a basis of its own — CIP as the consequence of
-    an arbitrage the desks take (B2.a): a desk that can borrow the foreign money at the funding
-    basis writes the forward at spot plus the two overnight rates plus that basis, and the
-    forward book's own basis clearing (`fx-forward.ts`, `Region.crossCurrencyBasisBps`) and the
-    evolved `fx.basisSpreadBps` retire into it. B2 ✅, B3 ✅, B2.a ✅.
 17b-v. **THE SWAP LINES.** A central bank lends its currency to another central bank against
     that bank's own, drawn when the basis clears past a stated width, on-lent to its banks at
     the basis plus a penalty — the backstop that caps the basis, and a real event the news tells.
@@ -1352,8 +1344,8 @@ step that owns its node; where it does not yet, the step below is the owner.
       `estateLocal`, and a resolution with no bid falls through to the public path that exists;
     · **banks-funding D4/D4.a, banks-lending B2.b** — origination is gated by capital alone, so a
       bank out of cash and collateral writes the same book as one flush with reserves;
-    · **fx-forwards B3/C4** — `evolveFxPair` still walks a second cross-currency basis the player
-      trades against; delete the line and point every reader at `reg.crossCurrencyBasisBps`;
+    · **fx-forwards B3/C4** — *closed at §9.17b-iv-b: `evolveFxPair` and `FxPair.basisSpreadBps` are
+      gone; the basis clears in the swap book and the forward prices off it*;
     · **freight B4** — nothing ever blocks a route (with E2, in that order);
     · **m-and-a D4** — `trade-settlement` writes off every invoice against an ACQUIRED firm as if
       it had died, because `isActiveCompany` conflates the two;
@@ -1620,6 +1612,28 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17b-iv-b — ONE BASIS.** The forward prices off the funding basis. `classes/fx-forward.ts`:
+`cipForwardRate` (spot carried at the holder's and the issuer's overnight rates over the tenor)
+and `forwardStrikeOf` (parity moved against the holder by the basis); the forward's mark is
+against the forward for the tenor LEFT, so at strike a parity-struck forward is worth nothing and
+the carry is earned, not booked. `derivative-markets/fx-forward.ts`: the per-pair basis CLEARING
+— the hedgers' schedules against the desks' float — is deleted; a desk carries its charge over
+funding (`registry.ts:balanceSheetChargeBps`, the return it needs on the capital a forward
+consumes — one arithmetic with the swap lender's reservation), the pair's all-in basis is the
+swap book's funding basis (`Region.xcsBasisBps`, zero where nobody is short the money) plus the
+desks' capacity-weighted charge, each holder takes of its gap what that basis leaves worth
+hedging (its own schedule: full size when free, nothing at its tolerance), the desks' float caps
+the fills pro rata, and the strike is `forwardStrikeOf` at the two overnight rates. The region
+publishes the forward basis as `crossCurrencyBasisBps` — derived from the funding basis, not a
+second print of one price — and the spot desks' quote width reads it as before. `evolveFxPair`
+(the last formula on a pair: the basis walked by a rate differential times 20 plus noise),
+`FxPair.basisSpreadBps` and its seed are deleted; the pair page shows the funding basis and the
+forward basis, both cleared. `fxBasisInstrumentId` goes with the book. Atlas fx B2, B2.a, B3
+✅ (A1.c, B1, E1 stay ⚠️: parity is applied and the basis is the cleared part; the RATE is not
+what participants bid), currency-and-fx E3 ✅, fx-spot E2 ✅, cross-border E4 re-cited; 37-SMALL's
+fx-forwards bullet closed. `test/derivatives.test.ts`: parity, the basis against the holder,
+worth nothing at strike, the carry earned by expiry. Gates green; no run.
 
 **17b-iv-a — THE CROSS-CURRENCY SWAP, AND THE FX FUNDING MARKET.** A LEG SAYS ITS MONEY:
 `profile.ts:DerivativeLeg.currency` (absent = the contract's), a profile's legs for the week are
