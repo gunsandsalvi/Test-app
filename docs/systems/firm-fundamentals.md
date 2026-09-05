@@ -90,7 +90,7 @@ checked by `scripts/check-atlas.sh`.
 | A4 an owner or owners holding the residual | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
 | B1 revenue is quantity × price from named buyers | `src/engine2/front-core.ts:unitRevenueLocal` | ✅ |
 | B1.a a consequence of a market, not a growth rate | `src/engine/simulation/stages/05-unit-bidding.ts:runUnitBiddingStage` | ✅ |
-| B2 input costs at the prices actually paid | `src/domain/company-week/inventory.ts:consumeLotsFifo` | ✅ |
+| B2 input costs at the prices actually paid | `src/engine2/lots.ts:consumeFifoOnViews` | ✅ |
 | B3 labour costs paid to named households | `src/domain/company-week/payroll.ts:payrollWeek` | ✅ |
 | **B4 operating profit is the residual of B1−B2−B3** | `src/domain/company-week/income-statement.ts:industrialIncome` | ⚠️ |
 | **B4.a the margin is a read, not a target** | `src/engine2/front-core.ts:newEbitdaMargin` | ⚠️ |

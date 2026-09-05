@@ -101,8 +101,23 @@ fi
 LOT_MUTATORS='(pushLot|mutableLots|freeLotRows)'
 LOT_STRAY=$(grep -rnE "import \{[^}]*\b${LOT_MUTATORS}\b[^}]*\} from '[^']*engine2/lots(\.ts)?'" src --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE '^src/engine/ledger/|^src/engine2/' || true)
-OUT_STRAY=$(grep -rnE "outputInventoryBySubUnit(\[[^]]+\])?(\.[a-zA-Z]+)?\s*(=[^=]|\+=|-=|\*=)" src --include=*.ts 2>/dev/null \
-  | grep -vE '^src/engine/ledger/|^src/engine2/stage08-back\.ts:|^src/engine/simulation/initialization\.ts:|^src/engine/companyGenerator\.ts:|^src/engine/bootstrap/' || true)
+# §3.13-INV-i — AND IT NOW CATCHES THE FORMS THE LEDGER ITSELF USES. This matched the literal
+# field name and nothing else, so three write forms walked straight through it — probed, none of
+# the three matched: an ALIAS write (`row.valueLocal = x`, which is how four of the ledger's own
+# five writers mutate), an OPTIONAL-CHAINED write (`c.outputInventoryBySubUnit?.[su].valueLocal`)
+# and a `!`-ASSERTED index write. Three arms now: the FIELD in every chained form it is written
+# through, a stock ROW's two columns through any alias, and the CONSTRUCTION of a row literal
+# (which is how `front-core.ts` materialises the whole record under the name `outRec`, entirely
+# outside the old fence). The literal arm stops at `;` so a TYPE annotation is not a write.
+# The four names below are the only writers there are, and each is here for a stated reason:
+# the merge onto the firm (`stage08-back`), the seam's own copy (`front-core` — §3.13-INV-ii
+# takes that write away), the clearing store's itemized holding, which is a HOLDINGS row and not
+# goods (`holdings-store`), and the seed's openers, which open every firm at `{}`.
+OUT_FIELD='outputInventoryBySubUnit(!|\?\.)?(\[[^]]+\])?(!|\?\.)?(\.[a-zA-Z]+)*[[:space:]]*(=[^=]|\+=|-=|\*=)'
+OUT_ROW='\.(unitsHeld|valueLocal)[[:space:]]*(=[^=]|\+=|-=|\*=)'
+OUT_LITERAL='\{[[:space:]]*unitsHeld:[^;]*\}'
+OUT_STRAY=$(grep -rnE "$OUT_FIELD|$OUT_ROW|$OUT_LITERAL" src --include=*.ts --include=*.tsx 2>/dev/null \
+  | grep -vE '^src/engine/ledger/|^src/engine2/stage08-back\.ts:|^src/engine2/front-core\.ts:|^src/engine/simulation/stages/holdings-store\.ts:|^src/engine/simulation/initialization\.ts:|^src/engine/companyGenerator\.ts:|^src/engine/bootstrap/' || true)
 if [ -n "$LOT_STRAY$OUT_STRAY" ]; then
   echo "ERROR: goods written outside engine/ledger/goods-ledger.ts — every move of goods is a wire:"
   echo "$LOT_STRAY$OUT_STRAY"

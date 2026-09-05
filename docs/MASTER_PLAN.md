@@ -397,6 +397,52 @@ written from here):
     **inventory at cost versus price is the next class**. What is left open of the survey, and
     nothing else:
 
+    **13-INV — INVENTORY AT COST VERSUS PRICE.** The class step 13's item 2 calls *a NEW
+    MECHANISM, not a refactor*. What is true today, read (not run) and each claim cited at its
+    site: a firm's finished stock is `{unitsHeld, valueLocal}` per sub-unit with **no cost basis
+    anywhere** — every weekly write recomputes `valueLocal = units × a price`, so the warehouse is
+    revalued UP when the market rises (`goods.md` E2.c's exact FORBID: profit the firm has not
+    earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
+    all). Seven slices, in this order, because each one is load-bearing for the next:
+
+    ii. **ONE MARK A WEEK, AND THE FILED NUMBER IS THE STOCK.** Three defects of one shape.
+       `setOutputStock` marks the row mid-week at LAST week's landed anchor while
+       `settleOutputInventory` re-marks it at THIS week's ex-works cleared price — two prices on
+       one row in one week, and a contract-only supplier (the `?? getOutputInventoryUnits`
+       fallback) keeps the anchor mark all the way to stage 08. The FILED balance sheet reads
+       `newOutputInventoryBySubUnit`, the pre-merge base, while the firm keeps the merge, so the
+       filed finished-goods number and the firm's own stock **are already two different numbers**.
+       And the front pass's carrying-cost write-down is discarded by that merge for every sub-unit
+       stage 05 settled, so the one write-down in the model is dead.
+    iii. **THE GOODS PRICE IS STORED** — step 13's item 3, *the cheapest half of the whole step*.
+       The auction's cleared price per `region|subUnit` goes in `v2.prices` (whose own header
+       already names `setOutputStock` as the same defect one asset class over); the region's
+       `exWorksUnitPriceLocal` and stage 05's anchor become reads of it. Nothing can re-mark a
+       warehouse next week until the price outlives the week that made it.
+    iv. **WHAT A UNIT COST TO MAKE IS AN HONEST NUMBER.** The pipeline books the whole line's
+       weekly operating cost against that week's batch, so a throttled week inflates the unit cost
+       and a zero-unit week makes it INFINITE; the weather's yield loss shrinks `arrivedUnits` and
+       leaves the value whole, so the survivors absorb the cost of the lost; and a virgin pipeline's
+       first touch mints `lead` weeks of cost from nothing. Nothing reads any of it today, which is
+       why it has never been audited — a cost basis built on it would be worthless.
+    v. **FINISHED STOCK IS LOTS AT COST.** Not a GOOD row: the register permits exactly one GOOD
+       row per (firm, sub-unit) and `openGoodsPass` addresses chains by `firmRow × NSUB + sub`, so
+       a second chain is silently orphaned — and merging the two would make the recipe draw consume
+       a firm's own output as an input. A DISTINCT KIND is invisible to both (each filters on the
+       GOOD typeRef) and to `register-marking`, which prices only tranches, sovereigns and equity —
+       so a basis parked there cannot be silently marked to market, which a field on `Company`
+       could. The audit's goods snapshot switches to the rows in the SAME commit: it sums the
+       record and the rows into one `region|subUnit` key, so both at once double-counts W4 in
+       week one.
+    vi. **LOWER OF COST AND NET REALISABLE VALUE** (`goods.md` E2/E2.a/E2.c/E3, the user's *"apply
+       real world facts"*). Cost until the market falls below it, then written down to market, and
+       **the write-down is a charge to income in the period it happens** — E3's missing writer.
+       The write-up never happens. A sale realises its margin against the lot's own cost, which is
+       F5's COGS: today the input draw is expensed in the week it is DRAWN, whatever was made or
+       sold. This is where the numbers move, and step 13 says they must.
+    vii. **THE FIELD GOES.** Readers take the rows; the value half of `outputInventoryBySubUnit` is
+       deleted; the dead carrying-cost write-down becomes a real charge or goes with it.
+
     · **13-NS — THE CONTINUOUS-VERSUS-DISCRETE CONVENTION** (step 12b, §9.12b, carried out of the
       finished 13-BOOK block): `engine/nelsonSiegel.ts` discounts CONTINUOUSLY (`exp(-z·t)`) where
       `domain/pricing/` compounds discretely — two answers to one question (rule 4). Four sites
@@ -1194,6 +1240,35 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-i — THE WRITE FENCE ACTUALLY FENCES, AND WHAT IT FOUND WHEN IT DID.** `check-hygiene.sh`
+  names the goods boundary — *a firm's finished stock is written by the ledger only* — and matched
+  the literal field name and nothing else, so three write forms walked through it: an ALIAS write
+  (`row.valueLocal = x`, which is how four of the ledger's own five writers mutate), an
+  OPTIONAL-CHAINED write, and a `!`-asserted index write. Three arms now — the field in every
+  chained form, a stock row's two columns through any alias, and the CONSTRUCTION of a row literal
+  (stopping at `;`, so a type annotation is not a write) — and each is PROVED by probe: five
+  violating forms introduced one at a time, five caught, the tree clean after. The four writers
+  left are named with their reasons rather than matched by accident: the merge onto the firm, the
+  seam's own copy (`front-core`, whose whole record materialisation under the alias `outRec` had
+  never been inside the fence at all — 13-INV-ii takes that write away), the clearing store's
+  itemized holding (a HOLDINGS row, not goods), and the seed's openers.
+  **What the arm found on its first run:** `domain/company-week/inventory.ts` held a second
+  `chargeCarryingCost` and a second `consumeLotsFifo` — one week's warehouse charge and the input
+  drawdown — and **neither was reachable from any week** (the live pair is `front-core.ts`'s own
+  lane, mirrored in `native/kernels.c`, and `lots.ts:consumeFifoOnViews` over the register's lot
+  columns). Two representations of each rule with one of them dead (rule 4), and
+  `test/inventory.test.ts` pinned the dead pair — eight assertions that could stay green while the
+  code that runs went untested, which is the §5 lesson about a test that measures nothing. Deleted;
+  the file keeps `fulfillmentRatio`, and the live lane's own tests in the same file already
+  covered FIFO order, per-lot cost, the partial split and exhaustion.
+  **And a demonstration of PART VIII's `13-ATLAS-GATE`, unlooked for:** `firm-fundamentals.md` B2
+  cited `inventory.ts:consumeLotsFifo`, and after the function was deleted `check-atlas.sh` STAYED
+  GREEN — because the entry's own prose names the function it deleted, and the gate's test is
+  `grep -q "\bSYM\b"` against the whole file, which a comment satisfies. That is the step's claim
+  ("a citation must resolve to a SYMBOL, not to a mention") observed rather than argued. B2 is
+  repointed at the live owner, `lots.ts:consumeFifoOnViews`, and goods B1.b cites the measure the
+  module has left. Gates green; no run (rule 11).
 
 **13-BOOK g-ii-d — THE FIELD GOES, AND 13-BOOK IS DONE.** `Company.plant` is deleted. Every
   writer reads its firm's rows (`plantVintagesOf`), applies the vintage function it always did,

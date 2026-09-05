@@ -119,7 +119,7 @@ checked by `scripts/check-atlas.sh`.
 | A4 homogeneous within its sub-unit | `src/engine/simulation/stages/05-unit-bidding.ts:runSubUnitMarkets` | ✅ |
 | B1 the production DECISION, quantity the outcome | `src/engine/simulation/stages/05-unit-bidding.ts:buildRegionSupplyPlans` | ✅ |
 | B1.a capacity is a reason and binds | `src/engine/simulation/stages/05-unit-bidding.ts:weeklyCapacityUnits` | ✅ |
-| **B1.b inputs on hand are a reason; shortage is a real state** | `src/engine2/front-core.ts:newInputSupplyConstraintFactor` | ⚠️ |
+| **B1.b inputs on hand are a reason; shortage is a real state** | `src/engine2/front-core.ts:newInputSupplyConstraintFactor` · `src/domain/company-week/inventory.ts:fulfillmentRatio` | ⚠️ |
 | B1.c labour available is a reason | `src/engine/simulation/stages/05-unit-bidding.ts:staffedShare` | ✅ |
 | B1.d VERIFY utilisation is a read of the outcome | — | ❌ |
 | **B2 production consumes the inputs it consumes** | `src/engine2/front-core.ts:consumeFifoOnViews` | ⚠️ |
