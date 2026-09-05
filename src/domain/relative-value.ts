@@ -176,7 +176,9 @@ export function cdsBasisLegs(args: {
   cashSpreadBps: number; cdsSpreadBps: number; carryBps: number; weeklyMoveBps: number;
   priceAtSpread: (spreadBps: number) => number; budgetLocal: number;
 }): { cash: RelativeValueLeg; protection: RelativeValueLeg } {
-  const cashMaxSpread = args.cdsSpreadBps + args.carryBps;
+  // Bought down to the spread that still pays cover plus carry; sold (the mirror) at any price
+  // the book clears, as a target.
+  const cashMaxSpread = args.faceLocal >= 0 ? args.cdsSpreadBps + args.carryBps : args.cdsSpreadBps - args.carryBps;
   const range = Math.max(1e-6, args.weeklyMoveBps);
   const cashReservation = args.priceAtSpread(cashMaxSpread);
   return {
@@ -186,7 +188,8 @@ export function cdsBasisLegs(args: {
     },
     protection: {
       market: 'CDS_PROTECTION', regionId: args.regionId, instrumentId: args.cdsInstrumentId, faceLocal: -args.faceLocal,
-      reservationPrice: args.cashSpreadBps - args.carryBps, fullSizePriceRange: range, budgetLocal: 0,
+      // Bought up to the rung less the carry; written (§3.17f-v, the mirror) down to the rung plus it.
+      reservationPrice: args.faceLocal >= 0 ? args.cashSpreadBps - args.carryBps : args.cashSpreadBps + args.carryBps, fullSizePriceRange: range, budgetLocal: 0,
     },
   };
 }
@@ -276,4 +279,32 @@ export function mergeLegs<L extends RelativeValueLeg & { entityId: string }>(leg
     byKey.set(k, { ...have, faceLocal: have.faceLocal + l.faceLocal, budgetLocal: have.budgetLocal + l.budgetLocal, reservationPrice: bigger.reservationPrice, fullSizePriceRange: bigger.fullSizePriceRange, forced: have.forced || l.forced });
   });
   return Array.from(byKey.values()).filter((l) => Math.abs(l.faceLocal) > 1);
+}
+
+/**
+ * §3.17f-v — SENIORITY ACROSS ONE ISSUER'S CAPITAL STRUCTURE, READ. A junior claim must pay more
+ * than the senior of the same borrower at the same date; where it pays LESS the senior is bought
+ * and the junior sold — borrowed through the lending book — carrying the junior's borrow fee and
+ * the senior's financing above repo. One direction: a junior paying MORE is a seniority premium,
+ * which has no bound to arbitrage.
+ */
+export function seniorityRead(args: { seniorSpreadBps: number; subSpreadBps: number; borrowFeeBps: number; financingRateAnnual: number; repoRateAnnual: number }): ComparableRead {
+  return {
+    deviationBps: args.seniorSpreadBps - args.subSpreadBps,
+    carryBps: Math.max(0, args.borrowFeeBps) + Math.max(0, args.financingRateAnnual - args.repoRateAnnual) * 10000,
+  };
+}
+
+/** §3.17f-v — the senior bought down to the spread that still pays the junior's plus the carry;
+ *  the junior a target sold at what the book clears (and borrowed beyond what is held). */
+export function seniorityLegs(args: {
+  regionId: RegionId; seniorId: InstrumentId; subId: InstrumentId; faceLocal: number;
+  subSpreadBps: number; carryBps: number; weeklyMoveBps: number; seniorPriceAtSpread: (bps: number) => number; subPrice: number; budgetLocal: number;
+}): { senior: RelativeValueLeg; sub: RelativeValueLeg } {
+  const range = Math.max(1e-6, args.weeklyMoveBps);
+  const seniorReservation = args.seniorPriceAtSpread(args.subSpreadBps + args.carryBps);
+  return {
+    senior: { market: 'CORP_BOND_CASH', regionId: args.regionId, instrumentId: args.seniorId, faceLocal: args.faceLocal, reservationPrice: seniorReservation, fullSizePriceRange: Math.max(1e-6, Math.abs(seniorReservation - args.seniorPriceAtSpread(args.subSpreadBps + args.carryBps + range))), budgetLocal: args.budgetLocal },
+    sub: { market: 'CORP_BOND_CASH', regionId: args.regionId, instrumentId: args.subId, faceLocal: -args.faceLocal, reservationPrice: args.subPrice, fullSizePriceRange: range, budgetLocal: 0 },
+  };
 }

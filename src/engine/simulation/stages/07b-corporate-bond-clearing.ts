@@ -90,6 +90,7 @@ import { buildDealerDeskParticipants, applyDealerDeskFills, deskTickersOf, total
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
 import { openDemandStaging, clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, positionsByInstrument, setTradableFloat, setDemand } from './financial-clearing-engine';
+import { positionKey } from './securities-lending';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 import { settlePricedOfferings } from './primary-settlement';
@@ -562,6 +563,23 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         return;
       }
       setDemand(DS, p.demandRow, i, leg.reservationPrice, leg.fullSizePriceRange, current + leg.faceLocal, leg.budgetLocal / Math.max(1e-9, leg.reservationPrice), current);
+    });
+    // §3.17f-v: what a book has LENT of a rung is exposure it holds through a receivable — its
+    // ceiling and floor come down by it — and a recalled borrow it still owes is a purchase at
+    // any price (the sovereign book's rule, on the staged row here).
+    participants.forEach((p) => {
+      if (p.demandRow === undefined) return;
+      bonds.forEach((b, i) => {
+        const lent = ctx.lentSharesByLender.get(positionKey(p.id, b.id)) ?? 0;
+        const buyIn = ctx.buyInSharesByBorrower.get(positionKey(p.id, b.id)) ?? 0;
+        if (lent <= 0 && buyIn <= 0) return;
+        const at = p.demandRow! * DS.n + i;
+        if (!DS.present[at]) return;
+        const current = claimedByEntity.get(p.id as EntityId)?.get(b.id) ?? 0;
+        DS.maxH[at] = Math.max(0, DS.maxH[at] - lent, current + buyIn);
+        DS.minH[at] = Math.max(0, DS.minH[at] - lent, buyIn > 0 ? current + buyIn : 0);
+        if (buyIn > 0) DS.maxNet[at] = Number.NaN;
+      });
     });
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
     const result = clearFinancialAsset(instruments, allParticipants, {

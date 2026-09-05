@@ -30,9 +30,10 @@ import { institutionPartyKey } from '../../../domain/derivatives/contract';
 import { initialMarginRateOf } from '../../../domain/derivatives/registry';
 import { BOND_FUTURE_TERM_KEY, nextDeliveryWeek, bondDurationYears, bondFutureWeeklyMoveOf } from '../../../domain/derivatives/classes/bond-future';
 import { bondFutureInstrumentId } from '../../../domain/instrument-keys';
-import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, swapSpreadRead, swapSpreadLegs, mergeLegs, edgeBps, arbTargetShare, arbSizeShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
+import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, swapSpreadRead, swapSpreadLegs, seniorityRead, seniorityLegs, mergeLegs, edgeBps, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
 import { asInstrumentId } from '../../../domain/ids';
 import { trancheClearedPricePerFace, trancheTerms, rowSpreadBps, priceAtSpreadOnTranche, IS_BOND_ROW } from '../../credit-price';
+import { TR_SUBORDINATED } from '../../../engine2/tranches';
 import { ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
 import { bookRowsOf, instrumentIdAt, rowUnits, rowBasisLocal as rowBasisOf } from '../../../engine2/holdings';
 import { CDS_BENCHMARK_TENOR, CDS_TENOR_YEARS, cdsTenorWeeksOf } from '../../../domain/derivatives/classes/cds';
@@ -65,6 +66,7 @@ export function runRelativeValueStage(state: GameState, ctx: WeeklyStepContext):
   readCdsBasis(ctx, funds, view, standing, book, week);
   readIndexBasis(ctx, funds, view, standing, book, week);
   readSwapSpread(ctx, funds, view, standing, book, week);
+  readSeniority(ctx, funds, week);
   // Two comparables on one instrument — the ten-year rung under the bond basis and the ten-year
   // swap spread — state one leg between them.
   ctx.relativeValueLegs = mergeLegs(ctx.relativeValueLegs);
@@ -199,6 +201,7 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
     const regionFunds = funds.filter((f) => f.region === regionId);
     if (regionFunds.length === 0) return;
     const pbBook = primeBrokerageBookOf(ctx.v2, regionId);
+    const loanBook = securityLoanBookOf(ctx.v2, regionId);
     const repoRateAnnual = view.overnightRateAnnual(regionId);
     const tenorYears = CDS_TENOR_YEARS[CDS_BENCHMARK_TENOR];
     ctx.updatedCompanies.forEach((issuer) => {
@@ -222,35 +225,107 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
       const weeklyMoveBps = Math.max(1, view.cdsSpreadWeeklyMoveBps(issuer.id, CDS_BENCHMARK_TENOR) ?? 1);
       regionFunds.forEach((fund) => {
         const line = pbBook.find((l) => l.fundId === fund.id);
-        const read = cdsBasisRead({ cashSpreadBps, cdsSpreadBps: issuer.cdsSpreadBps, financingRateAnnual: line?.rateAnnual ?? repoRateAnnual, repoRateAnnual, marginRate, requiredReturnAnnual: entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund)) });
-        const share = arbSizeShare(edgeBps(read), weeklyMoveBps);
-        // The position: the rung on its register, the protection it holds on the name.
+        const requiredReturnAnnual = entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund));
+        const read = cdsBasisRead({ cashSpreadBps, cdsSpreadBps: issuer.cdsSpreadBps, financingRateAnnual: line?.rateAnnual ?? repoRateAnnual, repoRateAnnual, marginRate, requiredReturnAnnual });
+        // §3.17f-v: the mirror — a rich rung against cheap cover — sells the rung (borrowed
+        // through the lending book) and writes the cover, carrying the borrow fee and the margin.
+        const mirror = { deviationBps: -read.deviationBps, carryBps: (reg.borrowFeeBpsByCompanyId?.[bondId] ?? 0) + Math.max(0, marginRate) * Math.max(0, requiredReturnAnnual) * 10000 };
+        const share = arbTargetShare(edgeBps(read), edgeBps(mirror), weeklyMoveBps);
+        // The position: the rung on its register less what it has borrowed of it, and the
+        // protection it holds on the name.
         const rows = bookRowsOf(ctx.v2, fund.id).filter((r) => instrumentIdAt(ctx.v2, r) === bondId);
+        const rungLoans = loanBook.filter((l) => l.instrumentId === bondId);
         const heldFace = rows.reduce((a, r) => a + rowUnits(ctx.v2.holdings, r), 0);
+        const netFace = heldFace - sharesOnLoan(rungLoans, 'borrower', fund.id, bondId);
         const key = institutionPartyKey(fund.id);
         const coverFace = standing.coverLocal('CDS', 'a', key, issuer.id) - standing.coverLocal('CDS', 'b', key, issuer.id);
-        if (!(share > 0) && heldFace <= 1 && Math.abs(coverFace) <= 1) return;
+        if (share === 0 && Math.abs(netFace) <= 1 && Math.abs(coverFace) <= 1 && heldFace <= 1) return;
         const capacityLocal = arbCapacityLocal(entityCashOf(ctx.v2, fund), fund.primeBrokerageAvailableLocal);
         const lines = book.filter((c) => c.classId === 'CDS' && c.reference.kind === 'ISSUER' && c.reference.issuerId === issuer.id
           && ((c.a.kind === 'INSTITUTION' && c.a.id === fund.id) || (c.b.kind === 'INSTITUTION' && c.b.id === fund.id)));
         const pnlLocal = pairPnLLocal({
-          cashValueLocal: rows.reduce((a, r) => a + ctx.v2.holdings.qtyLocal[r], 0),
+          cashValueLocal: rows.reduce((a, r) => a + ctx.v2.holdings.qtyLocal[r], 0) + stockLoanNetLocal(rungLoans, fund.id, () => cashPrice),
           cashBasisLocal: rows.reduce((a, r) => a + rowBasisOf(ctx.v2, r), 0),
           futuresSettledToFundLocal: lines.reduce((a, c) => a + (c.a.kind === 'INSTITUTION' && c.a.id === fund.id ? 1 : -1) * (c.settledMarkLocal ?? 0), 0),
         });
         const stopped = stoppedOut(pnlLocal, lines.reduce((a, c) => a + c.initialMarginLocal, 0));
         const carriedFace = capacityLocal / cashPrice;
-        const exposureFace = Math.max(heldFace, Math.abs(coverFace));
-        const targetFace = stopped ? 0 : exposureFace > carriedFace ? carriedFace : share * carriedFace;
+        const exposureFace = Math.max(Math.abs(netFace), Math.abs(coverFace));
+        const targetFace = stopped ? 0 : exposureFace > carriedFace ? Math.sign(share || netFace) * carriedFace : share * carriedFace;
         const forced = stopped || exposureFace > carriedFace;
-        const cashDelta = targetFace - heldFace;
+        const cashDelta = targetFace - netFace;
         const coverDelta = targetFace - coverFace;
         const legs = cdsBasisLegs({
-          regionId, bondId, cdsInstrumentId: cdsId, faceLocal: Math.max(cashDelta, coverDelta), cashSpreadBps, cdsSpreadBps: issuer.cdsSpreadBps,
-          carryBps: read.carryBps, weeklyMoveBps, priceAtSpread, budgetLocal: Math.min(Math.max(0, cashDelta) * cashPrice, capacityLocal),
+          regionId, bondId, cdsInstrumentId: cdsId, faceLocal: targetFace, cashSpreadBps, cdsSpreadBps: issuer.cdsSpreadBps,
+          carryBps: (targetFace >= 0 ? read : mirror).carryBps, weeklyMoveBps, priceAtSpread, budgetLocal: Math.min(Math.max(0, cashDelta) * cashPrice, capacityLocal),
         });
-        if (Math.abs(cashDelta) > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: cashDelta, forced });
+        if (cashDelta > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: cashDelta, forced });
+        else if (cashDelta < -1) {
+          const sellFace = Math.min(-cashDelta, heldFace);
+          if (sellFace > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: -sellFace, forced });
+          const borrowFace = -cashDelta - sellFace;
+          if (borrowFace > 1) ctx.borrowNeeds.push({ entityId: fund.id, regionId, instrumentId: bondId, units: borrowFace });
+        }
         if (Math.abs(coverDelta) > 1) ctx.relativeValueLegs.push({ ...legs.protection, entityId: fund.id, faceLocal: -coverDelta, forced });
+      });
+    });
+  });
+}
+
+/** §3.17f-v — SENIORITY: for each issuer, its senior and its subordinated rung nearest the
+ *  benchmark tenor; a junior paying less than the senior is sold (borrowed) against the senior
+ *  bought. A cash-only pair: no margin to stop on, the line's capacity is its limit. */
+function readSeniority(ctx: WeeklyStepContext, funds: InstitutionalEntity[], week: number): void {
+  REGION_IDS.forEach((regionId: RegionId) => {
+    const reg = ctx.updatedRegions[regionId];
+    if (!reg) return;
+    const regionFunds = funds.filter((f) => f.region === regionId);
+    if (regionFunds.length === 0) return;
+    const pbBook = primeBrokerageBookOf(ctx.v2, regionId);
+    const loanBook = securityLoanBookOf(ctx.v2, regionId);
+    const repoRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
+    const tenorYears = CDS_TENOR_YEARS[CDS_BENCHMARK_TENOR];
+    const TS = ctx.v2.tranches;
+    ctx.updatedCompanies.forEach((issuer) => {
+      if (issuer.region !== regionId || !isActiveCompany(issuer) || issuer.isBankEntity) return;
+      let senior: number | undefined; let sub: number | undefined; let gS = Number.POSITIVE_INFINITY; let gJ = Number.POSITIVE_INFINITY;
+      ladderRowsOf(ctx.v2, issuer.id).forEach((r) => {
+        if (!IS_BOND_ROW(TS.flags[r]) || !(TS.principalLocal[r] > 0)) return;
+        const g = Math.abs((TS.maturityWeek[r] - week) / 52 - tenorYears);
+        if ((TS.flags[r] & TR_SUBORDINATED) !== 0) { if (g < gJ) { gJ = g; sub = r; } } else if (g < gS) { gS = g; senior = r; }
+      });
+      if (senior === undefined || sub === undefined) return;
+      const seniorId = trancheIdOf(ctx.v2, senior); const subId = trancheIdOf(ctx.v2, sub);
+      const seniorPrice = trancheClearedPricePerFace(ctx.v2, seniorId); const subPrice = trancheClearedPricePerFace(ctx.v2, subId);
+      const seniorSpread = rowSpreadBps(ctx.v2, reg, senior, week); const subSpread = rowSpreadBps(ctx.v2, reg, sub, week);
+      if (!(seniorPrice !== undefined && seniorPrice > 0) || !(subPrice !== undefined && subPrice > 0) || seniorSpread === undefined || subSpread === undefined) return;
+      const seniorTerms = trancheTerms(ctx.v2, senior, week, reg.policyRate);
+      const seniorPriceAtSpread = (bps: number) => priceAtSpreadOnTranche(seniorTerms, reg.zeroRates, bps);
+      const subLoans = loanBook.filter((l) => l.instrumentId === subId);
+      regionFunds.forEach((fund) => {
+        const line = pbBook.find((l) => l.fundId === fund.id);
+        const read = seniorityRead({ seniorSpreadBps: seniorSpread, subSpreadBps: subSpread, borrowFeeBps: reg.borrowFeeBpsByCompanyId?.[subId] ?? 0, financingRateAnnual: line?.rateAnnual ?? repoRateAnnual, repoRateAnnual });
+        const share = arbTargetShare(edgeBps(read), Number.NEGATIVE_INFINITY, 25);
+        const seniorHeld = bookRowsOf(ctx.v2, fund.id).filter((r) => instrumentIdAt(ctx.v2, r) === seniorId).reduce((a, r) => a + rowUnits(ctx.v2.holdings, r), 0);
+        const subHeld = bookRowsOf(ctx.v2, fund.id).filter((r) => instrumentIdAt(ctx.v2, r) === subId).reduce((a, r) => a + rowUnits(ctx.v2.holdings, r), 0);
+        const subNet = subHeld - sharesOnLoan(subLoans, 'borrower', fund.id, subId);
+        if (!(share > 0) && seniorHeld <= 1 && Math.abs(subNet) <= 1) return;
+        const capacityLocal = arbCapacityLocal(entityCashOf(ctx.v2, fund), fund.primeBrokerageAvailableLocal);
+        const carriedFace = capacityLocal / seniorPrice;
+        const exposureFace = Math.max(seniorHeld, Math.abs(subNet));
+        const targetFace = exposureFace > carriedFace ? carriedFace : share * carriedFace;
+        const forced = exposureFace > carriedFace;
+        const seniorDelta = targetFace - seniorHeld;
+        const subDelta = -targetFace - subNet;
+        const legs = seniorityLegs({ regionId, seniorId, subId, faceLocal: targetFace, subSpreadBps: subSpread, carryBps: read.carryBps, weeklyMoveBps: 25, seniorPriceAtSpread, subPrice, budgetLocal: Math.min(Math.max(0, seniorDelta) * seniorPrice, capacityLocal) });
+        if (Math.abs(seniorDelta) > 1) ctx.relativeValueLegs.push({ ...legs.senior, entityId: fund.id, faceLocal: seniorDelta, forced });
+        if (subDelta > 1) ctx.relativeValueLegs.push({ ...legs.sub, entityId: fund.id, faceLocal: subDelta, forced });
+        else if (subDelta < -1) {
+          const sellFace = Math.min(-subDelta, subHeld);
+          if (sellFace > 1) ctx.relativeValueLegs.push({ ...legs.sub, entityId: fund.id, faceLocal: -sellFace, forced });
+          const borrowFace = -subDelta - sellFace;
+          if (borrowFace > 1) ctx.borrowNeeds.push({ entityId: fund.id, regionId, instrumentId: subId, units: borrowFace });
+        }
       });
     });
   });

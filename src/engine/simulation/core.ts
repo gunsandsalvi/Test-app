@@ -13,7 +13,7 @@ import { runRelativeValueStage } from './stages/relative-value';
 import { runOverdraftSweep } from './stages/overdraft-sweep';
 import { drawReverseRepoAtTheClose } from './stages/repo-clearing';
 import { runDerivativesStage } from './stages/derivatives';
-import { runSecuritiesLendingStage, runSovereignLendingPass } from './stages/securities-lending';
+import { runSecuritiesLendingStage, runBondLendingPass } from './stages/securities-lending';
 import { runEstateResolutionStage } from './stages/estate-resolution';
 import { reconcileRepoPledges } from './stages/repo-clearing';
 import { createInitialContext } from './stages/context';
@@ -265,9 +265,10 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // claim and append against it, and the write-back after 07e recomposes the arrays — the same
   // rows in the same order the old per-book partition-and-rebuild chain produced.
   run('holdings-store', () => buildHoldingsStore(ctx));
-  // §3.17e-iii-b: a sovereign borrow is located and struck on the opening register, before the
-  // sovereign auction, so the paper is sold into this week's bid.
-  run('sovereign-lending', () => runSovereignLendingPass(state, ctx));
+  // §3.17e-iii-b / 17f-v: a bond borrow — a sovereign's rung or a corporate's — is located and
+  // struck on the opening register, before the bond auctions, so the paper is sold into this
+  // week's bid.
+  run('bond-lending', () => runBondLendingPass(state, ctx));
   run('07b-corporate-bond-clearing', () => runCorporateBondClearingStage(state, ctx));
   run('07c-sovereign-bond-clearing', () => runSovereignBondClearingStage(state, ctx));
   run('07d-leveraged-loan-clearing', () => runLeveragedLoanClearingStage(state, ctx));

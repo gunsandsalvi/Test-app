@@ -547,25 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17f. **The relative-value book: every OTHER comparable joins the registry** (user: "is there a
-    programmatic way to do that across asset classes?" — there is, and 17e-ii-a built it:
-    `domain/relative-value.ts`, the `RELATIVE_VALUE` strategy, the legs the markets read; §9).
-    An arbitrage is not a flag but **two prices for the same risk**, and every pair here is
-    already declared because the audit measures it. Each joins as a declaration — a read and two
-    legs — and the market of each leg reads `ctx.relativeValueLegs` the way 07c, 07b, the CDS
-    book and the futures line do. The book stays CAPITAL-CONSTRAINED and able to LOSE (the stop
-    and the line, 17e-ii-b), which is what makes it a mechanism and not a clamp; **the audit keeps
-    measuring after the funds exist** — a basis that survives a well-capitalised book is a
-    finding. Three pairs are their own arbitrageurs already and join for the measure only: the
-    ETF premium (the authorised participants, `etf-flows.ts`), the cross-currency basis (the
-    desks, 17b-iv-b, and the swap lines, 17b-v), and a good's price across regions (sourcing,
-    05). What is left, in order:
-17f-v. **Seniority across one issuer's capital structure** (`P1`, failing 16 of 16 at HEAD). A
-    junior tranche paying less than the senior of the same issuer is sold against the senior
-    bought — which needs a CORPORATE bond borrow: the lending pass generalised from the sovereign
-    rung to any `lendable` kind (`ASSET_REGISTRY`: CORP_BOND is), the same delivery in face. The
-    mirror of 17f-i's basis (a rich bond against cheap cover) arrives with the same borrow.
-
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
 18. **Delete every bound whose mechanism already exists.** The audit's inventory, each to be deleted
@@ -1575,7 +1556,21 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17f-iii — THE SWAP SPREAD.** Per swap tenor, the par rate against the sovereign rung nearest
+**17f-v — SENIORITY, AND THE CDS BASIS MIRROR; 17f CLOSED.** `seniorityRead`: an issuer's
+  senior rung against its subordinated rung nearest the benchmark tenor (`TR_SUBORDINATED` on
+  the ladder rows), the trade where the junior pays LESS — the senior bought on the line, the
+  junior sold and borrowed — carrying the junior's borrow fee and the senior's financing above
+  repo; one direction (a seniority premium has no bound); `seniorityLegs`: the senior bought
+  down to the spread that still pays the junior + carry, the junior a target. A cash-only pair:
+  no margin to stop on, the line's capacity its limit. The CDS basis (17f-i) gains its mirror
+  — a rich rung sold and borrowed, its cover written down to the rung + carry — and its position
+  is net of the borrow. The lending pass lends ANY `lendable` rung (`runBondLendingPass`, the
+  kind read off the ladder, the `bond-lending` stage), and 07b reads lent face and buy-ins on
+  the staged row as 07c does. With this, every comparable the audit measures either has its
+  trader in the registry or its own arbitrageur (ETF premium, cross-currency basis, the goods
+  wedge): 17f is closed. Atlas: corporate-credit H3 cited, securities-lending B1 re-cited.
+  Gates green; no run.
+- **17f-iii — THE SWAP SPREAD.** Per swap tenor, the par rate against the sovereign rung nearest
   it: `swapSpreadRead` — received (long the line) against the rung shorted, carrying the rung's
   borrow fee and the swap's margin; paid against the rung bought, carrying the financing above
   repo and the margin; `swapSpreadLegs` — the swap received down to the yield + carry or paid

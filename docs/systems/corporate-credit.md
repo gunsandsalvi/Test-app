@@ -219,7 +219,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | G8 a default is INFORMATION that moves other issuers | `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ✅ |
 | H1 the market has a level, from real prices and weights | `src/engine/simulation/stages/index-calculation.ts:runIndexCalculationStage` | ✅ |
 | H2 VERIFY worse assessment trades wider | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
-| H3 VERIFY junior trades wider than senior in one issuer | `src/domain/credit-curve.ts:spreadAtTenor` | ⚠️ |
+| H3 VERIFY junior trades wider than senior in one issuer | `src/domain/credit-curve.ts:spreadAtTenor` · `src/domain/relative-value.ts:seniorityRead` | ⚠️ |
 | H4 cash and synthetic separately cleared; the BASIS is real | `src/engine/simulation/stages/derivative-markets/cds.ts:CDS_MARKET` · `src/domain/relative-value.ts:cdsBasisRead` | ⚠️ |
 | **H4.a FORBID neither derived from the other** | `src/engine2/stage08-back.ts:newCdsSpreadBps` | ❌ |
 
@@ -289,6 +289,13 @@ What the original re-walk added, still standing:
    did not close.
 
 ### ⚠️ A2.a / B3 / G5 / G5.a / H3 — SENIORITY IS DECORATIVE, AND `SUBORDINATED` IS NEVER ISSUED
+
+*2026-09-05 (§9.17f-v). H3 has a trader: where an issuer's junior rung pays less than its senior
+at the benchmark tenor, the relative-value book buys the senior on its line and sells the junior
+borrowed through the lending book (`relative-value.ts:seniorityRead`, the lending pass now
+lending any `lendable` rung). Measure, never enforce: the book is capital-constrained and one
+inversion that survives it is a finding. Still ⚠️ because a subordinated rung is never issued —
+until one is, the trade has nothing to read.*
 
 **Already §3 step 33**, and the re-walk makes it worse than the step states. Step 33 says the estate
 assigns recovery by instrument TYPE (`estate-resolution.ts:547-579`) and never reads

@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, swapSpreadRead, swapSpreadLegs, mergeLegs, edgeBps, arbSizeShare, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
+import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, swapSpreadRead, swapSpreadLegs, seniorityRead, seniorityLegs, mergeLegs, edgeBps, arbSizeShare, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
 import { bondFuturesCarryPrice } from '../src/domain/derivatives/classes/bond-future';
 import { asInstrumentId } from '../src/domain/ids';
 
@@ -121,4 +121,22 @@ test('swap spread: the read carries the borrow when received and the financing w
   // Two legs of one book on one rung are one leg.
   const merged = mergeLegs([{ ...recv.bond, entityId: 'F' }, { ...pay.bond, entityId: 'F', faceLocal: 400 }, { ...recv.swap, entityId: 'F' }]);
   assert.deepEqual(merged.map((l) => [l.market, l.faceLocal]), [['SOVEREIGN_CASH', -600], ['IRS_FIXED', 1000]]);
+});
+
+// §3.17f-v — seniority: a junior paying less than the senior is sold against the senior bought.
+test('seniority: the read is senior less junior with the borrow and the financing as carry; one direction', () => {
+  const r = seniorityRead({ seniorSpreadBps: 300, subSpreadBps: 250, borrowFeeBps: 15, financingRateAnnual: 0.06, repoRateAnnual: 0.05 });
+  assert.equal(r.deviationBps, 50, 'inverted: the junior pays less');
+  assert.ok(Math.abs(r.carryBps - 115) < 1e-9);
+  assert.equal(arbTargetShare(edgeBps(seniorityRead({ seniorSpreadBps: 200, subSpreadBps: 400, borrowFeeBps: 0, financingRateAnnual: 0.05, repoRateAnnual: 0.05 })), Number.NEGATIVE_INFINITY, 25), 0, 'a seniority premium has no bound to arbitrage');
+  const priceAtSpread = (bps: number) => 1 - bps / 10000;
+  const legs = seniorityLegs({ regionId: 'USA', seniorId: asInstrumentId('SR'), subId: asInstrumentId('JR'), faceLocal: 800, subSpreadBps: 250, carryBps: 20, weeklyMoveBps: 10, seniorPriceAtSpread: priceAtSpread, subPrice: 0.97, budgetLocal: 700 });
+  assert.equal(legs.senior.faceLocal, 800);
+  assert.ok(Math.abs(legs.senior.reservationPrice - priceAtSpread(270)) < 1e-12, 'the senior bought while it pays the junior plus the carry');
+  assert.equal(legs.sub.faceLocal, -800);
+  assert.equal(legs.sub.reservationPrice, 0.97);
+  // The CDS basis mirror: a rich rung sells at a target and its cover is written above the rung plus the carry.
+  const mirror = cdsBasisLegs({ regionId: 'USA', bondId: asInstrumentId('B'), cdsInstrumentId: asInstrumentId('USA-CDS-X-c5'), faceLocal: -500, cashSpreadBps: 150, cdsSpreadBps: 220, carryBps: 30, weeklyMoveBps: 12, priceAtSpread, budgetLocal: 0 });
+  assert.equal(mirror.protection.faceLocal, 500, 'cover written');
+  assert.equal(mirror.protection.reservationPrice, 180);
 });

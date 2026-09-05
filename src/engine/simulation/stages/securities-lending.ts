@@ -42,7 +42,11 @@ import { registerBook } from '../../ledger/instrument-ledger';
 import { ladderTotalLocal, isTrancheId } from '../../../engine2/tranches';
 import { trancheClearedPricePerFace } from '../../credit-price';
 import { weeklyPriceMoveOf } from '../../../engine2/prices';
-import { sovereignRowsOf } from '../../sovereign-register';
+import { bookRowsOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
+import { trancheRowOf, trancheKindOfRow, issuerIdOf } from '../../../engine2/tranches';
+import { governmentEntityId } from '../../../domain/entity-keys';
+import type { ItemizedHolding } from '../../../domain/banking';
+import { defect } from '../../../domain/defect';
 import type { EntityId } from '../../../domain/ids';
 import { asInstrumentId, isKnownEntity } from '../../../domain/ids';
 
@@ -577,19 +581,20 @@ function publishLent(ctx: WeeklyStepContext, book: SecurityLoan[]): void {
 }
 
 /**
- * §3.17e-iii-b — THE BOOK LENDS A SOVEREIGN. The same contract, the same fee, collateral and
- * recall as a share loan, on a rung of the sovereign ladder: the borrower is a book that needs
- * the paper to be short of it (`ctx.borrowNeeds`, the relative-value book's mirror trade), the
- * lenders are the holders of the rung, the price is the fee the auction clears, and the delivery
- * is FACE on the register. Runs BEFORE the sovereign auction — on the opening register, so the
- * paper delivered this week is sold into this week's bid and a lender's ceiling there already
- * knows what it lent — where the share pass runs before the equity book for the same reason.
+ * §3.17e-iii-b — THE BOOK LENDS A BOND. The same contract, the same fee, collateral and recall as
+ * a share loan, on any rung of a ladder — a sovereign's, and (§3.17f-v) a corporate's, every
+ * kind the registry calls `lendable`: the borrower is a book that needs the paper to be short of
+ * it (`ctx.borrowNeeds`, the relative-value book's mirror trades), the lenders are the holders of
+ * the rung, the price is the fee the auction clears, and the delivery is FACE on the register.
+ * Runs BEFORE the bond auctions — on the opening register, so the paper delivered this week is
+ * sold into this week's bid and a lender's ceiling there already knows what it lent — where the
+ * share pass runs before the equity book for the same reason.
  *
  * And a RETURN, which the share pass never had: a borrower that holds the paper and no longer
  * needs the borrow delivers it back and its collateral comes back. A short is covered by buying
  * the paper and returning it, not only by being recalled.
  */
-export function runSovereignLendingPass(state: GameState, ctx: WeeklyStepContext): void {
+export function runBondLendingPass(state: GameState, ctx: WeeklyStepContext): void {
   const v2 = ensureV2(state);
   const store = ctx.holdingsStore!;
   if (!store) return;
@@ -604,14 +609,24 @@ export function runSovereignLendingPass(state: GameState, ctx: WeeklyStepContext
     const lastFee: Record<string, number> = reg.borrowFeeBpsByCompanyId ?? {};
     const money = currencyOf(regionId);
     const priceOf = (instrumentId: string): number => trancheClearedPricePerFace(ctx.v2, asInstrumentId(instrumentId)) ?? 0;
-    /** What a book can deliver of a rung: its face on the opening register. */
+    /** What a book can deliver of a rung: its face on the opening register, whatever the kind. */
     const heldFace = (entityId: EntityId, bondId: string): number =>
-      sovereignRowsOf(ctx.v2, entityId).filter((r) => r.bondId === bondId).reduce((a, r) => a + r.faceLocal, 0);
+      bookRowsOf(ctx.v2, entityId).filter((r) => instrumentIdAt(ctx.v2, r) === bondId).reduce((a, r) => a + rowUnits(ctx.v2.holdings, r), 0);
+    /** The kind a rung is held as: the sovereign's, or the corporate ladder's own. */
+    const kindOf = (bondId: InstrumentId): ItemizedHolding['instrumentType'] => {
+      const r = trancheRowOf(ctx.v2, bondId);
+      const sovereign = issuerIdOf(ctx.v2, bondId) === governmentEntityId(regionId);
+      if (sovereign || r === undefined) return 'GOV_BOND';
+      const kind = trancheKindOfRow(ctx.v2, r);
+      // A facility is its lender's own loan and trades nowhere, so nothing lends it.
+      return kind === 'BANK_FACILITY' ? defect(`${bondId} is a facility: it cannot be lent`) : kind;
+    };
     const deliver = (fromId: EntityId, toId: EntityId, bondId: InstrumentId, face: number, price: number, reason: string) => {
+      const kind = kindOf(bondId);
       wireHoldingMove({ kind: 'INSTITUTION', id: fromId }, { kind: 'INSTITUTION', id: toId },
-        { instrumentType: 'GOV_BOND', instrumentId: bondId, issuerRegion: regionId, valueLocal: face * price, units: face }, reason);
-      store.addUnits(fromId, 'GOV_BOND', bondId, regionId, -face, price);
-      store.addUnits(toId, 'GOV_BOND', bondId, regionId, face, price);
+        { instrumentType: kind, instrumentId: bondId, issuerRegion: regionId, valueLocal: face * price, units: face }, reason);
+      store.addUnits(fromId, kind, bondId, regionId, -face, price);
+      store.addUnits(toId, kind, bondId, regionId, face, price);
     };
     const party = (id: EntityId) => ({ kind: 'INSTITUTION' as const, id });
     /** What each book wants borrowed of each rung this week — the need it stated; none = none. */
