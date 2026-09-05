@@ -16,6 +16,7 @@ import { DERIVATIVE_CLASSES, deskNotionalCapacityLocal, standingPfeChargeLocal, 
 import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivatives/hedging';
 import { StandingBook } from '../src/domain/derivatives/standing-book';
 import { asEntityId } from '../src/domain/ids';
+import { realisedUnsecuredRecoveryRate, CLAIM_SENIORITY, type Estate } from '../src/domain/estate';
 import { partyKey } from '../src/engine/ledger/party';
 
 const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView => ({
@@ -26,6 +27,7 @@ const view = (over: Partial<DerivativeMarketView> = {}): DerivativeMarketView =>
   cdsSpreadBps: () => 150,
   isInvestmentGrade: () => false,
   recoveryRate: () => 0.4,
+  issuerWorkout: () => undefined,
   commodityPrint: () => 110,
   commoditySpot: () => 105,
   fxToUsd: () => 1.1,
@@ -79,6 +81,27 @@ test('CDS: premium weekly to the seller; a reference default pays par less recov
   // §3.17-iii: what variation margin already paid the buyer on the way is netted from the payout.
   const evAfterVm = DERIVATIVE_CLASSES.CDS.eventTermination(base({ ...c, settledMarkLocal: 100_000 }), view({ isIssuerDefaulted: () => true }))!;
   assert.ok(Math.abs(evAfterVm.usdToB - -(1_000_000 * 0.6 - 100_000)) < 1e-9);
+});
+
+test('§3.17-vi CDS: the credit event settles at the issuer\'s OWN workout — it waits while the estate is open, marks at the expectation meanwhile, and pays no premium', () => {
+  const c = base({ classId: 'CDS', strike: 200, reference: { kind: 'ISSUER', issuerId: asEntityId('ISSUER') }, termKey: '', maturityWeek: 10 });
+  const open = view({ isIssuerDefaulted: () => true, issuerWorkout: () => ({ state: 'OPEN' }) });
+  assert.equal(DERIVATIVE_CLASSES.CDS.eventTermination(c, open), null, 'the payoff waits for the auction');
+  assert.equal(DERIVATIVE_CLASSES.CDS.holdsPastMaturity!(c, open), true, 'and the contract outlives its maturity for it');
+  assert.equal(DERIVATIVE_CLASSES.CDS.periodicLegUSDToB(c, open), null, 'no premium on a triggered contract');
+  assert.ok(Math.abs(DERIVATIVE_CLASSES.CDS.markToMarketUSDToA(c, open)! - 1_000_000 * 0.6) < 1e-9, 'marked at the expected payoff, the region\'s average, while open');
+  const closed = view({ isIssuerDefaulted: () => true, issuerWorkout: () => ({ state: 'CLOSED', recovery: 0.1 }) });
+  assert.equal(DERIVATIVE_CLASSES.CDS.holdsPastMaturity!(c, closed), false);
+  assert.ok(Math.abs(DERIVATIVE_CLASSES.CDS.markToMarketUSDToA(c, closed)! - 1_000_000 * 0.9) < 1e-9);
+  const ev = DERIVATIVE_CLASSES.CDS.eventTermination(base({ ...c, settledMarkLocal: 600_000 }), closed)!;
+  assert.ok(Math.abs(ev.usdToB - -(1_000_000 * 0.9 - 600_000)) < 1e-9, 'the settlement is the true-up from the expectation to what the unsecured class got back');
+  assert.equal(DERIVATIVE_CLASSES.CDS.holdsPastMaturity!(c, view()), false, 'a live reference: maturity is final');
+  const est = { companyId: asEntityId('ISSUER'), ticker: 'ISS', regionId: 'USA', openedWeek: 1, assets: { cashLocal: 0, receivablesLocal: 0, inventoryLocal: 0, ppeLocal: 0 }, distributedLocal: 0, claims: [
+    { holder: { kind: 'INSTITUTION', id: asEntityId('F1') }, instrumentType: 'CORP_BOND', seniority: CLAIM_SENIORITY.UNSECURED, principalLocal: 300, recoveredLocal: 30 },
+    { holder: { kind: 'INSTITUTION', id: asEntityId('F2') }, instrumentType: 'COMMERCIAL_PAPER', seniority: CLAIM_SENIORITY.UNSECURED, principalLocal: 100, recoveredLocal: 30 },
+    { holder: { kind: 'BANK', id: asEntityId('B1') }, instrumentType: 'BANK_FACILITY', seniority: CLAIM_SENIORITY.SECURED, principalLocal: 1000, recoveredLocal: 900 },
+  ] } as unknown as Estate;
+  assert.equal(realisedUnsecuredRecoveryRate(est), 0.15, 'the unsecured class alone: bonds and paper, not the secured lender');
 });
 
 test('§3.17-iii CDS: the mark is the spread move over the remaining life on a risky annuity — to the buyer when spreads widened', () => {

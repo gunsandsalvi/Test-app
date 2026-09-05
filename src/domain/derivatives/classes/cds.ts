@@ -8,7 +8,8 @@
  * COMPANY id — the same key the bond book prices. termKey: ''.
  */
 
-import { DerivativeClassProfile } from '../profile';
+import { DerivativeClassProfile, DerivativeMarketView } from '../profile';
+import type { DerivativeContract } from '../contract';
 import { issuerReferenceOf } from '../contract';
 import { annuityFactor } from '../../pricing';
 
@@ -57,8 +58,9 @@ export const CDS_PROFILE: DerivativeClassProfile = {
     if (bps === undefined) return undefined;
     return (bps / 10000) * Math.max(0, c.maturityWeek - m.week) / 52;
   },
-  /** The buyer pays the struck spread on the notional, weekly, for the life of the trade. */
-  periodicLegUSDToB: (c) => ({
+  /** The buyer pays the struck spread on the notional, weekly, for the life of the trade —
+   *  §3.17-vi: until the credit event; a triggered contract awaiting its workout pays no premium. */
+  periodicLegUSDToB: (c, m) => (m.isIssuerDefaulted(issuerReferenceOf(c)) ? null : {
     usdToB: (c.notional * (c.strike / 10000)) / 52,
     reason: 'CDS premium',
   }),
@@ -70,7 +72,12 @@ export const CDS_PROFILE: DerivativeClassProfile = {
    * is worth nothing. The lifecycle settles the change weekly; a name with no print does not mark.
    */
   markToMarketUSDToA: (c, m) => {
-    const current = m.cdsSpreadBps(issuerReferenceOf(c));
+    const issuerId = issuerReferenceOf(c);
+    // §3.17-vi: a triggered contract is worth its expected payoff — at the workout's realised
+    // recovery once it has closed, the region's average while it is open — so variation margin
+    // moves the bulk of the payoff at the event and the settlement is the true-up.
+    if (m.isIssuerDefaulted(issuerId)) return c.notional * Math.max(0, 1 - recoveryForEvent(c, m));
+    const current = m.cdsSpreadBps(issuerId);
     if (!Number.isFinite(current)) return null;
     const remainingWeeks = Math.max(0, c.maturityWeek - m.week);
     if (remainingWeeks === 0) return 0;
@@ -83,12 +90,29 @@ export const CDS_PROFILE: DerivativeClassProfile = {
   markReasonFinal: 'CDS settled',
   /** A defaulted reference entity terminates the contract: the seller pays par less what the
    *  workout actually recovers (G5, §7.192), which is what makes buying protection worth it —
-   *  §3.17-iii: less what variation margin has already paid the buyer on the way. */
+   *  §3.17-iii: less what variation margin has already paid the buyer on the way. §3.17-vi: what
+   *  the workout ACTUALLY recovers — the settlement waits for the issuer's own estate to close
+   *  and pays at what its unsecured class got back; only an issuer that left no estate settles at
+   *  the region's average. */
   eventTermination: (c, m) => {
-    if (!m.isIssuerDefaulted(issuerReferenceOf(c))) return null;
-    const recovery = Math.max(0, Math.min(1, m.recoveryRate(c.regionId)));
-    const payoutLocal = c.notional * Math.max(0, 1 - recovery) - (c.settledMarkLocal ?? 0);
+    const issuerId = issuerReferenceOf(c);
+    if (!m.isIssuerDefaulted(issuerId)) return null;
+    if (m.issuerWorkout(issuerId)?.state === 'OPEN') return null;
+    const payoutLocal = c.notional * Math.max(0, 1 - recoveryForEvent(c, m)) - (c.settledMarkLocal ?? 0);
     return { usdToB: -payoutLocal, reason: 'CDS credit event settled' };
+  },
+  /** §3.17-vi: a triggered contract outlives its maturity until the workout closes. */
+  holdsPastMaturity: (c, m) => {
+    const issuerId = issuerReferenceOf(c);
+    return m.isIssuerDefaulted(issuerId) && m.issuerWorkout(issuerId)?.state === 'OPEN';
   },
   closeOutUSDToB: () => 0, // a mark class: the lifecycle closes out at the mark
 };
+
+/** The recovery a credit event settles at: the workout's own once closed, the region's average
+ *  where there is none to wait for (or while it is open, for the mark's expectation). */
+function recoveryForEvent(c: DerivativeContract, m: DerivativeMarketView): number {
+  const w = m.issuerWorkout(issuerReferenceOf(c));
+  const r = w?.state === 'CLOSED' ? w.recovery : m.recoveryRate(c.regionId);
+  return Math.max(0, Math.min(1, r));
+}

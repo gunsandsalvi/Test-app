@@ -93,7 +93,7 @@ checked by `scripts/check-atlas.sh`.
 |---|---|---|
 | A1 satisfies `../instruments/derivative.md` | `src/domain/derivatives/classes/cds.ts:CDS_PROFILE` | ⚠️ |
 | A1.a D3 underlying — a named reference entity and its default event | `src/engine/simulation/stages/derivative-lifecycle.ts:buildDerivativeMarketView` | ✅ |
-| A1.b D4 payoff — par − recovery on the notional | `src/domain/derivatives/classes/cds.ts:eventTermination` | ⚠️ |
+| A1.b D4 payoff — par − recovery on the notional | `src/domain/derivatives/classes/cds.ts:eventTermination` | ✅ |
 | A1.c D7 price — the running spread in bps, cleared | `src/engine/simulation/stages/derivative-markets/cds.ts:runCdsMarket` | ✅ |
 | **A1.d D6 term — a stated tenor, and a CURVE of them** | `src/domain/derivatives/classes/cds.ts:CDS_TENOR_WEEKS` | ❌ |
 | A2 the premium leg is a real periodic payment, and it stops on the event | `src/domain/derivatives/classes/cds.ts:periodicLegUSDToB` | ✅ |
@@ -113,8 +113,8 @@ checked by `scripts/check-atlas.sh`.
 | C3.b a persistently large basis must be visible | `src/engine/audit/prices.ts:p2` | ⚠️ |
 | C4 VERIFY worse credit trades wider | `src/engine/audit/prices.ts:p3` | ⚠️ |
 | D1 a stated definition of the credit event, observable by both sides | `src/engine/simulation/stages/derivative-lifecycle.ts:buildDerivativeMarketView` | ⚠️ |
-| D2 a recovery from what the defaulted obligations fetch — an auction | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ⚠️ |
-| **D2.a FORBID no fixed recovery rate** | `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ⚠️ |
+| D2 a recovery from what the defaulted obligations fetch — an auction | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` · `src/domain/estate.ts:realisedUnsecuredRecoveryRate` · `src/engine/simulation/stages/derivative-lifecycle.ts:buildDerivativeMarketView` | ✅ |
+| **D2.a FORBID no fixed recovery rate** | `src/domain/derivatives/classes/cds.ts:eventTermination` · `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ✅ |
 | D3 the payment is real money, big enough to fail the seller | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ✅ |
 | D4 the contract terminates on the event | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ✅ |
 | D5 VERIFY Σ protection paid = Σ received; a default is a transfer | — | ❌ |
@@ -176,7 +176,21 @@ rates from spreads at all.
 book proves the multi-tenor clearing shape works — `irs.ts:SWAP_TENORS`), meaningful in what it
 opens. It belongs beside 17d's index, which is the other missing CDS product.
 
-### ⚠️ D2 / D2.a — THE RECOVERY IS NOT A CONSTANT, AND IT IS STILL NOT THIS ISSUER'S
+### ✅ D2 / D2.a — THE RECOVERY IS THIS ISSUER'S OWN WORKOUT
+
+*2026-09-05 (§9.17-vi). The credit event settles at what the reference's own estate actually
+paid its unsecured class (`estate.ts:realisedUnsecuredRecoveryRate` — the bonds and the paper,
+not the secured lender): the lifecycle's view exposes the issuer's workout
+(`buildDerivativeMarketView:issuerWorkout`, open or closed off `ctx.estates`), a triggered
+contract WAITS while the estate is open — no premium, marked at the expected payoff at the
+region's average so variation margin moves the bulk at the event, held past its maturity
+(`profile.ts:holdsPastMaturity`) — and settles the true-up when the estate closes. Only an issuer
+that left no estate settles at the region's average, and that is the stated fallback. Protection
+on a firm whose assets fetch 5 cents now pays more than on one whose fetch 80, which is B2.a's
+jump risk with a variance across names.*
+
+The paragraph below is the state before it.
+
 
 The FORBID is honoured in the way that matters most: **there is no fixed recovery rate in the
 credit-event payoff.** `shared-helpers.ts:creditRecoveryRate` is the region's own realised
@@ -272,8 +286,8 @@ CDS's `referenceId` is not re-keyed there. **§3 step 34, and 13-BOOK (d) for th
 
 ### Also marked, briefly
 
-- **A1 ⚠️** — the profile satisfies the contract as far as D8/D9 do; §9.17-ii/iii gave it initial margin off the name's own spread move and a weekly mark — what is left is the CCP (§3.17-iv).
-- **A1.b ⚠️** — the payoff is `par − the REGION's recovery`, not the estate's own — D2/D2.a above.
+- **A1 ⚠️** — the profile satisfies the contract as far as D8/D9 do; §9.17-ii/iii gave it initial margin off the name's own spread move and a weekly mark, §9.17-iv the clearing house, §9.17-vi the issuer's own recovery — what is left is the curve (A1.d).
+- **A1.b ✅** (2026-09-05, §9.17-vi) — the payoff is `par − the ISSUER's own realised unsecured recovery`, settled when its estate closes — D2/D2.a above.
 - **A3 ✅** (2026-09-05, §9.17-iii) — `cds.ts:markToMarketUSDToA` values protection every week as the spread move on a RISKY annuity: discounted at the overnight rate and survival-weighted at the hazard the cleared spread implies; the credit event nets what the mark already paid.
 - **C3.b ⚠️** — `P2` reports the basis and fires only above a quota, so a persistently large one on a minority of names is invisible.
 - **C4 ⚠️** — `P3` measures it with the same quota.

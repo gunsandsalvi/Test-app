@@ -113,6 +113,18 @@ export function outstandingLocal(claims: EstateClaim[]): number {
  * The realised recovery on the DEBT of a resolved estate: what secured and unsecured lenders got
  * back, against what they were owed. This is the number that calibrates the priced one.
  */
+/**
+ * §3.17-vi — WHAT THE UNSECURED CLASS ACTUALLY GOT BACK: the recovery a credit event settles at,
+ * because protection references the issuer's senior unsecured paper and that is the class the
+ * bonds and the commercial paper sit in. Undefined when the estate had no unsecured claim.
+ */
+export function realisedUnsecuredRecoveryRate(estate: Estate): number | undefined {
+  const unsecured = estate.claims.filter((c) => c.seniority === CLAIM_SENIORITY.UNSECURED);
+  const owedLocal = unsecured.reduce((a, c) => a + c.principalLocal, 0);
+  if (!(owedLocal > 0)) return undefined;
+  return Math.max(0, Math.min(1, unsecured.reduce((a, c) => a + c.recoveredLocal, 0) / owedLocal));
+}
+
 export function realisedDebtRecoveryRate(estate: Estate): number | undefined {
   const debt = estate.claims.filter((c) => c.seniority < CLAIM_SENIORITY.EQUITY);
   const owedLocal = debt.reduce((a, c) => a + c.principalLocal, 0);

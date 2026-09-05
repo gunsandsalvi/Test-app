@@ -547,15 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17. **Derivatives are centrally cleared, and margin is risk-based** (user) — split 2026-09-05,
-    one commit each; 17-i (the margin a contract carries is the amount posted), 17-ii (initial
-    margin is the reference's own move) and 17-iii (variation margin is the mark, for every
-    class) are in §9. What is left, in order:
-17-vi. **A credit event pays a REGIONAL AVERAGE recovery** (`cds.ts` `eventTermination` +
-    `derivative-lifecycle.ts`) instead of the estate's own workout on that issuer. Settle the
-    credit event off the estate's realised recovery when it closes (the undiscounted close-outs
-    the original entry named went with 17-iii: the close-out is the mark's delta now).
-
 17b. **An options class, and the FX swap lines.** Premium is a periodic leg paid once and
     exercise is an event termination at intrinsic value — two profile methods on the one contract.
     The real work is its MARKET; until it exists, stage 12's player options stay on the legacy
@@ -1621,6 +1612,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17-vi — A CREDIT EVENT SETTLES AT THE ISSUER'S OWN WORKOUT.** Step 17 is closed. The view
+exposes the reference's workout (`derivative-lifecycle.ts:buildDerivativeMarketView`
+`issuerWorkout`: OPEN while `ctx.estates` holds its estate unclosed, CLOSED with
+`estate.ts:realisedUnsecuredRecoveryRate` — what the bonds and the paper actually got back,
+the class protection references — undefined when the issuer left no estate). `cds.ts`: a
+triggered contract pays no premium, marks at its expected payoff (the realised recovery once
+closed, the region's average while open — so variation margin moves the bulk at the event and
+the settlement is the true-up), holds past its maturity while the workout is open
+(`profile.ts:holdsPastMaturity`, honoured by the lifecycle's maturity branch), and
+`eventTermination` settles when the estate closes at what it paid; only an issuer with no
+estate to wait for settles at the region's average, the stated fallback. Atlas cds A1.b, D2,
+D2.a ✅. `test/derivatives.test.ts`: waits while open, marks at the expectation, no premium,
+outlives maturity, settles the true-up at the realised rate; the unsecured class alone counts.
+Gates green; no run.
 
 **17-v-iii — THE MARKETS SIZE TO THE LIMIT.** Step 17-v is closed. A strike's margin rate
 exists before the contract does: `registry.ts:initialMarginRateOf(shape, view)` is the

@@ -20,6 +20,8 @@ import { RegionId } from '../geography';
 import { DerivativeClassId, DerivativeContract } from './contract';
 import type { EntityId } from '../ids';
 
+export type IssuerWorkout = { state: 'OPEN' } | { state: 'CLOSED'; recovery: number };
+
 /** Flat market inputs the lifecycle hands a profile — everything a leg may price off.
  *  Party LIVENESS is deliberately absent: a dead counterparty is the lifecycle's own close-out,
  *  detected once for every class, never a profile's business. */
@@ -36,6 +38,13 @@ export interface DerivativeMarketView {
   /** Whether the reference is investment grade this week — the CEM add-on's one split. */
   isInvestmentGrade(issuerId: EntityId): boolean;
   recoveryRate(regionId: RegionId): number;
+  /**
+   * §3.17-vi — THE REFERENCE'S OWN WORKOUT. `OPEN` while its estate is still selling and paying
+   * (the payoff waits for the auction); `CLOSED` with what the unsecured class actually got back
+   * (`estate.ts:realisedUnsecuredRecoveryRate`); undefined when the issuer left no estate to
+   * wait for, and then the region's average (`recoveryRate`) is the stated fallback.
+   */
+  issuerWorkout(issuerId: EntityId): IssuerWorkout | undefined;
   /** This week's futures print for (commodity, tenor bucket); NaN when the book did not clear. */
   commodityPrint(commodityId: string, termKey: string): number;
   /** Spot for a commodity; NaN when the commodity no longer exists. */
@@ -103,4 +112,10 @@ export interface DerivativeClassProfile {
    * (rate-leg classes; mark-leg classes close out at the mark, which the lifecycle owns).
    */
   closeOutUSDToB(c: DerivativeContract, m: DerivativeMarketView): number;
+  /**
+   * §3.17-vi — a contract that has an event pending settles the event, not its maturity: the
+   * lifecycle holds it past `maturityWeek` while this says so (a credit event awaiting the
+   * reference's workout). Absent: maturity is final, as for every class before.
+   */
+  holdsPastMaturity?(c: DerivativeContract, m: DerivativeMarketView): boolean;
 }

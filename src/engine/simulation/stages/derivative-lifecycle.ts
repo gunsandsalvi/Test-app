@@ -42,6 +42,7 @@ import { buildEntityIndex, companyOfParty } from '../../ledger/entity-index';
 import { pay } from './settlement';
 import { currencyOf } from '../../../domain/geography';
 import { creditRecoveryRate } from './shared-helpers';
+import { realisedUnsecuredRecoveryRate } from '../../../domain/estate';
 import type { EntityId } from '../../../domain/ids';
 
 
@@ -134,6 +135,15 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
     },
     isInvestmentGrade: (issuerId) => isInvestmentGradeRating(companyById.get(issuerId)?.creditRating),
     recoveryRate: (r) => creditRecoveryRate(region(r)),
+    // §3.17-vi: the reference's own workout — the estate the resolution stage keeps for it, open
+    // or closed (a closed one stays readable for a few weeks, which is the window this reads in).
+    issuerWorkout: (issuerId) => {
+      const estate = ctx.estates.find((e) => e.companyId === issuerId);
+      if (!estate) return undefined;
+      if (estate.closedWeek === undefined) return { state: 'OPEN' };
+      const recovery = realisedUnsecuredRecoveryRate(estate);
+      return recovery === undefined ? undefined : { state: 'CLOSED', recovery };
+    },
     commodityPrint: (commodityId, termKey) => {
       const comm = commodityById.get(commodityId);
       if (!comm) return Number.NaN;
@@ -376,7 +386,8 @@ export function settleDerivativeClass(
     const event = profile.eventTermination(c, view);
     if (event) { payThroughHouse(ctx, c, event.usdToB, event.reason, net, stands); releaseInitialMargin(ctx, c, view); continue; }
 
-    if (c.maturityWeek <= view.week) {
+    // §3.17-vi: a contract with an event pending outlives its maturity until the event settles.
+    if (c.maturityWeek <= view.week && !profile.holdsPastMaturity?.(c, view)) {
       const leg = profile.periodicLegUSDToB(c, view);
       if (leg) payThroughHouse(ctx, c, leg.usdToB, leg.reason, net, stands);
       settleMark(c, profile.markReasonFinal ?? 'derivative settled');
