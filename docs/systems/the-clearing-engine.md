@@ -205,13 +205,14 @@ no line at which it declines to answer.
 
 ### ❌ E3 — THE BID–OFFER IS A TABLE
 
-`DESK_SPREAD_BPS_BY_BOOK` (`domain/dealer-desk.ts:56-68`) is eight stated real-market widths —
-sovereign 5, bill 2, corporate 15, loan 20, equity 8, FX 2. It reaches the auction two ways: as
-`ClearingParams.dealerSpreadBps`, charged on every fill as a fee, and as the desks' own
-`fullSizeStatRange` (`dealer-desks.ts:152-156`), where the desk's reservation is
+`DESK_SPREAD_BPS_BY_BOOK` (`domain/dealer-desk.ts`) is eight stated real-market widths —
+sovereign 5, bill 2, corporate 15, loan 20, equity 8, FX 2. *(§9.26-e-i: it no longer reaches
+the auction as `ClearingParams.dealerSpreadBps`, charged on every fill as a fee — that parameter,
+the kernels' fee lane and the fee income paid by market share are deleted.)* It still reaches it
+as the desks' own `fullSizeStatRange` (`dealer-desks.ts`), where the desk's reservation is
 `currentStat ± neutralFraction × spreadBps`. So the quote width is a prior applied to last week's
 mid, which is the exact construction E3 forbids, and the desks' schedules — the thing the node
-says the spread should be READ OFF — are built from it instead.
+says the spread should be READ OFF — are built from it instead. **§3 step 26-e-ii.**
 
 **Already §3 step 26** (`dealer-desk.ts:117` is on its list). Second witness, with the mechanism
 named: it is not only a cost charged, it is the shape of the desks' curve.

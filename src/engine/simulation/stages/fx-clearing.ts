@@ -343,7 +343,6 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     }
 
     const result = clearFinancialAsset([instrument], participants, {
-      dealerSpreadBps: 0,
     });
 
     const clearedBookStat = takePrint(ctx, result, instrument.id, 'fx spot');

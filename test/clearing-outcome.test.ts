@@ -13,20 +13,20 @@ const p = (pid: string, demand: Partial<{ reservationStat: number; maxHoldingLoc
 });
 
 test('a book with buyers clears at a level of its own', () => {
-  const r = clearFinancialAsset([inst()], [p('seller', undefined, 1e9), p('buyer', {})], { dealerSpreadBps: 0, unsoldStaysWithHolder: true });
+  const r = clearFinancialAsset([inst()], [p('seller', undefined, 1e9), p('buyer', {})], { unsoldStaysWithHolder: true });
   assert.equal(r.unclearedByIndex[0], 0);
   assert.equal(r.printById.get(id)?.uncleared, undefined);
   assert.ok(r.statByIndex[0] !== 250 || true);
 });
 
 test('a book nobody wants at any level carries last week\'s statistic and says NO_DEMAND', () => {
-  const r = clearFinancialAsset([inst()], [p('seller', undefined, 1e9), p('nobody', { maxHoldingLocal: 0 })], { dealerSpreadBps: 0, unsoldStaysWithHolder: true });
+  const r = clearFinancialAsset([inst()], [p('seller', undefined, 1e9), p('nobody', { maxHoldingLocal: 0 })], { unsoldStaysWithHolder: true });
   assert.equal(r.printById.get(id)?.uncleared, 'NO_DEMAND');
   assert.equal(r.statByIndex[0], 250, 'the print is last week\'s, not the bracket');
 });
 
 test('mandated cores past the float at every level carry the statistic and say OVERSUBSCRIBED', () => {
-  const r = clearFinancialAsset([inst({ tradableFloatLocal: 1e8, outstandingLocal: 1e8 })], [p('core', { minHoldingLocal: 5e8, maxHoldingLocal: 5e8 })], { dealerSpreadBps: 0 });
+  const r = clearFinancialAsset([inst({ tradableFloatLocal: 1e8, outstandingLocal: 1e8 })], [p('core', { minHoldingLocal: 5e8, maxHoldingLocal: 5e8 })], {});
   assert.equal(r.printById.get(id)?.uncleared, 'OVERSUBSCRIBED');
   assert.equal(r.statByIndex[0], 250);
 });

@@ -143,7 +143,7 @@ function runBondFuturesMarket({ ctx, week, view, standing }: DerivativeMarketRun
       statKind: 'PRICE_LIKE',
       durationYears,
     };
-    const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
+    const result = clearFinancialAsset([instrument], participants, {});
     const cleared = takePrint(ctx, result, instrumentId, 'bond future');
     if (cleared === undefined) return;
 

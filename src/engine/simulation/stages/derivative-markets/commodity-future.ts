@@ -223,7 +223,6 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
 
       const result = clearFinancialAsset(instruments, participants, {
         // Bilateral between named hedgers, desks and funds; nobody stands between them yet.
-        dealerSpreadBps: 0,
       });
       const clearedPrice = takePrint(ctx, result, id, 'commodity future');
       if (clearedPrice === undefined || !(clearedPrice > 0)) return;

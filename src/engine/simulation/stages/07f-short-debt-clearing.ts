@@ -390,7 +390,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       });
 
       const result = clearFinancialAsset(instruments, [...participants, ...deskParticipants], {
-        dealerSpreadBps: DEALER_SPREAD_BPS,
         // OWN7: the float here is a stock these participants already hold, so an unsold
         // position stays with its holder rather than falling to a dealer nobody names.
         unsoldStaysWithHolder: true,
@@ -624,7 +623,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         participantPartyOf({ regionId, entityIds: billEntityIds, deskTickers, bankIdOfTicker }),
         // Item 13: the CCP receives less by exactly the rebates its buyers kept, and pays the
         // treasury less by the same total — flat by construction, as a clearing house is.
-        { netCashLocal: result.dealerNetCashLocal - totalCashRebatesLocal, feeLocal: result.totalDealerRevenueLocal },
+        { netCashLocal: result.dealerNetCashLocal - totalCashRebatesLocal },
         feeDesksForRegion(ctx, regionId),
         // PUB/item 13: the treasury receives the DISCOUNTED proceeds the auction's yield
         // implies — that shortfall against face is exactly the government's borrowing cost,
@@ -1104,7 +1103,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       const cpAllParticipants = [...cpParticipants, ...cpDeskParticipants];
       const cpResult = clearFinancialAsset(cpInstruments, cpAllParticipants, {
-        dealerSpreadBps: DESK_SPREAD_BPS_BY_BOOK[CP_BOOK],
         // OWN7: the float here is a stock these participants already hold, so an unsold
         // position stays with its holder rather than falling to a dealer nobody names.
         unsoldStaysWithHolder: true,
@@ -1225,7 +1223,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         ctx, regionId, currencyOf(regionId), CP_BOOK,
         cpResult.netCashDeltaByParticipantId,
         cpPartyOfParticipant,
-        { netCashLocal: cpResult.dealerNetCashLocal, feeLocal: cpResult.totalDealerRevenueLocal },
+        { netCashLocal: cpResult.dealerNetCashLocal },
         feeDesksForRegion(ctx, regionId),
         // The CCP pays each issuer for the paper its deal actually placed, AT THE PRICE it placed
         // at — a deal that conceded raises less, which is what a concession is.

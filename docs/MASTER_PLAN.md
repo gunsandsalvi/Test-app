@@ -551,15 +551,22 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-26-e. **The desk's spread is a consequence.** `DESK_SPREAD_BPS_BY_BOOK` (dealer-desk.ts) is nine
-    stated real-market widths doing two jobs: a fee on the mid in five books
-    (`financial-clearing-engine` charges `|traded| × bps` beside the one cleared price — dealer-desks
-    C5.a, the-clearing-engine E3, sovereign-credit D6) and the width of every desk's schedule; the
-    FX conversion fee in 05 and `fx-funding`, and the ETF share book, read it too. The width of a
-    desk's schedule is what carrying the position costs it — financing at the repo rate over the
-    holding it expects, plus the risk it bears, the instrument's own measured weekly move at its
-    bank's risk aversion — and the desk earns by buying below and selling above through that
-    schedule; the fee on the mid goes. Split further when reached: the engine, then each book.
+26-e-ii. **The width of a desk's schedule is what carrying the position costs it.** *(26-e-i is
+    in §9: the fee on the mid is gone.)* `dealer-desks.ts` sets every desk's `fullSizeStatRange`
+    — how far the level must move in its favour for it to go from flat to full — from
+    `DESK_SPREAD_BPS_BY_BOOK`, nine stated real-market widths. The width is what taking the
+    position costs the desk: financing it at the repo rate the world clears over the week until
+    it re-quotes, plus the risk it bears over that week — the instrument's own measured weekly
+    move (the print store carries no history per instrument yet; give it one) at its bank's own
+    risk aversion (`domain/preferences.ts`). The underwriting fee's `bookSpreadBps` term reads the
+    same width. dealer-desks C1/C3/C5, D5; the-clearing-engine E3; sovereign-credit D6;
+    corporate-credit D3.c.
+26-e-iii. **The FX pip and the ETF assembly cost are desks' widths.** `fx-funding.ts` and
+    `05-unit-bidding.ts` (a converting firm, a household or a treasury buying abroad) pay a stated
+    2bp pip to the region's banks by market share; `etf-flows.ts` sizes a basket's assembly cost
+    from the equity table. Each is the FX desks' or the equity desks' own width from 26-e-ii,
+    earned by the desk whose schedule was crossed; then `DESK_SPREAD_BPS_BY_BOOK` and its dead
+    `commodity`/`derivatives` entries are deleted. fx-spot B5/C3.
 26-f. **WHAT PLANT IS, decided once — and one depreciation schedule.** *(11e's last slice, folded
     in here deliberately: the seed and every birth assign `grossPPELocal` with no wire and there
     is no asset kind for plant — `ASSET_KINDS` carries `HOUSE`, not plant. You cannot wire a thing
@@ -1371,6 +1378,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**26-e-i — THE FEE ON THE MID GOES.** `DESK_SPREAD_BPS_BY_BOOK`'s first job was a fee: every book
+  passed its stated width as `ClearingParams.dealerSpreadBps` and the kernel charged every
+  participant `|traded| × bps` beside the one cleared level — whether a desk stood between the
+  parties or not — and `settleClearedBook` paid that income to the region's banks by market share,
+  to desks that had taken no position (dealer-desks C5.a, B3, F3; the-clearing-engine E3's first
+  half). Deleted: the parameter, the kernels' `fillFee` lane (TypeScript and C, rebuilt; the
+  `uncleared` lane moves to output 9) and the three worker paths' copy of it,
+  `totalDealerRevenueLocal`, the index funds' bound shaved by the fee (07b, 07d), the equity
+  book's own bps on every share flow (07e, three sites), and the fee half of settlement — the
+  rounding dust of the legs still lands on the region's desks pro rata, which is what dust does.
+  A participant pays what it traded at the cleared level and nothing beside it; a desk earns by
+  where its own schedule stood. dealer-desks C5.a ❌→✅, F3 ⚠️→✅ (a desk's P&L is its fills and
+  marks, nothing times volume), B3 stays ⚠️ and C5/C3/C4 ❌ for the width, which is 26-e-ii's
+  (split per rule 10: 26-e → i/ii/iii). Gates green; no run (rule 11).
 
 **26-d — ONE COST OF CAPITAL PER FIRM.** What a firm's capital requires was stated in seven places,
   four ways: the labour stage's `10Y + β × premium × risk aversion`, the freight and commodity

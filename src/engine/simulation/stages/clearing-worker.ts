@@ -12,7 +12,6 @@ interface Job {
   sab: SharedArrayBuffer;
   n: number;
   pCount: number;
-  dealerSpreadBps: number;
   unsoldStaysWithHolder: boolean;
   from: number;
   to: number;
@@ -36,7 +35,6 @@ function packViewsOnly(job: Job) {
   return {
     n, pCount, float, offering, withdrawStat, currentStat, yieldLike, skip,
     present, dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding,
-    dealerSpreadBps: job.dealerSpreadBps,
     unsoldStaysWithHolder: job.unsoldStaysWithHolder === true,
   };
 }
@@ -58,7 +56,6 @@ port.on('message', (job: Job) => {
     fillPart: shard.fillPart.subarray(0, shard.fillCount),
     fillFilled: shard.fillFilled.subarray(0, shard.fillCount),
     fillTraded: shard.fillTraded.subarray(0, shard.fillCount),
-    fillFee: shard.fillFee.subarray(0, shard.fillCount),
     fillCount: shard.fillCount,
   };
   port.postMessage(result);

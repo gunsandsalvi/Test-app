@@ -439,7 +439,6 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
 
     const result = clearFinancialAsset(instruments, participants, {
       // Bilateral between named holders and named funds; no dealer stands between them.
-      dealerSpreadBps: 0,
     });
 
     // ---- 4. STRIKE. At one cleared fee the lenders are fungible, so each borrower draws from
@@ -730,7 +729,7 @@ export function runBondLendingPass(state: GameState, ctx: WeeklyStepContext): vo
         if (demandByInstrumentId.size > 0) participants.push({ id: entity.id, currentHoldingsByInstrumentId: current, demandByInstrumentId });
       });
       if (participants.length > 0) {
-        const result = clearFinancialAsset(instruments, participants, { dealerSpreadBps: 0 });
+        const result = clearFinancialAsset(instruments, participants, {});
         let seq = 0;
         bondIds.forEach((bondId) => {
           const instrumentId = sblInstrumentId(regionId, bondId);

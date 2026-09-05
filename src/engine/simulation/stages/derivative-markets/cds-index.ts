@@ -178,7 +178,7 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
       statKind: 'YIELD_LIKE',
       durationYears: CDS_INDEX_TENOR_WEEKS / 52,
     };
-    const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
+    const result = clearFinancialAsset([instrument], participants, {});
     const clearedBps = takePrint(ctx, result, instrumentId, 'cds index');
     if (clearedBps === undefined) return;
 

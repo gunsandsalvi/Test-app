@@ -417,12 +417,11 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         const px = Math.max(1e-9, openingPrice[i]);
         demandByInstrumentId.set(
           loans[i].id,
-          // §7.270: the kernel's cash leg is traded PLUS the dealer fee, so a bound spent to the
-          // last dollar overdraws by spread × gross — the fee rides outside the bound. A fund that
-          // never walks away rides the bound exactly; shave it by the spread.
+          // §3.26-e-i: the bound is the fund's spendable cash — the kernel's cash leg is what was
+          // traded and nothing beside it, so nothing rides outside the bound any more.
           indexFundDemand(
             (investableLocal * c.weight) / px,
-            (institutionSpendableLocal(ctx, fund) * c.weight / (1 + DEALER_SPREAD_BPS / 10000)) / px,
+            (institutionSpendableLocal(ctx, fund) * c.weight) / px,
             'PRICE_LIKE')
         );
       });
@@ -438,7 +437,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         const shareOfFund = investableLocal > 0 ? targetValueLocal / investableLocal : 0;
         demandByInstrumentId.set(
           x.id,
-          indexFundDemand(targetValueLocal / px, (institutionSpendableLocal(ctx, fund) * shareOfFund / (1 + DEALER_SPREAD_BPS / 10000)) / px, 'PRICE_LIKE')
+          indexFundDemand(targetValueLocal / px, (institutionSpendableLocal(ctx, fund) * shareOfFund) / px, 'PRICE_LIKE')
         );
       });
       return {
@@ -463,7 +462,6 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
 
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants];
     const result = clearFinancialAsset(instruments, allParticipants, {
-      dealerSpreadBps: DEALER_SPREAD_BPS,
       // OWN7: the float here is a stock these participants already hold, so an unsold position
       // stays with its holder rather than falling to a dealer nobody names.
       unsoldStaysWithHolder: true,
@@ -564,7 +562,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       ctx, regionId, currencyOf(regionId), BOOK,
       result.netCashDeltaByParticipantId,
       partyOfParticipant,
-      { netCashLocal: result.dealerNetCashLocal, feeLocal: result.totalDealerRevenueLocal },
+      { netCashLocal: result.dealerNetCashLocal },
       feeDesksForRegion(ctx, regionId),
       // WS8: the CCP pays each issuer for the paper its deal actually placed, AT THE PRICE it
       // placed at — a deal that conceded raises less, which is what a concession is.

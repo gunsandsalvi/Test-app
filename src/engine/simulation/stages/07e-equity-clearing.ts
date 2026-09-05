@@ -453,7 +453,6 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
 
     const allParticipants = [...participants, ...indexFundParticipants, ...deskParticipants, ...(householdParticipant ? [householdParticipant] : [])];
     const result = clearFinancialAsset(instruments, allParticipants, {
-      dealerSpreadBps: DEALER_SPREAD_BPS,
       // OWN7: the float here is a stock these participants already hold, so an unsold
       // position stays with its holder rather than falling to a dealer nobody names.
       unsoldStaysWithHolder: true,
@@ -510,7 +509,6 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // SCALE C1: fills append to the store for the single write-back after this, the last book.
     // SETL6: the cash legs are collected here and settled below through the clearing house.
     const netCashByEntityId = new Map<string, number>();
-    let bookFeeLocal = 0;
     bookEntities.forEach((entity) => {
       const epi = piById.get(entity.id);
       const equityHoldings: ItemizedHolding[] = [];
@@ -544,16 +542,11 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         });
       }
       // The engine's cash delta is in the same unit as the quantity — shares — so convert the
-      // traded share flow into money at each name's cleared price. G3e: and charge the desks'
-      // spread on it, which this adapter never did because the engine's fee came back
-      // share-denominated too — so equity trading was free while every other book paid.
+      // traded share flow into money at each name's cleared price. §3.26-e-i: at that price and
+      // nothing beside it — the bps on the flow this adapter charged is gone with every book's.
       let cashDeltaLocal = 0;
-      let feeLocal = 0;
       const chargeLocal = (tradedShares: number, comp: Company) => {
         cashDeltaLocal -= tradedShares * comp.stockPrice;
-        const f = Math.abs(tradedShares) * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
-        cashDeltaLocal -= f;
-        feeLocal += f;
       };
       for (let ii = 0; ii < nI; ii++) {
         const shares = holdAt(epi, ii);
@@ -568,22 +561,18 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         if (comp) chargeLocal(-prevShares, comp);
       });
       netCashByEntityId.set(entity.id, cashDeltaLocal);
-      bookFeeLocal += feeLocal;
       store.append(entity.id, equityHoldings);
     });
 
     // G3e: the desks' own money leg, computed the same way — this book clears in shares, so the
     // engine's cash legs are share-denominated and every money number here is made in this
-    // adapter. A desk pays the book's spread on its own flow exactly as a client does.
+    // adapter. A desk's money leg is its own flow at the print, exactly as a client's is.
     const deskCashLocal = new Map<string, number>();
     deskParticipants.forEach((desk) => {
       const dpi = piById.get(desk.id);
       let cashDeltaLocal = 0;
       const charge = (tradedShares: number, comp: Company) => {
         cashDeltaLocal -= tradedShares * comp.stockPrice;
-        const f = Math.abs(tradedShares) * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
-        cashDeltaLocal -= f;
-        bookFeeLocal += f;
       };
       for (let ii = 0; ii < nI; ii++) {
         const shares = holdAt(dpi, ii);
@@ -600,7 +589,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       netCashByEntityId.set(desk.id, cashDeltaLocal);
     });
     // §7.281: the households' cash leg, computed the same way — shares SOLD at the cleared
-    // print, less the same spread every seller pays. The unsold remainder stays household-held
+    // print. The unsold remainder stays household-held
     // (it simply rejoins the residual the register measures). The proceeds land on the
     // HOUSEHOLD party at settlement below, which is the whole point of the channel.
     if (householdParticipant) {
@@ -616,9 +605,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const ti = ciById.get(companyId);
         const soldShares = Math.max(0, prevShares - (ti !== undefined ? holdAt(hpi, ti) : 0));
         if (soldShares <= 0) return;
-        const f = soldShares * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
-        cashDeltaLocal += soldShares * comp.stockPrice - f;
-        bookFeeLocal += f;
+        cashDeltaLocal += soldShares * comp.stockPrice;
         transferHolding(ctx.v2, { kind: 'HOUSEHOLD', region: regionId }, { kind: 'CLEARING_HOUSE', region: regionId },
           {
             instrumentType: 'EQUITY', instrumentId: companyId, issuerRegion: regionId,
@@ -676,13 +663,13 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       const legs = [...netCashByEntityId.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 8)
         .map(([id, v]) => `${id.slice(0, 18)} ${(v / 1e6).toFixed(1)}M`).join(' | ');
       const prim = [...result.primaryOutcomeById.entries()].map(([id, o]) => `${id.slice(0, 14)} take ${(o.marketTakeLocal / 1e6).toFixed(2)}Msh@${o.clearedStat.toFixed(2)}${o.withdrawn ? ' WITHDRAWN' : ''}`).join(' | ');
-      console.log(`  [equity-legs] ${regionId} dealerNet ${(dealerNetLocal / 1e6).toFixed(1)}M fee ${(bookFeeLocal / 1e6).toFixed(1)}M | ${legs} | primary: ${prim || 'none'}`);
+      console.log(`  [equity-legs] ${regionId} dealerNet ${(dealerNetLocal / 1e6).toFixed(1)}M | ${legs} | primary: ${prim || 'none'}`);
     }
     settleClearedBook(
       ctx, regionId, currencyOf(regionId), BOOK,
       netCashByEntityId,
       participantPartyOf({ regionId, entityIds, deskTickers, bankIdOfTicker }),
-      { netCashLocal: dealerNetLocal, feeLocal: bookFeeLocal },
+      { netCashLocal: dealerNetLocal },
       feeDesksForRegion(ctx, regionId),
       equityPrimaryTakes
     );

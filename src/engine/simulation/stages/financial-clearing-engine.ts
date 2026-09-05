@@ -224,8 +224,6 @@ export function setDemand(D: DemandStaging, row: number, i: number, reservationS
 }
 
 interface ClearingParams {
-  /** Bid/ask the dealer desk earns on the gross flow it facilitates. */
-  dealerSpreadBps: number;
   /**
    * How far the level may travel in a single week. Real markets gap, but they gap on news
    * arriving, and the schedules above already carry the news — this keeps one week's solve from
@@ -298,7 +296,6 @@ export interface ClearingResult {
   printById: Map<InstrumentId, ClearedPrint>;
   newParticipantHoldings: Map<string, Map<InstrumentId, number>>;
   newDealerInventoryById: Map<InstrumentId, number>;
-  totalDealerRevenueLocal: number;
   netCashDeltaByParticipantId: Map<string, number>;
   /**
    * SETL6 — the DEALER's own cash leg: it is the counterparty to every fill, so it receives
@@ -558,7 +555,6 @@ export interface PackedClearing {
   dMaxNet: Float64Array; // NaN = unbounded
   dMinH: Float64Array;
   prevHolding: Float64Array;
-  dealerSpreadBps: number;
   unsoldStaysWithHolder: boolean;
 }
 
@@ -578,7 +574,6 @@ export interface KernelShardResult {
   fillPart: Int32Array;
   fillFilled: Float64Array;
   fillTraded: Float64Array;
-  fillFee: Float64Array;
   fillCount: number;
 }
 
@@ -612,7 +607,6 @@ function packClearing(
     packed = {
       n, pCount, float, offering, withdrawStat, currentStat, yieldLike, skip,
       present, dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding,
-      dealerSpreadBps: params.dealerSpreadBps,
       unsoldStaysWithHolder: params.unsoldStaysWithHolder === true,
     };
     // Shared memory is reused across calls; zero what the packers below only conditionally set.
@@ -634,7 +628,6 @@ function packClearing(
       dMaxNet: new Float64Array(n * pCount),
       dMinH: new Float64Array(n * pCount),
       prevHolding: new Float64Array(n * pCount),
-      dealerSpreadBps: params.dealerSpreadBps,
       unsoldStaysWithHolder: params.unsoldStaysWithHolder === true,
     };
   }
@@ -728,7 +721,6 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
     fillPart: new Int32Array(span * pCount),
     fillFilled: new Float64Array(span * pCount),
     fillTraded: new Float64Array(span * pCount),
-    fillFee: new Float64Array(span * pCount),
     fillCount: 0,
   };
 
@@ -883,7 +875,6 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
       const wantedTradeLocal = kernFilled[pi] - previousLocal;
       const tradedLocal = wantedTradeLocal > 0 ? wantedTradeLocal * buyScale : wantedTradeLocal * sellScale;
       const filledLocal = previousLocal + tradedLocal;
-      const feeLocal = Math.abs(tradedLocal) * (packed.dealerSpreadBps / 10000);
       allocatedLocal += filledLocal;
       // Emit only rows that can move anything: a participant with no demand and no prior
       // holding contributes exact zeros everywhere (the old loop added -0-0 to its cash).
@@ -893,7 +884,6 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
         out.fillPart[f] = pi;
         out.fillFilled[f] = filledLocal;
         out.fillTraded[f] = tradedLocal;
-        out.fillFee[f] = feeLocal;
       }
     }
     // With both sides rationed there is nothing left over by construction, so there is no
@@ -961,7 +951,6 @@ function accumulateShard(
   for (; f < shard.fillCount; f++) {
     const filledLocal = shard.fillFilled[f];
     const tradedLocal = shard.fillTraded[f];
-    const feeLocal = shard.fillFee[f];
     // Dust is a DOLLAR: a position worth a dollar or less is not carried. The unit here is the
     // book's — dollars on the credit books, SHARES on the equity book — so the test is in money
     // (units × the cleared price where the stat is a price). Measured at §7.373: `filledLocal > 1`
@@ -973,9 +962,10 @@ function accumulateShard(
       result.holdingsMatrix[cell] = filledLocal;
       noteDenseWrite(cell);
     }
-    cashByPi[shard.fillPart[f]] = cashByPi[shard.fillPart[f]] - tradedLocal - feeLocal;
-    result.totalDealerRevenueLocal += feeLocal;
-    result.dealerNetCashLocal += tradedLocal + feeLocal;
+    // §3.26-e-i: no fee on the mid. A participant pays what it traded at the cleared level and
+    // nothing beside it; a desk earns by where its own schedule stood, never by a bps on the flow.
+    cashByPi[shard.fillPart[f]] = cashByPi[shard.fillPart[f]] - tradedLocal;
+    result.dealerNetCashLocal += tradedLocal;
   }
 }
 
@@ -1129,7 +1119,6 @@ export function clearFinancialAsset(
       }
       return primaryMap;
     },
-    totalDealerRevenueLocal: 0,
     netCashDeltaByParticipantId: new Map(),
     dealerNetCashLocal: 0,
     anyCeilingAboveHolding: anyCeilingAboveHolding(instruments, participants),

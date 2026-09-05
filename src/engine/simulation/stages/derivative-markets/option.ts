@@ -128,7 +128,7 @@ function runOptionMarket({ ctx, week, standing, view }: DerivativeMarketRun): vo
     });
     if (participants.length === 0) return;
 
-    const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
+    const result = clearFinancialAsset([instrument], participants, {});
     const clearedVolPct = takePrint(ctx, result, instrumentId, 'index option');
     if (clearedVolPct === undefined) return;
     const impliedVol = Number((clearedVolPct / 100).toFixed(4));

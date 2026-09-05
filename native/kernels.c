@@ -169,15 +169,14 @@ static double solveClearingStat(int isYieldLike, double floatUSD, double bLow, d
 /* clearingKernel(inArrs, scalars, outArrs) -> fillCount
    inArrs order:  float, offering, withdrawStat, currentStat, yieldLike, skip, present,
                   dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding
-   scalars (f64): n, pCount, dealerSpreadBps, (unused), unsold (0/1)
+   scalars (f64): n, pCount, (unused), (unused), unsold (0/1)
    outArrs order: clearedStat, dealerInventory, primaryWithdrawn, primaryMarketTake,
-                  hasPrimary, fillInst, fillPart, fillFilled, fillTraded, fillFee */
+                  hasPrimary, fillInst, fillPart, fillFilled, fillTraded, uncleared */
 static napi_value ClearingKernel(napi_env env, napi_callback_info info){
   size_t argc = 3; napi_value argv[3];
   napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
   double *sc = taPtr(env, argv[1], NULL);
   int n = (int)sc[0], pCount = (int)sc[1];
-  double dealerSpreadBps = sc[2];
   int unsold = sc[4] != 0;
   napi_value in = argv[0], out = argv[2];
   double *flt = taPtr(env, arrAt(env, in, 0), NULL), *offering = taPtr(env, arrAt(env, in, 1), NULL);
@@ -194,8 +193,7 @@ static napi_value ClearingKernel(napi_env env, napi_callback_info info){
   uint8_t *hasPrimary = taPtr(env, arrAt(env, out, 4), NULL);
   int32_t *fillInst = taPtr(env, arrAt(env, out, 5), NULL), *fillPart = taPtr(env, arrAt(env, out, 6), NULL);
   double *fillFilled = taPtr(env, arrAt(env, out, 7), NULL), *fillTraded = taPtr(env, arrAt(env, out, 8), NULL);
-  double *fillFee = taPtr(env, arrAt(env, out, 9), NULL);
-  uint8_t *unclearedA = taPtr(env, arrAt(env, out, 10), NULL);
+  uint8_t *unclearedA = taPtr(env, arrAt(env, out, 9), NULL);
   growScratch(pCount);
   long fillCount = 0;
   for (int i = 0; i < n; i++){
@@ -282,11 +280,10 @@ static napi_value ClearingKernel(napi_env env, napi_callback_info info){
       double wantedTrade = kernFilled[pi] - prev;
       double traded = wantedTrade > 0 ? wantedTrade * buyScale : wantedTrade * sellScale;
       double filled = prev + traded;
-      double fee = fabs(traded) * (dealerSpreadBps / 10000);
       allocated += filled;
       if (present[k] || prev != 0){
         fillInst[fillCount] = i; fillPart[fillCount] = pi;
-        fillFilled[fillCount] = filled; fillTraded[fillCount] = traded; fillFee[fillCount] = fee;
+        fillFilled[fillCount] = filled; fillTraded[fillCount] = traded;
         fillCount++;
       }
     }

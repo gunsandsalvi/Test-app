@@ -389,7 +389,6 @@ function sellPlantToBidders(
     demandByInstrumentId: new Map<InstrumentId, ParticipantDemand>([[instrumentId, { reservationStat: 0, fullSizeStatRange: 1, maxHoldingLocal: 0 }]]),
   };
   const result = clearFinancialAsset([instrument], [seller, ...bidders], {
-    dealerSpreadBps: 0, // no desk stands in a workout
     unsoldStaysWithHolder: true, // what no bidder takes stays the estate's
   });
   const price = takePrint(ctx, result, instrumentId, `${estate.regionId} estate plant`);

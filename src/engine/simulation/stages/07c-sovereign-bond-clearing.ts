@@ -559,7 +559,6 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       instruments,
       participants,
       {
-        dealerSpreadBps: DEALER_SPREAD_BPS,
         // OWN7: the float here is a stock these participants already hold, so an unsold
         // position stays with its holder rather than falling to a dealer nobody names.
         unsoldStaysWithHolder: true,
@@ -721,7 +720,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       ctx, regionId, currencyOf(regionId), BOOK,
       result.netCashDeltaByParticipantId,
       partyOfParticipant,
-      { netCashLocal: result.dealerNetCashLocal, feeLocal: result.totalDealerRevenueLocal },
+      { netCashLocal: result.dealerNetCashLocal },
       feeDesksForRegion(ctx, regionId),
       // PUB: the treasury is paid for the paper this week's auction actually placed.
       primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }), undefined, primaryAssetOf('GOV_BOND', regionId)),

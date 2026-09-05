@@ -128,7 +128,7 @@ function runXcsMarket({ ctx, week, standing, view }: DerivativeMarketRun): void 
       };
       if (participants.length === 0) { backstop(undefined, new Map()); return; }
 
-      const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
+      const result = clearFinancialAsset([instrument], participants, {});
       const clearedBps = takePrint(ctx, result, instrumentId, `${home} xcs`);
       if (clearedBps === undefined) { backstop(undefined, new Map()); return; }
 

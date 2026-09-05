@@ -54,11 +54,10 @@ if (addon) {
       fillPart: new Int32Array(span * packed.pCount),
       fillFilled: new Float64Array(span * packed.pCount),
       fillTraded: new Float64Array(span * packed.pCount),
-      fillFee: new Float64Array(span * packed.pCount),
       fillCount: 0,
     };
     scalars[0] = packed.n; scalars[1] = packed.pCount;
-    scalars[2] = packed.dealerSpreadBps; scalars[3] = Number.NaN; // §3.19-i: the cap slot is empty; the kernel reads nothing from it
+    scalars[2] = Number.NaN; scalars[3] = Number.NaN; // §3.26-e-i / §3.19-i: the spread and cap slots are empty; the kernel reads nothing from them
     scalars[4] = packed.unsoldStaysWithHolder ? 1 : 0;
     out.fillCount = addon.clearingKernel(
       [packed.float, packed.offering, packed.withdrawStat, packed.currentStat,
@@ -67,7 +66,7 @@ if (addon) {
       scalars,
       [out.clearedStat, out.dealerInventory, out.primaryWithdrawn,
         out.primaryMarketTake, out.hasPrimary, out.fillInst, out.fillPart,
-        out.fillFilled, out.fillTraded, out.fillFee, out.uncleared],
+        out.fillFilled, out.fillTraded, out.uncleared],
     );
     return out;
   });

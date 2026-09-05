@@ -15,7 +15,6 @@ interface WebJob {
   out: SharedArrayBuffer;
   n: number;
   pCount: number;
-  dealerSpreadBps: number;
   unsoldStaysWithHolder: boolean;
   from: number;
   to: number;
@@ -33,7 +32,6 @@ function packViewsOnly(job: WebJob) {
   return {
     n, pCount, float, offering, withdrawStat, currentStat, yieldLike, skip,
     present, dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding,
-    dealerSpreadBps: job.dealerSpreadBps,
     unsoldStaysWithHolder: job.unsoldStaysWithHolder === true,
   };
 }
@@ -51,7 +49,6 @@ self.onmessage = (ev: MessageEvent<WebJob>) => {
   f64(span).set(shard.primaryMarketTake);
   f64(cap).set(shard.fillFilled.subarray(0, shard.fillCount));
   f64(cap).set(shard.fillTraded.subarray(0, shard.fillCount));
-  f64(cap).set(shard.fillFee.subarray(0, shard.fillCount));
   const i32 = (len: number) => { const v = new Int32Array(job.out, off, len); off += len * 4; return v; };
   i32(cap).set(shard.fillInst.subarray(0, shard.fillCount));
   i32(cap).set(shard.fillPart.subarray(0, shard.fillCount));

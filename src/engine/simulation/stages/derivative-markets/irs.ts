@@ -245,7 +245,6 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
     const result = clearFinancialAsset(instruments, participants, {
       // Bilateral, cleared through the same house as every other book; the desks' spread on it
       // is DER's next slice, with the CDS and option books that share the machinery.
-      dealerSpreadBps: 0,
     });
 
     // ---- Strike the week's contracts. At one cleared par rate the receivers are fungible, so

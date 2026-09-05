@@ -307,8 +307,7 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
     }));
 
     const result = clearFinancialAsset(instruments, participants, {
-      // Bilateral between named desks and funds; the clearing house takes no fee on it yet.
-      dealerSpreadBps: 0,
+      // Bilateral between named desks and funds, each on its own schedule.
     });
 
     // ---- 4. Strike the week's contracts. What a quoter holds against its opening is what it did:

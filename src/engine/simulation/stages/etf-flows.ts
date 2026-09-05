@@ -742,7 +742,6 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const result = clearFinancialAsset([instrument], participants, {
       // The AP's own spread is its capacity constraint, already priced above; the book itself has
       // no separate dealer standing in it.
-      dealerSpreadBps: 0,
       // Undamped: a fund's shares can only move as far as the basket behind them plus the
       // assembly cost, which is a real bound and does not need a second one.
     });

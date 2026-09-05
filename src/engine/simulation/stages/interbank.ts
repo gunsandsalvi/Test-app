@@ -111,7 +111,7 @@ export function runInterbankSession(ctx: WeeklyStepContext, regionId: RegionId, 
     if (participants.length === 0) return;
     // The need is an inelastic order from outside the lender set: what it leaves unfilled is the
     // measurement the window reads, so the residual is not handed back to a holder.
-    const result = clearFinancialAsset([instrument], participants, { dealerSpreadBps: 0 });
+    const result = clearFinancialAsset([instrument], participants, {});
     const clearedBps = takePrint(ctx, result, instrumentId, `${regionId} interbank`);
     if (clearedBps === undefined || !Number.isFinite(clearedBps)) return;
     const rateAnnual = Number(((policyBps + Math.max(0, clearedBps)) / 10000).toFixed(6));

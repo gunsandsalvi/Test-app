@@ -495,7 +495,6 @@ export function runRegionalRepoSession(
 
     const result = clearFinancialAsset([instrument], participants, {
       // Bilateral GC at one rate — no desk in the middle taking a spread out of it.
-      dealerSpreadBps: 0,
       // Overnight money reprices to the corridor the week policy moves; the corridor — the
       // participants' own posted outside options — is the real bound, and the harness asserts it.
     });

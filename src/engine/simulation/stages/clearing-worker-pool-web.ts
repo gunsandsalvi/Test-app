@@ -90,7 +90,7 @@ function sharedPackBufferWeb(bytes: number): SharedArrayBuffer | null {
  *  order in clearing-worker-web.ts: header (8B), 6 F64 lanes, 2 I32 lanes, 3 U8 lanes. */
 function outBytes(span: number, pCount: number): number {
   const cap = span * pCount;
-  return 8 + (3 * span + 3 * cap) * 8 + 2 * cap * 4 + 3 * span;
+  return 8 + (3 * span + 2 * cap) * 8 + 2 * cap * 4 + 3 * span;
 }
 
 function shardFromOut(out: SharedArrayBuffer, from: number, to: number, pCount: number): KernelShardResult {
@@ -101,7 +101,7 @@ function shardFromOut(out: SharedArrayBuffer, from: number, to: number, pCount: 
   let off = 8;
   const f64 = (len: number) => { const v = new Float64Array(out, off, len); off += len * 8; return v; };
   const clearedStat = f64(span), dealerInventory = f64(span), primaryMarketTake = f64(span);
-  const fillFilled = f64(cap), fillTraded = f64(cap), fillFee = f64(cap);
+  const fillFilled = f64(cap), fillTraded = f64(cap);
   const i32 = (len: number) => { const v = new Int32Array(out, off, len); off += len * 4; return v; };
   const fillInst = i32(cap), fillPart = i32(cap);
   const u8 = (len: number) => { const v = new Uint8Array(out, off, len); off += len; return v; };
@@ -112,7 +112,6 @@ function shardFromOut(out: SharedArrayBuffer, from: number, to: number, pCount: 
     fillPart: fillPart.subarray(0, fillCount),
     fillFilled: fillFilled.subarray(0, fillCount),
     fillTraded: fillTraded.subarray(0, fillCount),
-    fillFee: fillFee.subarray(0, fillCount),
     fillCount,
   } as KernelShardResult;
 }
@@ -127,7 +126,6 @@ function runShardedKernelWeb(packed: PackedClearing, sab: SharedArrayBuffer): Ke
   const per = Math.ceil(n / w);
   const jobMeta = {
     sab, n, pCount: packed.pCount,
-    dealerSpreadBps: packed.dealerSpreadBps,
     unsoldStaysWithHolder: packed.unsoldStaysWithHolder,
   };
   for (let i = 0; i < w; i++) {

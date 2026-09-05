@@ -11,14 +11,14 @@
  * **The real mechanism.** A cleared market settles through a CENTRAL COUNTERPARTY. Every
  * participant faces the clearing house rather than each other, pays or receives its net for the
  * session, and the clearing house is flat by construction — it is on both sides of every trade.
- * That is exactly the invariant this buys: the dealer's leg, the desks' fees and every
+ * That is exactly the invariant this buys: the dealer's leg, the rounding dust and every
  * participant's net all settle against one party, so a book that forgets a leg leaves the
  * clearing house holding money and `clearingHouseResidualLocal` says so instead of the dollars
  * quietly vanishing.
  *
  * **The dealer.** It is the counterparty to every fill, so it receives exactly what the
- * participants paid (`dealerNetCashLocal`). The fee half is the desks' revenue and goes to the
- * named banks by market share, cash and equity together. What is left is the week's PRIMARY
+ * participants paid (`dealerNetCashLocal`). §3.26-e-i: there is no fee half any more — a desk
+ * earns by where its own schedule stood, never by a bps on the flow. What it received is the week's PRIMARY
  * placement, and it goes to the ISSUERS who brought the paper, by name and in proportion to
  * what each one's deal actually placed — stage 08 reports the same proceeds on the issuer's cash
  * walk and settles none of them.
@@ -27,7 +27,7 @@
  * an UNMODELED funder for a residual sitting on a region rather than on any balance sheet — is
  * gone, because the residual is gone: OWN7's two-sided rationing means an unsold holding stays
  * with its holder (financial-clearing-engine.ts, `unsoldStaysWithHolder`). What reaches this
- * function now is participants, fees and the primary, and all three have names. The leg stays in
+ * function now is participants, the dust and the primary, and all three have names. The leg stays in
  * the code as a GUARD: if a book ever leaves money over again, it prints under its own reason
  * instead of vanishing.
  */
@@ -52,7 +52,7 @@ import { isKnownEntity } from '../../../domain/ids';
 import type { EntityId, Ticker } from '../../../domain/ids';
 import { asTicker } from '../../../domain/ids';
 
-/** A desk that earns a share of the book's fees: a named bank, and how much of the flow it sees. */
+/** A desk that absorbs a share of the book's rounding dust: a named bank, and how much of the flow it sees. */
 interface FeeDesk { id: EntityId; ticker: Ticker; share: number }
 
 /**
@@ -271,7 +271,7 @@ export function settleClearedBook(
   book: string,
   netCashByParticipantId: Map<string, number>,
   partyOf: (participantId: string) => PartyRef | undefined,
-  dealer: { netCashLocal: number; feeLocal: number },
+  dealer: { netCashLocal: number },
   feeDesks: FeeDesk[],
   primaryTakes: PrimaryTake[] = [],
   /** §3.13b: the accrued the paper carried into this session, settled through the same house. */
@@ -311,9 +311,10 @@ export function settleClearedBook(
     });
   }
 
-  // What is left after the fees is what the week's PRIMARY placed, and it belongs to the issuers
-  // who brought the paper. Paid to each by name, pro rata to what its own deal placed.
-  const tradingLocal = dealer.netCashLocal - dealer.feeLocal;
+  // What the house netted is what the week's PRIMARY placed, and it belongs to the issuers who
+  // brought the paper. Paid to each by name, pro rata to what its own deal placed. §3.26-e-i:
+  // there is no fee half any more — nothing was charged beside the cleared level.
+  const tradingLocal = dealer.netCashLocal;
   const takeTotalLocal = primaryTakes.reduce((a, t) => a + Math.max(0, t.amountLocal), 0);
   const primaryLocal = Math.max(0, Math.min(takeTotalLocal, Math.max(0, tradingLocal)));
   if (primaryLocal > 0 && takeTotalLocal > 0) {
@@ -336,25 +337,25 @@ export function settleClearedBook(
   const roundingToleranceLocal = Math.max(1e4, Math.abs(dealer.netCashLocal) * 1e-6);
   if (process.env.LEFTOVER_TRACE === '1' && Math.abs(leftoverLocal) > 1) {
     console.log(`  [leftover] ${regionId} ${book}: leftover ${(leftoverLocal / 1e6).toFixed(3)}M`
-      + ` (dealerNet ${(dealer.netCashLocal / 1e6).toFixed(3)}M fee ${(dealer.feeLocal / 1e6).toFixed(3)}M primary ${(primaryLocal / 1e6).toFixed(3)}M)`);
+      + ` (dealerNet ${(dealer.netCashLocal / 1e6).toFixed(3)}M primary ${(primaryLocal / 1e6).toFixed(3)}M)`);
   }
-  if (Math.abs(leftoverLocal) > roundingToleranceLocal) defect(`${regionId} ${book} clearing left ${(leftoverLocal / 1e6).toFixed(3)}M with no owner (dealer net ${(dealer.netCashLocal / 1e6).toFixed(3)}M, fee ${(dealer.feeLocal / 1e6).toFixed(3)}M, primary ${(primaryLocal / 1e6).toFixed(3)}M)`);
+  if (Math.abs(leftoverLocal) > roundingToleranceLocal) defect(`${regionId} ${book} clearing left ${(leftoverLocal / 1e6).toFixed(3)}M with no owner (dealer net ${(dealer.netCashLocal / 1e6).toFixed(3)}M, primary ${(primaryLocal / 1e6).toFixed(3)}M)`);
 
-  // The desks' fee income (plus the rounding dust): cash and equity together, because nothing
-  // else arrived against it. Shares are normalised — the clients paid the whole fee, so the whole
-  // fee reaches the desks that earned it however their market shares happen to sum.
+  // The rounding dust of the legs: cash and equity together, because nothing else arrived
+  // against it, to the region's desks pro rata — dust has an owner. §3.26-e-i: this used to be
+  // the fee income too, paid by market share to desks that had taken no position (F3).
   const totalShare = feeDesks.reduce((a, d) => a + d.share, 0);
-  const deskTotalLocal = dealer.feeLocal + leftoverLocal;
+  const deskTotalLocal = leftoverLocal;
   if (deskTotalLocal !== 0 && totalShare > 0) {
     feeDesks.forEach((desk) => {
       const amountLocal = deskTotalLocal * (desk.share / totalShare);
-      if (amountLocal > 0) pay(ctx, { payer: ccp, payee: bankParty(desk), amount: amountLocal, currency: quoteCurrency, reason: `${book} dealer fee` });
-      else if (amountLocal < 0) pay(ctx, { payer: bankParty(desk), payee: ccp, amount: -amountLocal, currency: quoteCurrency, reason: `${book} dealer fee` });
+      if (amountLocal > 0) pay(ctx, { payer: ccp, payee: bankParty(desk), amount: amountLocal, currency: quoteCurrency, reason: `${book} clearing dust` });
+      else if (amountLocal < 0) pay(ctx, { payer: bankParty(desk), payee: ccp, amount: -amountLocal, currency: quoteCurrency, reason: `${book} clearing dust` });
     });
   }
 }
 
-/** The desks that share a region's clearing fees: its named banks, weighted by market share. */
+/** The desks that absorb a region's clearing dust: its named banks, weighted by market share. */
 export function feeDesksForRegion(ctx: WeeklyStepContext, regionId: RegionId): FeeDesk[] {
   const banks = banksOf(ctx.prevActiveFirms, regionId);
   return banks.map((b) => ({ id: b.id, ticker: b.ticker, share: b.bankMarketShare ?? 1 / Math.max(1, banks.length) }));

@@ -100,7 +100,7 @@ checked by `scripts/check-atlas.sh`.
 | **C3 risk widens the quote** | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
 | **C4 adverse selection widens it** | — | ❌ |
 | **C5 the bid–offer is the OUTPUT of C1–C4** | `src/domain/dealer-desk.ts:DESK_SPREAD_BPS_BY_BOOK` | ❌ |
-| **C5.a FORBID no spread applied to a mid** | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ❌ |
+| C5.a FORBID no spread applied to a mid | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | D1 a position limit per instrument and in aggregate | `src/engine/desk-register.ts:deskGrossLocal` | ✅ |
 | D2 a capital charge on what it holds, and it is real | `src/engine/macro/banking.ts:bankTotalAssetsLocal` | ✅ |
 | D3 a funding cost on the inventory, paid every week it holds it | `src/engine/macro/banking.ts:leverageHeadroomLocal` | ⚠️ |
@@ -114,7 +114,7 @@ checked by `scripts/check-atlas.sh`.
 | E4 VERIFY Σ desk inventory = what the rest of the world does not hold | `src/engine/audit/ownership.ts:o1` | ⚠️ |
 | F1 FORBID no infinite balance sheet | `src/domain/dealer-desk.ts:dealerDeskCapacityLocal` | ✅ |
 | F2 FORBID no desk exempt from its own bank's capital and funding | `src/engine/simulation/stages/dealer-desks.ts:sheetOf` | ✅ |
-| F3 FORBID no desk whose P&L is the spread times volume | `src/engine/ledger/bank-book.ts:bookPnL` | ⚠️ |
+| F3 FORBID no desk whose P&L is the spread times volume | `src/engine/ledger/bank-book.ts:bookPnL` | ✅ |
 
 ---
 
@@ -129,7 +129,19 @@ sold what it did not have, and every fill, paydown, maturity, corporate action, 
 player trade is a wire that moves a row. The register marks them at the close like every other
 row, and the O-family audits see them by construction rather than by a second walk.
 
-### ❌ C5 / C5.a / C3 / C4 — THE BID–OFFER IS A CONSTANT TABLE, AND IT IS CHARGED AS A FEE ON A MID
+### ❌ C5 / C3 / C4 / ✅ C5.a — THE BID–OFFER IS STILL A CONSTANT TABLE; IT IS NO LONGER CHARGED AS A FEE ON A MID
+
+*2026-09-05 (§9.26-e-i). The fee on the mid is gone. `ClearingParams.dealerSpreadBps`, the
+kernels' `fillFee` lane (TypeScript and C, and the three worker paths that carried it) and
+`totalDealerRevenueLocal` are deleted: a participant pays what it traded at the cleared level and
+nothing beside it, the index funds' bound is their spendable cash unshaved, the equity book's own
+bps on every share flow is gone, and `settleClearedBook` no longer pays fee income to a region's
+banks by market share — only the rounding dust of the legs still lands there, which is what dust
+does. C5.a ✅ and F3 ✅ (a desk's P&L is its fills and its marks, `bookPnL`, and nothing times
+volume). What the table still does is the second job below — the WIDTH of every desk's schedule —
+and that is §3 step 26-e-ii; the FX pip and the ETF assembly cost are 26-e-iii. The text below
+describes the fee as it stood.*
+
 
 **Verified, and it is worse than a per-book constant.** `domain/dealer-desk.ts:117`:
 
@@ -172,10 +184,11 @@ desk took no position at all collects fee income proportional to its size.
 - **D4 is half-present** (`⚠️`). A full desk shrinks its size and stops quoting
   (`dealerDeskCapacityLocal` returns 0), which is two of the node's three responses; **widening is
   the one it cannot do**, because the width is not the desk's.
-- **F3 is diverging** (`⚠️`). The desk's own P&L is honestly built — `applyDealerDeskFills:274`
-  computes `residualLocal = cashDeltaLocal + (newLocal − prevMarkedLocal)` plus `markToMarketLocal`, both
-  booked through `bookPnL`, so a desk genuinely loses money on inventory. But the fee income
-  running beside it *is* spread × volume, paid by market share, and it is not what any desk earned.
+- **F3 was diverging, and is closed** (§9.26-e-i). The desk's own P&L is honestly built —
+  `applyDealerDeskFills` computes `residualLocal = cashDeltaLocal + (newLocal − prevMarkedLocal)`
+  plus `markToMarketLocal`, both booked through `bookPnL`, so a desk genuinely loses money on
+  inventory — and the fee income that ran beside it, spread × volume paid by market share to
+  desks that had taken no position, is gone.
 
 **Already §3 step 26**, which names it precisely: *"`dealer-desk.ts:117` charges a stated
 real-market spread table as a real cost in five books."* Two things this tree adds that step 26's
@@ -269,11 +282,13 @@ the number is real and it reconciles. What the node additionally asks — *"it s
 client flow"* — is not read anywhere, and cannot be until B2's flow is visible. **A measurement,
 for §3 step 38.**
 
-**B3.** The client does pay for immediacy — the fee in `settleClearedBook` — but it pays the same
-whether it got immediacy or not: the fee is charged on gross traded value in every book that
-passes a non-zero `dealerSpreadBps`, including trades that matched client against client with no
-desk between them. So *"the alternative is waiting for a natural counterparty"* is charged for even
-when the natural counterparty was found. Closes with C5.
+**B3.** *(§9.26-e-i: the fee in `settleClearedBook` is gone — it was charged on gross traded
+value whether or not a desk stood between the parties, so "the alternative is waiting for a
+natural counterparty" was paid for even when the natural counterparty was found.)* What a client
+now pays for immediacy is exactly what it crosses of the desk's schedule — the desk's reservation
+sits `neutralFraction × range` away from the level in its own favour — which is the right shape;
+but that `range` is still the constant table's width, so B3 stays ⚠️ until §3 step 26-e-ii makes
+the width the desk's own carrying cost.
 
 ### ⚠️ A2 / C1 — ONE SCHEDULE, NOT TWO QUOTES
 
