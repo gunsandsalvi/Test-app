@@ -81,8 +81,9 @@ export interface CategoryDemandState {
   // intensity constant that only covered a handful of categories.
   corporateDemandLocal?: number;
   /** IND16: what the producer received at the factory gate this week — the first of the three
-   *  price levels (ex-works → landed `unitPriceLocal` → `shelfUnitPriceLocal`). Written by stage 05;
-   *  currently recorded only (no reader) — surfaced from behind an `as any` by §7.241's Tier 0. */
+   *  price levels (ex-works → landed `unitPriceLocal` → `shelfUnitPriceLocal`). Written by stage 05.
+   *  §3.22: read by `domain/commodity-spot.ts` — a commodity's spot is this price, weighted by the
+   *  units each origin supplied, in the numéraire. */
   exWorksUnitPriceLocal?: number;
   _fulfillmentRatio?: number; // transient, read by AA3 same week, not persisted
   totalUnitsSuppliedThisWeek?: number;
@@ -115,6 +116,9 @@ export function createSeedCategoryDemandState(
     // the opening week that reads as an economic event.
     localUnitPriceLocal: unitPriceLocal,
     smoothedUnitPriceLocal: unitPriceLocal,
+    // §3.22: the gate price opens where the books do, so the commodity's seed print is a read of
+    // the same field every later week reads.
+    exWorksUnitPriceLocal: unitPriceLocal,
     // XB3a-3: the week's real quantities, which the sourcing intent reads to decide where to buy
     // and how much freight to book. Seeded at the bootstrap demand a week represents, so the
     // opening week forms an intent against the same observables every later week does (§7.4).

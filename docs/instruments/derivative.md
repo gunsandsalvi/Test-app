@@ -80,7 +80,7 @@ checked by `scripts/check-atlas.sh`. The three FORBIDs of **WHAT A DERIVATIVE IS
 | D2 a notional, in a unit, generally not exchanged | `src/domain/derivatives/contract.ts:notional` | ✅ |
 | D2.a the notional is not the exposure | `src/domain/derivatives/registry.ts:standingPfeChargeLocal` | ⚠️ |
 | D3 an observable underlying priced elsewhere | `src/domain/derivatives/profile.ts:DerivativeMarketView` | ✅ |
-| **D3.a FORBID no underlying that only exists inside the derivative** | `src/engine/macro/evolution.ts:evolveCommodity` | ⚠️ |
+| **D3.a FORBID no underlying that only exists inside the derivative** | `src/domain/commodity-spot.ts:markCommodityToAuction` | ✅ |
 | D4 a payoff function of D3 | `src/domain/derivatives/profile.ts:periodicLegUSDToB` | ✅ |
 | D5 a currency per leg, legs need not share one | `src/domain/derivatives/profile.ts:DerivativeLeg` · `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ✅ |
 | D6 a term: start, end, payment dates between | `src/domain/derivatives/contract.ts:maturityWeek` | ✅ |
@@ -226,7 +226,7 @@ conflated — but only because one of them (current exposure) does not exist: wh
 charges is notional × a stated number, which is Basel's own CEM shape and is admitted by rule 2.
 Recorded as diverging rather than absent; it closes with step 17's risk-based margin.
 
-### ⚠️ N3 / D3.a — TWO PLACES WHERE THE DERIVATIVE AND THE CASH MARKET PRICE EACH OTHER
+### ⚠️ N3 — WHERE THE DERIVATIVE AND THE CASH MARKET PRICE EACH OTHER
 
 `stage08-back.ts:1872`: `newCdsSpreadBps = L8.cdsSpreadBps[row] > 0 ? L8.cdsSpreadBps[row] :
 newOasBps` — a reference with no protection book this week carries the **bond's OAS as its CDS
@@ -235,9 +235,10 @@ did it unconditionally for every player CDS, with a `recoveryRate = 0.40` defaul
 went with the legacy layer, §9.17b-ii.) **Already §3 step 26**, which names
 `stage08-back.ts:1861` by line.
 
-Separately, D3.a's underlying: the commodity futures book cash-settles to
-`evolution.ts:evolveCommodity`'s spot, which is `spotPrice × exp(drift)` with a 0.5 floor — a
-price nothing cleared. **Already §3 step 22.**
+*2026-09-05 (§9.22). D3.a is closed: the commodity futures book cash-settles to the goods
+auction's gate price (`domain/commodity-spot.ts:markCommodityToAuction`), a price named producers
+and buyers struck; `evolveCommodity`'s `spotPrice × exp(drift)` walk is deleted. No underlying now
+exists only inside its derivative.*
 
 ### Also marked, briefly
 

@@ -124,7 +124,7 @@ checked by `scripts/check-atlas.sh`.
 | B1.d VERIFY utilisation is a read of the outcome | — | ❌ |
 | **B2 production consumes the inputs it consumes** | `src/engine2/front-core.ts:consumeFifoOnViews` | ⚠️ |
 | B3 work in progress, owned by somebody | `src/engine/simulation/stages/05-unit-bidding.ts:advanceProductionPipeline` | ✅ |
-| B4 yield — not everything started is finished | — | ❌ |
+| B4 yield — not everything started is finished | `src/engine/macro/weather.ts:subUnitYieldLossShareOf` | ⚠️ |
 | B5 unit cost = inputs + wages + capital charge | `src/engine/simulation/stages/05-unit-bidding.ts:prospectiveUnitCostLocal` | ⚠️ |
 | C1 sellers offer, buyers post the most they will pay | `src/engine/simulation/stages/double-auction.ts:AuctionOffer` | ✅ |
 | C2 a price clears per (good, market, period) | `src/engine/simulation/stages/double-auction.ts:clearDoubleAuction` | ✅ |
@@ -249,10 +249,14 @@ The inputs for a real PPI are all present and already measured per sub-unit:
 `totalUnitsSuppliedThisWeek` is the production weight. **§3 step 37-BENCHMARK** — small, and it is
 the measurement §3 step 23 will need to prove it deleted the right index.
 
-### ❌ B4 / B1.d / ⚠️ E4 — THREE THINGS THAT NEVER HAPPEN TO A UNIT
+### ⚠️ B4 / ❌ B1.d / ⚠️ E4 — THREE THINGS THAT (MOSTLY) NEVER HAPPEN TO A UNIT
 
-- **B4 yield.** `advanceProductionPipeline` (05-unit-bidding:240) returns exactly what was started
-  `leadWeeks` ago: `arrivedUnits === startedUnits`, always. No scrap, no defect rate, no loss.
+- **B4 yield.** *2026-09-05 (§9.22): one yield loss is real — a weather event's. What the plant
+  FINISHED is what the region's weather left of it (`05-unit-bidding.ts`, the loss share from
+  `weather.ts:subUnitYieldLossShareOf` — the affected commodity's stated loss in its value share of
+  the sub-unit), recorded as fewer units produced so `W4` holds without a scrap.* Otherwise
+  `advanceProductionPipeline` returns exactly what was started `leadWeeks` ago: no scrap rate, no
+  defect rate, no process loss.
 - **E4 spoilage.** `scrapGoods` exists and is real, but its only callers are estate resolution
   (`estate-resolution.ts:253,365,369`) and a consignment whose buyer died
   (`goods-arrival.ts:97,110`). `shelfLifeWeeksOf` is read once — by `distribution.ts:47`, to size

@@ -27,6 +27,7 @@ import { defect } from '../../../domain/defect';
 import { categoryPriceTier, householdBudgetReachMultiple, budgetDemandLadder, DEMAND_LADDER_RUNGS } from '../../../domain/industry';
 import { patienceWeeksOf, riskAversionOf, expectationFromHistory, adaptiveExpectation } from '../../../domain/preferences';
 import { TIER_SPEND_MIX } from '../../macro/household-cohorts';
+import { subUnitYieldLossShareOf } from '../../macro/weather';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_INTENSITY } from '../constants';
 import { purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
@@ -1174,9 +1175,15 @@ function buildRegionSupplyPlans(
       targetProductionUnits,
       coversUnitCost ? weeklyOperatingCostLocal : 0
     );
+    // §3.22 / goods.md B4 — YIELD: what the plant FINISHED is what the weather left of it. A
+    // drought, a freeze-off or a flood in THIS region takes its stated share of the affected
+    // commodity's harvest (`macro/weather.ts`), which is that commodity's value share of this
+    // sub-unit's output. The lost units were paid for and never exist — that is what a loss is —
+    // and the ledger records what actually arrived, so W4 holds without a scrap.
+    const arrivedUnits = pipeline.arrivedUnits * (1 - subUnitYieldLossShareOf(reg.weather, subUnitId));
     // The caller trims this to what the contracts left behind, once they have settled against
     // the same stock. Here it is simply everything the firm can sell.
-    const openOfferUnits = Math.max(0, pipeline.arrivedUnits + currentUnits);
+    const openOfferUnits = Math.max(0, arrivedUnits + currentUnits);
 
     // CAP / RULE 15 — THE SELLER'S FLOOR IS ITS COST IN DOLLARS, NOT A FRACTION OF THE MARKET.
     //
@@ -1223,7 +1230,7 @@ function buildRegionSupplyPlans(
       initialInventoryUnits: currentUnits,
       targetProductionUnits,
       targetProductionLocal: targetProductionUnits * referencePriceLocal,
-      arrivedProductionUnits: pipeline.arrivedUnits,
+      arrivedProductionUnits: arrivedUnits,
       wipQueue: pipeline.queue,
       openOfferUnits,
       // Cost per unit of what this plant actually makes, in dollars. Falls back to the

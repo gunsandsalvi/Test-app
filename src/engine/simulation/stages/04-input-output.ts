@@ -12,6 +12,7 @@
 import { GameState, RegionId, COMMODITY_CATEGORY_LINKAGE } from '../../../types';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { WeeklyStepContext } from './context';
+import { subUnitYieldLossShareOf } from '../../macro/weather';
 import { segmentStockUnits, setSegmentStock, produceGoods, consumeGoods, scrapGoods } from '../../ledger/goods-ledger';
 
 export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -50,14 +51,15 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
   // than an independently invented formula. Previously stage04 derived "weeklyProduction" from a
   // generic industrialProductionRate/throttle/price-response formula applied to whichever
   // companies happened to carry this subUnitId as a product line — completely disconnected from
-  // the real commodity's own price/supply-demand clearing the trading desk already computes
-  // every week (evolution.ts's computeCommodityClearingRatio). Worse, for specialty_metals this
+  // the real commodity's own print (§3.22: a READ of the sub-unit's own cleared gate price and
+  // units, `domain/commodity-spot.ts`). Worse, for specialty_metals this
   // company set was EMPTY (no company anywhere had it as an output line before the company-
   // generation fix), so its real weekly production was always zero regardless of any formula —
   // the true root cause of that category's guaranteed depletion to zero. Grouping commodities by
   // linked subUnitId here makes every category's real supply the sum of its real commodities'
-  // own weeklySupplyUnits (last week's cleared figure — commodities evolve later this same week,
-  // in stage07, so this is a one-week lag, the same convention used elsewhere in this pipeline).
+  // own weeklySupplyUnits (last week's cleared figure — commodities are marked later this same
+  // week, in stage 07, so this is a one-week lag, the same convention used elsewhere in this
+  // pipeline).
   const commoditiesByInputCat: Record<string, { spotPrice: number; weeklySupplyUnits?: number }[]> = {};
   state.commodities.forEach(comm => {
     const linkage = COMMODITY_CATEGORY_LINKAGE[comm.id] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
@@ -125,7 +127,10 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
       const totalBidQuantity = demanderBidQuantities.reduce((s, d) => s + d.bidQuantity, 0);
       const globalBidQuantity = globalBidQuantityByInputCat[inputCat] ?? 0;
       const regionShareOfGlobalDemand = globalBidQuantity > 0.001 ? totalBidQuantity / globalBidQuantity : 1 / regionIds.length;
-      const weeklyProduction = (globalWeeklyProductionByInputCat[inputCat] ?? 0) * regionShareOfGlobalDemand;
+      // §3.22: what THIS region's weather destroyed of the sub-unit's yield this week never exists
+      // (`macro/weather.ts:subUnitYieldLossShareOf`); the auction prices the shortage.
+      const weeklyProduction = (globalWeeklyProductionByInputCat[inputCat] ?? 0) * regionShareOfGlobalDemand
+        * (1 - subUnitYieldLossShareOf(reg.weather, inputCat));
       const totalAvailableSupply = decayedInventory + weeklyProduction;
 
       const clearingRatio = totalAvailableSupply > 0 ? totalBidQuantity / totalAvailableSupply : 1;

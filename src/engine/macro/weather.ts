@@ -24,7 +24,7 @@
  * — written at fourteen sites, read at none — are deleted.
  */
 
-import { RegionId, WeatherAnomaly, Company } from '../../types';
+import { RegionId, WeatherAnomaly, Company, COMMODITY_CATEGORY_LINKAGE } from '../../types';
 import { random } from '../rng';
 
 /** Weeks in the year, and where the warm half of it sits. Arithmetic, not observation. */
@@ -198,4 +198,30 @@ export function evolveRegionalWeather(
     weeksActive: 1,
     minDurationWeeks,
   };
+}
+
+/**
+ * NAT3 — what an event has destroyed of a commodity's yield THIS week: its stated loss, decaying
+ * as the event ages, and nothing when it names another commodity. At most all of the crop
+ * (§3.18-i: that is arithmetic, not a cap).
+ */
+export function weatherYieldLossShareOf(weather: WeatherAnomaly, commodityId: string): number {
+  if (weather.affectedCommodityId !== commodityId) return 0;
+  const decay = Math.pow(0.55, Math.max(0, (weather.weeksActive || 0) - 1));
+  return Math.max(0, Math.min(1, (weather.yieldImpactPct ?? 0) * decay));
+}
+
+/**
+ * §3.22 — the share of a sub-unit's output the region's weather destroys this week. A commodity
+ * is a value share of its sub-unit (`COMMODITY_CATEGORY_LINKAGE`), so a drought on wheat takes
+ * wheat's share of the harvest, not the whole of it; the loss is a loss of UNITS where they are
+ * made (stage 05's pipeline, stage 04's segment production), and the auction prices the shortage.
+ */
+export function subUnitYieldLossShareOf(weather: WeatherAnomaly, subUnitId: string): number {
+  let loss = 0;
+  Object.entries(COMMODITY_CATEGORY_LINKAGE).forEach(([commodityId, l]) => {
+    if (l.subUnitId !== subUnitId) return;
+    loss += l.intensityShare * weatherYieldLossShareOf(weather, commodityId);
+  });
+  return Math.min(1, loss);
 }

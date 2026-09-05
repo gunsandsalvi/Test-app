@@ -108,6 +108,14 @@ export interface Commodity {
   symbol: string;
   category: 'Energy' | 'Metals' | 'Agriculture';
   unit: string;
+  /**
+   * §3.22 / rule 8 — how many of the linked sub-unit's units one unit of THIS commodity is: a
+   * barrel, a bushel, an ounce against a unit of `upstream_extraction`, `agricultural_commodities`,
+   * `specialty_metals`. Fixed at the seed, where the marginal producer's cost per unit meets the
+   * sub-unit's seed print; every later spot is the sub-unit's cleared gate price times this.
+   */
+  goodsUnitsPerUnit: number;
+  /** §3.22: a READ of the linked sub-unit's world print, USD per `unit` (`domain/commodity-spot.ts`). */
   spotPrice: number;
   historicalPrices: number[];
   revenueHistory?: number[];

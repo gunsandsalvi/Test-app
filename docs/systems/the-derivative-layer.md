@@ -126,7 +126,7 @@ checked by `scripts/check-atlas.sh`.
 | F1 FORBID no position without a counterparty | `src/engine/audit/ownership.ts:o5` | ✅ |
 | F2 FORBID no exposure without margin or a stated reason | `src/domain/derivatives/profile.ts:closeOutMoveOf` | ⚠️ |
 | **F3 FORBID no netting across counterparties** | `src/domain/derivatives/registry.ts:standingPfeChargeLocal` | ✅ |
-| F4 FORBID nothing settles against a price this world does not clear | `src/engine/macro/evolution.ts:evolveCommodity` | ⚠️ |
+| F4 FORBID nothing settles against a price this world does not clear | `src/domain/commodity-spot.ts:markCommodityToAuction` | ✅ |
 
 ---
 
@@ -388,4 +388,4 @@ does with that claim is `hedge-funds.md`'s B5 (gross, net and equity as three re
 
 - **D2 ✅** — variation margin flows for every class (§9.17-iii gave IRS and CDS their marks) — A4/D2.b.
 - **F1 ✅** (2026-09-05, §9.17b-ii) — `O5` checks both parties are alive for the one book, and the one book is the only derivative layer: the player's legacy positions, which had no `b` at all, are deleted — `../instruments/derivative.md` D1.a.
-- **F4 ⚠️** — the commodity future cash-settles to `evolveCommodity`'s formula spot — 37-COMMODITY.
+- **F4 ✅** (2026-09-05, §9.22) — the commodity future cash-settles to the goods auction's gate price, read by `domain/commodity-spot.ts`; the formula spot and its walk are deleted.

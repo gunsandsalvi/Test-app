@@ -33,7 +33,6 @@ src/domain/derivatives/hedging.ts
 src/domain/game-state.ts
 src/domain/household-credit.ts
 src/domain/index.ts
-src/domain/market-microstructure.ts
 src/domain/markets.ts
 src/domain/preferences.ts
 src/domain/pricing/discount.ts
@@ -50,7 +49,6 @@ src/engine/columns/table.ts
 src/engine/dealers.ts
 src/engine/formatters.ts
 src/engine/macro/utils.ts
-src/engine/macro/weather.ts
 src/engine/macroEngine.ts
 src/engine/simulation.ts
 src/engine/simulation/central-bank-identity-trace.ts

@@ -551,13 +551,12 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-22. **Commodity spot clears.** `evolution.ts:1424` moves spot by `exp(drift + …)` with a floor;
-    `07-commodities.ts` is a 16-line wrapper that does not supersede it. One writer, and it is the
-    auction. The futures curve beside it is already cleared — today they are two disconnected
-    representations of one price.
 23. **The input price index dies into the cleared price.** `04-input-output.ts:129` sets a price
     index by formula and smooths it, a second representation of what stage 05 actually clears, with
-    no cash leg and a third inventory stock behind it.
+    no cash leg and a third inventory stock behind it. *(§9.22: 04's production line now reads the
+    commodity's cleared supply value — the commodity's share of LAST week's cleared supply, a loop
+    with a one-week lag — and carries the region's weather yield loss; both go with the block when
+    the index dies.)*
 24. **Labour clears on the wage.** `labor-market.ts:587-596` applies one fill ratio per occupation
     identically to every employer, so `offeredWageIndex` has ZERO effect on hiring — paying more only
     lowers quits. Labour is rationed by posted vacancies, not cleared on price, and the comment at
@@ -1004,13 +1003,12 @@ step that owns its node; where it does not yet, the step below is the owner.
     D2/D2.a/D5/F1/F2, A1.a/A4/D3/C3/B4, E1/E3/E4; commodity-futures C4.a/D2, B3.a/D3/E3,
     B4/C1.a, A1.a/A2.) `Commodity.inventoryLevelPct` is a **percentage on a random walk in [0,100]**,
     untouched by production or consumption and not an input to the price; supply and demand units
-    are two independent elasticity formulas never reconciled against each other. So the identity
-    `produced + opening = consumed + closing` has no terms. Every commodity exists TWICE — a
-    written price series, and a real goods sub-unit that genuinely clears — and the join runs one
-    way only. Downstream, futures converge by an ENFORCED boundary because nothing can be
-    delivered, there is no roll, and the carry arbitrageur cannot store. Large; step 22 owns the
-    spot walk and this is the half it does not cover. The goods side's W4 units identity is the
-    machinery it needs.
+    are the auction's own since §9.22, but nothing reconciles them to a stock. So the identity
+    `produced + opening = consumed + closing` has two of its four terms. Every commodity's PRICE is
+    a read of its goods sub-unit since §9.22; its STOCK, LOCATION and HOLDER are not. Downstream, futures converge by an ENFORCED boundary because nothing can be
+    delivered, there is no roll, and the carry arbitrageur cannot store. Large; §9.22 took the spot
+    walk and both elasticities, and this is the half it did not cover (`inventoryLevelPct`'s walk
+    now lives in `07-commodities.ts`). The goods side's W4 units identity is the machinery it needs.
 
 37-HOUSING. **NO DWELLING EXISTS AS AN OBJECT.** (housing C5, C4/C4.a, and 26b/13's item 1.) Stock is
     `population/2.5 × ownershipRate × medianHomePrice`; `HOME_OWNERSHIP_RATE` is written once at
@@ -1392,6 +1390,28 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**22 — COMMODITY SPOT IS A READ OF THE GOODS AUCTION.** `evolveCommodity` multiplied last week's
+  spot by `exp(0.4 × (growth + noise) + 0.12 × (clearingRatio − 1))`, reading the sub-unit's cleared
+  supply and demand only as the statistic that moved a written path, with both schedules written as
+  elasticities (−0.7, 0.5) on spot over the seed's history. Deleted, with
+  `computeCommodityClearingRatio`. `domain/commodity-spot.ts:markCommodityToAuction` — one writer,
+  stage 07 — sets spot to the linked sub-unit's world print: every origin's ex-works cleared price
+  (`exWorksUnitPriceLocal`, seeded where the books open and given its first reader) in the
+  numéraire, weighted by the units it supplied, times the commodity's own unit against the
+  sub-unit's (`Commodity.goodsUnitsPerUnit`, rule 8: fixed once at the seed where the marginal
+  producer's cost per unit meets the sub-unit's seed print, so the seed prints at its level and
+  week 0 and week 1 are one shape). `weeklySupplyUnits`/`weeklyDemandUnits` are the auction's own
+  units in the commodity's value share; no origin supplied → no print, the last carries (§3.21).
+  The weather's yield loss, which scaled that statistic, is a loss of UNITS where they are made:
+  `weather.ts:subUnitYieldLossShareOf` (the affected commodity's stated loss in its share of the
+  sub-unit) comes off what the region's plants FINISHED this week (05's pipeline — goods B4 ⚠️,
+  fewer units produced so W4 holds) and off 04's segment production; the auction prices the
+  shortage the same week. Futures settle to a cleared print (commodity-futures D4 ✅,
+  derivative-layer F4 ✅, derivative D3.a ✅); commodities-spot F3 ✅, D1 ⚠️ (one world print —
+  location is 37-COMMODITY's, with the stock: `inventoryLevelPct` is still the percentage walk,
+  now in `07-commodities.ts`), B1/B2/B2.a/C1/C2 ✅ as the goods side's, B1.a/E1 ⚠️.
+  `test/commodity-spot.test.ts`. Gates green; no run (rule 11).
 
 **21 — A BRACKET CAN NEVER BE A PRINT.** (21-BRACKET's measurement — 67 tight and 139 wide bracket
   prints over the 16-week reference — is closed with it.) `solveClearingStat` returned `number` and

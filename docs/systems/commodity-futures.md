@@ -97,14 +97,14 @@ checked by `scripts/check-atlas.sh`.
 | C1 the futures/spot relation is a consequence of storage, financing, scarcity | `src/domain/derivatives/classes/commodity-future.ts:PHYSICAL_STORAGE_COST_ANNUAL` | ✅ |
 | C1.a contango bounded above by cost of carry, because B4 arbitrages it | `src/domain/instrument-keys.ts:commodityFutureInstrumentId` · `src/engine/pricing.ts:priceCommodityFutures` | ⚠️ |
 | C1.b backwardation unbounded below — the asymmetry is real | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
-| **C2 the curve carries physical tightness; inventory is the state variable** | `src/engine/macro/evolution.ts:evolveCommodity` | ❌ |
+| **C2 the curve carries physical tightness; inventory is the state variable** | `src/engine/simulation/stages/07-commodities.ts:inventoryLevelPct` | ❌ |
 | C3 VERIFY inventories low ⇒ backwardation | — | ❌ |
 | **C4 the futures price converges to spot at expiry, because delivery is possible** | `src/domain/derivatives/classes/commodity-future.ts:markReasonFinal` | ⚠️ |
 | **C4.a convergence is a consequence of deliverability, not an enforced boundary** | `src/domain/derivatives/classes/commodity-future.ts:markToMarketUSDToA` | ❌ |
 | D1 at expiry it delivers or cash-settles, and both are real | `src/domain/derivatives/classes/commodity-future.ts:eventTermination` | ⚠️ |
 | **D2 physical delivery must be possible for at least some participants** | — | ❌ |
 | D3 a party that cannot take delivery must close or roll before expiry | — | ❌ |
-| D4 cash settlement is against an observed spot price, which must be cleared | `src/engine/simulation/stages/07-commodities.ts:runCommoditiesStage` | ⚠️ |
+| D4 cash settlement is against an observed spot price, which must be cleared | `src/domain/commodity-spot.ts:markCommodityToAuction` | ✅ |
 | E1 FORBID no futures price without a physical market underneath it | `src/engine/audit/prices.ts:x2` | ⚠️ |
 | E2 FORBID no unlimited open interest against finite deliverable supply | `src/domain/derivatives/registry.ts:DESK_DERIVATIVE_PFE_SHARE_OF_HEADROOM` · `src/domain/clearing-house.ts:memberMarginLimitLocal` | ⚠️ |
 | E3 FORBID no roll that is free | — | ❌ |
@@ -177,23 +177,19 @@ of the correlation is a random walk. **A measurement, for §3 step 38** for C3; 
 when consumption exceeds production — before either the curve or the audit can read it. That is
 `commodities-spot.md` D2.a's node, and this tree is the second witness to it.
 
-### ⚠️ D4 / E1 — THE SPOT THE CONTRACT SETTLES AGAINST IS A FORMULA
+### ✅ D4 / ⚠️ E1 — THE SPOT THE CONTRACT SETTLES AGAINST IS THE GOODS AUCTION'S
 
-`07-commodities.ts:runCommoditiesStage` calls `evolveCommodity`, and
-`macro/evolution.ts:1432` is `comm.spotPrice * Math.exp(safeDriftExponent)` with a `0.5` floor. So
-the price every futures contract cash-settles to in its delivery week is a drift-plus-noise walk,
-not a cleared print — and E1's FORBID (*"no futures price without a physical market underneath
-it"*) is breached one level down: the futures curve **is** cleared, honestly, against real
-schedules; the thing it is cleared *relative to* is not.
+*2026-09-05 (§9.22). `07-commodities.ts:runCommoditiesStage` marks every commodity to the goods
+auction (`domain/commodity-spot.ts:markCommodityToAuction`): spot is the linked sub-unit's world
+gate print — each origin's ex-works cleared price in the numéraire, weighted by what it supplied —
+in the commodity's own unit. `evolveCommodity` and its walk are deleted. So the price every futures
+contract cash-settles to in its delivery week is a cleared print, `impliedConvenienceYield` now
+infers from two cleared prices, and D4's "which must therefore exist and be cleared" is paid.*
 
-`audit/prices.ts:x2` measures the consequence (*"futures within carry of spot"*, failing 2 weeks
-of 16 per step 17f's list), so the discrepancy is at least visible.
-
-**Already §3 step 22** — *"Commodity spot clears. `evolution.ts:1424` moves spot by
-`exp(drift + …)` with a floor."* Recorded here because this tree is where the cost is paid: with
-spot uncleared, `impliedConvenienceYield` infers a convenience yield from one cleared price and one
-formula price, and D4's *"which must therefore exist and be cleared"* is exactly what step 22 owes
-this system.
+E1 stays ⚠️ one level down: the futures curve is cleared against real schedules relative to a
+cleared spot, but the **physical market underneath it has no deliverable stock** — nobody can take
+a barrel off it (D2 ❌, `commodities-spot.md` D2/A4). `audit/prices.ts:x2` (*"futures within carry
+of spot"*) keeps measuring the curve against the print. **§3 step 37-COMMODITY.**
 
 ### ❌ B3.a / D3 / E3 — THERE IS NO ROLL
 

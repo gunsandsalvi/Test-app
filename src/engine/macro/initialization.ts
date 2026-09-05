@@ -28,6 +28,8 @@ import {
 } from '../bootstrap/national-accounts';
 import { deriveSubUnitUnitPrice, TARGET_FIRMS_PER_REGION } from '../bootstrap/category-demand';
 import { GENERATED_COMMODITIES, GENERATED_FX_PAIR_LEGS, getInitialFxRate, getCommodityBaseSpotPrice } from '../bootstrap/commodities-and-fx';
+import { commodityLinkageOf, goodsUnitsPerCommodityUnitOf, markCommodityToAuction } from '../../domain/commodity-spot';
+import { FxToUsd } from '../../domain/currency';
 import { getRegionYieldCurveParams, getRegionNeutralRate, getRegionInitialPolicyRate, getRegionProductivityGrowth, INFLATION_TARGET } from '../bootstrap/yield-curves';
 import { fxPairLabel, REGION_IDS_SEED_ORDER } from '../../domain/geography';
 
@@ -765,12 +767,20 @@ export function getInitialFxPairs(): FxPair[] {
 
 /**
  * Initial Commodities — generic, non-real-ticker names/ids (see bootstrap/commodities-and-fx.ts)
+ *
+ * §3.22: the seed level is the marginal producer's cost per unit (NAT1), and stating it against
+ * the linked sub-unit's seed print is what fixes the commodity's UNIT (rule 8 — a barrel is so
+ * many units of `upstream_extraction`, the way a tonne is so many bushels). The seed's print is
+ * then the same read every week makes (`domain/commodity-spot.ts`), so week 0 and week 1 are one
+ * shape (§7.4). Runs after the linkage is calibrated, because the week's units are read in the
+ * commodity's share.
  */
-export function getInitialCommodities(): Commodity[] {
+export function getInitialCommodities(regions: Record<RegionId, Region>, fxToUsd: FxToUsd): Commodity[] {
   const rf = 0.045;
   return GENERATED_COMMODITIES.map((def) => {
     const spotPrice = getCommodityBaseSpotPrice(def);
-    return {
+    const linkage = commodityLinkageOf(def.id);
+    const seed: Commodity = {
       id: def.id,
       name: def.name,
       symbol: def.id,
@@ -787,6 +797,8 @@ export function getInitialCommodities(): Commodity[] {
       supplyDemandBalance: 'Balanced' as const,
       inventoryLevelPct: 48,
       allTimeBaselinePrice: spotPrice,
+      goodsUnitsPerUnit: goodsUnitsPerCommodityUnitOf(spotPrice, linkage.subUnitId, regions, fxToUsd),
     };
+    return markCommodityToAuction(seed, regions, fxToUsd);
   });
 }

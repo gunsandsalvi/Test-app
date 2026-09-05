@@ -2,7 +2,7 @@ import { levelPaymentFactor } from '../../domain/pricing';
 import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams } from '../nelsonSiegel';
-import { RegionId, Region, Commodity, HouseholdState, OccupationType, OccupationPool, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
+import { RegionId, Region, Commodity, HouseholdState, OccupationType, OccupationPool, Company, WealthTier, HousingMarket } from '../../types';
 import { getBaseAnnualWageLocal, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
 import {
   computeHouseholdDisposableIncomeLocal,
@@ -1276,7 +1276,9 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
 
 
 /**
- * Evolve Commodities with Weather & Supply/Demand shocks
+ * §3.22: a commodity's print is a READ of the goods auction (`domain/commodity-spot.ts`); the
+ * walk that lived here is deleted. What remains is the SEED's calibration of each commodity's
+ * value share of its sub-unit.
  */
 
 function computePrivateSegmentCommoditySupplyLocal(commodityId: string, regions: Record<RegionId, Region>, fxToUsd: FxToUsd): number {
@@ -1310,133 +1312,6 @@ export function calibrateIntensityShare(commodityId: string, allCompanies: Compa
   const weeklySupplyLocal = publicWeeklySupplyLocal + privateWeeklySupplyLocal;
   const totalCategoryDemandLocal = REGION_IDS.reduce((s, r) => s + localToUsd(regions[r].categoryDemand[subUnitId]?.demandLevelAnnualLocal ?? 0, r, fxToUsd), 0);
   return totalCategoryDemandLocal > 0 ? (weeklySupplyLocal * 52) / totalCategoryDemandLocal : 0.01;
-}
-
-function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity, regions: Record<RegionId, Region>, privateSegmentSupplyLocal: number, fxToUsd: FxToUsd): { ratio: number; supplyUnits: number; demandUnits: number } {
-  const linkage = COMMODITY_CATEGORY_LINKAGE[commodityId] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
-  const intensityShare = linkage?.intensityShare ?? 0;
-
-  // §7.128 — BOTH SIDES OF THIS MARKET ON THE SAME BASE.
-  //
-  // Demand was `intensityShare x the whole category's output, summed over four regions`; supply
-  // was `the entire annual revenue of the two firms tagged with this commodityId`. Two different
-  // bases for the two sides of one market (rule 4), and the gap was invisible while recipes were
-  // shallow. CHAIN-D tripled intermediate demand for extraction, refining, chemicals and power,
-  // demand moved with it, supply did not, and the input market drained: measured USA week 12,
-  // upstream extraction supplying 2,458 units against 20,954 demanded, inventory zero, stage 04
-  // fulfilment 0.00 and its price down 92% — read as deflation for the model's whole life
-  // (§7.127).
-  //
-  // What the linkage actually says is that a commodity is a SHARE OF A SUB-UNIT'S VALUE. So its
-  // supply is that share of the sub-unit's real cleared supply and its demand is that share of
-  // the sub-unit's demand — whoever makes the good brings the commodity to market, not only the
-  // two firms carrying the tag. The elasticities below then move a ratio that means something.
-  // §6.1 money-locality: each region's demand level and cleared price are REGION-LOCAL money.
-  // A world commodity market sums both sides in USD, or the ratio divides a currency salad.
-  const perRegion = REGION_IDS.reduce((acc, r) => {
-    const catDemand = linkage ? regions[r].categoryDemand[linkage.subUnitId] : undefined;
-    if (!catDemand) return acc;
-    acc.demandAnnualLocal += localToUsd(catDemand.demandLevelAnnualLocal ?? 0, r, fxToUsd);
-    // Rule 9: `totalUnitsSuppliedThisWeek` is WEEKLY and `demandLevelAnnualLocal` is ANNUAL.
-    acc.supplyWeeklyLocal += localToUsd((catDemand.totalUnitsSuppliedThisWeek ?? 0) * (catDemand.unitPriceLocal ?? 0), r, fxToUsd);
-    return acc;
-  }, { demandAnnualLocal: 0, supplyWeeklyLocal: 0 });
-
-  // Before this market has ever cleared (week 1) there is no supplied figure yet, so fall back to
-  // the tagged producers' own output, which is what the seed had.
-  const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && isActiveCompany(c));
-  const taggedWeeklySupplyLocal = producers.reduce((s, c) => s + localToUsd((c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, c.region, fxToUsd), 0);
-  const weeklySupplyLocal = perRegion.supplyWeeklyLocal > 0
-    ? perRegion.supplyWeeklyLocal * intensityShare
-    : taggedWeeklySupplyLocal + privateSegmentSupplyLocal;
-
-  const baselineWeeklyDemandLocal = (perRegion.demandAnnualLocal * intensityShare) / 52;
-
-  const baselineHistoricalPrice = comm.historicalPrices.length > 0 ? comm.historicalPrices[0] : comm.spotPrice;
-  const referencePrice = baselineHistoricalPrice > 0 ? baselineHistoricalPrice : comm.spotPrice;
-  const priceRatio = referencePrice > 0 ? comm.spotPrice / referencePrice : 1.0;
-  const demandElasticity = -0.7; // low spot prices stimulate real industrial & consumer demand
-  const supplyElasticity = 0.5; // low spot prices cause real production curtailment
-
-  const demandUnits = comm.spotPrice > 0 ? (baselineWeeklyDemandLocal / referencePrice) * Math.pow(priceRatio, demandElasticity) : 0;
-  const supplyUnits = comm.spotPrice > 0 ? (weeklySupplyLocal / referencePrice) * Math.pow(priceRatio, supplyElasticity) : 0;
-
-  const ratio = supplyUnits > 0.001 ? demandUnits / supplyUnits : 1.0;
-  return { ratio, supplyUnits, demandUnits };
-}
-
-export function evolveCommodity(
-  comm: Commodity,
-  globalGrowth: number,
-  rfLocal: number,
-  regions: Record<RegionId, Region>,
-  allCompanies: Company[],
-  fxToUsd: FxToUsd
-): Commodity {
-  const dt = 1 / 52;
-  const demandShock = globalGrowth * 0.8;
-  const randomEps = (random() - 0.5) * comm.volatility * Math.sqrt(dt);
-
-  // NAT3: an event does not move the price. It destroys SUPPLY — the share of this commodity's
-  // yield it took — and the clearing ratio below prices the shortage, input costs rise through
-  // the recipes, and the measured index reports it. That is the chain this comment used to name
-  // while the code added the event's own price impact to the drift instead.
-  let yieldLossShare = 0;
-  Object.values(regions).forEach((r) => {
-    if (r.weather.affectedCommodityId === comm.id || r.weather.affectedCommodityId === comm.symbol) {
-      const decay = Math.pow(0.55, Math.max(0, (r.weather.weeksActive || 0) - 1));
-      yieldLossShare += (r.weather.yieldImpactPct ?? 0) * decay;
-    }
-  });
-  // §3.18-i: a crop cannot lose more than all of itself — that is arithmetic; the 0.9 cap was not.
-  yieldLossShare = Math.max(0, Math.min(1, yieldLossShare));
-
-  const drift = demandShock * dt + randomEps;
-  
-  const privateSegmentSupplyLocal = computePrivateSegmentCommoditySupplyLocal(comm.id, regions, fxToUsd);
-  const { ratio: rawClearingRatio, supplyUnits: rawSupplyUnits, demandUnits } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions, privateSegmentSupplyLocal, fxToUsd);
-  const supplyUnits = rawSupplyUnits * (1 - yieldLossShare);
-  const clearingRatio = rawClearingRatio * (1 - yieldLossShare);
-  // §3.18-i: the ±4%/week cap on the imbalance term is gone (rule 6); step 22 replaces the walk.
-  const supplyDemandDrift = (clearingRatio - 1.0) * 0.12;
-  const rawDriftExponent = drift * 0.4 + supplyDemandDrift;
-  const safeDriftExponent = isFinite(rawDriftExponent) ? rawDriftExponent : 0;
-  // §3.18-i: no 0.5 floor (rule 6) — an exponential of a finite exponent is positive on its own.
-  const newSpot = Number((comm.spotPrice * Math.exp(safeDriftExponent)).toFixed(2));
-  
-  const change1W = Number((newSpot - comm.spotPrice).toFixed(2));
-
-  // DER4: THE CURVE IS NOT DRAWN HERE ANY MORE. It was `spot x exp((r − convenienceYield) x T)`
-  // with the convenience yield seeded once and never touched, so the curve was spot times a
-  // constant: it could not back off when this market went short or build out when it went long,
-  // and nobody was on either side of it. `07i-commodity-futures.ts` clears all three tenors
-  // against real producer and consumer hedging demand and writes them, and the convenience yield
-  // is inferred from what it cleared. Spot carries the week's move through until it runs.
-  const f1M = comm.futures1M > 0 ? comm.futures1M : newSpot;
-  const f3M = comm.futures3M > 0 ? comm.futures3M : newSpot;
-  const f6M = comm.futures6M > 0 ? comm.futures6M : newSpot;
-
-  const hist = [...comm.historicalPrices.slice(-51), newSpot];
-
-  const inventoryLevelPct = Math.max(0, Math.min(100, Math.round(comm.inventoryLevelPct + (random() - 0.5) * 3 - yieldLossShare * 40)));
-  // Derived from the same clearing ratio actually driving price/supply/demand above, not the
-  // independent inventoryLevelPct random walk — previously the two could (and regularly did)
-  // disagree, e.g. showing "Balanced" next to a ~2x demand/supply gap.
-  const supplyDemandBalance = clearingRatio > 1.15 ? 'Deficit (Tight Supply)' : clearingRatio < 0.85 ? 'Surplus (Oversupplied)' : 'Balanced';
-
-  return {
-    ...comm,
-    spotPrice: newSpot,
-    weeklySupplyUnits: supplyUnits,
-    weeklyDemandUnits: demandUnits,
-    change1W,
-    historicalPrices: hist,
-    futures1M: f1M,
-    futures3M: f3M,
-    futures6M: f6M,
-    inventoryLevelPct,
-    supplyDemandBalance,
-  };
 }
 
 /**

@@ -77,73 +77,115 @@ Written 2026-09-03 from the domain, code shut.
 
 ## 2. THE MAPPING
 
-Mapped 2026-09-03. `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+Mapped 2026-09-03; re-marked 2026-09-05 (§9.22). `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
 checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
 |---|---|---|
 | A1 a standardised fungible unit — grade, location, quantity | `src/domain/instruments.ts:Commodity` | ⚠️ |
 | **A1.a location is part of the identity** | — | ❌ |
-| A2 produced by named producers, consumed by named consumers | `src/engine/macro/evolution.ts:computeCommodityClearingRatio` | ⚠️ |
+| A2 produced by named producers, consumed by named consumers | `src/domain/commodity-spot.ts:markCommodityToAuction` · `src/engine/simulation/stages/05-unit-bidding.ts:buildRegionSupplyPlans` | ✅ |
 | A3 it is storable, at a cost | `src/domain/instruments.ts:inventoryLevelPct` | ⚠️ |
-| **A4 the stock is finite and observable, held by real parties** | `src/engine/macro/evolution.ts:inventoryLevelPct` | ❌ |
-| B1 a producer produces at a cost, because the price covers it | `src/engine/macro/evolution.ts:supplyElasticity` | ⚠️ |
-| B1.a the supply schedule is a consequence of the cost distribution | — | ❌ |
-| B2 capacity is fixed in the short run | — | ❌ |
-| B2.a so supply is inelastic and price does the adjusting | `src/engine/macro/evolution.ts:supplyElasticity` | ⚠️ |
-| B3 production can be disrupted — a real loss of units | `src/engine/macro/evolution.ts:yieldLossShare` | ✅ |
+| **A4 the stock is finite and observable, held by real parties** | `src/engine/simulation/stages/07-commodities.ts:inventoryLevelPct` | ❌ |
+| B1 a producer produces at a cost, because the price covers it | `src/engine/simulation/stages/05-unit-bidding.ts:coversUnitCost` | ✅ |
+| B1.a the supply schedule is a consequence of the cost distribution | `src/engine/simulation/stages/05-unit-bidding.ts:prospectiveUnitCostLocal` | ⚠️ |
+| B2 capacity is fixed in the short run | `src/engine/simulation/stages/05-unit-bidding.ts:weeklyCapacityUnits` | ✅ |
+| B2.a so supply is inelastic and price does the adjusting | `src/engine/simulation/stages/05-unit-bidding.ts:openOfferUnits` | ✅ |
+| B3 production can be disrupted — a real loss of units | `src/engine/macro/weather.ts:subUnitYieldLossShareOf` | ✅ |
 | B4 a producer can hold inventory rather than sell | — | ❌ |
-| C1 a consumer buys because it needs the input | `src/engine/simulation/stages/04-input-output.ts:runInputOutputStage` | ⚠️ |
-| C2 demand is inelastic in the short run | `src/engine/macro/evolution.ts:demandElasticity` | ⚠️ |
+| C1 a consumer buys because it needs the input | `src/engine/simulation/stages/05-unit-bidding.ts:recipeInputBuyersBySubUnit` | ✅ |
+| C2 demand is inelastic in the short run | `src/domain/market-microstructure.ts:CATEGORY_INPUT_REQUIREMENTS` | ✅ |
 | C3 an investor may buy the physical, to hold | — | ❌ |
-| C4 VERIFY small imbalances produce large price moves | `src/engine/macro/evolution.ts:supplyDemandDrift` | ❌ |
-| **D1 the price clears, per grade and location** | `src/engine/macro/evolution.ts:evolveCommodity` | ❌ |
+| C4 VERIFY small imbalances produce large price moves | `src/domain/commodity-spot.ts:worldPrintOf` | ❌ |
+| D1 the price clears, per grade and location | `src/domain/commodity-spot.ts:markCommodityToAuction` | ⚠️ |
 | **D2 inventory is the buffer** | `src/engine/simulation/stages/04-input-output.ts:totalAvailableSupply` | ❌ |
 | **D2.a a state variable that carries across weeks, and price depends on it** | `src/engine/simulation/stages/04-input-output.ts:decayedInventory` | ❌ |
 | D3 storage costs money, paid to somebody | — | ❌ |
 | D4 spot–forward is a consequence of storage, financing and scarcity | `src/engine/simulation/stages/derivative-markets/commodity-future.ts:impliedConvenienceYield` | ✅ |
 | **D5 VERIFY Σ produced + opening = Σ consumed + closing** | — | ❌ |
-| E1 commodity prices are input costs, and hit PPI before CPI | `src/engine/simulation/stages/04-input-output.ts:newPriceIndex` | ❌ |
+| E1 commodity prices are input costs, and hit PPI before CPI | `src/engine/ledger/goods-ledger.ts:receiveInputLot` | ⚠️ |
 | E2 energy reaches households directly | `src/domain/industry-registry.ts:refined_products` | ✅ |
 | E3 a producing region's terms of trade move with the price | — | ❌ |
 | E4 VERIFY the shock propagates along the chain, not directly | — | ❌ |
-| **F1 FORBID no consumption without production or inventory** | `src/engine/macro/evolution.ts:demandUnits` | ❌ |
+| **F1 FORBID no consumption without production or inventory** | `src/domain/commodity-spot.ts:worldPrintOf` | ❌ |
 | **F2 FORBID no negative inventory** | `src/engine/ledger/goods-ledger.ts:setSegmentStock` | ❌ |
-| **F3 FORBID no price from a written path** | `src/engine/macro/evolution.ts:safeDriftExponent` | ❌ |
+| F3 FORBID no price from a written path | `src/domain/commodity-spot.ts:worldPrintOf` | ✅ |
 
 ---
 
 ## 3. THE DIFF
 
-### ❌ F3 / D1 — THE SPOT PRICE IS A WALKED SERIES
+### ✅ F3 / ⚠️ D1 — THE SPOT IS THE AUCTION'S GATE PRICE
 
-*2026-09-05 (§9.18-i). The 0.5 floor, the ±4%/week cap on the imbalance term and the 0.9 cap on
-a weather loss are gone (rule 6; a loss is capped at all of the crop, which is arithmetic). The
-walk itself stands until §3 step 22 clears spot.*
+*2026-09-05 (§9.22). The walk is deleted. `domain/commodity-spot.ts:markCommodityToAuction` sets
+`spotPrice` to the linked sub-unit's world print — every origin's ex-works cleared price
+(`exWorksUnitPriceLocal`, given its first reader) in the numéraire, weighted by the units that
+origin supplied — times the commodity's own unit against the sub-unit's (`goodsUnitsPerUnit`, rule
+8, fixed at the seed where the marginal producer's cost per unit meets the sub-unit's seed print).
+`weeklySupplyUnits` and `weeklyDemandUnits` are the auction's own supplied and demanded units in
+the commodity's value share; the balance word is their ratio. No origin supplied a unit → no
+print, the last one carries (§3.21). `evolveCommodity`, `computeCommodityClearingRatio`, the growth
+term, the noise term, the imbalance term and both elasticities are gone, and the seed prints
+through the same read, so week 0 and week 1 are one shape.*
 
-`evolution.ts:1424`:
+What that closes, and what it does not:
+
+- **F3 ✅.** Nothing writes a path. The price is what named producers received from named buyers
+  in stage 05's auction, and this system's only price-writer is that auction.
+- **D1 ⚠️.** It clears — but as **one world print**. A1.a still holds: the same grade in two
+  places is one price here, because the `Commodity` has no location, so the four regional gate
+  prices are averaged rather than published as four. That is 37-COMMODITY's, with the stock.
+- **B1 / B2 / B2.a / C1 / C2 ✅, B1.a ⚠️** — these are the goods side's mechanisms, now read
+  rather than re-derived: a producer offers only when the price covers its own dollar cost
+  (`coversUnitCost`); its plant binds (`weeklyCapacityUnits`) and what it offers is stock plus what
+  the plant finished, so the price does the adjusting; a recipe buyer bids what its recipe needs
+  (`CATEGORY_INPUT_REQUIREMENTS`) and cannot change its process this week. B1.a is ⚠️ because
+  each producer's floor is its own unit cost and the auction fills cheaper offers first — the
+  schedule IS the cost distribution — but that unit cost is `goods.md` B5's ⚠️.
+- **C4 ❌** is now a measurement with a price to measure: the imbalance-to-move relation is the
+  auction's, not a `±0.04` clamp's. **§3 step 38.**
+
+### ❌ D2 / D2.a / D5 / F1 / F2 — THERE IS NO COMMODITY STOCK. NOT A BAD ONE — NONE
+
+This is what §9.22 did **not** cover, and it is the larger half.
+
+`Commodity` (`instruments.ts`) carries `inventoryLevelPct: number` — a **percentage**, 0 to 100 —
+and `07-commodities.ts` moves it as:
 
 ```
-const newSpot = Math.max(0.5, Number((comm.spotPrice * Math.exp(safeDriftExponent)).toFixed(2)));
+const inventoryLevelPct = Math.max(0, Math.min(100,
+  Math.round(comm.inventoryLevelPct + (random() - 0.5) * 3 - yieldLossShare * 40)));
 ```
 
-where `safeDriftExponent = drift * 0.4 + supplyDemandDrift`, `drift` is
-`globalGrowth * 0.8 / 52 + (random() − 0.5) * volatility * √(1/52)`, and `supplyDemandDrift` is
-`clamp(±0.04, (clearingRatio − 1) * 0.12)`. Nobody bids, nobody offers, nothing is allocated; the
-last price is multiplied by an exponential of a growth term, a noise term and a clamped imbalance
-term. `07-commodities.ts` is a 16-line wrapper over it.
+A random walk in a box. It is not units, it is not held by anyone, it is not touched by production
+or consumption, and **it is not an input to the price**. The price the commodity now reads does
+depend on stock — a firm's ask falls as its warehouse fills (`05-unit-bidding.ts`
+`inventoryPricePressure`) and the segment pool's units are offered — but that is the goods
+sub-unit's stock, in the goods tree's terms; the commodity's *own* stock is this percentage. So:
 
-**Already §3 step 22**, which names this line and this shape exactly. Two additions for whoever
-takes the step:
+- **D2 / D2.a** — the commodity's inventory does not carry the balance; a week of deficit leaves
+  no trace on next week's percentage.
+- **D5** — `weeklySupplyUnits` and `weeklyDemandUnits` are the auction's own supplied and demanded
+  units in the commodity's share (§9.22) — real terms now — but nothing reconciles them to a
+  stock, and there is no commodity-level stock to reconcile them to. The identity has two of its
+  four terms.
+- **F1** — the demanded units are what was bid, and the auction fills only from stock and
+  arrivals (`goods.md` F1), so consumption without production is impossible on the goods side;
+  the commodity has no stock of its own for the FORBID to be stated on.
+- **F2** — the only thing preventing a negative inventory is `Math.max(0, …)` on a percentage that
+  the flows never touched. That is a clamp, not a stock discipline. (§9.13-BOOK f5: the stock is
+  a GOOD row on the region's segment now, in units, and 04's production, draw and decay are the
+  goods flows `W4` reads against it — a holder and a unit; the discipline behind the clamp is
+  still 04's own arithmetic.)
 
-- **The clamp is load-bearing and it is C4's answer.** `±0.04` per week caps how fast the price can
-  respond no matter how large the imbalance, which is the direct negation of C4 ("with both sides
-  inelastic, small imbalances should produce large price moves"). A bound where a mechanism
-  belongs (rule 6), and it comes out with the auction.
-- **The elasticities are the demand and supply curves, written down.** `demandElasticity = −0.7`
-  and `supplyElasticity = 0.5` (`evolution.ts:1389-1390`) applied to a price ratio *are* the
-  schedules B1.a says must be a consequence of the cost distribution. When the auction arrives,
-  these two constants are what it replaces.
+Contrast the goods side, which has all of this: `audit/wires.ts`'s **W4** checks
+`Δ(output stock + input lots + in transit) = produced − consumed − scrapped + wires in − wires
+out`, per region and sub-unit, **in units**, every week, with a float-dust tolerance. The
+machinery D2/D5/F2 need already exists one directory away and is not pointed at commodities.
+
+**§3 step 37-COMMODITY.** A physical commodity's float is its inventory. Sizing: the same shape as
+the goods ledger's flows (`produceGoods` / `consumeGoods` / `scrapGoods`) plus a holder, which is
+what A4 and D3 also need.
 
 ### ❌ D2 / D2.a / D5 / F1 / F2 — THERE IS NO COMMODITY STOCK. NOT A BAD ONE — NONE
 
@@ -188,8 +230,9 @@ which is what A4 and D3 also need.
 ### ❌ A1.a / A4 / D3 / C3 / B4 — THE COMMODITY IS A PRICE SERIES, NOT A THING SOMEBODY OWNS
 
 Five nodes fail for one reason. A `Commodity` has an id, a name, a symbol, a category, a unit
-label, a spot price, a futures strip, a volatility and an inventory percentage. It has **no
-location, no owner and no storage cost**, and no party's balance sheet carries a barrel of it.
+label and its unit against the sub-unit's (§9.22), a spot price that is a read of the goods
+auction, a futures strip, a volatility and an inventory percentage. It has **no location, no owner
+and no storage cost**, and no party's balance sheet carries a barrel of it.
 
 - **A1.a** — one global spot price. The same grade in two places cannot be two prices, so the
   location basis this tree shares with `freight-and-logistics.md` D3 has nothing to be a basis of.
@@ -207,43 +250,41 @@ location, no owner and no storage cost**, and no party's balance sheet carries a
 Worth stating plainly because it decides the shape of every fix here. **Every commodity in this
 model exists twice.**
 
-1. As a `Commodity` in `state.commodities`: a global spot price on a written path, with a
-   percentage inventory. This is what the trading screens, the futures strip and `04-input-output`
-   read.
+1. As a `Commodity` in `state.commodities`: a global spot price, a futures strip and a percentage
+   inventory. This is what the trading screens, the futures book and `04-input-output` read.
 2. As a **goods sub-unit** in the industry registry (`upstream_extraction`, `refined_products`,
    `agricultural_commodities`, `specialty_metals`, `electricity`): produced by named firms with
    real capacity, cleared in a per-region double auction, held as lots and output stock with a
    units identity, shipped by named carriers, and consumed by real recipes.
 
-`COMMODITY_CATEGORY_LINKAGE` (`domain/instruments.ts:114`) is the join, and the join runs one way
-only: `computeCommodityClearingRatio` reads the sub-unit's cleared supply and demand to build the
-ratio that drives the written path (A2 is ⚠️ for exactly this — the producers are named, but only
-as a *statistic* feeding a formula). Nothing flows back: no firm ever pays the spot price, no
-firm's cost is `spotPrice`, and no unit of the `Commodity` is ever delivered. The written path is
-a **display of a market that already cleared**, and that is why step 22's "two disconnected
-representations of one price" is the right diagnosis.
+`COMMODITY_CATEGORY_LINKAGE` (`domain/instruments.ts`) is the join. *2026-09-05 (§9.22): the join
+now runs the right way for the PRICE and the week's QUANTITIES — representation 1 is a read of
+representation 2 (`domain/commodity-spot.ts`), so the spot a firm hedges and a future settles to
+is the gate price the auction struck, and a weather event's loss is a loss of the sub-unit's units
+where they are made (`weather.ts:subUnitYieldLossShareOf`, in 05's pipeline and 04's segment
+production). Before this the sub-unit's cleared supply and demand were read only as a statistic
+that moved a written path.*
 
-**Consequence for the fix:** representation 2 already satisfies A2, B1, B2, B3, C1, D2 and F1/F2
-in the goods tree's terms. What this system needs is not a second physical market — it is for the
-`Commodity` object to become a *read* of the sub-unit that already clears, plus the location and
-inventory dimensions the sub-unit does not carry.
+What still does not flow: the `Commodity`'s **stock**, **location** and **holder**. Its inventory
+is the percentage walk above, not the sub-unit's stock, and no unit of the `Commodity` as such is
+ever delivered — the sub-unit's units are. Representation 2 already satisfies A4, B4, D2, D5 and
+F1/F2 in the goods tree's terms; what this system needs is for the `Commodity` to read those too,
+plus the location dimension the sub-unit does not carry. **§3 step 37-COMMODITY.**
 
-### ❌ E1 / E3 / E4 — THE CHAIN THIS SYSTEM FEEDS IS CUT AT THE FIRST LINK
+### ⚠️ E1 / ❌ E3 / E4 — THE CHAIN THIS SYSTEM FEEDS HAS ITS FIRST LINK, AND NO PPI TO SHOW IT
 
-E1 requires a commodity price to reach a firm's cost and show in PPI before CPI. The path in the
-code is `spotPrice × weeklySupplyUnits → globalWeeklyProductionByInputCat →
-newPriceIndex (a smoothed formula) → upstreamScarcityIndex / inputCostPressure`, and those last
-two fields are read by **`src/ui/objects/market.tsx:109` and nothing else**. Stage 04's
-`_fulfillmentRatio` does reach the kernel, where it becomes `newInputSupplyConstraintFactor` —
-which is also read by nothing (see `goods.md` B1.b). So stage 04's entire output is inert, which
-is a sharper statement of §3 step 23 than that step currently carries.
+E1 requires a commodity price to reach a firm's cost and show in PPI before CPI. *2026-09-05
+(§9.22): the first link is real. A firm pays the sub-unit's landed price for the input lots its
+recipe draws (`goods-ledger.ts:receiveInputLot`), and the commodity's spot is that same market's
+gate price — so a commodity shock IS an input cost, by construction, not through
+`04-input-output`'s formula index.* What is still missing is the PPI it should show in first:
+stage 04's `newPriceIndex → upstreamScarcityIndex / inputCostPressure` is read by
+**`src/ui/objects/market.tsx` and nothing else**, and the PPI `goods.md` G1.a asks for does not
+exist. **§3 step 23** deletes the index; the PPI and E4's propagation are **a measurement, for §3
+step 38**.
 
 E3 is simply absent: `grep -i 'terms of trade' src` returns nothing, and no region's currency
-fundamentals read any commodity price. E4's propagation cannot be measured while E1's first link
-is cut.
-
-E1 and E4 are **a measurement, for §3 step 38**, once step 23 has deleted the formula index and
-the PPI `goods.md` G1.a asks for exists. E3 is **§3 step 37-COMMODITY** and belongs to
+fundamentals read any commodity price. **§3 step 37-COMMODITY**, and it belongs to
 `cross-border.md`/`fx-spot.md` rather than here; recorded so it is not lost.
 
 ### ✅ D4 / B3 — TWO NODES THAT ARE RIGHT
@@ -255,13 +296,15 @@ consumer hedging demand, and the convenience yield is **inferred** from what cle
 storage cost, financing cost and scarcity, never an imposed basis", and it is the shape the spot
 side still needs.
 
-B3 is right too: a weather event destroys a share of the **yield** (`yieldLossShare`), and the
-file's own comment records that it used to add a price impact instead. The disruption is a loss of
-units; it is only the absence of a stock for those units to come out of that keeps it from being
-fully real.
+B3 is right, and since §9.22 it is right where it should be: a weather event destroys its stated
+share of the affected commodity's **yield**, which is that commodity's value share of the sub-unit
+(`weather.ts:subUnitYieldLossShareOf`), and the loss is taken off the units the region's plants
+FINISHED this week (`05-unit-bidding.ts`) and off the segment's production (`04-input-output.ts`)
+— fewer units produced, so `W4` holds without a scrap — and the auction prices the shortage the
+same week. (It used to scale a supply statistic that moved a written path, and the event once
+stated its own price impact.)
 
 ### Also marked, briefly
 
-- **A1 ⚠️** — a unit and a symbol, no grade and no location — A1.a above.
+- **A1 ⚠️** — a unit, a symbol and (§9.22) its unit against the sub-unit's; no grade and no location — A1.a above.
 - **A3 ⚠️** — storable as a percentage on a random walk; nothing is paid to store it — D3.
-- **B2.a ⚠️ / C2 ⚠️** — `supplyElasticity` and `demandElasticity` are the constants the auction replaces — F3/D1 above.

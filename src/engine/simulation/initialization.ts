@@ -1453,7 +1453,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     });
   });
 
-  const commodities = getInitialCommodities();
   const allGeneratedCompanies = companies;
   // Calibrate the working linkage from the FROZEN base shares (§6: the old in-place mutation
   // meant a second world built in the same process re-calibrated already-calibrated values).
@@ -1462,6 +1461,9 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const calibratedShare = calibrateIntensityShare(commodityId, allGeneratedCompanies, regions, base.subUnitId, seedFxToUsd);
     COMMODITY_CATEGORY_LINKAGE[commodityId] = { ...base, intensityShare: calibratedShare };
   });
+  // §3.22: the commodities are seeded AFTER the linkage is calibrated — the seed print (spot, the
+  // week's units, the balance word) is a read of the sub-unit each one is a share of.
+  const commodities = getInitialCommodities(regions, seedFxToUsd);
 
   // G3b: the dealers the player trades with ARE the named banks' desks.
   const dealers = dealersFromBanks(seedV2, (b) => openingCashOf(b.bankBalanceSheet!), (b) => facilityBookOf(seedV2, b.id), (b) => seedBankBookLocalOf(b.bankBalanceSheet!), companies);
