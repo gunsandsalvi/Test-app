@@ -15,8 +15,9 @@
  */
 import type { InterbankLoan } from '../../domain/interbank';
 import type { CentralBankLoan } from '../../domain/central-bank-loan';
+import type { SwapLineDraw } from '../../domain/swap-lines';
 import type { V2World } from '../../engine2/world';
-import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, writeInterbankRow, writeInterbankTerms, materializeInterbank, writeCentralBankLoanRow, writeCentralBankLoanTerms, materializeCentralBankLoan, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeUnits, writeDerivativeSize, writeDerivativeParties, writeRepoRow, writeCcpFundRow, writeCcpFundAmount, materializeCcpFund, ccpFundIdOf, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
+import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, writeInterbankRow, writeInterbankTerms, materializeInterbank, writeCentralBankLoanRow, writeCentralBankLoanTerms, materializeCentralBankLoan, writeSwapLineRow, writeSwapLineTerms, materializeSwapLine, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeUnits, writeDerivativeSize, writeDerivativeParties, writeRepoRow, writeCcpFundRow, writeCcpFundAmount, materializeCcpFund, ccpFundIdOf, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import { derivativePartyKey, type DerivativeClassId, type DerivativeContract, type DerivativeParty } from '../../domain/derivatives/contract';
@@ -340,6 +341,28 @@ export function publishCentralBankLoanBook(v2: V2World, regionId: RegionId, book
     return r;
   });
   relinkKindInRegion(v2, 'CB_LOAN', regionId, rows);
+}
+
+/** §3.20-LLR-b — THE SWAP-LINE BOOK: a home region's draws on the other central banks' lines,
+ *  rows of the contract store read and written the way the repo book is. */
+const swapLineBookMemo = new WeakMap<V2World, { epoch: number; byRegion: Map<string, SwapLineDraw[]> }>();
+export function swapLineBookOf(v2: V2World, homeRegion: RegionId): SwapLineDraw[] {
+  let memo = swapLineBookMemo.get(v2);
+  if (!memo || memo.epoch !== v2.obligations.epoch) { memo = { epoch: v2.obligations.epoch, byRegion: new Map() }; swapLineBookMemo.set(v2, memo); }
+  let book = memo.byRegion.get(homeRegion);
+  if (!book) { book = rowsOfKindInRegion(v2, 'SWAP_LINE', homeRegion).map((r) => materializeSwapLine(v2, r)); memo.byRegion.set(homeRegion, book); }
+  return book;
+}
+export function publishSwapLineBook(v2: V2World, homeRegion: RegionId, book: SwapLineDraw[]): void {
+  const rows = book.map((d) => {
+    if (d.homeRegion !== homeRegion) return defect(`swap line draw ${d.id} of ${d.homeRegion} published on ${homeRegion}'s book`);
+    resolvePartyRef(bankPartyOf(d.bankId), `swap line ${d.id} borrower`);
+    const r = derivativeRowOf(v2, d.id);
+    if (r === undefined) return writeSwapLineRow(v2, d);
+    writeSwapLineTerms(v2, r, d);
+    return r;
+  });
+  relinkKindInRegion(v2, 'SWAP_LINE', homeRegion, rows);
 }
 
 /** §3.20b — THE INTERBANK BOOK: a region's unsecured bank-to-bank loans, rows of the contract

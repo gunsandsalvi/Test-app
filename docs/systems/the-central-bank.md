@@ -90,7 +90,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.a it can always meet an obligation in its own money | `src/engine/simulation/stages/central-bank-demand.ts:bookCentralBankFills` | ✅ |
 | A2 it has a balance sheet, and a real one | `src/domain/central-bank.ts:CentralBank` | ✅ |
 | A2.a liabilities: reserves, currency, the TGA, the RRP window | `src/domain/central-bank.ts:centralBankLiabilitiesLocal` · `src/engine/ledger/accounts.ts:bankReservesOf` | ✅ |
-| A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsLocal` · `src/domain/central-bank-loan.ts:CentralBankLoan` · `src/engine/ledger/contract-ledger.ts:centralBankLoanBookOf` | ✅ |
+| A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsLocal` · `src/domain/central-bank-loan.ts:CentralBankLoan` · `src/engine/ledger/contract-ledger.ts:centralBankLoanBookOf` · `src/engine/ledger/contract-ledger.ts:swapLineBookOf` | ✅ |
 | A2.c VERIFY it closes weekly, with a revaluation account | `src/engine/audit/money.ts:m1` | ✅ |
 | A3 a mandate: a stated objective | `src/domain/region-macro.ts:targetInflation` | ⚠️ |
 | A4 operationally independent, financially owned | `src/domain/central-bank.ts:remittanceLocal` | ✅ |
@@ -141,8 +141,10 @@ collateral and solvency are still the two the domestic line lacks, so the row st
 close (`domain/central-bank-loan.ts`, `stages/central-bank-loans.ts`), struck at the close for what the
 interbank market left unfunded, paying its week's interest at its own struck rate at the open, repaid
 from cash above the buffer and rolled at that morning's rate when it cannot be; `loansToBanksLocal`
-and `centralBankLoanLocal` are reads of the book, and a resolution re-seats the rows. What the row
-carries is still what the scalar carried: none of the four below.*
+and `centralBankLoanLocal` are reads of the book, and a resolution re-seats the rows. §9.20-LLR-b did
+the same for the swap-line draws (`swapLineBookOf`; the three lines that stood for them are reads,
+written by `syncSwapLineSheets` alone). What a row carries is still what the scalar carried: none
+of the four below.*
 
 Bagehot's rule is four conditions and `strikeCentralBankLoan` (`central-bank-loans.ts`) has one and a
 half:

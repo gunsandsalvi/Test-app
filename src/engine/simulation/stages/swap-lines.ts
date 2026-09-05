@@ -18,7 +18,9 @@ import { currencyOf, RegionId, NUMERAIRE } from '../../../domain/geography';
 import { convert } from '../../../domain/currency';
 import { bankParty } from '../../../domain/party';
 import { Company } from '../../../domain/company';
-import { SWAP_LINE_TERM_WEEKS, swapLineInterestLocal, SwapLineDraw } from '../../../domain/swap-lines';
+import { SWAP_LINE_TERM_WEEKS, swapLineInterestLocal, SwapLineDraw, swapLineDrawId, swapLineDrawnByRegionOf, swapLineLentByRegionOf, swapLineDepositsOf } from '../../../domain/swap-lines';
+import { swapLineBookOf, publishSwapLineBook } from '../../ledger/contract-ledger';
+import type { EntityId } from '../../../domain/ids';
 import type { DerivativeMarketView } from '../../../domain/derivatives/profile';
 
 const addTo = (rec: Record<string, number> | undefined, key: string, delta: number): Record<string, number> => {
@@ -28,6 +30,22 @@ const addTo = (rec: Record<string, number> | undefined, key: string, delta: numb
   return out;
 };
 
+/** §3.20-LLR-b — the three lines that stood for the draws are READS of the book, written here and
+ *  nowhere else: each home bank's draws per lending region, the home central bank's on-lending per
+ *  lending region, and the home money it gave for them. */
+export function syncSwapLineSheets(ctx: WeeklyStepContext, home: RegionId): void {
+  const book = swapLineBookOf(ctx.v2, home);
+  const cbHome = ctx.updatedRegions[home]?.centralBankSheet;
+  if (cbHome) {
+    cbHome.swapLineLentByRegion = swapLineLentByRegionOf(book);
+    cbHome.swapLineDepositsLocal = Math.round(swapLineDepositsOf(book));
+  }
+  ctx.updatedCompanies.forEach((c) => {
+    if (!c.isBankEntity || !c.bankBalanceSheet || c.region !== home) return;
+    c.bankBalanceSheet.swapLineDrawnByRegion = swapLineDrawnByRegionOf(book, c.id);
+  });
+}
+
 export function drawSwapLine(ctx: WeeklyStepContext, home: RegionId, foreign: RegionId, bank: Company, foreignLocal: number, week: number): SwapLineDraw | undefined {
   const cbHome = ctx.updatedRegions[home]?.centralBankSheet;
   const cbForeign = ctx.updatedRegions[foreign]?.centralBankSheet;
@@ -35,14 +53,17 @@ export function drawSwapLine(ctx: WeeklyStepContext, home: RegionId, foreign: Re
   const foreignMoney = currencyOf(foreign), homeMoney = currencyOf(home);
   const homeLocal = convert(foreignLocal, foreignMoney, homeMoney, ctx.fx);
   const homeUSD = convert(homeLocal, homeMoney, NUMERAIRE, ctx.fx);
-  // The lending central bank creates its money and it lands on the borrowing region's bank.
   pay(ctx, { payer: { kind: 'CENTRAL_BANK', region: foreign }, payee: bankParty(bank), amount: foreignLocal, currency: foreignMoney, reason: 'swap line drawn' });
-  bank.bankBalanceSheet = { ...bank.bankBalanceSheet, swapLineDrawnByRegion: addTo(bank.bankBalanceSheet.swapLineDrawnByRegion, foreign, foreignLocal) };
-  cbHome.swapLineLentByRegion = addTo(cbHome.swapLineLentByRegion, foreign, foreignLocal);
-  cbHome.swapLineDepositsLocal = (cbHome.swapLineDepositsLocal ?? 0) + homeLocal;
+  // The lending central bank's FX reserves are its own line, moved by the FX book as well.
   cbForeign.fxReservesByRegion = addTo(cbForeign.fxReservesByRegion, home, homeUSD);
-  const draw: SwapLineDraw = { counterpartyRegion: foreign, bankId: bank.id, foreignLocal, homeLocal, homeUSD, drawnWeek: week, maturityWeek: week + SWAP_LINE_TERM_WEEKS };
-  cbHome.swapLines = [...(cbHome.swapLines ?? []), draw];
+  const draw: SwapLineDraw = { id: swapLineDrawId(home, foreign, bank.id, week), homeRegion: home, counterpartyRegion: foreign, bankId: bank.id, foreignLocal, homeLocal, homeUSD, drawnWeek: week, maturityWeek: week + SWAP_LINE_TERM_WEEKS };
+  const book = swapLineBookOf(ctx.v2, home);
+  const same = book.find((d) => d.id === draw.id);
+  // A second draw by the same bank on the same line in the same week adds to the same row.
+  publishSwapLineBook(ctx.v2, home, same
+    ? book.map((d) => (d.id === draw.id ? { ...d, foreignLocal: d.foreignLocal + foreignLocal, homeLocal: d.homeLocal + homeLocal, homeUSD: d.homeUSD + homeUSD } : d))
+    : [...book, draw]);
+  syncSwapLineSheets(ctx, home);
   return draw;
 }
 
@@ -50,19 +71,17 @@ export function serviceSwapLines(ctx: WeeklyStepContext, week: number, view: Pic
   const bankById = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((home) => {
     const cbHome = ctx.updatedRegions[home]?.centralBankSheet;
-    if (!cbHome?.swapLines?.length) return;
+    const book = swapLineBookOf(ctx.v2, home);
+    if (!cbHome || book.length === 0) return;
     const homeMoney = currencyOf(home);
     const kept: SwapLineDraw[] = [];
-    cbHome.swapLines.forEach((d) => {
+    book.forEach((d) => {
       const bank = bankById.get(d.bankId);
       const foreign = d.counterpartyRegion;
       const foreignMoney = currencyOf(foreign);
       const cbForeign = ctx.updatedRegions[foreign]?.centralBankSheet;
-      // A bank that has left the world leaves its draw to the resolution that took its book; the
-      // central bank's record is kept until that book repays (a resolved bank's sheet carries it).
       if (!bank?.bankBalanceSheet) { kept.push(d); return; }
       if (d.drawnWeek < week) {
-        // Interest, in the borrowing central bank's own money, remitted with its other income.
         const interestLocal = convert(swapLineInterestLocal(d.foreignLocal, view.overnightRateAnnual(foreign)), foreignMoney, homeMoney, ctx.fx);
         if (interestLocal > 1) {
           pay(ctx, { payer: bankParty(bank), payee: { kind: 'CENTRAL_BANK', region: home }, amount: interestLocal, currency: homeMoney, reason: 'swap line interest' });
@@ -70,14 +89,18 @@ export function serviceSwapLines(ctx: WeeklyStepContext, week: number, view: Pic
         }
       }
       if (d.maturityWeek > week) { kept.push(d); return; }
-      // The unwind, at the original rate: the bank returns the foreign money to the central bank
-      // that created it, and the books reverse.
       pay(ctx, { payer: bankParty(bank), payee: { kind: 'CENTRAL_BANK', region: foreign }, amount: d.foreignLocal, currency: foreignMoney, reason: 'swap line repaid' });
-      bank.bankBalanceSheet = { ...bank.bankBalanceSheet, swapLineDrawnByRegion: addTo(bank.bankBalanceSheet.swapLineDrawnByRegion, foreign, -d.foreignLocal) };
-      cbHome.swapLineLentByRegion = addTo(cbHome.swapLineLentByRegion, foreign, -d.foreignLocal);
-      cbHome.swapLineDepositsLocal = (cbHome.swapLineDepositsLocal ?? 0) - d.homeLocal;
       if (cbForeign) cbForeign.fxReservesByRegion = addTo(cbForeign.fxReservesByRegion, home, -d.homeUSD);
     });
-    cbHome.swapLines = kept;
+    publishSwapLineBook(ctx.v2, home, kept);
+    syncSwapLineSheets(ctx, home);
   });
+}
+
+/** A resolved bank's draws are assumed by the bank that takes its book: the rows re-seat. */
+export function reseatSwapLines(ctx: WeeklyStepContext, home: RegionId, fromBankId: EntityId, toBankId: EntityId): void {
+  const book = swapLineBookOf(ctx.v2, home);
+  if (!book.some((d) => d.bankId === fromBankId)) return;
+  publishSwapLineBook(ctx.v2, home, book.map((d) => (d.bankId === fromBankId ? { ...d, bankId: toBankId } : d)));
+  syncSwapLineSheets(ctx, home);
 }

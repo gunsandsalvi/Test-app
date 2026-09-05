@@ -25,6 +25,10 @@ export const SWAP_LINE_SPREAD_BPS = 25;
 export const SWAP_LINE_TERM_WEEKS = 13;
 
 export interface SwapLineDraw {
+  /** §3.20-LLR-b — a row of the contract store: one per bank, per lending region, per week. */
+  id: string;
+  /** The home region — whose central bank drew the line and on-lent; the book the row sits on. */
+  homeRegion: RegionId;
   /** The region whose money was borrowed — the lending central bank's. */
   counterpartyRegion: RegionId;
   /** The bank the money was on-lent to. */
@@ -56,3 +60,23 @@ export function cappedBasisBps(clearedBasisBps: number | undefined): number {
 export function swapLineInterestLocal(foreignLocal: number, foreignOvernightAnnual: number): number {
   return foreignLocal * (Math.max(0, foreignOvernightAnnual) + SWAP_LINE_SPREAD_BPS / 10000) / 52;
 }
+
+export const swapLineDrawId = (home: RegionId, foreign: RegionId, bankId: EntityId, week: number): string =>
+  `SWL:${home}:${foreign}:${bankId}@${week}`;
+
+/** What one bank has drawn, per lending region, in that region's money — a read of the book. */
+export function swapLineDrawnByRegionOf(book: readonly SwapLineDraw[], bankId: EntityId): Record<string, number> {
+  const out: Record<string, number> = {};
+  book.forEach((d) => { if (d.bankId === bankId) out[d.counterpartyRegion] = (out[d.counterpartyRegion] ?? 0) + d.foreignLocal; });
+  return out;
+}
+
+/** What the home central bank has on-lent, per lending region — a read of the book. */
+export function swapLineLentByRegionOf(book: readonly SwapLineDraw[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  book.forEach((d) => { out[d.counterpartyRegion] = (out[d.counterpartyRegion] ?? 0) + d.foreignLocal; });
+  return out;
+}
+
+/** The home money the central bank gave for the draws, at their own rates — a read of the book. */
+export const swapLineDepositsOf = (book: readonly SwapLineDraw[]): number => book.reduce((a, d) => a + d.homeLocal, 0);

@@ -551,15 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-20-LLR-b. **THE SWAP-LINE COPIES ARE READS OF THE DRAWS.** (20-LLR-a, the central bank's loans as
-    a book, is §9.) The swap lines already are a book of draws — `CentralBank.swapLines`, one
-    record per bank, per foreign money, with the amounts and the weeks — but three copies are
-    kept beside it by hand: `BankingSector.swapLineDrawnByRegion`, `CentralBank.swapLineLentByRegion`
-    and `CentralBank.swapLineDepositsLocal`, each added to at the draw, subtracted from at the
-    unwind, merged at a resolution and compared to the draws by M2. The draws move into the
-    contract store beside the central-bank loans (kind `SWAP_LINE`, the lending central bank as
-    A, the bank as B, the foreign money as the currency), and the three copies become reads of
-    it, so a draw cannot disagree with what was drawn.
 20-LLR. **NOTHING CAN FAIL FOR WANT OF LIQUIDITY, AND THAT IS THE MONEY SYSTEM'S LARGEST HOLE**
     (user, 2026-09-03, asking whether the desks and the central bank are buyers of last resort so
     that an auction cannot fail — half right, and the half that is right is not in the auctions).
@@ -1527,6 +1518,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20-LLR-b — THE SWAP-LINE DRAWS ARE ROWS, AND THEIR COPIES ARE READS.** The draws were a list on
+  the central bank's record (`CentralBank.swapLines`) with three copies kept beside it by hand —
+  each bank's `swapLineDrawnByRegion`, the central bank's `swapLineLentByRegion` and
+  `swapLineDepositsLocal` — added to at the draw, subtracted at the unwind, merged at a resolution,
+  compared by M2. Now a draw is a row of the contract store (kind `SWAP_LINE`: the lending central
+  bank as A, the bank as B, the foreign money as the row's currency, the home region as its
+  region, the lending region as where it is repaid into; the foreign principal, the home money
+  given per unit of it at the draw, and the numéraire value the lender booked), read and written
+  through `contract-ledger.ts:swapLineBookOf` / `publishSwapLineBook`; `stages/swap-lines.ts`
+  draws, services and unwinds rows, `syncSwapLineSheets` is the one writer of the three lines
+  (reads of the book, `domain/swap-lines.ts:swapLineDrawnByRegionOf` etc.), a resolution
+  re-seats the rows (`reseatSwapLines`) instead of merging maps, and the news reads the book.
+  The lending central bank's FX-reserve line stays its own (the FX book moves it too). Test: the
+  three reads. `the-central-bank.md` A2.b and D3 notes. Gates green; no run.
 
 **20-LLR-a — THE CENTRAL BANK'S LOANS TO ITS BANKS ARE A BOOK.** `loansToBanksLocal` was a scalar the
   funding close added to and 02b subtracted from; `centralBankLoanLocal` its mirror on each

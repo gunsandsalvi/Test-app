@@ -20,6 +20,7 @@ import { ABSENT_REF, newRefColumn, type RefColumn, type TypeRef, type RegionRef,
 import type { DerivativeContract, DerivativeReference, DerivativeParty } from '../domain/derivatives/contract';
 import type { InterbankLoan } from '../domain/interbank';
 import type { CentralBankLoan } from '../domain/central-bank-loan';
+import type { SwapLineDraw } from '../domain/swap-lines';
 import type { RepoContract, RepoPledge, RepoParty } from '../domain/repo';
 import type { SecurityLoan } from '../domain/securities-lending';
 import type { PrimeBrokerageLine } from '../domain/prime-brokerage';
@@ -368,6 +369,53 @@ export function materializeCentralBankLoan(v2: V2World, r: number): CentralBankL
   return {
     id: S.id[r], regionId: regionOf(v2, S.regionRef[r]) as RegionId, bankId: borrower.id,
     principalLocal: S.notional[r], rateAnnual: S.strike[r], struckWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
+  };
+}
+
+// ---- §3.20-LLR-b — THE SWAP-LINE DRAWS: the LENDING central bank as A, the bank the money was
+// on-lent to as B, the foreign money as the row's currency, the home region as the row's region
+// and the lending region as `toRegionRef` (the money is repaid into it). `notional` is the foreign
+// principal, `strike` the home money given per unit of it at the draw, `units` the numéraire
+// value the lending central bank booked in its FX reserves — the two numbers the unwind returns. ----
+
+/** Write a swap-line draw as a new row (ledger-internal). Returns the row. */
+export function writeSwapLineRow(v2: V2World, d: SwapLineDraw): number {
+  const S = mutableObligations(v2);
+  if (S.rowById.has(d.id)) return defect(`swap line draw ${d.id} struck twice`);
+  const r = allocRow(S);
+  const kindRef = internType(v2, 'SWAP_LINE');
+  S.kindRef[r] = kindRef; S.classRef[r] = kindRef; S.regionRef[r] = internRegion(v2, d.homeRegion);
+  S.currencyId[r] = CURRENCY_ID[currencyOf(d.counterpartyRegion)];
+  S.aRef[r] = internPartyKey(v2, partyKey({ kind: 'CENTRAL_BANK', region: d.counterpartyRegion })); S.bRef[r] = internPartyKey(v2, partyKey(bankPartyOf(d.bankId)));
+  S.notional[r] = d.foreignLocal; S.strike[r] = d.foreignLocal > 0 ? d.homeLocal / d.foreignLocal : 0; S.units[r] = d.homeUSD; S.settledMark[r] = Number.NaN;
+  S.struckWeek[r] = d.drawnWeek | 0; S.maturityWeek[r] = d.maturityWeek | 0;
+  S.refKind[r] = 0; S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = d.id;
+  S.pledges[r] = []; S.toRegionRef[r] = internRegion(v2, d.counterpartyRegion);
+  S.rowById.set(d.id, r);
+  appendToKind(S, kindRef, r);
+  bump(S, kindRef);
+  return r;
+}
+
+/** A live swap-line row takes the draw's current terms (ledger-internal). */
+export function writeSwapLineTerms(v2: V2World, r: number, d: SwapLineDraw): void {
+  const S = mutableObligations(v2);
+  S.bRef[r] = internPartyKey(v2, partyKey(bankPartyOf(d.bankId)));
+  S.notional[r] = d.foreignLocal; S.strike[r] = d.foreignLocal > 0 ? d.homeLocal / d.foreignLocal : 0; S.units[r] = d.homeUSD;
+  S.struckWeek[r] = d.drawnWeek | 0; S.maturityWeek[r] = d.maturityWeek | 0;
+  bump(S, S.kindRef[r]);
+}
+
+/** One swap-line row materialized back to the draw the stages read. */
+export function materializeSwapLine(v2: V2World, r: number): SwapLineDraw {
+  const S = v2.obligations;
+  const borrower = partyFromKey(partyKeyOf(v2, S.bRef[r]));
+  if (borrower === undefined || borrower.kind !== 'BANK') return defect(`swap line row ${r} (${S.id[r]}) names a borrower the key table cannot read`);
+  const foreignLocal = S.notional[r];
+  return {
+    id: S.id[r], homeRegion: regionOf(v2, S.regionRef[r]) as RegionId, counterpartyRegion: regionOf(v2, S.toRegionRef[r]) as RegionId,
+    bankId: borrower.id, foreignLocal, homeLocal: foreignLocal * S.strike[r], homeUSD: S.units[r],
+    drawnWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
   };
 }
 

@@ -13,6 +13,7 @@
  * Runs after every mechanism stage and before the feed is assembled (13-news).
  */
 
+import { swapLineBookOf } from '../../ledger/contract-ledger';
 import { GameState, Company, RegionId } from '../../../types';
 import { marketCapAt } from '../../../engine2/instruments';
 import type { EntityId } from '../../../domain/ids';
@@ -416,8 +417,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   // ---- 7f. §3.17b-v: a central bank drew its swap line — the funding basis cleared past the
   // line's price, or nobody would lend, and the foreign money came from the other central bank. ----
   REGION_IDS.forEach((rid) => {
-    const cb = ctx.updatedRegions[rid]?.centralBankSheet;
-    const draws = (cb?.swapLines ?? []).filter((d) => d.drawnWeek === week);
+    const draws = swapLineBookOf(ctx.v2, rid).filter((d) => d.drawnWeek === week);
     if (draws.length === 0) return;
     const byCounterparty = new Map<string, { usd: number; banks: Set<string> }>();
     draws.forEach((d) => { const e = byCounterparty.get(d.counterpartyRegion) ?? { usd: 0, banks: new Set() }; e.usd += convert(d.foreignLocal, currencyOf(d.counterpartyRegion), currencyOf(rid), ctx.fx); e.banks.add(d.bankId); byCounterparty.set(d.counterpartyRegion, e); });

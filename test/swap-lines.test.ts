@@ -30,3 +30,15 @@ test('the draw sits on both books: the bank owes the foreign money, the central 
   assert.ok(Math.abs(assets - 1_250_000) < 1e-6, 'the on-lent euros are its asset, at today\'s rate');
   assert.ok(Math.abs(liabilities - 1_100_000) < 1e-6, 'the dollars it gave at the draw\'s rate are its liability');
 });
+
+test('§3.20-LLR-b: the three lines are reads of the book of draws', async () => {
+  const { swapLineDrawnByRegionOf, swapLineLentByRegionOf, swapLineDepositsOf } = await import('../src/domain/swap-lines');
+  const book = [
+    { id: 'a', homeRegion: 'USA', counterpartyRegion: 'EUR', bankId: 'B1', foreignLocal: 100, homeLocal: 125, homeUSD: 125, drawnWeek: 1, maturityWeek: 14 },
+    { id: 'b', homeRegion: 'USA', counterpartyRegion: 'EUR', bankId: 'B2', foreignLocal: 50, homeLocal: 60, homeUSD: 60, drawnWeek: 2, maturityWeek: 15 },
+    { id: 'c', homeRegion: 'USA', counterpartyRegion: 'JPN', bankId: 'B1', foreignLocal: 7, homeLocal: 5, homeUSD: 5, drawnWeek: 2, maturityWeek: 15 },
+  ] as never[];
+  assert.deepEqual(swapLineDrawnByRegionOf(book, 'B1' as never), { EUR: 100, JPN: 7 });
+  assert.deepEqual(swapLineLentByRegionOf(book), { EUR: 150, JPN: 7 });
+  assert.equal(swapLineDepositsOf(book), 190);
+});

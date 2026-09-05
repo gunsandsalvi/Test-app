@@ -24,14 +24,14 @@ export interface CentralBank {
    *  what makes a defence fail. */
   fxReservesByRegion?: Record<string, number>;
   /** §3.17b-v — ASSET: the foreign money this central bank drew on its swap lines and on-lent to
-   *  its banks, per lending region, in that region's money (`domain/swap-lines.ts`); equals the
-   *  sum of its banks' `swapLineDrawnByRegion`. Read in this book's money by `swapLineLentLocal`. */
+   *  its banks, per lending region, in that region's money. §3.20-LLR-b: a READ of the swap-line
+   *  book (`contract-ledger.ts:swapLineBookOf`), written by `stages/swap-lines.ts:syncSwapLineSheets`
+   *  and nowhere else; equals the sum of its banks' `swapLineDrawnByRegion` by construction.
+   *  Read in this book's money by `swapLineLentLocal`. */
   swapLineLentByRegion?: Record<string, number>;
   /** §3.17b-v — LIABILITY: the home money this central bank gave the lending central banks for
    *  the draws, in its own money; unwound at the draws' original rates. */
   swapLineDepositsLocal?: number;
-  /** §3.17b-v — the draws outstanding, one record each, for the interest and the unwind. */
-  swapLines?: import('./swap-lines').SwapLineDraw[];
   region: RegionId;
   /** Assets: the real sovereign book, by tenor bucket. Clears in 07c like any other holder. */
   /** Asset: the unsecured loans to banks drawn at the funding close (the lender of
