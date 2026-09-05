@@ -223,7 +223,7 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
         }, view));
       });
     });
-    const admitted = admitToHouse(ctx, struck);
+    const admitted = admitToHouse(ctx, struck, view);
     strikeDerivatives(ctx, admitted);
     admitted.forEach((c) => postInitialMargin(ctx, c));
   });

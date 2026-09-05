@@ -252,6 +252,14 @@ export function writeSettledMark(v2: V2World, r: number, markLocal: number | und
   bump(S, S.kindRef[r]);
 }
 
+/** §3.17e-iv: a contract's size — notional, units and the margin it carries — after a slice of it
+ *  was netted at the house (ledger-internal). */
+export function writeDerivativeSize(v2: V2World, r: number, notional: number, units: number | undefined, initialMarginLocal: number): void {
+  const S = mutableObligations(v2);
+  S.notional[r] = notional; S.units[r] = units === undefined ? Number.NaN : units; S.initialMargin[r] = initialMarginLocal;
+  bump(S, S.kindRef[r]);
+}
+
 /** §3.17d-i: a contract's settled count of its series' events moves as they settle (ledger-internal). */
 export function writeDerivativeUnits(v2: V2World, r: number, units: number | undefined): void {
   const S = mutableObligations(v2);

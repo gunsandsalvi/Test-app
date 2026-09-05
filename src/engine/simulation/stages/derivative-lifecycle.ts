@@ -19,7 +19,8 @@
  */
 
 import { GameState, RegionId } from '../../../types';
-import { derivativesBookOf, strikeDerivatives, keepDerivatives } from '../../ledger/contract-ledger';
+import { derivativesBookOf, strikeDerivatives, keepDerivatives, reseatDerivative } from '../../ledger/contract-ledger';
+import { planOffsets } from '../../../domain/derivatives/netting';
 import { ccpOfContract, ccpOfMoney, memberMarginAccount, runWaterfall, writeDownSurvivors, ccpOwnCapitalLocal, memberMarginCapacityLocal, admittedShareOf, scaledContract, type WaterfallRound } from '../../../domain/clearing-house';
 import { ccpFundOf, publishCcpFund, ccpSheetAt, memberMarginPostedLocal } from '../../ledger/contract-ledger';
 import { bankReservesOf, cashOf, obligationCurrencyOf } from '../../ledger/accounts';
@@ -388,27 +389,29 @@ export function resolveMemberDefault(ctx: WeeklyStepContext, view: DerivativeLif
  * contract with none to post posts none. (B's own margin comes with the novation, 17-iv-b.)
  */
 export function postInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract): void {
-  const marginLocal = initialMarginLocal(c);
-  if (!(marginLocal > MIN_LEG_LOCAL)) return;
   // §3.17-iv-b: BOTH members post — each faces the house, and the house is exposed to each. A
   // bank posts from its securities account and carries the margin as an asset
   // (`clearing-house.ts:memberMarginAccount`).
-  const house = ccpOfContract(c);
-  [c.a, c.b].forEach((member) => pay(ctx, { payer: memberMarginAccount(member), payee: house, amount: marginLocal, currency: c.currency, reason: 'initial margin posted' }));
+  [c.a, c.b].forEach((member) => postMemberMargin(ctx, c, member));
+}
+/** §3.17e-iv: one member's posting — the seat that changes hands on a netted slice posts alone. */
+function postMemberMargin(ctx: WeeklyStepContext, c: DerivativeContract, member: DerivativeParty): void {
+  const marginLocal = initialMarginLocal(c);
+  if (!(marginLocal > MIN_LEG_LOCAL)) return;
+  pay(ctx, { payer: memberMarginAccount(member), payee: ccpOfContract(c), amount: marginLocal, currency: c.currency, reason: 'initial margin posted' });
 }
 
 function releaseInitialMargin(ctx: WeeklyStepContext, c: DerivativeContract, view: DerivativeLifecycleView): void {
+  [c.a, c.b].forEach((member) => releaseMemberMargin(ctx, c, member, view));
+}
+/** Held by the clearing house, which is where the posting put it, and returned to a member that
+ *  still exists; one that has ceased to exist has nowhere to receive it, the same rule the legs
+ *  follow — the house keeps it, and it is the first resource the waterfall (17-iv-c) draws on. */
+function releaseMemberMargin(ctx: WeeklyStepContext, c: DerivativeContract, member: DerivativeParty, view: DerivativeLifecycleView): void {
   const marginLocal = initialMarginLocal(c);
   if (!(marginLocal > MIN_LEG_LOCAL)) return;
-  // Held by the clearing house, which is where the posting put it, and returned to each member
-  // that still exists; a member that has ceased to exist has nowhere to receive it, the same rule
-  // the legs follow — the house keeps it, and it is the first resource the waterfall (17-iv-c)
-  // draws on.
-  const house = ccpOfContract(c);
-  [c.a, c.b].forEach((member) => {
-    if (view.partyState(member) === 'GONE') return;
-    pay(ctx, { payer: house, payee: memberMarginAccount(member), amount: marginLocal, currency: c.currency, reason: 'initial margin returned' });
-  });
+  if (view.partyState(member) === 'GONE') return;
+  pay(ctx, { payer: ccpOfContract(c), payee: memberMarginAccount(member), amount: marginLocal, currency: c.currency, reason: 'initial margin returned' });
 }
 
 /**
@@ -552,12 +555,63 @@ export function reserveMemberCapacity(ctx: WeeklyStepContext, cap: MemberCapacit
   cap.remainingByKey.set(key, Math.max(0, remainingCapacityOf(ctx, cap, party, home) - convert(marginLocal, currency, home, ctx.v2.fx)));
 }
 
-/** A market's whole strike, admitted contract by contract against one capacity read. */
-export function admitToHouse(ctx: WeeklyStepContext, struck: readonly DerivativeContract[]): DerivativeContract[] {
+/** A market's whole strike: §3.17e-iv netted against the standing book first, then admitted
+ *  contract by contract against one capacity read. */
+export function admitToHouse(ctx: WeeklyStepContext, struck: readonly DerivativeContract[], view: DerivativeLifecycleView): DerivativeContract[] {
   const cap = openMemberCapacity();
   const admitted: DerivativeContract[] = [];
-  struck.forEach((c) => { const a = admitContract(ctx, cap, c); if (a) admitted.push(a); });
+  netAgainstStanding(ctx, view, struck).forEach((c) => { const a = admitContract(ctx, cap, c); if (a) admitted.push(a); });
   return admitted;
+}
+
+/**
+ * §3.17e-iv — OFFSETTING LINES NET AT THE HOUSE. For each new contract, the slices of standing
+ * contracts on the SAME line where a member of the new one holds the opposite seat
+ * (`netting.ts:planOffsets`, oldest first): the slice settles at the print — its mark since it
+ * was last settled, to or from the member leaving, through the house — the leaving member's
+ * margin on the slice comes back, the new counterparty takes the seat and posts the slice's
+ * margin, and the slice's settled mark restarts at the print so the incoming member holds it as
+ * if struck there. Only what the standing book does not absorb stands as a new contract. A line
+ * with no print this week nets nothing: there is no price to close at.
+ */
+function netAgainstStanding(ctx: WeeklyStepContext, view: DerivativeLifecycleView, struck: readonly DerivativeContract[]): DerivativeContract[] {
+  const out: DerivativeContract[] = [];
+  const net = new Map<string, number>();
+  const drawn = new Set<string>();
+  struck.forEach((c) => {
+    const profile = derivativeProfile(c.classId);
+    const { offsets, remainingNotional } = planOffsets(c, derivativesBookOf(ctx), drawn);
+    let netted = 0;
+    offsets.forEach((o) => {
+      const s = derivativesBookOf(ctx).find((x) => x.id === o.standingId);
+      if (!s) return;
+      const mark = profile.markToMarketUSDToA(s, view);
+      if (mark === null) return;
+      drawn.add(s.id);
+      netted += o.notional;
+      const share = o.notional / s.notional;
+      const leaving = o.seat === 'b' ? s.b : s.a;
+      const slice = { ...scaledContract(s, share), settledMarkLocal: (s.settledMarkLocal ?? 0) * share };
+      // The slice closes at the print for the member leaving: what it is owed or owes since the
+      // last settlement, through the house.
+      payThroughHouse(ctx, slice, -(mark * share - slice.settledMarkLocal), 'position netted at the house', net);
+      releaseMemberMargin(ctx, slice, leaving, view);
+      postMemberMargin(ctx, slice, o.incoming);
+      const seatA = o.seat === 'a' ? o.incoming : s.a;
+      const seatB = o.seat === 'b' ? o.incoming : s.b;
+      if (share >= 1 - 1e-12) {
+        reseatDerivative(ctx, s, { a: seatA, b: seatB, notional: s.notional, units: s.units, initialMarginLocal: s.initialMarginLocal, settledMarkLocal: mark });
+      } else {
+        // The remainder stands as it was, smaller; the slice stands re-seated as its own contract.
+        const rest = 1 - share;
+        reseatDerivative(ctx, s, { a: s.a, b: s.b, notional: s.notional * rest, units: s.units === undefined ? undefined : s.units * rest, initialMarginLocal: s.initialMarginLocal * rest, settledMarkLocal: (s.settledMarkLocal ?? 0) * rest });
+        strikeDerivatives(ctx, [{ ...slice, id: `${s.id}-N${c.struckWeek}`, a: seatA, b: seatB, settledMarkLocal: mark * share }]);
+      }
+    });
+    if (netted <= 0) { out.push(c); return; }
+    if (remainingNotional > MIN_LEG_LOCAL && netted < c.notional) out.push(scaledContract(c, (c.notional - netted) / c.notional));
+  });
+  return out;
 }
 
 // §3.13-BOOK d5c / §3.17-i, ii: the margin a contract carries (`registry.ts:initialMarginLocal`),

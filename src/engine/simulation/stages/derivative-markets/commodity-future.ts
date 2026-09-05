@@ -293,7 +293,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
   });
 
   // §3.17-v-i: the house admits what each member can margin, then the contracts stand and post.
-  const admitted = admitToHouse(ctx, struck);
+  const admitted = admitToHouse(ctx, struck, view);
     strikeDerivatives(ctx, admitted);
     admitted.forEach((c) => postInitialMargin(ctx, c));
   // The standing book then marks at the week's fresh prints (the stage settles this class AFTER

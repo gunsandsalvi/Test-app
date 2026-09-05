@@ -14,7 +14,7 @@
  * columnar store for the six is slice d4c's.
  */
 import type { V2World } from '../../engine2/world';
-import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeUnits, writeDerivativeParties, writeRepoRow, writeCcpFundRow, writeCcpFundAmount, materializeCcpFund, ccpFundIdOf, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
+import { kindEpochOf, writeInvoiceRow, materializeInvoice, writeCommitmentRow, writeDrawn, materializeCommitment, commitmentIdOf, liveObligationsOf, rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, materializePrimeBrokerageLine, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeUnits, writeDerivativeSize, writeDerivativeParties, writeRepoRow, writeCcpFundRow, writeCcpFundAmount, materializeCcpFund, ccpFundIdOf, writeRepoTerms, writeLoanRow, writeLoanTerms, writePrimeBrokerageRow, writePrimeBrokerageTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import { derivativePartyKey, type DerivativeClassId, type DerivativeContract, type DerivativeParty } from '../../domain/derivatives/contract';
@@ -240,6 +240,24 @@ export function keepDerivatives(ctx: WeeklyStepContext, kept: DerivativeContract
   });
   relinkKind(ctx.v2, 'DERIVATIVE', rows);
   ctx.derivativesBook = kept;
+}
+
+/**
+ * §3.17e-iv — ONE contract re-seated and re-sized in place: a netted slice's seat passes to the
+ * incoming member and its settled mark restarts at the print; the standing remainder keeps its
+ * terms at the smaller size. The row is written and the working copy replaced, so the standing
+ * index rebuilds on its next read.
+ */
+export function reseatDerivative(ctx: WeeklyStepContext, c: DerivativeContract, next: Pick<DerivativeContract, 'a' | 'b' | 'notional' | 'units' | 'initialMarginLocal' | 'settledMarkLocal'>): DerivativeContract {
+  const r = rowOfContract(c);
+  resolvePartyRef(next.a, `derivative ${c.id} re-seated party a`); resolvePartyRef(next.b, `derivative ${c.id} re-seated party b`);
+  writeDerivativeParties(ctx.v2, r, next.a, next.b);
+  writeDerivativeSize(ctx.v2, r, next.notional, next.units, next.initialMarginLocal);
+  writeSettledMark(ctx.v2, r, next.settledMarkLocal);
+  const updated = tagRow({ ...c, ...next }, r);
+  ctx.derivativesBook = derivativesBookOf(ctx).map((x) => (x === c ? updated : x));
+  ctx.derivativeStanding = undefined;
+  return updated;
 }
 
 /** A novation: every contract naming the old party names the new one, which must exist. */

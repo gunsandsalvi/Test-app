@@ -547,13 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17e-iv. **Offsetting lines net at the house.** A book that reverses on a line — short contracts
-    standing, a long struck against them — carries BOTH at the house, each margined
-    (`derivative-lifecycle.ts:postInitialMargin`), where a real clearing house nets a member's
-    positions on one line and returns the margin. Small: at strike, a new contract between the
-    same two members on the same instrument and reference that opposes a standing one closes
-    the standing one at the print (a mark-leg settlement) and stands only for the excess.
-    Surfaced by 17e-iii-a, whose mirror trade reverses the book's line.
 17f. **The relative-value book, and it need not be written strategy by strategy** (user: "is there
     a programmatic way to do that across asset classes?"). *(17e-ii-a built the mechanism — the
     registry `domain/relative-value.ts`, the `RELATIVE_VALUE` strategy, the legs the markets read
@@ -1594,7 +1587,20 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17e-iii-b — THE LENDING BOOK LENDS A SOVEREIGN.** `securities-lending.ts:
+**17e-iv — OFFSETTING LINES NET AT THE HOUSE.** A LINE is a contract's identity — class,
+  region, money, reference, tenor and maturity (`netting.ts:lineKeyOf`); a member striking the
+  opposite seat on a line it holds nets against its standing slices, oldest first
+  (`planOffsets`, pure, tested). `admitToHouse` now takes the view and nets before admitting
+  (`netAgainstStanding`): each slice settles at the profile's mark through the house to the
+  member leaving, that member's margin on the slice comes back (`releaseMemberMargin`, the
+  per-member half of the release), the incoming counterparty takes the seat and posts the
+  slice's margin (`postMemberMargin`), and the slice's settled mark restarts at the print;
+  a whole offset re-seats the standing row in place, a partial one shrinks it and strikes the
+  slice re-seated as its own contract (`contract-ledger.ts:reseatDerivative`,
+  `obligations.ts:writeDerivativeSize`; the standing index is dropped for rebuild). Only the
+  excess stands. A line with no print nets nothing. Two swaps struck on different weeks are two
+  lines and stand gross. Atlas: the-derivative-layer B3 cited, C1.a ⚠️. Gates green; no run.
+- **17e-iii-b — THE LENDING BOOK LENDS A SOVEREIGN.** `securities-lending.ts:
   runSovereignLendingPass`, run after `holdings-store` and before 07b: the region's loan book is
   one (`securityLoanBookOf`), partitioned by `isTrancheId` — the share pass carries bond loans
   through untouched and prices a bond loan's net at `trancheClearedPricePerFace`. The pass

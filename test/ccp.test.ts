@@ -252,7 +252,8 @@ test('§3.17-v-i: the house admits a strike against each member\'s remaining cap
       reference: { kind: 'REGION', regionId: 'EUR' }, termKey: '', settledMarkLocal: 0, initialMarginLocal: im, struckWeek: 5, maturityWeek: 14,
     });
     const limit = 1000 / k;
-    const admitted = admitToHouse(ctx, [c('one', 1e6, limit * 0.75), c('two', 1e6, limit * 0.5), c('three', 1e6, limit)]);
+    // §3.17e-iv: nothing stands on this line, so the view is never asked for a print.
+    const admitted = admitToHouse(ctx, [c('one', 1e6, limit * 0.75), c('two', 1e6, limit * 0.5), c('three', 1e6, limit)], { partyState: () => 'ALIVE' } as never);
     assert.deepEqual(admitted.map((x) => [x.id, Math.round(x.notional), Math.round(x.initialMarginLocal)]), [
       ['one', 1e6, Math.round(limit * 0.75)],
       ['two', 5e5, Math.round(limit * 0.25)],

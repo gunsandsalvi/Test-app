@@ -17,6 +17,7 @@ import { hedgeConcessionPerUnit, hedgeToleranceBps } from '../src/domain/derivat
 import { StandingBook } from '../src/domain/derivatives/standing-book';
 import { asEntityId, asInstrumentId } from '../src/domain/ids';
 import { nextDeliveryWeek, deliverableOf, bondDurationYears, bondFuturesCarryPrice, bondFuturesNetBasis, bondFutureHolderQuote, twoWayPriceQuote } from '../src/domain/derivatives/classes/bond-future';
+import { planOffsets, lineKeyOf } from '../src/domain/derivatives/netting';
 import { writerReservationVol, ATM_PRICE_PER_VOL_SQRT_T } from '../src/domain/derivatives/classes/option';
 import { lenderReservationBps } from '../src/domain/derivatives/classes/xcs';
 import { protectionNeedLocal, twoWayProtectionQuote, nearestCdsTenor, cdsTenorWeeksOf, CDS_TENORS, CDS_BENCHMARK_TENOR, LARGE_EXPOSURE_LIMIT_OF_CAPITAL } from '../src/domain/derivatives/classes/cds';
@@ -523,4 +524,30 @@ test('bond future: marks to its own print, settles to the deliverable\'s cash pr
   assert.ok(Math.abs(move - (12 / 10000) * bondDurationYears(0.03, (600 - 10) / 52)) < 1e-12);
   assert.equal(DERIVATIVE_CLASSES.BOND_FUTURE.eventTermination(c, view()), null);
   assert.ok(leg(DERIVATIVE_CLASSES.BOND_FUTURE.eventTermination(c, view({ sovereignBondTerms: () => undefined }))!).reason.includes('gone'));
+});
+
+// §3.17e-iv — a member that reverses on a line nets against what it has standing, oldest first,
+// and only the excess stands as new.
+test('netting: a new contract offsets the standing slices where its members hold the opposite seat on the same line', () => {
+  const F = asEntityId('FUND'), D1 = asEntityId('DESK1'), D2 = asEntityId('DESK2');
+  const fund = { kind: 'INSTITUTION' as const, id: F };
+  const ref = referenceFor('BOND_FUTURE');
+  const line = (over: Partial<DerivativeContract>) => base({ classId: 'BOND_FUTURE', reference: ref, termKey: 'F', maturityWeek: 26, units: 100, notional: 100, ...over });
+  const s1 = line({ id: 's1', a: bankPartyOf(D1), b: fund, notional: 60, units: 60 });   // fund short 60 to desk 1
+  const s2 = line({ id: 's2', a: bankPartyOf(D2), b: fund, notional: 80, units: 80 });   // fund short 80 to desk 2
+  const other = line({ id: 'o', a: bankPartyOf(D2), b: bankPartyOf(D1), notional: 50, units: 50 });
+  assert.equal(lineKeyOf(s1), lineKeyOf(s2));
+  assert.notEqual(lineKeyOf(s1), lineKeyOf(line({ maturityWeek: 39 })), 'another delivery is another line');
+  // The fund goes long 100 against desk 2. BOTH members net, oldest first: the fund's 60 short
+  // to desk 1 (desk 2 takes the seat), then desk 2's own 50 long against desk 1 absorbs 40 of
+  // its new short (the fund takes desk 2's seat) — and the fund's 80 to desk 2 is never reached.
+  const plan = planOffsets(line({ id: 'n', a: fund, b: bankPartyOf(D2) }), [s1, other, s2]);
+  assert.deepEqual(plan.offsets.map((o) => [o.standingId, o.seat, o.notional, o.incoming.id]), [['s1', 'b', 60, 'DESK2'], ['o', 'a', 40, 'FUND']]);
+  assert.equal(plan.remainingNotional, 0);
+  // A short by desk 1 against the fund's standing short does not net: desk 1 is long there.
+  assert.equal(planOffsets(line({ id: 'n2', a: fund, b: bankPartyOf(D1), notional: 10 }), [other]).offsets.length, 0);
+  // Long 200: everything standing nets and 60 is left to stand.
+  const big = planOffsets(line({ id: 'n3', a: fund, b: bankPartyOf(D1), notional: 200 }), [s1, s2]);
+  assert.equal(big.remainingNotional, 60);
+  assert.equal(big.offsets[0].incoming.id, 'DESK1');
 });

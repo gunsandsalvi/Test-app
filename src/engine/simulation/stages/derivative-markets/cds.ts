@@ -376,7 +376,7 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
       });
     }));
     // §3.17-v-i: the house admits what each member can margin, then the contracts stand and post.
-    const admitted = admitToHouse(ctx, struck);
+    const admitted = admitToHouse(ctx, struck, view);
     strikeDerivatives(ctx, admitted);
     admitted.forEach((c) => postInitialMargin(ctx, c));
   });

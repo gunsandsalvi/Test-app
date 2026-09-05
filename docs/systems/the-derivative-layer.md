@@ -100,11 +100,11 @@ checked by `scripts/check-atlas.sh`.
 | A4 VERIFY Σ marks = 0 per contract and in aggregate | `src/engine/audit/ownership.ts:o9` | ✅ |
 | B1 two parties agree terms at a cleared price | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` · `src/engine/simulation/stages/derivative-markets/option.ts:runOptionMarket` | ✅ |
 | B2 recorded on both books; one contract, not two | `src/engine/ledger/contract-ledger.ts:strikeDerivatives` | ✅ |
-| B3 closed by an offset, an early termination, or expiry | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ⚠️ |
+| B3 closed by an offset, an early termination, or expiry | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` · `src/domain/derivatives/netting.ts:planOffsets` | ⚠️ |
 | B3.a an offset with a different counterparty does not remove the first | `src/domain/derivatives/standing-book.ts:StandingBook` | ✅ |
 | B4 novation, with the old counterparty's consent | `src/engine/simulation/stages/10-mergers.ts:runMergersStage` | ⚠️ |
 | C1 bilateral: face each other, exchange collateral, net per pair | — | ❌ |
-| C1.a netting is per counterparty pair | — | ❌ |
+| C1.a netting is per counterparty pair | `src/domain/derivatives/netting.ts:lineKeyOf` · `src/engine/simulation/stages/derivative-lifecycle.ts:admitToHouse` | ⚠️ |
 | **C2 cleared: a CCP becomes buyer to the seller and seller to the buyer** | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` · `src/engine/simulation/stages/derivative-lifecycle.ts:postInitialMargin` | ✅ |
 | C2.a it concentrates the risk in a named party | `src/engine/simulation/stages/derivative-lifecycle.ts:closeOutDerivativesOfParty` · `src/engine/audit/ownership.ts:o15` | ✅ |
 | C3 the CCP is a real entity with a balance sheet | `src/domain/clearing-house.ts:CcpSheet` · `src/engine/ledger/contract-ledger.ts:ccpFundOf` · `src/engine/simulation/stages/derivatives.ts:trueUpDefaultFunds` · `src/engine/ledger/contract-ledger.ts:houseViewOf` · `src/ui/functions/derivatives.tsx:derivatives` | ✅ |
@@ -296,7 +296,15 @@ produces borrowing and never produces selling.
 **§3 step 37-MARGIN**, . It is the missing half of step 17's margin work and should be built with
 it: risk-based margin with no failure path is a bigger number that still cannot fail.
 
-### ❌ C1 / C1.a — NO BILATERAL BOOK, AND NO NETTING SET
+### ❌ C1 / ⚠️ C1.a — NO BILATERAL BOOK; THE CLEARED BOOK NETS A MEMBER'S LINE
+
+*2026-09-05 (§9.17e-iv). The cleared form of the netting set exists: a member that strikes the
+opposite seat on a LINE it already holds (class, region, money, reference, tenor and maturity —
+`netting.ts:lineKeyOf`) nets against its standing slices, oldest first (`planOffsets`): the slice
+settles at the print through the house, the leaving member's margin comes back, the new
+counterparty takes the seat and posts, and only the excess stands (`admitToHouse`). Per member,
+per line — the cleared book's netting, which is what C1.a means once every contract clears. ⚠️
+because two swaps struck on different weeks are two lines and stand gross until a compression run.*
 
 *2026-09-05 (§9.17-iv-b). Every contract clears: no member faces another, so the bilateral arm
 of the tree is absent rather than half-built, and C1 says so. C1.a's netting per pair is what a
@@ -329,6 +337,11 @@ credit exposure across them is what the node forbids, and the code does the firs
 second.
 
 ### ⚠️ B3 / B4 — A CONTRACT CAN ONLY LEAVE BY DYING
+
+*2026-09-05 (§9.17e-iv). The OFFSET exit exists: a contract leaves — whole or as a slice — when
+its member strikes the opposite seat on the same line, closed at the print with its margin
+returned (`netting.ts:planOffsets`, `derivative-lifecycle.ts:admitToHouse`). What is still absent
+is the voluntary early termination, so B3 stays ⚠️.*
 
 B3 names three exits and the code has one and a half. Expiry works (`settleDerivativeClass`'s
 maturity branch) and a profile event works (`eventTermination`). **An offsetting trade never
