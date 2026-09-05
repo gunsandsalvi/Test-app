@@ -23,6 +23,7 @@
  */
 
 import { bankReservesOf, cashOf } from '../../../ledger/accounts';
+import { plantVintagesOf } from '../../../ledger/plant-ledger';
 import { bankBookAssetsLocal, deskRowsOf } from '../../../desk-register';
 import { buildEntityIndex } from '../../../ledger/entity-index';
 import { partyFromKey } from '../../../ledger/party';
@@ -159,7 +160,7 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
   firmExposure.forEach((exposureByIssuer, holderId) => {
     const firm = companyById.get(holderId);
     if (!firm || firm.isBankEntity || !isActiveCompany(firm)) return;
-    const equityLocal = companyBookEquityLocal(firm, cashOf(ctx.v2, firm), ladderTotalLocal(ctx.v2, firm.id), ctx.nextWeek);
+    const equityLocal = companyBookEquityLocal(firm, plantVintagesOf(ctx.v2, firm.id), cashOf(ctx.v2, firm), ladderTotalLocal(ctx.v2, firm.id), ctx.nextWeek);
     addNeeds(firm, companyParty(firm), equityLocal, exposureByIssuer);
   });
 

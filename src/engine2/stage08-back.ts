@@ -10,7 +10,7 @@
  * engine2 columns (tranches first, then lots, then the firm scalars) without touching the stage.
  */
 
-import { commissionPlant, retirePlant, scrapPlant, writePlantRows } from '../engine/ledger/plant-ledger';
+import { commissionPlant, retirePlant, scrapPlant, writePlantRows, plantVintagesOf } from '../engine/ledger/plant-ledger';
 import type { PrimarySettlement } from '../engine/simulation/stages/context';
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
 import { equityInstrumentId } from '../domain/instrument-keys';
@@ -1780,6 +1780,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     }
 
     const financing = decideCorporateFinancing({
+      plant: plantVintagesOf(v2, comp.id), // §3.13-BOOK g-ii-c
       comp, week: nextWeek,
       marketCapLocal: L8.stockPrice[row] * L8.sharesOutstanding[row],
       costOfDebtAnnual: costOfNewDebtAnnual,
@@ -2088,14 +2089,14 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     if (L8.publiclyListed[row] === 1 && excessCash > 5 && debtToEquity < 0.6 && L8.sharesOutstanding[row] > 10 && !isDefaulted && newStockPrice > 0) {
       // §3.18-ii: the firm's REAL book equity per share (`equity-valuation.ts:companyBookEquityLocal`)
       // — not an invented `cash + 0.8 × revenue − debt` with a 0.5 floor.
-      const estimatedBookValuePerShare = companyBookEquityLocal(comp, cash.usd, newTotalDebt, nextWeek) / L8.sharesOutstanding[row];
+      const estimatedBookValuePerShare = companyBookEquityLocal(comp, plantVintagesOf(v2, comp.id), cash.usd, newTotalDebt, nextWeek) / L8.sharesOutstanding[row];
       // "Cheap" against the same arithmetic the market itself prices this company with (07e /
       // equity-valuation.ts), at the board's own cost of capital — not against a sector P/E
       // table. A board that buys back stock is taking the other side of that auction, so it has
       // to be reading the same book; comparing to a multiple the market no longer uses would be
       // two valuations of one company again.
       const boardFairValuePerShare = companyFairValuePerShare(
-        { ...comp, netIncome: newNetIncome }, cash.usd,
+        { ...comp, netIncome: newNetIncome }, plantVintagesOf(v2, comp.id), cash.usd,
         reg.zeroRates.tenor10Y,
         REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
         newTotalDebt,

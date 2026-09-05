@@ -35,6 +35,7 @@
  */
 
 import { plantNetLocal } from '../../../domain/plant';
+import { plantVintagesOf } from '../../ledger/plant-ledger';
 import { laborForceCount } from '../../../domain/region-macro';
 import { runRateAnnual } from '../../../domain/units';
 import { GameState, Region, RegionId, Company, OccupationType } from '../../../types';
@@ -249,7 +250,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // fund did not reduce hiring, it just accumulated as an unpayable payroll, and the entire
       // adjustment fell on cash-exhaustion layoffs that arrived too late and cascaded (measured:
       // 30-50% unemployment in all four regions, hidden by the 50% clamp on the print).
-      const netPpeLocal = plantNetLocal(comp.plant, ctx.nextWeek);
+      const netPpeLocal = plantNetLocal(plantVintagesOf(ctx.v2, comp.id), ctx.nextWeek); // §3.13-BOOK g-ii-c
       // §5-BRAINS — the return THIS management requires of its plant: the premium weighted by its own
       // risk aversion. A risk-averse board wants more for the same beta and sheds sooner.
       // §3.26-d: one owner of that number (`domain/company-week/cost-of-capital.ts`).
@@ -319,7 +320,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // §7.269 — the ceiling is the PLANT's, not the seed's (domain/company.ts). A firm whose
       // delivered capex grew its PP&E can staff the bigger plant; frozen at the seed headcount,
       // no profitable firm could ever absorb a released worker and unemployment only ratcheted.
-      const productiveHeadsCap = Math.max(1, fullStaffingCapHeads(comp, ctx.nextWeek));
+      const productiveHeadsCap = Math.max(1, fullStaffingCapHeads(comp, plantVintagesOf(ctx.v2, comp.id), ctx.nextWeek));
       // §5-PROD, CORRECTED BY MEASUREMENT (§7.301) — THE LEVEL TARGET DOES **NOT** LEARN.
       // Multiplying revenue-per-head by the Wright's-law multiplier here was §5-PROD's third
       // labour consumer, and the inside-commit bisection priced it alone at +3.6pts of USA

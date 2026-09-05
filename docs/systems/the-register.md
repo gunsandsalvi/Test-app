@@ -391,8 +391,9 @@ non-financial asset for the first time: the household sector's DWELLINGS are a r
 columns a bond's or a good's live in. A firm's PLANT has the same shape since g-ii-a
 (`src/engine/ledger/plant-ledger.ts:writePlantRows`): a row per capital good and life, in units of
 cost, its lots the vintages at the week each entered service, read back as the vintage list by
-`plantVintagesOf`; since g-ii-b every writer of a firm's plant hands it the list it computed and
-`O16` names a firm whose rows and field disagree.
+`plantVintagesOf`; since g-ii-b every writer of a firm's plant hands it the list it computed,
+`O16` names a firm whose rows and field disagree, and since g-ii-c every reader of a firm's plant
+reads the rows.
 
 ### Also marked, briefly
 

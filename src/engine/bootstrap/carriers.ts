@@ -203,7 +203,7 @@ export function generateCarriers(
     // no books yet: the seed auction prices the fleet at marginal cost before its plant exists.
     plant: [],
   })) as unknown as Company[];
-  const clearing = runFreightClearing({ carriers: provisional, regions, unitMassTonnes, bookings, fxToUsd, week: openingWeek });
+  const clearing = runFreightClearing({ plantOf: () => [], carriers: provisional, regions, unitMassTonnes, bookings, fxToUsd, week: openingWeek });
 
   return staffed.map((c, idx) => buildCarrierCompany(
     c.region, c.assets, idx, regions, unitMassTonnes,

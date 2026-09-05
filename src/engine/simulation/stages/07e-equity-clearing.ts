@@ -28,6 +28,7 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
+import { plantVintagesOf } from '../../ledger/plant-ledger';
 import { marketCapAt, issuedSharesOf } from '../../../engine2/instruments';
 import { companyParty } from '../../../domain/party';
 import { isActiveCompany, isPubliclyListed, banksOf } from '../../../domain/company';
@@ -172,8 +173,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
 
     // Per-company real primitives, computed once per region-week — never inside the participants
     // loop, which would recompute them once per entity per name.
-    const bookEquityById = new Map(regionCompanies.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id), ctx.nextWeek)]));
-    const netInvestmentRateById = new Map(regionCompanies.map((c) => [c.id, companyNetInvestmentRate(c, ctx.nextWeek)]));
+    const bookEquityById = new Map(regionCompanies.map((c) => [c.id, companyBookEquityLocal(c, plantVintagesOf(ctx.v2, c.id), cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id), ctx.nextWeek)]));
+    const netInvestmentRateById = new Map(regionCompanies.map((c) => [c.id, companyNetInvestmentRate(c, plantVintagesOf(ctx.v2, c.id), ctx.nextWeek)]));
 
     // §7.327 — THE DEMAND BUILD'S DENSE COLUMNS. The participants loop below runs
     // entities × companies with ~6 Map probes and two `positionKey` string builds per pair

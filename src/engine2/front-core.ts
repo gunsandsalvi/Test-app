@@ -26,6 +26,7 @@
  */
 
 import { defect } from '../domain/defect';
+import { plantVintagesOf } from '../engine/ledger/plant-ledger';
 import { exitIdleLines } from '../domain/company-week/product-lines';
 import { patienceWeeksOf } from '../domain/preferences';
 import { Company, RegionId } from '../types';
@@ -423,9 +424,10 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
     S.baselineEbitdaMarginResolved[row] = nn(CN.baselineEbitdaMargin[row], ebitdaV / Math.max(1, annualRev));
     // §3.26-f-ii — the plant is the register, read at the week's opening: its net (the tax
     // basis's default and the deferred-tax read) and its year's charge (the P&L's D&A).
-    const openingNet = plantNetLocal(comp.plant, nextWeek);
+    const plant = plantVintagesOf(v2, comp.id); // §3.13-BOOK g-ii-c: the register's rows
+    const openingNet = plantNetLocal(plant, nextWeek);
     S.openingNetPpeLocal[row] = openingNet;
-    S.depreciationAnnualLocal[row] = plantDepreciationAnnualLocal(comp.plant, nextWeek);
+    S.depreciationAnnualLocal[row] = plantDepreciationAnnualLocal(plant, nextWeek);
     S.taxBasisOpenLocal[row] = nn(CN.taxBasisPpeLocal[row], openingNet);
     S.carryforwardLocal[row] = nn(CN.taxLossCarryforwardLocal[row], 0);
     S.usefulLifeYears[row] = usefulLifeYearsOf(comp);

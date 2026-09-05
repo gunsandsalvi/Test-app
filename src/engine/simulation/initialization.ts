@@ -1370,6 +1370,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       regions[r].tradeBalanceAnnualUSD = regions[r].exportsAnnualUSD - regions[r].importsAnnualUSD;
     });
     const clearing = runFreightClearing({
+      plantOf: (c) => c.plant, // the seed's carriers, before their rows are opened (`openSeededBooks`)
       carriers, regions, unitMassTonnes: seededUnitMassTonnes, bookings, fxToUsd: seedFxToUsd, week: SEED_WEEK,
     });
     // A lane no carrier serves still needs a price to be evaluated against, or a route can never

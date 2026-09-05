@@ -31,6 +31,7 @@
  */
 
 import { GameState, Company } from '../../../types';
+import { plantVintagesOf } from '../../ledger/plant-ledger';
 import type { EntityId } from '../../../domain/ids';
 import { companyParty } from '../../../domain/party';
 import { WeeklyStepContext } from './context';
@@ -103,7 +104,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     const operating = ctx.updatedCompanies.filter(
       (c) => c.region === region && isActiveCompany(c) && !c.isBankEntity && !c.isInstitutionalEntity
     );
-    const corporateBaseLocal = operating.reduce((a, c) => a + corporateInsurableBaseLocal(c, ctx.nextWeek), 0);
+    const corporateBaseLocal = operating.reduce((a, c) => a + corporateInsurableBaseLocal(plantVintagesOf(ctx.v2, c.id), c.annualRevenue, ctx.nextWeek), 0);
     const householdBaseLocal = householdInsurableBaseLocal(hs.netWorthLocal, reg.estimatedHouseholdIncomeLocal);
     const totalBaseLocal = corporateBaseLocal + householdBaseLocal;
     if (!(totalBaseLocal > 0) || !(weeklyPremiumsLocal > 0)) return;
@@ -131,7 +132,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     // policyholder's share of every insurer's book is its share of what there is to insure; it
     // pays each insurer that share of that insurer's premiums, at that insurer's rate. ----
     operating.forEach((comp) => {
-      const share = corporateInsurableBaseLocal(comp, ctx.nextWeek) / totalBaseLocal;
+      const share = corporateInsurableBaseLocal(plantVintagesOf(ctx.v2, comp.id), comp.annualRevenue, ctx.nextWeek) / totalBaseLocal;
       if (!(share > 0)) return;
       weeks.forEach((w) => {
         const premiumLocal = w.premiumLocal * share;

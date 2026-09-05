@@ -28,7 +28,7 @@
  * closes to them precisely when they most want it open.
  */
 
-import { plantNetLocal } from '../../../domain/plant';
+import { plantNetLocal, type PlantVintage } from '../../../domain/plant';
 import { riskAversionOf, patienceWeeksOf, Preferences } from '../../../domain/preferences';
 import { Company, CreditRating } from '../../../types';
 
@@ -126,6 +126,8 @@ interface FinancingDecision {
  */
 export function decideCorporateFinancing(params: {
   comp: Company;
+  /** §3.13-BOOK g-ii-c: the firm's plant rows, read by the caller. */
+  plant: readonly PlantVintage[];
   /** §3.26-f-ii: the week the plant register is read at. */
   week: number;
   /** §3.13-BOOK dIV: the market cap as the caller read it — price × the index's shares in issue. */
@@ -161,7 +163,7 @@ export function decideCorporateFinancing(params: {
   // and the issuer count decaying 324 → 252 — recorded in the plan's RVr close-out).
   const afterTaxCostOfDebt = costOfDebtAnnual * (1 - effectiveTaxRate);
   const nopatAnnual = Math.max(0, (params.ebitAnnual ?? ebitdaAnnual * 0.75)) * (1 - effectiveTaxRate);
-  const netPPELocal = Math.max(1, plantNetLocal(comp.plant, week));
+  const netPPELocal = Math.max(1, plantNetLocal(params.plant, week));
   const investedCapitalLocal = netPPELocal + comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
   const returnOnInvestedCapital = nopatAnnual / investedCapitalLocal;
   const earningsYield = comp.stockPrice > 0 ? comp.eps / comp.stockPrice : 0;

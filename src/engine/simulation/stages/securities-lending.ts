@@ -15,6 +15,7 @@
  */
 
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
+import { plantVintagesOf } from '../../ledger/plant-ledger';
 import { publishSecurityLoanBook, securityLoanBookOf } from '../../ledger/contract-ledger';
 import { marketCapAt, issuedSharesOf } from '../../../engine2/instruments';
 import { GameState, RegionId, Company } from '../../../types';
@@ -288,8 +289,8 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     });
     const floatValueById = new Map(listed.map((c) => [c.id, issuedSharesOf(ctx.v2, c.id) * c.stockPrice]));
     const totalFloatValueLocal = listed.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;
-    const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id), ctx.nextWeek)]));
-    const netInvestmentRateById = new Map(listed.map((c) => [c.id, companyNetInvestmentRate(c, ctx.nextWeek)]));
+    const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityLocal(c, plantVintagesOf(ctx.v2, c.id), cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id), ctx.nextWeek)]));
+    const netInvestmentRateById = new Map(listed.map((c) => [c.id, companyNetInvestmentRate(c, plantVintagesOf(ctx.v2, c.id), ctx.nextWeek)]));
     const riskFreeRate = reg.zeroRates.tenor10Y;
 
     const shortFunds = ctx.updatedInstitutionalEntities.filter(

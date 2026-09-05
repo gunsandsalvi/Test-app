@@ -3,7 +3,7 @@
  *  financial. Product lines, debt tranches, the three statements, credit, and the real input and
  *  output inventories it holds. No parallel firm type anywhere (§7.33). */
 
-import { plantNetLocal } from './plant';
+import { plantNetLocal, type PlantVintage } from './plant';
 import { InstrumentId, type EntityId, type Ticker } from './ids';
 import { RegionId } from './geography';
 import type { CdsTenorKey } from './derivatives/classes/cds';
@@ -701,10 +701,10 @@ export function banksOf(companies: readonly Company[], region?: RegionId): Compa
  * against — recorded at first read, the `unitsPerNetPpeDollar` pattern — so IND1's delivered
  * capex raises the ceiling and depreciation lowers it, symmetrically.
  */
-export function fullStaffingCapHeads(c: Company, week: number): number {
+export function fullStaffingCapHeads(c: Company, plant: readonly PlantVintage[], week: number): number {
   const baselineHeads = c.baselineEmployeeCount;
   if (!(baselineHeads > 0)) return Math.max(1, c.employeeCount);
-  const netPpeLocal = plantNetLocal(c.plant, week);
+  const netPpeLocal = plantNetLocal(plant, week); // §3.13-BOOK g-ii-c: the register's rows, handed in
   // §5-PROD: a firm that has LEARNED runs the same plant with fewer people — the ceiling is
   // heads-per-plant at the firm's own current unit-labour productivity, not its baseline's.
   const learning = Math.max(1e-6, c.learningMultiplier ?? 1);

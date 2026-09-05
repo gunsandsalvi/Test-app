@@ -18,7 +18,8 @@
  * to the rate.
  */
 
-import { plantNetLocal } from '../../../domain/plant';
+import { plantNetLocal, type PlantVintage } from '../../../domain/plant';
+import { plantVintagesOf } from '../../ledger/plant-ledger';
 import { GameState, Region, RegionId, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { laneDistanceNm } from '../../../domain/geography';
@@ -109,7 +110,8 @@ function buildCarrierOffers(
   regions: Record<RegionId, Region>,
   unitMassTonnes: Record<string, number>,
   fxToUsd: FxToUsd,
-  week: number
+  week: number,
+  plantOf: (carrier: Company) => readonly PlantVintage[]
 ): { offersByLane: Map<string, AuctionOffer[]>; marginalByLane: Partial<Record<string, number>>; capacityByLane: Partial<Record<string, number>> } {
   const offersByLane = new Map<string, AuctionOffer[]>();
   const marginalByLane: Partial<Record<string, number>> = {};
@@ -124,7 +126,7 @@ function buildCarrierOffers(
     // return its hulls require is a real cost of offering the capacity, and a floor without it
     // prices freight where the fleet cannot be replaced.
     // §3.26-d: the return its hulls require has one owner (`domain/company-week/cost-of-capital.ts`).
-    const netPpeLocal = plantNetLocal(carrier.plant, week); // §3.26-f-ii: the fleet's register
+    const netPpeLocal = plantNetLocal(plantOf(carrier), week); // §3.26-f-ii: the fleet's register (§3.13-BOOK g-ii-c: its rows, handed in)
     const costOfCapital = costOfCapitalOf(carrier, riskFreeRateOf(regions[home]));
     const fleetCapacityTonnes = (carrier.carrierFleet?.assets ?? []).reduce((a, x: FreightAsset) => {
       const d = laneDistanceNm(x.laneFrom, x.laneTo);
@@ -182,9 +184,10 @@ export function marginalRatesForAllLanes(
   regions: Record<RegionId, Region>,
   unitMassTonnes: Record<string, number>,
   fxToUsd: FxToUsd,
-  week: number
+  week: number,
+  plantOf: (carrier: Company) => readonly PlantVintage[]
 ): Partial<Record<string, number>> {
-  return buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd, week).marginalByLane;
+  return buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd, week, plantOf).marginalByLane;
 }
 
 export function runFreightClearing(args: {
@@ -195,11 +198,14 @@ export function runFreightClearing(args: {
   fxToUsd: FxToUsd;
   /** §3.26-f-ii: the week the carriers' plant registers are read at. */
   week: number;
+  /** §3.13-BOOK g-ii-c: a carrier's plant, read off its register rows by the caller (the seed's
+   *  provisional carriers have none yet). */
+  plantOf: (carrier: Company) => readonly PlantVintage[];
 }): FreightClearing {
-  const { carriers, regions, unitMassTonnes, bookings, fxToUsd, week } = args;
+  const { carriers, regions, unitMassTonnes, bookings, fxToUsd, week, plantOf } = args;
   const result = emptyFreightClearing();
 
-  const { offersByLane, marginalByLane, capacityByLane } = buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd, week);
+  const { offersByLane, marginalByLane, capacityByLane } = buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd, week, plantOf);
   const carrierByTicker = new Map(carriers.map((c) => [c.ticker, c]));
   result.marginalRatePerTonneLaneMoneyByLane = marginalByLane;
   result.laneCapacityTonnes = capacityByLane;
@@ -297,6 +303,7 @@ export function runFreightClearingStage(state: GameState, ctx: WeeklyStepContext
   const fxToUsd = (regionId: RegionId) => getFxToUsd(state.fxPairs, regionId);
   const carriers = collectCarriers(state);
   const clearing = runFreightClearing({
+    plantOf: (c) => plantVintagesOf(ctx.v2, c.id),
     carriers,
     regions: ctx.updatedRegions,
     unitMassTonnes: state.unitMassTonnes,

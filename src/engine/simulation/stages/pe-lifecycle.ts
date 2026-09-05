@@ -1,5 +1,5 @@
 import { V2World } from '../../../engine2/world';
-import { movePlant, writePlantRows } from '../../ledger/plant-ledger';
+import { movePlant, writePlantRows, plantVintagesOf } from '../../ledger/plant-ledger';
 import { drawCommitment, returnCommitment, lpCommitmentsOf } from '../../ledger/contract-ledger';
 import { registerCompanyEquity, setIssuedUnits } from '../../ledger/instrument-ledger';
 import { issuedSharesOf, marketCapAt } from '../../../engine2/instruments';
@@ -579,7 +579,7 @@ export function runPeLifecycleForRegion(
         // the last seller is willing to tender. Never below the printed price: nobody sells the
         // market a discount.
         const patientValuePerShare = companyFairValuePerShare(
-          listedTarget, cashOf(ctx.v2, listedTarget), riskFreeRate, PATIENT_HOLDER_REQUIRED_RETURN,
+          listedTarget, plantVintagesOf(ctx.v2, listedTarget.id), cashOf(ctx.v2, listedTarget), riskFreeRate, PATIENT_HOLDER_REQUIRED_RETURN,
           ladderTotalLocal(ctx.v2, listedTarget.id), issuedSharesOf(ctx.v2, listedTarget.id), ctx.nextWeek
         );
         const takeoutPricePerShare = Math.max(listedTarget.stockPrice, patientValuePerShare);

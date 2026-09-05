@@ -15,7 +15,7 @@
  */
 
 import { capitalMixOf } from '../../../domain/industry-registry';
-import { writePlantRows } from '../../ledger/plant-ledger';
+import { writePlantRows, plantVintagesOf } from '../../ledger/plant-ledger';
 import { profileKeyOf } from './profiles';
 import { plantNetLocal, slicePlant, mergePlant, retireWornPlant, plantEffectiveNetLocal } from '../../../domain/plant';
 import { movePlant, retirePlant, abandonPlant } from '../../ledger/plant-ledger';
@@ -252,7 +252,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
       writePlantRows(ctx.v2, comp.id, comp.region, comp.plant); // §3.13-BOOK g-ii-b
       retirePlant(comp.id, worn.retiredCostLocal);
     }
-    estate.assets.ppeLocal = comp ? plantNetLocal(comp.plant, ctx.nextWeek) : 0;
+    estate.assets.ppeLocal = comp ? plantNetLocal(plantVintagesOf(ctx.v2, comp.id), ctx.nextWeek) : 0;
     const ppeOfferedLocal = estate.assets.ppeLocal / weeksLeft(ppeWeeks);
     const plant = sellPlantToBidders(ctx, estate, comp, ppeOfferedLocal);
     if (weeksLeft(ppeWeeks) <= 1 && comp) {
@@ -261,7 +261,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
       comp.plant = [];
       writePlantRows(ctx.v2, comp.id, comp.region, []); // §3.13-BOOK g-ii-b
     }
-    estate.assets.ppeLocal = comp ? plantNetLocal(comp.plant, ctx.nextWeek) : 0;
+    estate.assets.ppeLocal = comp ? plantNetLocal(plantVintagesOf(ctx.v2, comp.id), ctx.nextWeek) : 0;
     thisWeek.ppeSoldLocal += plant.soldLocal;
     thisWeek.plantPriceOfBook = plant.priceOfBook;
 
@@ -373,7 +373,7 @@ function sellPlantToBidders(
   const instrumentId = asInstrumentId(`ESTATE-PLANT:${estate.companyId}`);
   const bidders: ClearingParticipant[] = [];
   peersOf(ctx, estate, comp).forEach((peer) => {
-    const netPpeLocal = plantNetLocal(peer.plant, ctx.nextWeek);
+    const netPpeLocal = plantNetLocal(plantVintagesOf(ctx.v2, peer.id), ctx.nextWeek);
     if (!(netPpeLocal > 0)) return; // no plant of its own: no return on capital to read a bid from
     const roc = (peer.ebit) / netPpeLocal;
     // §3.26-f-iv-c — WHAT THE PLANT ON OFFER CAN PRODUCE FOR THIS BIDDER: the effective plant it
@@ -442,7 +442,7 @@ function sellPlantToBidders(
     // §3.26-f-ii — the plant moves as vintages: the buyer takes its share of every vintage on
     // the dead firm's register (the machines keep their age and life), at the cleared price of
     // book; `takenLocal` is net book, the unit the auction cleared in.
-    const remainingNetLocal = plantNetLocal(comp.plant, ctx.nextWeek);
+    const remainingNetLocal = plantNetLocal(plantVintagesOf(ctx.v2, comp.id), ctx.nextWeek);
     const split = slicePlant(comp.plant, remainingNetLocal > 0 ? Math.min(1, takenLocal / remainingNetLocal) : 0);
     // §3.26-f-iii — the move is a PLANT wire at the price of book it cleared at.
     movePlant(companyPartyOf(estate.companyId), companyParty(peer), split.taken, takenLocal * price, 'estate plant sold at auction');
@@ -710,7 +710,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   // estate takes what the register actually claims; O7 owns the size of the gap and step 11f owns
   // closing it.
 
-  const netPpeLocal = plantNetLocal(comp.plant, ctx.nextWeek); // §3.26-f-ii: the register's read
+  const netPpeLocal = plantNetLocal(plantVintagesOf(ctx.v2, comp.id), ctx.nextWeek); // §3.26-f-ii: the register's read
   return {
     companyId: comp.id,
     ticker: comp.ticker,
@@ -747,7 +747,7 @@ function regionalPpeAbsorptionWeeks(
   let weeklyCapexLocal = 0;
   ctx.updatedCompanies.forEach((c) => {
     if (c.region !== regionId) return;
-    installedLocal += plantNetLocal(c.plant, ctx.nextWeek);
+    installedLocal += plantNetLocal(plantVintagesOf(ctx.v2, c.id), ctx.nextWeek);
     weeklyCapexLocal += Math.max(0, (c.maintenanceCapex) + (c.growthCapex)) / 52;
   });
   const out = (!(weeklyCapexLocal > 0) || !(installedLocal > 0)) ? 52

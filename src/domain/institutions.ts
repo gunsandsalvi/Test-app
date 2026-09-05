@@ -267,8 +267,8 @@ const INSURANCE_POLICY_TERM_WEEKS = 52;
 
 /** What a firm has to lose, and therefore insures: its plant (gross, read off the register at
  *  `week` — §3.26-f-ii) and the revenue that runs through it. */
-export const corporateInsurableBaseLocal = (c: { plant: readonly PlantVintage[]; annualRevenue: number }, week: number): number =>
-  Math.max(0, plantGrossLocal(c.plant, week)) + Math.max(0, c.annualRevenue);
+export const corporateInsurableBaseLocal = (plant: readonly PlantVintage[], annualRevenue: number, week: number): number =>
+  Math.max(0, plantGrossLocal(plant, week)) + Math.max(0, annualRevenue);
 
 /** What a household sector has to lose: its net worth and its income. */
 export const householdInsurableBaseLocal = (netWorthLocal: number, incomeLocal: number): number =>

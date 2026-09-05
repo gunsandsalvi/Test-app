@@ -509,10 +509,6 @@ written from here):
     g-ii. **PLANT JOINS** — g-ii-a is in §9: the rows exist (`plant-ledger.ts:writePlantRows` /
        `plantVintagesOf`, a row per capital good and life in units of cost, lots at the service
        week, round-trip pinned). Writers first (f1's discipline), what is left:
-    g-ii-c. **THE READERS TAKE THE ROWS.** ~30 read sites in 20 files call the `domain/plant.ts`
-       reads on `comp.plant`; they call them on `plantVintagesOf(v2, comp.id)` instead — the
-       domain reads take a vintage list and do not change; sites without a world in reach get
-       the list from a caller that has one.
     g-ii-d. **THE FIELD GOES.** `Company.plant` is deleted and the writers write rows only; the
        vintage functions stay the semantics (a writer reads the rows, applies them, writes the
        rows). W6 keeps closing on the wires and the flows, in cost.
@@ -1332,6 +1328,20 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK g-ii-c — THE READERS TAKE THE ROWS.** Every read of a firm's plant is a read of its
+  register rows now: the front seam's opening net and year's charge, the back lanes, the staffing
+  ceiling, the unit's capital charge and the line's effective capacity in the goods auction, the
+  labour stage, the equity valuation's book equity and net investment rate (the equity book, the
+  stock-loan book, the CDS book, the board's buyback and the sponsor's tender), the financing
+  decision, the insurers' insurable base, the carriers' fleet in the freight book and the lane
+  helper, the estate's net plant, the news materiality, the burn-in probe, W6's snapshot and the
+  firm's statement. The five domain reads that took a company take the vintage list
+  (`fullStaffingCapHeads`, `corporateInsurableBaseLocal`, `weeklyCapitalChargeLocal`,
+  `companyNetInvestmentRate`, `companyBookEquityLocal`, and `companyFairValuePerShare` with them);
+  the freight book takes a `plantOf` read, because the seed prices its provisional carriers
+  before any row exists. What still reads the field is the writers' own inputs (a scrap slices
+  the list it is handed) — g-ii-d's. Gates green; no run (rule 11).
 
 **13-BOOK g-ii-b — THE WRITERS KEEP THE ROWS.** Every writer of `Company.plant` hands
   `writePlantRows` the list it just computed, in the same breath: the rebuild's commissioning

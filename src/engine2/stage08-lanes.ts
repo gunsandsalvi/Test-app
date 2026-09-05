@@ -14,6 +14,7 @@
  */
 
 import { profileKeyOf } from '../engine/simulation/stages/profiles/types';
+import { plantVintagesOf } from '../engine/ledger/plant-ledger';
 import { Company } from '../types';
 import { WeeklyStepContext, CompanyWeekUpdate } from '../engine/simulation/stages/context';
 import { usefulLifeYearsOf } from '../domain/company-week/capital-programme';
@@ -177,9 +178,10 @@ export function buildBackLanes(
     const c = companies[i];
     const reg = updatedRegions[c.region];
     const wu = companyUpdates[c.ticker];
-    L.plantGrossLocal[i] = plantGrossLocal(c.plant, nextWeek);
-    L.plantNetLocal[i] = plantNetLocal(c.plant, nextWeek);
-    L.plantDepreciationAnnualLocal[i] = plantDepreciationAnnualLocal(c.plant, nextWeek);
+    const plant = plantVintagesOf(v2, c.id); // §3.13-BOOK g-ii-c: the register's rows
+    L.plantGrossLocal[i] = plantGrossLocal(plant, nextWeek);
+    L.plantNetLocal[i] = plantNetLocal(plant, nextWeek);
+    L.plantDepreciationAnnualLocal[i] = plantDepreciationAnnualLocal(plant, nextWeek);
     L.usefulLifeYears[i] = usefulLifeYearsOf(c);
     L.producedUnitsThisWeek[i] = wu?.producedUnitsThisWeek ?? 0;
     L.plantCapacityUnitsThisWeek[i] = wu?.plantCapacityUnitsThisWeek ?? 0;

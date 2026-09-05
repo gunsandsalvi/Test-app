@@ -20,7 +20,7 @@
  */
 
 import { moveDwellings } from '../../ledger/dwelling-ledger';
-import { arrivePlant } from '../../ledger/plant-ledger';
+import { arrivePlant, plantVintagesOf } from '../../ledger/plant-ledger';
 import { GameState, Region, RegionId, UnitBid, UnitOffer, Company } from '../../../types';
 import { bookTradeInvoices } from '../../ledger/contract-ledger';
 import { bankParty, companyParty, companyPartyOf } from '../../../domain/party';
@@ -977,7 +977,7 @@ function buildRegionSupplyPlans(
     // capital is made of (`capitalMixOf`), so a vintage of a kind the line does not use, or one
     // in excess of the scarcest kind, produces nothing for it.
     const netPPEForCapacityLocal = Math.max(1,
-      plantEffectiveNetLocal(comp.plant, capitalMixOf([{ subUnitId, revenueShare: 1 }], profileKeyOf(comp)), week));
+      plantEffectiveNetLocal(plantVintagesOf(v2, comp.id), capitalMixOf([{ subUnitId, revenueShare: 1 }], profileKeyOf(comp)), week));
     if (!(line.unitsPerNetPpeDollar! > 0)) {
       const openingCapacityUnits =
         ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare) / referencePriceLocal;
@@ -1082,7 +1082,7 @@ function buildRegionSupplyPlans(
     // "fully staffed" at its old headcount and doubled output nobody worked for; scaled with
     // net PP&E, more plant needs more people to run it — which is what makes hiring the way a
     // grown firm's output actually grows.
-    const staffedShare = Math.max(0, (comp.employeeCount) / fullStaffingCapHeads(comp, week));
+    const staffedShare = Math.max(0, (comp.employeeCount) / fullStaffingCapHeads(comp, plantVintagesOf(v2, comp.id), week));
     // What the plant can make THIS WEEK. A harvest is not a decision: the crop ripens
     // once a year and no price makes it ripen twice. Averages to 1 over the year, so this moves
     // output around the calendar and never adds any.
@@ -1229,7 +1229,7 @@ function buildRegionSupplyPlans(
     // plant, this line's share of it, over the week's units. It was `(0.05 + pd × 0.60) × 1.5`: a
     // stated hurdle, a stated loss-given-default and a stated shape, beside the cost of capital the
     // labour stage already charged the same firm with.
-    const lineCapitalChargeWeeklyLocal = weeklyCapitalChargeLocal(comp, riskFreeRateOf(reg), week) * Math.max(0, line.revenueShare);
+    const lineCapitalChargeWeeklyLocal = weeklyCapitalChargeLocal(comp, plantVintagesOf(v2, comp.id), riskFreeRateOf(reg), week) * Math.max(0, line.revenueShare);
 
     // SHARE VERSUS MARGIN, expressed only through the real offer price.
     //

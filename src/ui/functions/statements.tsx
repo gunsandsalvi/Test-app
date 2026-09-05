@@ -1,4 +1,5 @@
 import { RegionId, currencyOf } from '../../domain/geography';
+import { plantVintagesOf } from '../../engine/ledger/plant-ledger';
 import { usdToLocal, FxToUsd } from '../../domain/currency';
 import { runRateAnnual } from '../../domain/units';
 import { plantGrossLocal, plantAccumulatedDepreciationLocal } from '../../domain/plant';
@@ -155,8 +156,8 @@ function CompanyStatements({ world, c, tab, nav }: { world: World; c: Company; t
     ) : (
       <Statement units="USD millions · the live book (no quarter filed yet)" asOf={asOf} lines={[
         { label: 'Cash', usd: cashOf(ensureV2(world.state), c) },
-        { label: 'Gross plant', usd: plantGrossLocal(c.plant, world.state.currentWeek) },
-        { label: 'Accumulated depreciation', usd: -plantAccumulatedDepreciationLocal(c.plant, world.state.currentWeek) },
+        { label: 'Gross plant', usd: plantGrossLocal(plantVintagesOf(ensureV2(world.state), c.id), world.state.currentWeek) },
+        { label: 'Accumulated depreciation', usd: -plantAccumulatedDepreciationLocal(plantVintagesOf(ensureV2(world.state), c.id), world.state.currentWeek) },
         { label: 'Total debt', usd: ladderTotalLocal(ensureV2(world.state), c.id), total: true },
       ]} />
     );

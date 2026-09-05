@@ -4,6 +4,7 @@
  * week-over-week checks need, copied out when the audit runs.
  */
 import { plantGrossLocal } from '../../domain/plant';
+import { plantVintagesOf } from '../ledger/plant-ledger';
 import { stateDepositLines, treasuryAccountOf, waysAndMeansOf } from '../ledger/accounts';
 import { buildEntityIndex } from '../ledger/entity-index';
 import { materializeGovLadder } from '../../engine2/tranches';
@@ -151,8 +152,10 @@ export function goodsUnitsByKey(state: GameState, parts?: Record<string, [number
  *  closed — the unit a register is kept in, so a re-mark cannot move it. */
 export function plantCostByCompany(state: GameState): Record<string, number> {
   const out: Record<string, number> = {};
+  const v2 = state.v2 as V2World | undefined;
+  if (!v2) return out;
   for (const c of state.companies) {
-    const g = plantGrossLocal(c.plant, state.currentWeek);
+    const g = plantGrossLocal(plantVintagesOf(v2, c.id), state.currentWeek); // §3.13-BOOK g-ii-c: the rows
     if (g) out[c.id] = g;
   }
   return out;

@@ -30,9 +30,10 @@ export function costOfCapitalOf(firm: { beta?: number; management?: Preferences 
 /** The weekly charge the firm's net plant carries at that rate — the cost of holding it a week.
  *  §3.26-f-ii: the net plant is a read of the register at `week`. */
 export function weeklyCapitalChargeLocal(
-  firm: { beta?: number; management?: Preferences; plant: readonly PlantVintage[] },
+  firm: { beta?: number; management?: Preferences },
+  plant: readonly PlantVintage[],
   riskFreeRate: number,
   week: number
 ): number {
-  return (plantNetLocal(firm.plant, week) * costOfCapitalOf(firm, riskFreeRate)) / 52;
+  return (plantNetLocal(plant, week) * costOfCapitalOf(firm, riskFreeRate)) / 52;
 }
