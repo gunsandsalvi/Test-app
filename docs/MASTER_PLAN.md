@@ -551,18 +551,6 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
-24-ii. **The seekers have a reservation.** *(24-i is in §9: the matches clear on the bid, the
-    marginal bid is the print, the going rate is a read of what is paid; three wage speeds
-    deleted.)* A seeker accepts nothing below its outside option — the benefit the model already
-    pays (`UNEMPLOYMENT_REPLACEMENT_RATE`, a POLICY primitive) on the going rate — defended in REAL
-    terms: the reservation rises with the price level, which is where the cost of living is
-    actually recovered, so `COST_OF_LIVING_PASS_THROUGH` and the bargaining-power term on
-    `NEUTRAL_LABOR_TIGHTNESS` die into it. In a slack market the print then falls to the
-    reservation, not to zero; in a tight one the bids set it. labour D1 → ✅ and B1's first half.
-    The participation decision — whether a household posts itself at all — stays 37-SMALL; the
-    remaining labour constants (the two hiring speeds, the distress speed, the withdrawal rate, the
-    two quit elasticities) are 37-EMPLOYMENT's and 37-SMALL's, where the posting and the quit get
-    an owner.
 25. **A CURVE POINT SAYS WHETHER IT WAS TRADED OR INTERPOLATED.** *(The two-owners half is DONE —
     §9.13-SOV row 5. `sovereign-curve.ts` fits once through every cleared point and publishes every
     field as a read of it, and `P6` is now the guard on that rather than a measurement of it.)*
@@ -1107,8 +1095,7 @@ step that owns its node; where it does not yet, the step below is the owner.
     · **households D5.a** — MMF shares are issued pro rata and never chosen, so the deposit / money
       fund / bill substitution never happens, and **F2** — nobody inherits anything;
     · **labour B1** — participation moves by a constant keyed off a regime label with the wage
-      nowhere in it *(the reservation half is 24-ii; this is whether a household posts itself at
-      all)*, and **C2/C3** — firing has no cost, only a pair of speeds;
+      nowhere in it *(the reservation half landed at §9.24-ii; this is whether a household posts itself at all, and for how many hours)*, and **C2/C3** — firing has no cost, only a pair of speeds;
     · **freight E2** — `laneFillRatio` and `shippedShareByLaneSubUnit` are computed and read by
       nobody, so capacity sets the PRICE of distance and never the QUANTITY;
     · **goods B1.b** — `inputSupplyConstraintFactor` reaches only the UI;
@@ -1393,6 +1380,21 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**24-ii — THE SEEKERS HAVE A RESERVATION.** A matched seeker accepts nothing below its outside
+  option — the benefit this world already pays it, `UNEMPLOYMENT_REPLACEMENT_RATE` of the going
+  rate (a transfer-policy primitive) — so both passes of the labour clearing refuse a bid below
+  that share of the rate it is bid against: in a slack market the print falls to it and no
+  further, in a tight one the bids set it. labour D1 ✅ (posted demand against posted supply, per
+  occupation and region), B1 ❌→⚠️ (the acceptance is the household's; whether it searches at all,
+  and for how many hours, stays 37-SMALL). `COST_OF_LIVING_PASS_THROUGH` (0.6 of inflation, times
+  a bargaining power off tightness) deleted: it raised the going rate beside the bargain the model
+  already has — the firms' bids carry a price rise as a nominal surplus per head, and the rent
+  share of it reaches the bid at the firm's horizon — a second channel from prices to wages (rule
+  4). Of the labour constants the step named, what remains — the two hiring speeds, the distress
+  speed, the withdrawal rate, the two quit elasticities, the matching function's own — is
+  37-EMPLOYMENT's and 37-SMALL's, where a posting and a quit get an owner. Gates green; no run
+  (rule 11).
 
 **24-i — THE MATCHES CLEAR ON THE WAGE.** One fill ratio per occupation, `min(1, hires/vacancies)`,
   applied identically to every employer — so an offer 40% over the going rate filled the same share

@@ -43,8 +43,8 @@ import {
   MATCHING_EFFICIENCY, MATCHING_ELASTICITY,
   HIRING_ADJUSTMENT_SPEED_MULTIPLE, LAYOFF_SPEED_MULTIPLE, DISTRESS_LAYOFF_SPEED,
   VACANCY_WITHDRAWAL_RATE_WEEKLY,
-  COST_OF_LIVING_PASS_THROUGH,
   GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
+import { UNEMPLOYMENT_REPLACEMENT_RATE } from '../../bootstrap/national-accounts';
 import { clearLabourMatches, remainingLabourBids, labourPrintOf, LabourBid } from '../../../domain/labour-clearing';
 import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and-wages';
 import { isActiveCompany, fullStaffingCapHeads, RECEIPTS_MEASUREMENT_WEIGHT } from '../../../domain/company';
@@ -53,7 +53,6 @@ import { WeeklyStepContext } from './context';
 import { INDUSTRY_REGISTRY, smePoolSubUnits } from '../../../domain/industry-registry';
 import { weeklyWageBillLocal, getBaseAnnualWageLocal } from '../../bootstrap/labor-and-wages';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
-import { NEUTRAL_LABOR_TIGHTNESS } from '../../../domain/region-macro';
 import { patienceWeeksOf, riskAversionOf, adaptiveExpectation } from '../../../domain/preferences';
 import { RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../../bootstrap/population';
 import {
@@ -521,6 +520,12 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       });
     });
     const filledByKeyByOcc = {} as Record<OccupationType, Map<string, number>>;
+    // §3.24-ii: THE SEEKERS' RESERVATION. A matched seeker accepts nothing below its outside
+    // option, which is the benefit this world already pays it — `UNEMPLOYMENT_REPLACEMENT_RATE`
+    // of the going rate (a transfer-policy primitive), so a bid is refused below that share of
+    // the rate it is bid against. In a slack market the print falls to this and no further; in a
+    // tight one the bids set it. Whether a household searches at all is 37-SMALL's.
+    const reservationIndex = UNEMPLOYMENT_REPLACEMENT_RATE;
 
     OCCUPATIONS.forEach((occ) => {
       const supplyForOcc = totalLaborForce * (shares[occ] ?? BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] ?? 0.2);
@@ -545,7 +550,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // no bid this week can take land nowhere: a posting is an employer's, and an anonymous
       // carried opening has none until 37-EMPLOYMENT's register gives it one.
       const float = Math.max(0, Math.min(matches, openVacancies, seekers));
-      const cleared = clearLabourMatches(bidsByOcc[occ], float);
+      const cleared = clearLabourMatches(bidsByOcc[occ], float, reservationIndex);
       const hires = cleared.filledUnits;
 
       hiresByOcc[occ] = hires;
@@ -583,7 +588,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const nextShares = { ...shares } as Record<OccupationType, number>;
       OCCUPATIONS.forEach((occ) => {
         // §3.24-i: the movers take what the occupation's own search left, in the same bid order.
-        const second = clearLabourMatches(remainingLabourBids(bidsByOcc[occ], filledByKeyByOcc[occ]), moved.into[occ]);
+        const second = clearLabourMatches(remainingLabourBids(bidsByOcc[occ], filledByKeyByOcc[occ]), moved.into[occ], reservationIndex);
         second.filledByKey.forEach((u, k) => filledByKeyByOcc[occ].set(k, (filledByKeyByOcc[occ].get(k) ?? 0) + u));
         hiresByOcc[occ] += second.filledUnits;
         nextShares[occ] = Math.max(0, (shares[occ] ?? BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] ?? 0.2)
@@ -749,15 +754,13 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     const marketCatchupByOcc = {} as Record<OccupationType, number>;
     OCCUPATIONS.forEach((occ) => {
       const avgPaid = wageDenomByOcc[occ] > 0 ? wageNumeratorByOcc[occ] / wageDenomByOcc[occ] : 1;
-      // The cost of living the workforce bargains to recover, on top of what is paid. §7.345 —
-      // COST-OF-LIVING RECOVERY IS BARGAINING, AND BARGAINING NEEDS AN OUTSIDE OPTION: a worker
-      // recovers it only where it can credibly leave — the same concave job-finding rate the quit
-      // rate rides on (§7.210), 1 at neutral tightness and zero with none. §3.24-ii moves this
-      // into the seekers' own reservation, where a real wage is actually defended.
-      const bargainingPower = Math.min(1, Math.pow(
-        Math.max(0, reg.laborMarketTightness ?? 1) / NEUTRAL_LABOR_TIGHTNESS, MATCHING_ELASTICITY));
-      const colaWeekly = (reg.inflation ?? 0) * COST_OF_LIVING_PASS_THROUGH * bargainingPower / 52;
-      const catchup = avgPaid * (1 + colaWeekly) - 1;
+      // §3.24-ii: no cost-of-living term. `COST_OF_LIVING_PASS_THROUGH` (0.6 of inflation, times a
+      // bargaining power off tightness) raised the going rate beside the bargain the model
+      // already has — a second channel from prices to wages (rule 4). The channel is the
+      // firms' bids: a price rise is a nominal surplus per head, the rent share of it reaches
+      // the bid at the firm's horizon, and the average paid moves because employers moved it.
+      // Real wages fall while that happens, which is what a price surge does to them.
+      const catchup = avgPaid - 1;
       marketCatchupByOcc[occ] = catchup;
       const prev = pools[occ]?.wageIndex ?? 1.0;
       // LAB: the going rate is a price and carries no band. It used to sit in [0.1, 20] with its

@@ -81,7 +81,7 @@ Written 2026-09-03 from the domain, code shut.
 
 ## 2. THE MAPPING
 
-Mapped 2026-09-03; re-marked 2026-09-05 (§9.24-i). `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
+Mapped 2026-09-03; re-marked 2026-09-05 (§9.24-i, §9.24-ii). `✅` present · `⚠️` present but diverging · `❌` absent. Every citation is
 checked by `scripts/check-atlas.sh`.
 
 | Node | Code | |
@@ -91,7 +91,7 @@ checked by `scripts/check-atlas.sh`.
 | A3 labour is heterogeneous: skill, sector, region | `src/domain/region-macro.ts:OCCUPATION_TYPES` | ⚠️ |
 | A3.a so unemployment and vacancies can be high at once | `src/domain/labour-clearing.ts:clearLabourMatches` · `src/engine/simulation/stages/labor-market.ts:occupationalMobility` | ✅ |
 | A4 the relationship persists — employment is a state | `src/domain/company.ts:employeeCount` | ⚠️ |
-| **B1 a household decides whether to work, given the wage** | `src/engine/macro/evolution.ts:participationDrift` | ❌ |
+| B1 a household decides whether to work, given the wage | `src/domain/labour-clearing.ts:clearLabourMatches` · `src/engine/macro/evolution.ts:participationDrift` | ⚠️ |
 | B2 the workforce is finite | `src/domain/region-macro.ts:laborForceCount` | ✅ |
 | B3 exactly one state: employed, unemployed, inactive | `src/engine/simulation/stages/labor-market.ts:seekers` | ⚠️ |
 | B4 an unemployed person searches, and search takes time | `src/domain/region-macro.ts:MATCHING_EFFICIENCY` | ✅ |
@@ -102,7 +102,7 @@ checked by `scripts/check-atlas.sh`.
 | **C3 firing has a cost, and the asymmetry is the cycle** | `src/domain/region-macro.ts:LAYOFF_SPEED_MULTIPLE` | ⚠️ |
 | C4 a failed firm releases its workers at once | `src/engine/simulation/stages/labor-market.ts:runLaborReconciliationStage` | ✅ |
 | C5 a vacancy is a real posted intention, and can go unfilled | `src/engine/simulation/stages/labor-market.ts:carriedVacanciesByOcc` | ✅ |
-| D1 the wage is a price that CLEARS | `src/domain/labour-clearing.ts:clearLabourMatches` | ⚠️ |
+| D1 the wage is a price that CLEARS | `src/domain/labour-clearing.ts:clearLabourMatches` | ✅ |
 | D2 it does not clear instantly — wages are sticky | `src/engine/simulation/stages/labor-market.ts:avgPaid` | ⚠️ |
 | D2.a so the adjustment falls on quantity | `src/engine/simulation/stages/labor-market.ts:hiresByOcc` | ✅ |
 | D2.b VERIFY stickiness is the contract's, not a coefficient | `src/engine/simulation/stages/labor-market.ts:avgPaid` | ⚠️ |
@@ -121,7 +121,7 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ⚠️ D1 / D2 / D2.b — THE MATCHES CLEAR ON THE BID; THE SUPPLY SIDE HAS NO RESERVATION YET, AND THE STICKINESS HAS NO CONTRACT
+### ✅ D1 / ⚠️ D2 / D2.b — THE MATCHES CLEAR ON THE BID AGAINST THE SEEKERS' RESERVATION; THE STICKINESS HAS NO CONTRACT
 
 *2026-09-05 (§9.24-i). The fill ratio is gone. Every posting is a bid — the employer's openings in
 an occupation at its own `offeredWageIndex` — and the week's matches go to the highest bids first,
@@ -134,14 +134,16 @@ ease are deleted. The going rate is the employment-weighted average of what is a
 firms at their own levels, the segments and the government at the rate — a read, not a walk;
 `MARKET_WAGE_CATCHUP_SPEED_WEEKLY` is deleted with it.*
 
+*§9.24-ii: the supply side posts its price. A matched seeker refuses a bid below its outside
+option — the benefit this world already pays it, `UNEMPLOYMENT_REPLACEMENT_RATE` of the going rate
+— so in a slack market the print falls to that and no further, and in a tight one the bids set it.
+D1 ✅: posted demand against posted supply, per occupation and region. `COST_OF_LIVING_PASS_THROUGH`
+is deleted with it: it raised the going rate by 0.6 of inflation beside the bargain the model
+already has, a second channel from prices to wages; the channel is the firms' bids — a price rise
+is a nominal surplus per head, and the rent share of it reaches the bid at the firm's horizon.*
+
 What is still ⚠️:
 
-- **D1** — the demand side clears on price; the supply side does not yet post one. A seeker
-  accepts any bid, so in a slack market (matches beyond the postings) the print is the lowest bid
-  that filled and nothing bounds it below. **§3 step 24-ii** gives the seekers their reservation —
-  the outside option the model already pays (`UNEMPLOYMENT_REPLACEMENT_RATE`), defended in real
-  terms, so the cost of living is recovered where it is actually recovered and
-  `COST_OF_LIVING_PASS_THROUGH` dies with it.
 - **D2 / D2.b** — the stickiness is now a consequence of two real things — a firm reprices at its
   own horizon, and the segments and the government pay the rate that was — and of no coefficient.
   It is not yet a consequence of a CONTRACT: there is no agreed wage with a term, no renegotiation
@@ -150,7 +152,7 @@ What is still ⚠️:
   land there too, since a quit and a withdrawal are what a worker and an employer do to a posting
   they own.
 
-### ❌ B1 — NOBODY DECIDES WHETHER TO WORK
+### ⚠️ B1 — A SEEKER REFUSES A BID BELOW ITS BENEFIT; NOBODY DECIDES WHETHER TO SEARCH
 
 The supply side has a workforce (`laborForceCount`) and a matching function, but no participation
 decision. `evolution.ts:251`:
@@ -166,9 +168,10 @@ to its own price: a wage boom draws nobody in and a collapse pushes nobody out, 
 much" (hours) does not exist at all — labour is heads, never hours. The discouraged-worker margin,
 which is a large part of why measured unemployment lags a recovery, cannot occur.
 
-**§3 step 24-ii** takes the reservation half — a seeker accepts nothing below its outside option,
-now that a wage is a price. The participation half — whether a household posts itself at all,
-given the wage — stays **37-SMALL**, and the two stated drift constants die with it.
+*§9.24-ii took the reservation half: a matched seeker accepts nothing below its outside option,
+the benefit, so B1's "given the wage and its alternatives" is real at the point of acceptance.*
+The participation half — whether a household posts itself at all, given the wage, and how many
+hours — stays **37-SMALL**, and the two stated drift constants die with it.
 
 ### ⚠️ C2 / C3 — THE ASYMMETRY IS A PAIR OF SPEEDS, NOT A PAIR OF COSTS
 

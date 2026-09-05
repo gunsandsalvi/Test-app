@@ -552,19 +552,6 @@ export const VACANCY_WITHDRAWAL_RATE_WEEKLY = 0.10;
  * walked the going rate toward what was paid instead of reading it. All three are gone.
  */
 /**
- * How much of the cost of living a workforce actually recovers in its wage. Bargaining is over
- * REAL wages — a workforce facing 10% inflation asks for something close to 10% just to stand
- * still, and a firm that refuses loses people. Without this term nominal wages ignored prices
- * completely and real wages collapsed at the rate of inflation (the defect §5-HH6 names: −2.5%
- * nominal against 10% inflation).
- *
- * It is deliberately INCOMPLETE. Full indexation would make the real wage a constant and hand
- * the model a mechanical wage-price spiral; partial pass-through is also what the data show —
- * real wages do fall during inflation surges, which is precisely the observation that this
- * number is below one.
- */
-export const COST_OF_LIVING_PASS_THROUGH = 0.6;
-/**
  * How much a firm's relative pay changes its quit rate. A firm paying 10% below market loses
  * people faster; one paying above keeps them. This is what makes a raise DO something, and it
  * is the reallocation channel: workers move toward the firms that are short of them.
