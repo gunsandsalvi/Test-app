@@ -18,13 +18,19 @@
  */
 
 import { asEntityId, asTicker, type EntityId, type Ticker } from './ids';
-import type { RegionId } from './geography';
+import { REGION_IDS, type RegionId } from './geography';
 
 /**
  * A region's TREASURY as a ladder issuer — the party a sovereign tranche is issued by and retired
  * to. See the header: this is the name that existed five times.
  */
 export const governmentEntityId = (regionId: RegionId): EntityId => asEntityId(`GOV_${regionId}`);
+/** §3.14: the region whose treasury an entity id names, or nothing — the one read of the format above. */
+export const regionOfGovernmentEntity = (id: string): RegionId | undefined => {
+  if (!id.startsWith('GOV_')) return undefined;
+  const region = id.slice(4) as RegionId;
+  return (REGION_IDS as readonly string[]).includes(region) ? region : undefined;
+};
 
 /**
  * §3.13-READ D10 — THE TREASURY AS A LADDER ISSUER, as an OBJECT. Slice (c1) extracted the id and

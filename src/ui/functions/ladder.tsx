@@ -11,10 +11,12 @@ import { money, pctLevel, count } from '../format';
 import { formatDate, formatMonthYear, WEEKS_PER_YEAR } from '../calendar';
 import { World, companyOf, regionOf, displayWeek } from '../world';
 import { materializeLadder } from '../../engine2/tranches';
-import { trancheId } from '../objects/tranche';
+import { trancheId, yearOf } from '../objects/tranche';
+import { instrumentDisplayName } from '../../domain/instruments';
+import { isDiscountBill } from '../../domain/government';
 import { SectionLabel } from '../objects/common';
 
-interface Row { id: string; key: string; kind: string; principalLocal: number; rate: number; maturityWeek: number; originationWeek: number; note?: string }
+interface Row { id: string; name: string; key: string; kind: string; principalLocal: number; rate: number; maturityWeek: number; originationWeek: number; note?: string }
 
 function Wall({ rows, world }: { rows: Row[]; world: World }) {
   const now = world.state.currentWeek;
@@ -39,7 +41,7 @@ function LadderTable({ rows, world, nav }: { rows: Row[]; world: World; nav: Nav
   const now = world.state.currentWeek;
   return (
     <Table rows={rows} keyOf={(r) => r.key} columns={[
-      { key: 'id', label: 'tranche', width: 1.6, render: (r) => <Link to={{ type: 'tranche', id: r.key }} nav={nav}>{r.id}</Link> },
+      { key: 'id', label: 'tranche', width: 1.6, render: (r) => <Link to={{ type: 'tranche', id: r.key }} nav={nav}>{r.name}</Link> },
       { key: 'kind', label: 'kind', width: 0.9, render: (r) => r.kind },
       { key: 'usd', label: 'size', width: 0.9, render: (r) => money(r.principalLocal) },
       { key: 'rate', label: 'rate', width: 0.8, render: (r) => pctLevel(r.rate, 2) },
@@ -59,7 +61,7 @@ export const ladder: FunctionModule = {
       if (!c) return null;
       const policy = regionOf(world, c.region)?.policyRate ?? 0;
       const rows: Row[] = materializeLadder(world.v2, c.id).map((t) => ({
-        id: t.id, key: trancheId(c.id, t.id),
+        id: t.id, name: instrumentDisplayName(c.ticker, t, yearOf(world)), key: trancheId(c.id, t.id),
         kind: t.isCommercialPaper ? 'paper' : t.isBankFacility ? `facility${t.facilityBankId ? ` · ${t.facilityBankId}` : ''}` : t.seniority === 'SUBORDINATED' ? 'sub bond' : t.rateType === 'FLOATING' ? 'loan' : 'bond',
         principalLocal: t.principalLocal, rate: t.rateType === 'FLOATING' ? policy + (t.floatingMarginBps ?? 0) / 10_000 : (t.couponRate ?? 0),
         maturityWeek: t.maturityWeek, originationWeek: t.originationWeek,
@@ -72,7 +74,7 @@ export const ladder: FunctionModule = {
         <Card style={{ padding: '2px 0' }}>
           <KV k="outstanding" hint={`${rows.length} tranches`} v={money(total)} />
           <KV k="annual interest" hint={total > 0 ? `${pctLevel(interest / total, 2)} blended` : undefined} v={money(interest)} />
-          <KV k="next maturity" hint={next ? next.id : undefined} v={next ? (next.maturityWeek - now <= 0 ? 'now' : `${formatDate(displayWeek(world.state, next.maturityWeek))} · ${money(next.principalLocal)}`) : '—'} />
+          <KV k="next maturity" hint={next ? next.name : undefined} v={next ? (next.maturityWeek - now <= 0 ? 'now' : `${formatDate(displayWeek(world.state, next.maturityWeek))} · ${money(next.principalLocal)}`) : '—'} />
           <KV k="due within a year" v={money(rows.filter((r) => r.maturityWeek - now < WEEKS_PER_YEAR).reduce((a, r) => a + r.principalLocal, 0))} />
           <KV k="coverage" hint="ebitda over interest" v={interest > 0 ? `${(c.ebitda / interest).toFixed(1)}×` : '—'} />
         </Card>
@@ -85,7 +87,7 @@ export const ladder: FunctionModule = {
     const r = regionOf(world, ref.id);
     if (!r) return null;
     const rows: Row[] = materializeGovLadder(ensureV2(world.state), r.id).map((t) => ({
-      id: t.id, key: trancheId(r.id, t.id), kind: `${t.tenorAtIssuanceYears}y`, principalLocal: t.principalLocal, rate: t.couponRate, maturityWeek: t.maturityWeek, originationWeek: t.originationWeek,
+      id: t.id, name: instrumentDisplayName(r.id, { rateType: 'FIXED', couponRate: t.couponRate, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, isBill: isDiscountBill(t.tenorAtIssuanceYears) }, yearOf(world)), key: trancheId(r.id, t.id), kind: `${t.tenorAtIssuanceYears}y`, principalLocal: t.principalLocal, rate: t.couponRate, maturityWeek: t.maturityWeek, originationWeek: t.originationWeek,
     })).sort((a, b) => a.maturityWeek - b.maturityWeek);
     const total = rows.reduce((a, x) => a + x.principalLocal, 0);
     const interest = rows.reduce((a, x) => a + x.principalLocal * x.rate, 0);

@@ -175,3 +175,46 @@ export interface TradeableInstrument {
     dividendYield?: number;
   };
 }
+
+/**
+ * §3.14 — THE NAME A MARKET WOULD USE (`bond.md` N14). An internal id (`KRLN-T3`, `USA-GOV-10Y-41`)
+ * is an id, never the name. The name is the issuer and what the paper pays and when: a bond is
+ * `KRLN 4.75% 2031`, a loan (or a bank facility, which is a loan) `KRLN L+350 2029`, a bill
+ * `USA 3M bill`, commercial paper `KRLN 3M CP`, and a sovereign bond `USA 4.75% 2031`. ONE
+ * function, so the tranche view, the ladder, every holders list, the desk traces and the news
+ * cannot each spell it. The calendar is the caller's (`yearOfWeek`): the UI's and the engine's
+ * still differ by a year (§3.15 unifies them), and this file owns neither.
+ */
+export interface NamedPaper {
+  rateType: 'FIXED' | 'FLOATING';
+  couponRate?: number;
+  floatingMarginBps?: number;
+  originationWeek: number;
+  maturityWeek: number;
+  isCommercialPaper?: boolean;
+  /** A sovereign discount bill (`government.ts:isDiscountBill`), which the caller knows and the
+   *  tranche does not carry. */
+  isBill?: boolean;
+}
+
+/** "3M", "13M", "5Y", "1.5Y" — a tenor in the unit a market quotes it in. */
+export function tenorLabel(weeks: number): string {
+  const months = Math.round((weeks / 52) * 12);
+  if (months < 12) return `${Math.max(1, months)}M`;
+  const years = weeks / 52;
+  return Number.isInteger(Math.round(years * 10) / 10) ? `${Math.round(years)}Y` : `${(Math.round(years * 10) / 10).toFixed(1)}Y`;
+}
+
+/** "4.75%", "4.5%", "5%" — a coupon as a market prints it. */
+export function couponLabel(rate: number): string {
+  return `${(Math.round(rate * 10000) / 100).toString()}%`;
+}
+
+export function instrumentDisplayName(issuer: string, t: NamedPaper, yearOfWeek: (week: number) => number): string {
+  const tenorWeeks = t.maturityWeek - t.originationWeek;
+  if (t.isBill) return `${issuer} ${tenorLabel(tenorWeeks)} bill`;
+  if (t.isCommercialPaper) return `${issuer} ${tenorLabel(tenorWeeks)} CP`;
+  const year = yearOfWeek(t.maturityWeek);
+  if (t.rateType === 'FLOATING') return `${issuer} L+${Math.round(t.floatingMarginBps ?? 0)} ${year}`;
+  return `${issuer} ${couponLabel(t.couponRate ?? 0)} ${year}`;
+}

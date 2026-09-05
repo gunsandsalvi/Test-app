@@ -7,6 +7,10 @@ import { World } from '../world';
 import { REGION_IDS } from '../../domain/geography';
 import { ObjectHeader, FunctionTiles, RegionLink, taped } from './common';
 import { ObjectRef } from '../types';
+import { ensureV2 } from '../../engine2/world';
+import { instrumentNameOf } from '../../engine/instrument-name';
+import { yearOfWeek } from '../calendar';
+import { displayWeek } from '../world';
 
 export interface Book { name: string; region: string; bound: { id: string; dir: string; streak: number }[]; streaks: number }
 
@@ -41,8 +45,13 @@ export function instrumentRef(world: World, id: string): ObjectRef | undefined {
   return r ? { type: 'region', id: r } : undefined;
 }
 
-/** An instrument id as the world names it: the company's or fund's ticker where the id is theirs, else the id. */
+/** An instrument id as the world names it: a tranche by the name a market would use (§3.14,
+ *  `instrumentDisplayName`), the company's or fund's ticker where the id is theirs, else the id. */
 export function instrumentName(world: World, id: string): string {
+  const named = instrumentNameOf(ensureV2(world.state), id,
+    (issuerId) => world.state.companies.find((c) => c.id === issuerId)?.ticker,
+    (w) => yearOfWeek(displayWeek(world.state, w)));
+  if (named !== undefined) return named;
   const ref = instrumentRef(world, id);
   if (!ref) return id;
   if (ref.type === 'company') { const c = world.state.companies.find((x) => x.id === ref.id); return c && c.id === id ? c.ticker : c ? `${c.ticker} ${id.slice(c.id.length + 1)}` : id; }

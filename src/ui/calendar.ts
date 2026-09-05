@@ -11,6 +11,9 @@ export function dateOfWeek(week: number): Date {
   return new Date(START + Math.max(0, week) * WEEK_MS);
 }
 
+/** 2027 — the year a week falls in; a maturity's year in a name (§3.14). */
+export const yearOfWeek = (week: number): number => dateOfWeek(week).getUTCFullYear();
+
 /** "2 Apr 2027" */
 export function formatDate(week: number): string {
   const d = dateOfWeek(week);

@@ -547,10 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-14. **Nomenclature** (rule 9). A tranche's display name is issuer + coupon + maturity
-    (`KRLN 4.75% 2031`), a loan issuer + margin + maturity (`KRLN L+350 2029`), a bill issuer +
-    tenor, a sovereign the same. `ui/objects/tranche.tsx:50` currently labels with the internal id.
-    One naming function in `domain/instruments.ts`, used by the UI, the news and every trace.
 15. **Search by asset, price and spread together** (rule 9). `ui/objects/tranche.tsx:50` is
     `searchable: false` — make bonds, loans, CP and bills searchable by class and by issuer. Every
     fixed-income view shows PRICE and DM/OAS side by side (needs step 13). Fix the UI unit errors the
@@ -1655,6 +1651,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**14 — NOMENCLATURE.** `domain/instruments.ts:instrumentDisplayName` is the one grammar (bond.md
+N14, both types ✅): a bond is issuer + coupon + maturity (`KRLN 4.75% 2031`), a loan and a bank
+facility issuer + margin + maturity (`KRLN L+350 2029`), a bill and commercial paper issuer +
+tenor (`USA 3M bill`, `KRLN 3M CP`), a sovereign bond the same as a corporate. `engine/
+instrument-name.ts:instrumentNameOf` is the one read of the store that feeds it — the row, the
+issuer's ticker or (`entity-keys.ts:regionOfGovernmentEntity`) region, bill-or-bond. Used by the
+tranche object (the id now shown once, as "id"), the ladder, every holders and desk list through
+`book.tsx:instrumentName`, and the two traces that printed a tranche id (`[desk-prior]`,
+`[paydown]`); the news names issuers and no paper today, so it has nothing to spell. The year is
+the caller's calendar (`ui/calendar.ts:yearOfWeek` on the display week; `formatters.ts:
+yearOfSimulationWeek` for a trace) because the two still differ by one — step 15 unifies them and
+the name follows. `test/instrument-name.test.ts`. Gates green; no run.
 
 **14-SHELL — THE SHELL, BEFORE THE VIEWS THAT SIT IN IT.** (user, 2026-09-04.) ONE cap for every
 long list: `ui.tsx:Table` renders its first `TABLE_CAP` (50) rows and says so beneath them — "the

@@ -130,14 +130,14 @@ thing is there). Every citation is checked by `scripts/check-atlas.sh`.
 | **N13 · sov a CLAIM ON FAILURE, stated even as "nothing seizable"** | — | ❌ |
 | **N13.a · corp a RANKING of that claim** | `src/domain/estate.ts:CLAIM_SENIORITY` | ⚠️ |
 | N13.a · sov a RANKING (answer: pari passu, always) | `src/domain/region-macro.ts:GovDebtTranche` | ✅ |
-| **N14 · corp an IDENTITY a market would use** | `src/ui/objects/tranche.tsx:tranche` | ❌ |
-| **N14 · sov an IDENTITY a market would use** | `src/domain/sovereign-id.ts:govBondTrancheId` | ❌ |
+| N14 · corp an IDENTITY a market would use | `src/ui/objects/tranche.tsx:tranche` | ✅ |
+| N14 · sov an IDENTITY a market would use | `src/engine/instrument-name.ts:instrumentNameOf` | ✅ |
 
 ---
 
 ## 3. THE DIFF
 
-**48 rows — 24 nodes (the fourteen plus their ten sub-nodes) × 2 types: 30 ✅, 14 ⚠️, 4 ❌** — counted by `test/atlas-marks.test.ts` on every commit now.
+**48 rows — 24 nodes (the fourteen plus their ten sub-nodes) × 2 types: 32 ✅, 14 ⚠️, 2 ❌** — counted by `test/atlas-marks.test.ts` on every commit now.
 
 *Re-marked 2026-09-04 at §9.13-CREDIT row 2, catching up four rows the commits that closed them
 left behind, and again at row 4, which closed N7 · corp and N7.b · corp: commercial paper was the
@@ -149,8 +149,8 @@ tally nobody recounts — is the one kind of drift the gate cannot catch.*
 
 The contract's own thesis is confirmed and sharpened: the two types differ correctly at N11, N13
 and N13.a — the sovereign genuinely has no call machinery and no seniority field, which is the
-right answer and rule 4's. They used to fail IDENTICALLY at N7, N7.b and N14; N7 and N7.b are now
-closed on both types, and N14 is where what is left of the model's real defect lives.
+right answer and rule 4's. They used to fail IDENTICALLY at N7, N7.b and N14; all three are now
+closed on both types (N14 by §9.14, 2026-09-05).
 
 ### ✅ N7 / N7.b — CLOSED ON BOTH TYPES: EVERY BOND-SHAPED THING HAS A PRICE IT CHANGES HANDS AT
 
@@ -206,12 +206,15 @@ by. It is `sovereign-credit.md` branch G's whole finding, and it is stated here 
 is where the two types are meant to differ and this is the row where the difference was never
 written down at all.
 
-### ❌ N14 BOTH TYPES — THE DISPLAY NAME IS THE INTERNAL ID
+### ✅ N14 BOTH TYPES — THE NAME IS THE ONE A MARKET WOULD USE
 
-**KNOWN(14).** `ui/objects/tranche.tsx:60` heads a tranche with `t.id` — `KRLN-T3`, or
-`KRLN-CP-47`. The sovereign side is `govBondTrancheId`'s `USA-GOV-10Y-41`. Rule 9 wants `KRLN 4.75% 2031`,
-`KRLN L+350 2029`, and issuer + tenor for a sovereign. Both types have every ingredient on the
-instrument already; nothing composes them.
+Closed 2026-09-05 (§9.14). `domain/instruments.ts:instrumentDisplayName` is the one grammar —
+`KRLN 4.75% 2031`, `KRLN L+350 2029` (a bank facility is a loan), `USA 3M bill`, `KRLN 3M CP`,
+`USA 4.75% 2031` — and `engine/instrument-name.ts:instrumentNameOf` is the one read of the store
+that feeds it (the row, the issuer's ticker or region, bill-or-bond). The tranche object, the
+ladder, every holders and desk list (`book.tsx:instrumentName`) and the desk and paydown traces
+name paper through it; the internal id is shown once, as "id", on the tranche. The year is the
+caller's calendar, because the UI's and the engine's still differ by one (§3.15).
 
 ### ⚠️ N3 BOTH TYPES — NO INSTRUMENT CARRIES ITS OWN CURRENCY
 

@@ -7,6 +7,9 @@ import type { Ticker } from '../domain/ids';
 // Anchor simulation start to Jan 5, 2026 (Week 1 = Jan 5, 2026)
 export const SIMULATION_START_DATE = new Date(2026, 0, 5); // Jan 5, 2026
 
+/** §3.14: the calendar year a week falls in, on the ENGINE's calendar (the traces' one). */
+export const yearOfSimulationWeek = (week: number): number => getSimulationDate(week).getFullYear();
+
 export function getSimulationDate(week: number): Date {
   const safeWeek = Math.max(1, Math.floor(week || 1));
   const date = new Date(SIMULATION_START_DATE.getTime());
