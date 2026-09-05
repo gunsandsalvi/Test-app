@@ -15,6 +15,24 @@ import { BankingSector, householdBookRwaLocal, businessLoanBookOf } from './bank
  *  experience (G5 displaces it with the realized rate, one resolution at a time — §7.192). */
 export const CREDIT_RECOVERY_RATE = 0.4;
 
+/** How many resolutions it takes before a region's own experience displaces the prior. */
+const RECOVERY_PRIOR_WEIGHT = 8;
+
+/**
+ * What a defaulted borrower's lenders get back — this region's recovery rate: its own realised
+ * experience (`Region.realisedRecoveryRates`, what its workouts actually paid, most recent last),
+ * weighted against the prior by how much experience it has. One resolution does not overturn the
+ * prior; twenty do. G5 made this an OUTPUT: the loss the credit market PRICES is the loss it has
+ * SEEN, and the audit (P2) holds the two to the history's own standard error.
+ */
+export function creditRecoveryRate(reg?: { realisedRecoveryRates?: number[] }): number {
+  const realised = reg?.realisedRecoveryRates ?? [];
+  if (realised.length === 0) return CREDIT_RECOVERY_RATE;
+  const mean = realised.reduce((a, b) => a + b, 0) / realised.length;
+  const w = realised.length / (realised.length + RECOVERY_PRIOR_WEIGHT);
+  return Math.max(0, Math.min(1, mean * w + CREDIT_RECOVERY_RATE * (1 - w)));
+}
+
 /** The capital ratio a bank's treasury actually RUNS at — the buffer above the 8% floor that
  *  real supervision demands and real banks keep. Origination prices against consuming it;
  *  breaching the floor itself is where the bank declines outright. */

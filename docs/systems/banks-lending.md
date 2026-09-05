@@ -127,7 +127,7 @@ checked by `scripts/check-atlas.sh`.
 | **D5 it can be pledged to the central bank or in repo** | `src/engine/simulation/stages/repo-clearing.ts:unencumberedBorrowingCapacityLocal` | ❌ |
 | **E1 a missed payment or covenant breach is an EVENT** | — | ❌ |
 | **E2 the loan is reclassified: performing → impaired** | `src/domain/banking.ts:status` | ❌ |
-| E3 workout: restructure, extend or enforce | `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ⚠️ |
+| E3 workout: restructure, extend or enforce | `src/domain/bank-pricing.ts:creditRecoveryRate` | ⚠️ |
 | E4 enforcement: the collateral is realised | `src/domain/banking.ts:FORECLOSURE_COST_SHARE` | ⚠️ |
 | E5 the write-off: the loss hits capital | `src/engine/ledger/bank-book.ts:bookPnL` | ✅ |
 | E5.a VERIFY loss = principal − recovery − provisions taken | `src/engine/simulation/stages/bank-lending.ts:loanLossWeeklyLocal` | ⚠️ |

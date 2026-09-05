@@ -84,7 +84,7 @@ forbidden thing is there). Every citation is checked by `scripts/check-atlas.sh`
 | A4 an opinion, not a fact, and it can be wrong | `src/engine/simulation/credit.ts:COVERAGE_FLOOR` | ⚠️ |
 | **A5 published by a NAMED assessor with its own incentives** | — | ❌ |
 | B1 what it measures: the probability of failing to perform | `src/engine/simulation/stages/shared-helpers.ts:computeAnnualDefaultProbability` | ⚠️ |
-| B2 and, separately, the loss given that failure | `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ⚠️ |
+| B2 and, separately, the loss given that failure | `src/domain/bank-pricing.ts:creditRecoveryRate` | ⚠️ |
 | **B2.a an instrument's rating differs from its issuer's** | — | ❌ |
 | B3 it is relative: an ordering across issuers | `src/engine/simulation/credit.ts:peerMedianRevenueLocal` | ✅ |
 | C1 **mandates** restrict what a fund, insurer or pension may hold | `src/engine/simulation/stages/asset-allocation.ts:subInvestmentGradeSizeFactor` | ⚠️ |

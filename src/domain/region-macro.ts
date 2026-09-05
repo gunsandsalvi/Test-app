@@ -743,6 +743,11 @@ export interface Region {
    *  A measured number (`bond-future.ts:bondFuturesNetBasis`). */
   bondFuturesDeliverableId?: string;
   bondFuturesBasis?: number;
+  /** §3.27-iii-a — what the relative-value book read this week as the CHEAPEST carry any fund
+   *  faced to take the benchmark CDS–cash basis on this name, each way (`relative-value.ts:
+   *  readCdsBasis`: `readBps` long the rung and the cover, `mirrorBps` its reverse). A basis
+   *  wider than that carry is free money nobody took — the bound P2 holds the print to. */
+  cdsBasisCarryBpsByIssuer?: Record<string, { week: number; readBps: number; mirrorBps: number }>;
   /**
    * CAL/DER — the SECURED OVERNIGHT INDEX: the cleared GC repo rate compounded week by week, the
    * way a published overnight benchmark actually is. It is a level, not a rate: the ratio of two

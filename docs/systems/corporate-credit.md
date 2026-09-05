@@ -216,7 +216,7 @@ there). Every citation is checked by `scripts/check-atlas.sh`.
 | G5.a a junior claim can recover nothing | `src/domain/estate.ts:claimsAtSeniority` | ⚠️ |
 | G6 the holder books the loss, on a date | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` | ✅ |
 | **G7 restructuring** | — | ❌ |
-| G8 a default is INFORMATION that moves other issuers | `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ✅ |
+| G8 a default is INFORMATION that moves other issuers | `src/domain/bank-pricing.ts:creditRecoveryRate` | ✅ |
 | H1 the market has a level, from real prices and weights | `src/engine/simulation/stages/index-calculation.ts:runIndexCalculationStage` | ✅ |
 | H2 VERIFY worse assessment trades wider | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
 | H3 VERIFY junior trades wider than senior in one issuer | `src/domain/credit-curve.ts:spreadAtTenor` · `src/domain/relative-value.ts:seniorityRead` | ⚠️ |
@@ -407,6 +407,10 @@ zero — which H4.a forbids by name. `Company.cdsSpreadBps` is now the protectio
 print or nothing, and the basis trade, the index and the audit take only names with a print.* The
 book itself (`derivative-markets/cds.ts:CDS_MARKET`) is real and clears against real hedging
 demand; H4 stays ⚠️ for H4.a's mirror, which needs the corporate bond borrow of §3 step 17f-v.
+
+*2026-09-05 (§9.27-iii-a): the audit holds the print to the trader's own bound. `readCdsBasis`
+records, per name, the cheapest carry any fund faced each way (`Region.cdsBasisCarryBpsByIssuer`),
+and `audit/prices.ts:p2` fires on every benchmark basis wider than it — no band, no quota.*
 
 ### ⚠️ E5.d — THE CLEARED LEVEL CAN BE THE SEARCH BRACKET
 

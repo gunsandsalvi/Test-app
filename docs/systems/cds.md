@@ -119,11 +119,11 @@ checked by `scripts/check-atlas.sh`.
 | **C2 the implied default probability is DERIVED from the spread** | `src/engine/simulation/stages/shared-helpers.ts:computeAnnualDefaultProbability` | ❌ |
 | C3 VERIFY the CDS spread and the cash bond's spread are close | `src/engine/audit/prices.ts:p2` | ✅ |
 | C3.a the basis is a consequence, measured and never set | `src/engine/simulation/stages/derivative-markets/cds.ts:runCdsMarket` | ✅ |
-| C3.b a persistently large basis must be visible | `src/engine/audit/prices.ts:p2` | ⚠️ |
+| C3.b a persistently large basis must be visible | `src/engine/audit/prices.ts:p2` · `src/domain/region-macro.ts:cdsBasisCarryBpsByIssuer` | ✅ |
 | C4 VERIFY worse credit trades wider | `src/engine/audit/prices.ts:p3` | ⚠️ |
 | D1 a stated definition of the credit event, observable by both sides | `src/engine/simulation/stages/derivative-lifecycle.ts:buildDerivativeMarketView` | ⚠️ |
 | D2 a recovery from what the defaulted obligations fetch — an auction | `src/engine/simulation/stages/estate-resolution.ts:runEstateResolutionStage` · `src/domain/estate.ts:realisedUnsecuredRecoveryRate` · `src/engine/simulation/stages/derivative-lifecycle.ts:buildDerivativeMarketView` | ✅ |
-| **D2.a FORBID no fixed recovery rate** | `src/domain/derivatives/classes/cds.ts:eventTermination` · `src/engine/simulation/stages/shared-helpers.ts:creditRecoveryRate` | ✅ |
+| **D2.a FORBID no fixed recovery rate** | `src/domain/derivatives/classes/cds.ts:eventTermination` · `src/domain/bank-pricing.ts:creditRecoveryRate` | ✅ |
 | D3 the payment is real money, big enough to fail the seller | `src/engine/simulation/stages/derivative-lifecycle.ts:payThroughHouse` | ✅ |
 | D4 the contract terminates on the event | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ✅ |
 | D5 VERIFY Σ protection paid = Σ received; a default is a transfer | — | ❌ |
@@ -236,7 +236,7 @@ The paragraph below is the state before it.
 
 
 The FORBID is honoured in the way that matters most: **there is no fixed recovery rate in the
-credit-event payoff.** `shared-helpers.ts:creditRecoveryRate` is the region's own realised
+credit-event payoff.** `bank-pricing.ts:creditRecoveryRate` is the region's own realised
 experience — `estate-resolution.ts:262` records what each workout actually paid, and the function
 blends that rolling mean against a prior with weight `n/(n+8)`. `CREDIT_RECOVERY_RATE = 0.40`
 (`domain/bank-pricing.ts`) survives only as that prior, which is what a lender must assume before
@@ -346,5 +346,5 @@ CDS's `referenceId` is not re-keyed there. **§3 step 34, and 13-BOOK (d) for th
 - **A1 ✅** (2026-09-05, §9.17d-iii) — the profile satisfies the contract: §9.17-ii/iii gave it initial margin off the name's own spread move and a weekly mark, §9.17-iv the clearing house, §9.17-vi the issuer's own recovery, §9.17d-iii the curve (A1.d).
 - **A1.b ✅** (2026-09-05, §9.17-vi) — the payoff is `par − the ISSUER's own realised unsecured recovery`, settled when its estate closes — D2/D2.a above.
 - **A3 ✅** (2026-09-05, §9.17-iii) — `cds.ts:markToMarketUSDToA` values protection every week as the spread move on a RISKY annuity: discounted at the overnight rate and survival-weighted at the hazard the cleared spread implies; the credit event nets what the mark already paid.
-- **C3.b ⚠️** — `P2` reports the basis and fires only above a quota, so a persistently large one on a minority of names is invisible.
+- **C3.b ✅** — *2026-09-05 (§9.27-iii-a):* `P2` holds every name's benchmark basis to the cheapest carry the relative-value book read to take it (`Region.cdsBasisCarryBpsByIssuer`); a survivor is a finding, one per name, no quota. The other tenors have no arbitrageur — §3.27-iv.
 - **C4 ⚠️** — `P3` measures it with the same quota.

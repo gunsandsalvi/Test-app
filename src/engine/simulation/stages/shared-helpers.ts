@@ -161,29 +161,14 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
  * The 0.4 survives as the prior: what a lender must assume before this world has resolved enough
  * defaults to have an opinion of its own.
  */
-// The workout prior lives in domain/bank-pricing.ts (one owner); re-exported for its readers.
-export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
-import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
+// The workout prior and the blend that reads it live in domain/bank-pricing.ts (one owner);
+// re-exported for this file's readers.
+export { CREDIT_RECOVERY_RATE, creditRecoveryRate } from '../../../domain/bank-pricing';
 import { cashOf, entityCashOf } from '../../ledger/accounts';
 import { asInstrumentId, type InstrumentId } from '../../../domain/ids';
 import type { TypeRef, InstrRef } from '../../../engine2/refs';
 import { equityIssuerId } from '../../../domain/instrument-keys';
 
-
-/** How many resolutions it takes before a region's own experience displaces the prior. */
-const RECOVERY_PRIOR_WEIGHT = 8;
-
-/**
- * This region's recovery rate: its own realised experience, weighted against the prior by how
- * much experience it has. One resolution does not overturn the prior; twenty do.
- */
-export function creditRecoveryRate(reg?: { realisedRecoveryRates?: number[] }): number {
-  const realised = reg?.realisedRecoveryRates ?? [];
-  if (realised.length === 0) return CREDIT_RECOVERY_RATE;
-  const mean = realised.reduce((a, b) => a + b, 0) / realised.length;
-  const w = realised.length / (realised.length + RECOVERY_PRIOR_WEIGHT);
-  return Math.max(0, Math.min(1, mean * w + CREDIT_RECOVERY_RATE * (1 - w)));
-}
 
 export function getRatingBucket(rating: string): 'IG' | 'HY' {
   return ['AAA', 'AA', 'A', 'BBB'].includes(rating) ? 'IG' : 'HY';

@@ -88,7 +88,7 @@ checked by `scripts/check-atlas.sh`.
 | A4.a a percentage hides a defect that scales | `src/engine/audit/types.ts:floatDust` | ✅ |
 | B1 money is conserved | `src/engine/audit/money.ts:auditMoney` | ✅ |
 | B2 ownership is conserved | `src/engine/audit/ownership.ts:auditOwnership` | ✅ |
-| B3 prices exist and are cleared | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
+| B3 prices exist and are cleared | `src/engine/audit/prices.ts:auditPrices` | ✅ |
 | B4 cross-market consistency | `src/engine/audit/prices.ts:auditPrices` | ⚠️ |
 | B5 accounts balance | `src/engine/audit/accounts.ts:auditAccounts` | ✅ |
 | B6 names resolve | `src/engine/audit/names.ts:auditNames` | ✅ |
@@ -138,14 +138,18 @@ findings reached the violation count and never the one output anyone reads. The 
 the keys of `FAMILY_WORDS`, typed over `AuditFinding['family']`: a family with no word is a compile
 error, and `--- W · wires ---` prints W1 (money-wires = gross) through W7 (dwellings) like the rest.
 
-### ✅ A1.a / ⚠️ B3 / B4 — CHECKS THAT CANNOT FIRE
+### ✅ A1.a / B3 / ⚠️ B4 — CHECKS THAT CANNOT FIRE
 
 A1.a's witness is gone: `ownership.ts` O2 compared `stockPrice × issued` against `marketCapAt`,
 defined as exactly that — **a read of one thing against itself, which always passes** — and
-§9.27-ii deleted the line; every remaining check reads two things. B3 and B4 stay `⚠️` for
-§3.27-iii: `prices.ts` P1, P2 and X2 fire only above 5%/10%/25% breach quotas, so a minority of
-issuers may invert seniority with a clean board, and their bands are stated widths where the
-mechanism that sets each spread is the honest comparison.
+§9.27-ii deleted the line; every remaining check reads two things. B3 closed with §9.27-iii-a:
+P1 reads every leg as a spread over the one curve at its own tenor and forgives the solver's
+resolution and nothing else, P2 holds the benchmark basis to the relative-value book's own
+carry and the priced recovery to the workouts' history at its standard error, and every breach
+is a finding. B4 stays `⚠️` for §3.27-iii-b/c: X1's corridor, deposit and solvency lines and X2's
+2.5× wedge, 0.8/1.25 carry box and 2-point bond basis are stated widths where the corridor's
+posted spreads, the lane's freight, the desks' cost of carry and the book's own carry are the
+honest bounds.
 
 ### ⚠️ A3 — THE SIZE IS A NUMBER WITHOUT ITS CURRENCY
 

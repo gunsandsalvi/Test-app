@@ -155,6 +155,19 @@ export function issuerCreditPointsOnCurve(
   return points;
 }
 
+/** The issuer's own bond nearest a tenor, with face — the rung a basis is read against (§3.17f-i
+ *  the relative-value book, §3.27-iii-a the audit that holds it to the book's carry). */
+export function nearestBondRowOf(v2: V2World, issuerId: EntityId, week: number, tenorYears: number): number | undefined {
+  const S = v2.tranches;
+  let rung: number | undefined; let gap = Number.POSITIVE_INFINITY;
+  for (const r of ladderRowsOf(v2, issuerId)) {
+    if (!IS_BOND_ROW(S.flags[r]) || !(S.principalLocal[r] > 0)) continue;
+    const g = Math.abs((S.maturityWeek[r] - week) / 52 - tenorYears);
+    if (g < gap) { gap = g; rung = r; }
+  }
+  return rung;
+}
+
 /** What this borrower pays at a maturity, for a caller that already holds the region's rates. */
 export function issuerSpreadAtOnCurve(
   v2: V2World, rates: RegionRates, issuerId: EntityId, week: number, tenorYears: number,

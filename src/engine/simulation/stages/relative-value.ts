@@ -32,7 +32,7 @@ import { BOND_FUTURE_TERM_KEY, nextDeliveryWeek, bondDurationYears, bondFutureWe
 import { bondFutureInstrumentId } from '../../../domain/instrument-keys';
 import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, cdsBasisRead, cdsBasisLegs, indexArbRead, indexArbLegs, swapSpreadRead, swapSpreadLegs, seniorityRead, seniorityLegs, mergeLegs, edgeBps, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
 import { asInstrumentId } from '../../../domain/ids';
-import { trancheClearedPricePerFace, trancheTerms, rowSpreadBps, priceAtSpreadOnTranche, IS_BOND_ROW } from '../../credit-price';
+import { trancheClearedPricePerFace, trancheTerms, rowSpreadBps, priceAtSpreadOnTranche, IS_BOND_ROW, nearestBondRowOf } from '../../credit-price';
 import { TR_SUBORDINATED } from '../../../engine2/tranches';
 import { ladderRowsOf, trancheIdOf } from '../../../engine2/tranches';
 import { bookRowsOf, instrumentIdAt, rowUnits, rowBasisLocal as rowBasisOf } from '../../../engine2/holdings';
@@ -209,12 +209,7 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
       const issuerCdsBps = issuer.cdsSpreadBps;
       if (issuer.region !== regionId || !isActiveCompany(issuer) || issuer.isBankEntity || issuerCdsBps === undefined || !(issuerCdsBps > 0)) return;
       // THE RUNG: the issuer's own bond nearest the benchmark tenor, with a print and a spread.
-      let rung: number | undefined; let gap = Number.POSITIVE_INFINITY;
-      ladderRowsOf(ctx.v2, issuer.id).forEach((r) => {
-        if (!IS_BOND_ROW(ctx.v2.tranches.flags[r]) || !(ctx.v2.tranches.principalLocal[r] > 0)) return;
-        const g = Math.abs((ctx.v2.tranches.maturityWeek[r] - week) / 52 - tenorYears);
-        if (g < gap) { gap = g; rung = r; }
-      });
+      const rung = nearestBondRowOf(ctx.v2, issuer.id, week, tenorYears);
       if (rung === undefined) return;
       const bondId = trancheIdOf(ctx.v2, rung);
       const cashPrice = trancheClearedPricePerFace(ctx.v2, bondId);
@@ -225,6 +220,7 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
       const cdsId = cdsInstrumentId(regionId, issuer.id, CDS_BENCHMARK_TENOR);
       const marginRate = initialMarginRateOf({ classId: 'CDS', regionId, reference: { kind: 'ISSUER', issuerId: issuer.id }, termKey: CDS_BENCHMARK_TENOR, maturityWeek: week + cdsTenorWeeksOf(CDS_BENCHMARK_TENOR) }, view);
       const weeklyMoveBps = Math.max(1, view.cdsSpreadWeeklyMoveBps(issuer.id, CDS_BENCHMARK_TENOR) ?? 1);
+      let cheapestReadBps = Number.POSITIVE_INFINITY, cheapestMirrorBps = Number.POSITIVE_INFINITY;
       regionFunds.forEach((fund) => {
         const line = pbBook.find((l) => l.fundId === fund.id);
         const requiredReturnAnnual = entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund));
@@ -232,6 +228,7 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
         // §3.17f-v: the mirror — a rich rung against cheap cover — sells the rung (borrowed
         // through the lending book) and writes the cover, carrying the borrow fee and the margin.
         const mirror = { deviationBps: -read.deviationBps, carryBps: (reg.borrowFeeBpsByCompanyId?.[bondId] ?? 0) + Math.max(0, marginRate) * Math.max(0, requiredReturnAnnual) * 10000 };
+        cheapestReadBps = Math.min(cheapestReadBps, read.carryBps); cheapestMirrorBps = Math.min(cheapestMirrorBps, mirror.carryBps);
         const share = arbTargetShare(edgeBps(read), edgeBps(mirror), weeklyMoveBps);
         // The position: the rung on its register less what it has borrowed of it, and the
         // protection it holds on the name.
@@ -270,6 +267,8 @@ function readCdsBasis(ctx: WeeklyStepContext, funds: InstitutionalEntity[], view
         }
         if (Math.abs(coverDelta) > 1) ctx.relativeValueLegs.push({ ...legs.protection, entityId: fund.id, faceLocal: -coverDelta, forced });
       });
+      // §3.27-iii-a: what the cheapest arbitrageur faced, each way — the bound P2 holds the basis to.
+      if (Number.isFinite(cheapestReadBps)) (reg.cdsBasisCarryBpsByIssuer ??= {})[issuer.id] = { week, readBps: cheapestReadBps, mirrorBps: cheapestMirrorBps };
     });
   });
 }

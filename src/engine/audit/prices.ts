@@ -13,11 +13,13 @@ import { calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { ensureV2, typeOf } from '../../engine2/world';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../engine2/holdings';
 import { isTrancheKind } from '../../domain/assets';
-import { trancheClearedPricePerFace, issuerSpreadAtOnCurve, IS_LOAN_ROW } from '../credit-price';
+import { trancheClearedPricePerFace, issuerSpreadAtOnCurve, IS_LOAN_ROW, rowSpreadBps, trancheTerms, nearestBondRowOf } from '../credit-price';
 import { materializeGovLadder, ladderRowsOf, TR_SUBORDINATED, TR_CP, TR_FACILITY } from '../../engine2/tranches';
 
 import { STANDARD_CORP_TENOR_YEARS } from '../../domain/primary-market';
-import { CDS_TENORS, CDS_TENOR_YEARS } from '../../domain/derivatives/classes/cds';
+import { CDS_BENCHMARK_TENOR, CDS_TENOR_YEARS } from '../../domain/derivatives/classes/cds';
+import { spreadBpsFromPrice, SPREAD_SOLVE_RESOLUTION_BPS } from '../../domain/pricing/bond';
+import { creditRecoveryRate } from '../../domain/bank-pricing';
 import { clearedPriceOf } from '../../engine2/prices';
 import { asInstrumentId } from '../../domain/ids';
 
@@ -29,84 +31,121 @@ const RATING_RANK: Record<string, number> = { AAA: 0, AA: 1, A: 2, BBB: 3, BB: 4
 const P1_COMPARISON_TENOR_YEARS = STANDARD_CORP_TENOR_YEARS;
 
 /**
- * P1 — seniority orders the spreads of one issuer: paper ≤ senior-secured loan ≤ senior bond ≤
- * subordinated.
+ * P1 — seniority orders the spreads of one issuer, at one date: a secured claim (the loan, the
+ * facility) pays no more than the senior unsecured bond at the same tenor, and the subordinated
+ * claim pays no less. Commercial paper is pari passu with the bond, so its claim is rule 4's: one
+ * value where both printed at the same tenor.
  *
- * §3.13: the two BOND legs are now read at the SAME MATURITY off that issuer's own cleared prices
- * — a five-year senior against a five-year subordinated, which is the only comparison a seniority
- * claim is about. It used to read one issuer-level number for the senior leg and a stored field
- * for the junior one, so the test could not tell a rank difference from a maturity difference.
+ * §3.13: the two BOND legs are read at the SAME MATURITY off that issuer's own cleared prices — a
+ * five-year senior against a five-year subordinated, which is the only comparison a seniority
+ * claim is about. §3.27-iii-a: every leg is a spread over the same CURVE — the facility's is what
+ * a par price implies on its own terms (a par floater's discount margin), the paper's its own
+ * row's cleared spread — where the facility's used to be a margin over POLICY and the paper's a
+ * coupon over policy, so a steep curve read as a seniority breach. Two spreads off one curve
+ * differ by the solver's own resolution and the subtraction's dust, and by nothing else that is
+ * not a breach; and every breach is a finding — the 5% quota that let a minority invert seniority
+ * behind a clean board is gone, and the count is the size.
  */
 function p1(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
   const v2 = ensureV2(state);
   let inv = 0, n = 0; const examples: string[] = [];
+  const dust = (a: number, b: number) => floatDust(Math.abs(a) + Math.abs(b), 2) + 2 * SPREAD_SOLVE_RESOLUTION_BPS;
   state.companies.forEach((c) => {
     if (!isActiveCompany(c) || c.isBankEntity) return;
     const reg = state.regions[c.region];
-    if (!reg) return;
-    const policy = reg.policyRate ?? 0;
-    const at = (rank: number) => issuerSpreadAtOnCurve(v2, reg, c.id, week, P1_COMPARISON_TENOR_YEARS,
-      (flags) => ((flags & TR_SUBORDINATED) !== 0) === (rank === 1))?.spreadBps;
-    const bond = at(0);
+    if (!reg?.zeroRates) return;
+    const curve = reg.zeroRates;
+    const bondAt = (tenorYears: number, rank = 0) => issuerSpreadAtOnCurve(v2, reg, c.id, week, tenorYears,
+      (flags) => ((flags & TR_SUBORDINATED) !== 0) === (rank === 1));
+    const bond = bondAt(P1_COMPARISON_TENOR_YEARS)?.spreadBps;
     if (bond === undefined || !(bond > 0)) return;
     // §3.13 row 3: the loan leg is that borrower's own five-year LOAN point, off its own loans'
     // cleared prices — the same maturity as the bond leg above, which is what makes the two
     // comparable at all.
     const loan = issuerSpreadAtOnCurve(v2, reg, c.id, week, P1_COMPARISON_TENOR_YEARS, IS_LOAN_ROW)?.spreadBps;
-    // §3.13-BOOK d1b: the ladder's rows, not the array.
-    const rows = ladderRowsOf(v2, c.id);
-    const TS = v2.tranches;
-    const cp = rows.find((r) => (TS.flags[r] & TR_CP) !== 0);
-    const cpSpread = cp !== undefined ? ((Number.isNaN(TS.couponRate[cp]) ? 0 : TS.couponRate[cp]) - policy) * 1e4 : undefined;
-    const facility = rows.find((r) => (TS.flags[r] & TR_FACILITY) !== 0);
-    const facSpread = facility !== undefined && !Number.isNaN(TS.floatingMarginBps[facility]) ? TS.floatingMarginBps[facility] : undefined;
-    const subSpread = at(1);
+    const subSpread = bondAt(P1_COMPARISON_TENOR_YEARS, 1)?.spreadBps;
     n++;
     const bad: string[] = [];
-    if (loan !== undefined && loan > bond * 1.05 + 25) bad.push(`loan ${loan}bp > bond ${bond}bp`);
-    if (cpSpread !== undefined && cpSpread > bond + 25) bad.push(`paper ${cpSpread.toFixed(0)}bp > bond ${bond}bp`);
-    if (facSpread !== undefined && facSpread > bond * 1.05 + 25) bad.push(`facility ${facSpread}bp > bond ${bond}bp`);
+    if (loan !== undefined && loan - bond > dust(loan, bond)) bad.push(`loan ${loan.toFixed(1)}bp > bond ${bond.toFixed(1)}bp`);
+    // §3.13-BOOK d1b: the ladder's rows, not the array. The facility and the paper are each read
+    // at THEIR OWN tenor against the bond curve there.
+    const TS = v2.tranches;
+    ladderRowsOf(v2, c.id).forEach((r) => {
+      const tenorYears = (TS.maturityWeek[r] - week) / 52;
+      if (!(TS.principalLocal[r] > 0) || !(tenorYears > 0)) return;
+      const isFacility = (TS.flags[r] & TR_FACILITY) !== 0, isCp = (TS.flags[r] & TR_CP) !== 0;
+      if (!isFacility && !isCp) return;
+      // A facility is drawn at par: its spread over the curve is what par implies on its own terms.
+      const spread = isFacility ? spreadBpsFromPrice(trancheTerms(v2, r, week, reg.policyRate), curve, 1) : rowSpreadBps(v2, reg, r, week);
+      const bondHere = bondAt(tenorYears);
+      if (spread === undefined || bondHere === undefined) return;
+      if (isFacility && spread - bondHere.spreadBps > dust(spread, bondHere.spreadBps)) bad.push(`facility ${spread.toFixed(1)}bp > bond ${bondHere.spreadBps.toFixed(1)}bp at ${tenorYears.toFixed(1)}y`);
+      // Paper is the same claim as the bond: where a bond PRINTED at its tenor (§3.25's `traded`) the two are one value.
+      if (isCp && bondHere.traded && Math.abs(spread - bondHere.spreadBps) > dust(spread, bondHere.spreadBps)) bad.push(`paper ${spread.toFixed(1)}bp ≠ bond ${bondHere.spreadBps.toFixed(1)}bp at ${tenorYears.toFixed(1)}y`);
+    });
     // The real test, and the one §3.33 says must fail while the estate ignores subordination:
     // the market should charge MORE for the junior claim on the same borrower at the same date.
-    if (subSpread !== undefined && subSpread < bond - 1e-6) bad.push(`sub ${subSpread.toFixed(0)}bp < senior ${bond.toFixed(0)}bp`);
+    if (subSpread !== undefined && bond - subSpread > dust(subSpread, bond)) bad.push(`sub ${subSpread.toFixed(0)}bp < senior ${bond.toFixed(0)}bp`);
     if (bad.length) { inv++; if (examples.length < 3) examples.push(`${c.ticker}: ${bad.join(', ')}`); }
   });
-  if (inv > n * 0.05) out.push({ family: 'P', check: 'P1 seniority orders the spreads', week, usd: inv, message: `${inv} of ${n} issuers price a senior claim wider than a junior one (${examples.join(' | ')})` });
+  if (inv > 0) out.push({ family: 'P', check: 'P1 seniority orders the spreads', week, usd: inv, message: `${inv} of ${n} issuers price a senior claim wider than a junior one, or paper away from the bond it ranks with (${examples.join(' | ')})` });
   return out;
 }
 
-/** P2 — the CDS clears near the bond: basis bounded, and the recovery pricing assumes is the recovery estates deliver. */
+/**
+ * P2 — THE CDS CLEARS INSIDE THE ARBITRAGE'S CARRY OF THE BOND, and the recovery the pricer
+ * assumes is the recovery the workouts delivered.
+ *
+ * §3.27-iii-a. The mechanism that ties protection to the name's own cash paper is the
+ * relative-value book (§3.17f-i): long the rung on the line and long the cover when the bond
+ * pays more than the cover costs, the mirror when it pays less, each carrying the financing
+ * above repo (or the borrow fee) and the return its margin needs. It trades the BENCHMARK tenor,
+ * and what it read this week as the cheapest carry any fund faced, each way, is on the region
+ * (`cdsBasisCarryBpsByIssuer`). A basis wider than that carry is free money nobody took — the
+ * finding, one per name; the 150bp-or-75% band and the 10% quota that stood here were stated
+ * widths. The other tenors have no arbitrageur (§3.27-iv), so nothing bounds them and this check
+ * does not pretend to.
+ *
+ * The recovery: the pricer's `creditRecoveryRate` is the region's own realised history shrunk to
+ * the prior; what the workouts delivered is that history unshrunk. The sample's own standard
+ * error is the only honest band, so what fires is the PRIOR's pull once the history is long
+ * enough to have an opinion the prior still overrides — never a hard-coded 40% in a ±20pp box.
+ */
 function p2(state: GameState, week: number): AuditFinding[] {
   const out: AuditFinding[] = [];
-  let wide = 0, n = 0;
-  // Only names whose protection book CLEARED this week: a stale print is a quote, not a price.
   const v2 = ensureV2(state);
+  const tenorYears = CDS_TENOR_YEARS[CDS_BENCHMARK_TENOR];
+  let survived = 0, n = 0; const examples: string[] = [];
   state.companies.forEach((c) => {
     const reg = state.regions[c.region];
-    if (!isActiveCompany(c) || !reg || c.cdsSpreadBps === undefined || !(c.cdsSpreadBps > 0) || c.cdsClearedWeek !== state.currentWeek) return;
-    // §3.13: the cash leg of a basis is that issuer's own bond at the SAME point on its curve,
-    // read off the price it cleared at — §3.17d-iii: at every tenor the protection book printed.
-    // A name with no printed bond has no basis to test.
-    const curve = reg.cdsSpreadHistoryByIssuer?.[c.id];
-    CDS_TENORS.forEach((tenor) => {
-      const hist = curve?.[tenor];
-      const cds = hist?.[hist.length - 1];
-      if (!(cds !== undefined && cds > 0)) return;
-      const cash = issuerSpreadAtOnCurve(v2, reg, c.id, week, CDS_TENOR_YEARS[tenor])?.spreadBps;
-      if (cash === undefined || !(cash > 0)) return;
-      n++;
-      if (Math.abs(cds - cash) > Math.max(150, cash * 0.75)) wide++;
-    });
+    // Only names whose protection book CLEARED this week: a stale print is a quote, not a price.
+    if (!isActiveCompany(c) || !reg?.zeroRates || c.cdsSpreadBps === undefined || !(c.cdsSpreadBps > 0) || c.cdsClearedWeek !== state.currentWeek) return;
+    const carry = reg.cdsBasisCarryBpsByIssuer?.[c.id];
+    if (!carry || carry.week !== state.currentWeek) return;
+    // The rung the book read the basis against: the issuer's own bond nearest the benchmark.
+    const rung = nearestBondRowOf(v2, c.id, week, tenorYears);
+    const cash = rung === undefined ? undefined : rowSpreadBps(v2, reg, rung, week);
+    if (cash === undefined || !(cash > 0)) return;
+    n++;
+    const deviationBps = cash - c.cdsSpreadBps;
+    const dust = floatDust(Math.abs(cash) + Math.abs(c.cdsSpreadBps), 2) + SPREAD_SOLVE_RESOLUTION_BPS;
+    if (deviationBps > carry.readBps + dust || -deviationBps > carry.mirrorBps + dust) {
+      survived++;
+      if (examples.length < 3) examples.push(`${c.ticker} bond ${cash.toFixed(0)}bp vs CDS ${c.cdsSpreadBps.toFixed(0)}bp against ${(deviationBps > 0 ? carry.readBps : carry.mirrorBps).toFixed(0)}bp of carry`);
+    }
   });
-  if (wide > n * 0.1) out.push({ family: 'P', check: 'P2 CDS basis bounded', week, usd: wide, message: `${wide} of ${n} name-tenors carry a CDS more than 150bp or 75% away from the bond at the same point` });
-  const closed = (state.estates ?? []).filter((e) => e.closedWeek !== undefined);
-  if (closed.length >= 5) {
-    const owed = sum(closed, (e) => sum(e.claims.filter((c) => c.seniority < 99 && c.instrumentType !== 'EQUITY'), (c) => c.principalLocal));
-    const got = sum(closed, (e) => sum(e.claims.filter((c) => c.seniority < 99 && c.instrumentType !== 'EQUITY'), (c) => c.recoveredLocal));
-    const rec = owed > 0 ? got / owed : NaN;
-    if (Number.isFinite(rec) && Math.abs(rec - 0.4) > 0.2) out.push({ family: 'P', check: 'P2 recovery priced = recovery delivered', week, usd: rec, message: `${closed.length} closed estates paid ${pct(rec)} of debt claims; every spread is priced at 40%` });
-  }
+  if (survived) out.push({ family: 'P', check: 'P2 the CDS basis is inside the arbitrage\'s carry', week, usd: survived, message: `${survived} of ${n} names' ${tenorYears}y basis is wider than the cheapest carry any fund faced to take it (${examples.join(' | ')})` });
+  REGION_IDS.forEach((r) => {
+    const reg = state.regions[r];
+    const realised = reg?.realisedRecoveryRates ?? [];
+    if (!reg || realised.length < 2) return;
+    const k = realised.length;
+    const mean = sum(realised, (x) => x) / k;
+    const se = Math.sqrt(sum(realised, (x) => (x - mean) ** 2) / (k - 1) / k);
+    const priced = creditRecoveryRate(reg);
+    if (Math.abs(priced - mean) > se + floatDust(Math.abs(priced) + Math.abs(mean), k + 2)) out.push({ family: 'P', check: 'P2 recovery priced = recovery delivered', week, usd: priced - mean, message: `${r}: ${k} workouts delivered ${pct(mean)} ± ${pct(se)}; every spread is priced at ${pct(priced)} — the prior's pull` });
+  });
   return out;
 }
 

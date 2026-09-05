@@ -106,15 +106,21 @@ export function priceFromSpreadBps(terms: PaperTerms, curve: ZeroCurve, spreadBp
  * the caller decides whether that is a print or an untraded book (rule 3).
  */
 export function spreadBpsFromPrice(terms: PaperTerms, curve: ZeroCurve, price: number): number {
-  let lo = -2000, hi = 100000;
+  let lo = SPREAD_SOLVE_LO_BPS, hi = SPREAD_SOLVE_HI_BPS;
   if (price >= priceFromSpreadBps(terms, curve, lo)) return lo;
   if (price <= priceFromSpreadBps(terms, curve, hi)) return hi;
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < SPREAD_SOLVE_STEPS; i++) {
     const mid = (lo + hi) / 2;
     if (priceFromSpreadBps(terms, curve, mid) > price) lo = mid; else hi = mid;
   }
   return (lo + hi) / 2;
 }
+/** The solver's bracket — the range the clearing engine itself quotes — and how often it halves it. */
+const SPREAD_SOLVE_LO_BPS = -2000, SPREAD_SOLVE_HI_BPS = 100000, SPREAD_SOLVE_STEPS = 60;
+/** What two spreads solved from prices can differ by through the solver alone (rule 7): the
+ *  bracket halved that many times. A comparison of two such spreads forgives this and the
+ *  subtraction's own dust, and nothing more (§3.27-iii-a). */
+export const SPREAD_SOLVE_RESOLUTION_BPS = (SPREAD_SOLVE_HI_BPS - SPREAD_SOLVE_LO_BPS) / 2 ** SPREAD_SOLVE_STEPS;
 
 /**
  * §3.13-SOV row 4 — PRICE FROM YIELD, AND YIELD FROM PRICE, FOR PAPER WITH NO CREDIT SPREAD.

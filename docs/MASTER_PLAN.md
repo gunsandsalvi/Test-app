@@ -553,17 +553,33 @@ written from here):
 
 ### PART V — THE INSTRUMENT TELLS THE TRUTH
 
-27-iii. **The prices family measures what it claims.** `prices.ts` P1 and P2 fire only above
-    5%/10% breach quotas and X2 above 25%, so a minority may invert seniority with a clean board —
-    every breach is a finding and the count is its size; P1's `loan > bond × 1.05 + 25bp` bands are
-    the same shape; P2 hard-codes a 40% recovery and a ±20pp band where the CDS pricer's own assumed
-    recovery is the priced side and the sample's own standard error the only honest band; X2 tests
-    the same good across regions against a fixed 2.5× and futures against a 0.8/1.25 box with no
-    rate, storage cost or tenor, where the wedge is freight plus conversion and the carry is the
-    repo rate over the tenor plus the good's own storage (`annualCarryingCostRateOf`); P1 compares
-    a CP spread over the POLICY rate against a bond spread over the CURVE; X1's repo corridor and
-    deposit-rate bands are stated widths. Each becomes a read of the mechanism that sets it.
-    the-audit B3/B4 re-marked.
+27-iii-b. **X1 reads the corridor, the alternative and the floor it claims.** *(rule 10 split of
+    "the prices family measures what it claims".)* `prices.ts` X1 holds repo to `policy ± 150bp`
+    where the corridor is the posted SRF ceiling and ON RRP floor (`macro/banking.ts:
+    SRF_SPREAD_BPS`/`ON_RRP_SPREAD_BPS`, which `repo-clearing.ts` and `interbank.ts` each rebuild):
+    one owner `repoCorridorOf(policyRate)`, read by both stages and the check, and the band is dust.
+    "Deposits pay below policy" forgives 50bp where the mechanism (`macro/banking.ts:depositRate`)
+    pays up to the depositor's ALTERNATIVE — `min(policy + the bank's wholesale spread, the money
+    fund's yield)` — on the contested share: below policy is not what the mechanism promises, so
+    the line either reads the identity the mechanism does keep or leaves the audit for §6. "A
+    solvent bank earns a margin" states solvency as `> 0.08` where
+    `bank-pricing.ts:BANK_MIN_CAPITAL_RATIO` is the floor it means. the-audit B4 re-marked.
+27-iii-c. **X2 reads the wedge and the carry.** `prices.ts` X2 tests the same good across regions
+    against a fixed 2.5× and fires only past a 25% quota, where the wedge is the freight on the
+    cheapest-to-dearest lane (`state.freightRatePerTonneLaneMoneyByLane × unitMassTonnes`, converted
+    as `05-unit-bidding.ts` converts it) and every breach is an arbitrage nobody took; the 3m future
+    against a 0.8/1.25 box with no rate, storage cost or tenor, where the desks' own ceiling is
+    `costOfCarryPrice` at the USA 3m rate and the category's storage (`commodity-future.ts`) and
+    nothing bounds the floor (no one shorts the physical: the convenience yield is inferred); the
+    bond future against 2 points of the cash price, where the relative-value book's cheapest carry
+    is the bound — recorded as 27-iii-a records the CDS's (`readBondBasis`). Every breach a finding,
+    the count its size. the-audit B4 ⚠️→✅; commodity-futures E1 re-marked.
+27-iv. **The basis is arbitraged at every tenor the protection book prints.** The relative-value
+    book reads the CDS–cash basis at the BENCHMARK tenor only (`readCdsBasis`,
+    `CDS_BENCHMARK_TENOR`); the 1y/3y/10y books open at the issuer's cash spread at that tenor and
+    then move on their own supply and demand with nothing tying them to the bond there, so P2
+    measures only the benchmark (27-iii-a) and rule 4 has no keeper at the others. `readCdsBasis`
+    reads every tenor with a print against the rung nearest it and records each carry; P2 follows.
 28. **The harness's own defects.** *(The first — the NaN per-bank identity — is DONE, with the
     over-pledge and SME-cash reads that were dead the same way; §9's lint entry.)*
     `:2600` reads book-weighted regional averages for the capital and NIM bands, so a minority of
@@ -1345,6 +1361,24 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**27-iii-a — P1 AND P2 READ THE MECHANISMS THAT SET THEM.** P1 compared a paper coupon over POLICY
+  and a facility margin over policy against a bond spread over the CURVE, so a steep curve read as a
+  seniority breach; it forgave `bond × 1.05 + 25bp` and fired only past a 5% quota. Every leg is now
+  a spread over the one curve — the facility's what par implies on its own terms
+  (`spreadBpsFromPrice(trancheTerms(…), curve, 1)`), the paper's its own row's cleared spread
+  (`rowSpreadBps`) — each read at ITS tenor against the bond curve there; paper, pari passu with
+  the bond, is one value where a bond printed at its tenor (§3.25's `traded`); the only forgiveness
+  is the solver's own resolution (`bond.ts:SPREAD_SOLVE_RESOLUTION_BPS`, the bracket halved sixty
+  times) plus the subtraction's dust; every breach is a finding and the count its size. P2's basis
+  band (`max(150bp, 75%)`, 10% quota) is the relative-value book's own carry: `readCdsBasis` records
+  per name the cheapest carry any fund faced each way (`Region.cdsBasisCarryBpsByIssuer`; the rung
+  through one owner, `credit-price.ts:nearestBondRowOf`), and a benchmark basis wider than it is
+  free money nobody took — a finding per name. The other tenors have no arbitrageur: 27-iv,
+  inserted. P2's recovery no longer tests 40% ± 20pp over five estates: `creditRecoveryRate` (moved
+  beside its prior, `domain/bank-pricing.ts`) against the region's realised history unshrunk, the
+  sample's own standard error the band — what fires is the prior's pull. the-audit B3 ⚠️→✅; cds
+  C3.b ⚠️→✅; four trees re-cite `bank-pricing.ts:creditRecoveryRate`. Gates green; no run (rule 11).
 
 **27-ii — THE SCOREBOARD SHOWS THE WIRES, THE TAUTOLOGY DIES, AND THE BAND'S DECLARATION WITH
   IT.** `audit/index.ts:auditSummary` iterated a hand-written `['M','O','P','X','F','N']`, so the
