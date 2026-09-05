@@ -100,8 +100,19 @@ function runBondFuturesMarket({ ctx, week, view, standing }: DerivativeMarketRun
       seat(`BFDESK-${bank.ticker}`, party, twoWayPriceQuote({ carryPrice, rangePrice, sizeLocal: Math.min(capacityLocal, memberNotionalCapacityLocal(ctx, capacity, party, money, marginRate)) }));
     });
 
+    // §3.17e-ii-a: the relative-value books' FUTURE legs — short the line against the deliverable
+    // they are long — at the price that keeps the pair's edge. A book on the line by its legs is
+    // not also a duration mandate here.
+    const rvLegs = ctx.relativeValueLegs.filter((l) => l.market === 'BOND_FUTURE' && l.regionId === regionId && l.instrumentId === instrumentId);
+    const onByLegs = new Set(rvLegs.map((l) => l.entityId));
+    rvLegs.forEach((leg) => {
+      const party: DerivativeParty = { kind: 'INSTITUTION', id: leg.entityId };
+      const houseLocal = memberNotionalCapacityLocal(ctx, capacity, party, money, marginRate);
+      seat(leg.entityId, party, bondFutureHolderQuote({ carryPrice: leg.reservationPrice, rangePrice: leg.fullSizePriceRange, gapLocal: Math.max(-houseLocal, Math.min(houseLocal, leg.faceLocal)) }));
+    });
+
     // The duration mandates, and the holders over their sovereign target.
-    ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId && !e.isDefaulted && institutionProfile(e.entityType).sovereignDurationMandate).forEach((entity) => {
+    ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId && !e.isDefaulted && !onByLegs.has(e.id) && institutionProfile(e.entityType).sovereignDurationMandate).forEach((entity) => {
       const party: DerivativeParty = { kind: 'INSTITUTION', id: entity.id };
       const totalAssetsLocal = institutionTotalAssetsLocal(ctx, entity);
       // The swap book's own gap read: assets beyond the paper that carries duration, net of the

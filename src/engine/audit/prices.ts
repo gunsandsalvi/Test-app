@@ -187,6 +187,18 @@ function x2(state: GameState, week: number): AuditFinding[] {
   let badCarry = 0;
   state.commodities.forEach((c) => { if (!(c.spotPrice > 0)) return; const ratio = c.futures3M / c.spotPrice; if (ratio < 0.8 || ratio > 1.25) badCarry++; });
   if (badCarry) out.push({ family: 'X', check: 'X2 futures within carry of spot', week, usd: badCarry, message: `${badCarry} commodities' 3m future sits more than 20–25% from spot` });
+  // §3.17e-ii-a: the bond future against the cash bond carried — the first comparable the
+  // relative-value book trades, so a basis that survives it is a finding.
+  const v2 = ensureV2(state);
+  let badBasis = 0; const basisExamples: string[] = [];
+  REGION_IDS.forEach((r) => {
+    const reg = state.regions[r];
+    if (!reg || reg.bondFuturesBasis === undefined || reg.bondFuturesDeliverableId === undefined) return;
+    const cash = trancheClearedPricePerFace(v2, asInstrumentId(reg.bondFuturesDeliverableId));
+    if (!(cash !== undefined && cash > 0)) return;
+    if (Math.abs(reg.bondFuturesBasis) / cash > 0.02) { badBasis++; basisExamples.push(`${r} ${(reg.bondFuturesBasis * 100).toFixed(2)}pt`); }
+  });
+  if (badBasis) out.push({ family: 'X', check: 'X2 bond future within carry of cash', week, usd: badBasis, message: `${badBasis} regions' bond future sits more than 2 points from the cash bond carried (${basisExamples.join(' | ')})` });
   return out;
 }
 

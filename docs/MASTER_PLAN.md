@@ -547,19 +547,28 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17e-ii. **The basis trade** (user; 17e-i built the future and prints the basis — §9). The
-    basis trader is long the cash bond, financed in repo, and short the future when the net basis
-    (`Region.bondFuturesBasis`) pays for the financing and the margin: **the largest single source
-    of real repo demand in a real market. Step 7 made the repo and reverse-repo flows load-bearing
-    for the whole banking system's liquidity, and step 30b is about to make the overnight sleeve a
-    decision — this is the demand side those two are missing.** It is 17f's FIRST comparable (a
-    future against spot plus carry — `X2`), and it is built there as that book's first trade, not
-    as a strategy flag: a hedge fund buys the deliverable in 07c, finances it in prime brokerage
-    (`domain/prime-brokerage.ts:maxDrawnLocal`, the fund's repo), shorts the line, posts real
-    margin, and is cut when it draws down (atlas sovereign-credit I3/I3.a).
+17e-ii-b. **The basis trader is CUT** (atlas sovereign-credit I3.a FORBID: *no basis trader that
+    cannot lose*). 17e-ii-a opens the trade and sizes it to the fund's capital (§9); nothing yet
+    REDUCES it. When the edge closes or reverses the target face falls below what the fund holds
+    and the legs must come off — the deliverable OFFERED in 07c (a negative cash leg:
+    `minHoldingLocal` 0, sold above its reservation) and the line bought back (a positive future
+    leg) — and a drawdown past what its capital tolerates (the margin identity on its line: the
+    broker's haircut widening, the mark going against it, `riskAversionOf(management)` the
+    threshold) cuts it whole. That is the limit to arbitrage, and it is why a basis can persist:
+    a fund forced out at the wides is the mechanism rules 3 and 6 want, and a fund that always
+    closes the gap is a clamp wearing a fund's clothes.
+17e-iii. **The negative basis needs a bond borrow.** The book trades one direction — future rich:
+    long cash on the line, short the future. A cheap future is the mirror: long the future and
+    SHORT the cash bond, which needs the sovereign BORROWED through the securities-lending book
+    (`contract-ledger.ts:securityLoanBookOf`, equities only today). Small once SBL takes a
+    GOV_BOND row; `bondBasisLegs` already states the pair as signed faces.
 17f. **The relative-value book, and it need not be written strategy by strategy** (user: "is there
-    a programmatic way to do that across asset classes?"). **There is, and the model already holds
-    the list.** Today a hedge fund's strategy is a row of hand-written boolean flags in
+    a programmatic way to do that across asset classes?"). *(17e-ii-a built the mechanism — the
+    registry `domain/relative-value.ts`, the `RELATIVE_VALUE` strategy, the legs the markets read
+    — and its first entry, the bond basis (§9). What is left here is each OTHER comparable joining
+    the registry as a declaration: a read and two legs, and the market of each leg reading
+    `ctx.relativeValueLegs` the way 07c and the futures line do.)* **There is, and the model
+    already holds the list.** Today a hedge fund's strategy is a row of hand-written boolean flags in
     `HEDGE_FUND_STRATEGY_PROFILES` (`institution-profiles.ts:117`) — `shortsEquity`,
     `tradesCommodityFutures`, `runsFxDirectional` — one flag per market somebody remembered to
     add. An arbitrage is not a flag. It is **two prices for the same risk**, and every such pair
@@ -1593,7 +1602,28 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17e-i — THE GOVERNMENT BOND FUTURE.** A new class, `BOND_FUTURE` (`classes/bond-future.ts`):
+**17e-ii-a — THE RELATIVE-VALUE BOOK, AND ITS FIRST TRADE: THE BOND BASIS.** The registry
+  of comparables is `domain/relative-value.ts`: a comparable is a READ (`ComparableRead`:
+  deviation and carry, annualised bps of the pair's face; `edgeBps` their difference) and two
+  LEGS (`RelativeValueLeg`: market, instrument, signed face, the price the leg is worth doing at,
+  the range it scales in over, a cash leg's money). The book sizes by `arbSizeShare(edge,
+  weeklyMove)` — full size once the edge exceeds the relationship's own weekly move — against
+  `arbCapacityLocal` (spendable cash + what the broker will lend, the haircut already in it).
+  First entry: `bondBasisRead` (net basis ÷ cash price ÷ T, less the line's financing above repo
+  and the required return on the future's margin) and `bondBasisLegs` (cash leg up to the price
+  at which the future still pays the carry; future leg down to carry plus that cost). The
+  strategy `RELATIVE_VALUE` is the fifth (`HedgeFundStrategy`, its profile, a fifth seeded fund
+  per region on the same size curve); `stages/relative-value.ts` runs after prime-brokerage and
+  before 07b, reads the region's `bondFuturesBasis` and deliverable, the fund's line rate and
+  `primeBrokerageAvailableLocal`, its deliverable face on the register and its short cover in
+  the standing book, and states each leg as the delta to target on `ctx.relativeValueLegs`;
+  07c takes a SOVEREIGN_CASH leg as the fund's own demand for that bond (reservation, size, budget,
+  `minHoldingLocal` its current), the futures line takes a BOND_FUTURE leg as a seat
+  (`bondFutureHolderQuote` at the leg's price) and drops such a fund from the mandate loop.
+  X2 gains the bond basis (a print more than 2 points from carry). Only ADDS this commit: the
+  cut is 17e-ii-b, the mirror 17e-iii, both inserted. Atlas: sovereign-credit I3 ⚠️. Gates
+  green; no run.
+- **17e-i — THE GOVERNMENT BOND FUTURE.** A new class, `BOND_FUTURE` (`classes/bond-future.ts`):
   the DELIVERABLE is a named rung of the region's sovereign ladder (reference `{ kind:
   'SOVEREIGN', regionId, bondId }`, `REF_KINDS` 'SOVEREIGN'), the one nearest ten years from the
   next quarterly delivery (`deliverableOf`, `nextDeliveryWeek` on 13-week clock); price per unit

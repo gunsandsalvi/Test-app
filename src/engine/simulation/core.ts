@@ -9,6 +9,7 @@ import { rollDamperStreaks, setDamperStreaks } from './stages/financial-clearing
 import { GameState } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
+import { runRelativeValueStage } from './stages/relative-value';
 import { runOverdraftSweep } from './stages/overdraft-sweep';
 import { drawReverseRepoAtTheClose } from './stages/repo-clearing';
 import { runDerivativesStage } from './stages/derivatives';
@@ -239,6 +240,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // HF1: the funds' lines are re-struck before any book opens, so a line cut this week is a
   // fund that has to sell in this week's auctions.
   run('prime-brokerage', () => runPrimeBrokerageStage(state, ctx));
+  // §3.17e-ii-a: the relative-value books state their legs off last week's prints, on the lines
+  // just struck, before the books that clear them open.
+  run('relative-value', () => runRelativeValueStage(state, ctx));
   run('03-category-demand', () => runCategoryDemandStage(state, ctx));
   run('04-input-output', () => runInputOutputStage(state, ctx));
   // XB3a: the week's first two passes. A buyer forms its sourcing plan against observed prices

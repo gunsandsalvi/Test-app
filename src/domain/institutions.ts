@@ -52,7 +52,9 @@ export type HedgeFundStrategy =
   /** The same in bonds and loans: the natural buyer of what the dealer desks cannot carry. */
   | 'LONG_SHORT_CREDIT'
   /** The marginal buyer at the wides, pricing off expected recovery rather than expected loss. */
-  | 'DISTRESSED';
+  | 'DISTRESSED'
+  /** §3.17e-ii-a — two prices for one risk: reads the registry of comparables and trades both legs. */
+  | 'RELATIVE_VALUE';
 
 export interface AssetAllocationTarget {
   equityPct: number;

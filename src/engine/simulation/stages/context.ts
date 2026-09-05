@@ -147,6 +147,9 @@ export interface WeeklyStepContext {
    * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
    * market). */
   damperBoundInstrumentIds: string[];
+  /** §3.17e-ii-a — the relative-value books' legs for the week, stated before any book opens;
+   *  the market that clears each leg reads it here (`stages/relative-value.ts`). */
+  relativeValueLegs: (import('../../../domain/relative-value').RelativeValueLeg & { entityId: import('../../../domain/ids').EntityId })[];
   /** GUARD — books whose demand side could not grow at any price this week: no participant's
    * holding ceiling exceeded what it already held. A market that cannot trade is a defect, not
    * a quiet pass (§7.102's shape). Asserted empty by the harness. */
@@ -417,6 +420,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     earningsReportedThisTurn: [],
     defaultedTickers: [],
     damperBoundInstrumentIds: [],
+    relativeValueLegs: [],
     lentSharesByLender: new Map(),
     buyInSharesByBorrower: new Map(),
     deadCeilingBooks: [],

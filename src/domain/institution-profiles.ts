@@ -126,6 +126,9 @@ export const HEDGE_FUND_STRATEGY_PROFILES: Record<HedgeFundStrategy, HedgeFundSt
   // The distressed book is the one that must be able to bid when everyone else is at their
   // limit, which is what its unusually large sleeve and its conviction size are for.
   DISTRESSED:        { targets: { govBondPct: 0,    corpBondPct: 0.40, loanPct: 0.35, equityPct: 0,    cashPct: 0.25 }, convictionMultiple: 4.0, pricesOffRecovery: true, shortsEquity: false, tradesCommodityFutures: false, runsFxDirectional: false, hedgesForeignEquity: true, sellsVolatility: false },
+  // §3.17e-ii-a: the relative-value book holds cash as its dry powder and its pairs on the
+  // broker's line; its sovereign sleeve is the collateral its first comparable is long.
+  RELATIVE_VALUE:    { targets: { govBondPct: 0.20, corpBondPct: 0.20, loanPct: 0,    equityPct: 0,    cashPct: 0.60 }, pricesOffRecovery: false, shortsEquity: false, tradesCommodityFutures: false, runsFxDirectional: false, hedgesForeignEquity: true, sellsVolatility: false },
 };
 
 /** The strategy profile of a hedge fund; undefined for every other kind (or an unlabelled one). */

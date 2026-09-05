@@ -430,6 +430,23 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       return { id: entity.id, currentHoldingsByInstrumentId: currentByBond, demandByInstrumentId };
     });
 
+    // §3.17e-ii-a: a relative-value book's CASH leg — the deliverable it is long against its
+    // short in the futures line — is its own demand for that one bond: up to the price at which
+    // the future still pays the carry, in the size the pair calls for, on the money its cash and
+    // its broker's line carry. Its other bids in this book stand as its sovereign sleeve.
+    ctx.relativeValueLegs.filter((l) => l.market === 'SOVEREIGN_CASH' && l.regionId === regionId && l.faceLocal > 0).forEach((leg) => {
+      const p = entityParticipants.find((x) => x.id === leg.entityId);
+      if (!p || !ownInstrumentIds.has(leg.instrumentId)) return;
+      const current = p.currentHoldingsByInstrumentId.get(leg.instrumentId) ?? 0;
+      p.demandByInstrumentId.set(leg.instrumentId, {
+        reservationStat: leg.reservationPrice,
+        maxHoldingLocal: current + leg.faceLocal * leg.reservationPrice,
+        fullSizeStatRange: leg.fullSizePriceRange,
+        maxNetPurchaseLocal: leg.budgetLocal,
+        minHoldingLocal: current,
+      });
+    });
+
     // §3.13-SOV row 3: haircuts are per bond, off the ladder this auction is pricing.
     const repoHaircuts = computeSovereignRepoHaircuts(reg, (id) => bonds.find((b) => b.id === id)?.years);
     const bankParticipants: ClearingParticipant[] = regionBanks.map((bank) => {

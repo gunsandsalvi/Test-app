@@ -38,7 +38,7 @@ export interface FirmSeedTemplate {
 
 /** HF1: the four books, in size order — macro is the largest, as it is in reality. */
 export const HEDGE_FUND_STRATEGIES: HedgeFundStrategy[] =
-  ['GLOBAL_MACRO', 'LONG_SHORT_EQUITY', 'LONG_SHORT_CREDIT', 'DISTRESSED'];
+  ['GLOBAL_MACRO', 'LONG_SHORT_EQUITY', 'LONG_SHORT_CREDIT', 'DISTRESSED', 'RELATIVE_VALUE'];
 
 const NAME_PREFIXES = [
   'Apex', 'Meridian', 'Quantum', 'Summit', 'Pinnacle', 'Vanguard', 'Stellar', 'Nexus', 'Horizon', 'Nova',
