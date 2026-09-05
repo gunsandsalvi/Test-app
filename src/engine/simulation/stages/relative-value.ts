@@ -11,7 +11,9 @@
  * deliverable and buys the line back to target at what the books clear; a pair the line no
  * longer carries, or that has lost what its future leg was margined for, is cut whole at any
  * price. That is the limit to arbitrage, and why a basis can persist. The first comparable is
- * the bond basis; the mirror trade is 17e-iii.
+ * the bond basis, in BOTH directions (§3.17e-iii-a): a cheap future is long the line and short
+ * the cash, and a cash leg below what the book holds sells what it has and states the rest as a
+ * borrow need for the lending book.
  *
  * Runs after prime-brokerage (the line the cash leg is financed on is struck) and before 07b.
  */
@@ -23,11 +25,12 @@ import { institutionPartyKey } from '../../../domain/derivatives/contract';
 import { initialMarginRateOf } from '../../../domain/derivatives/registry';
 import { BOND_FUTURE_TERM_KEY, nextDeliveryWeek, bondDurationYears, bondFutureWeeklyMoveOf } from '../../../domain/derivatives/classes/bond-future';
 import { bondFutureInstrumentId } from '../../../domain/instrument-keys';
-import { bondBasisRead, bondBasisLegs, edgeBps, arbSizeShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
+import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, edgeBps, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../../../domain/relative-value';
 import { asInstrumentId } from '../../../domain/ids';
 import { trancheClearedPricePerFace } from '../../credit-price';
 import { sovereignRowsOf } from '../../sovereign-register';
-import { primeBrokerageBookOf, derivativesBookOf } from '../../ledger/contract-ledger';
+import { primeBrokerageBookOf, derivativesBookOf, securityLoanBookOf } from '../../ledger/contract-ledger';
+import { sharesOnLoan, stockLoanNetLocal } from '../../../domain/securities-lending';
 import { rowBasisLocal } from '../../../engine2/holdings';
 import { entityCashOf } from '../../ledger/accounts';
 import { buildDerivativeMarketView, standingBookOf } from './derivative-lifecycle';
@@ -36,6 +39,7 @@ import { entityRequiredReturn } from './asset-allocation';
 
 export function runRelativeValueStage(state: GameState, ctx: WeeklyStepContext): void {
   ctx.relativeValueLegs = [];
+  ctx.borrowNeeds = [];
   const funds = ctx.updatedInstitutionalEntities.filter((e) => e.entityType === 'HEDGE_FUND' && e.hedgeFundStrategy === 'RELATIVE_VALUE' && !e.isDefaulted);
   if (funds.length === 0) return;
   const view = buildDerivativeMarketView(ctx);
@@ -61,6 +65,10 @@ export function runRelativeValueStage(state: GameState, ctx: WeeklyStepContext):
     const marginRate = initialMarginRateOf({ classId: 'BOND_FUTURE', regionId, reference: { kind: 'SOVEREIGN', regionId, bondId }, termKey: BOND_FUTURE_TERM_KEY, maturityWeek: deliveryWeek }, view);
     const weeklyPriceMove = Math.max(1e-4, bondFutureWeeklyMoveOf(view, regionId, bondDurationYears(repoRateAnnual, (terms.maturityWeek - deliveryWeek) / 52)) ?? cashPrice * 0.01);
     const pbBook = primeBrokerageBookOf(ctx.v2, regionId);
+    const loanBook = securityLoanBookOf(ctx.v2, regionId).filter((l) => l.instrumentId === bondId);
+    // §3.17e-iii-a: the mirror's carry is the paper's borrow fee, at the lending book's last print
+    // — none yet is an unpriced borrow, which the lending book prices the week it is asked.
+    const borrowFeeBps = reg.borrowFeeBpsByCompanyId?.[bondId] ?? 0;
 
     funds.filter((f) => f.region === regionId).forEach((fund) => {
       const line = pbBook.find((l) => l.fundId === fund.id);
@@ -70,39 +78,56 @@ export function runRelativeValueStage(state: GameState, ctx: WeeklyStepContext):
         financingRateAnnual: line?.rateAnnual ?? repoRateAnnual, repoRateAnnual, marginRate,
         requiredReturnAnnual: entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund)),
       });
-      const edge = edgeBps(read);
-      const share = arbSizeShare(edge, (weeklyPriceMove / cashPrice) * 10000);
+      const requiredReturnAnnual = entityRequiredReturn(fund, institutionTotalAssetsLocal(ctx, fund));
+      const mirror = bondBasisMirrorRead({ netBasis: reg.bondFuturesBasis!, cashPrice, yearsToDelivery, borrowFeeBps, marginRate, requiredReturnAnnual });
+      // §3.17e-iii-a: signed — + long the cash on the line and short the future, − its mirror.
+      const share = arbTargetShare(edgeBps(read), edgeBps(mirror), (weeklyPriceMove / cashPrice) * 10000);
       const capacityLocal = arbCapacityLocal(entityCashOf(ctx.v2, fund), fund.primeBrokerageAvailableLocal);
-      // The position it has: the deliverable on its register, the line it is short in the book.
+      // The position it has: the deliverable on its register less what it has borrowed of it,
+      // and its net line — long less short — in the standing book.
       const rows = sovereignRowsOf(ctx.v2, fund.id).filter((r) => r.bondId === bondId);
       const heldFace = rows.reduce((a, r) => a + r.faceLocal, 0);
+      const borrowedFace = sharesOnLoan(loanBook, 'borrower', fund.id, bondId);
+      const netFace = heldFace - borrowedFace;
       const key = institutionPartyKey(fund.id);
       const shortFace = standing.coverLocal('BOND_FUTURE', 'b', key, bondId);
-      if (!(share > 0) && heldFace <= 1 && shortFace <= 1) return;
+      const longFace = standing.coverLocal('BOND_FUTURE', 'a', key, bondId);
+      const netFuture = longFace - shortFace;
+      if (share === 0 && Math.abs(netFace) <= 1 && Math.abs(netFuture) <= 1 && heldFace <= 1) return;
       // §3.17e-ii-b — THE STOP and THE LINE. What the pair has made: the deliverable's mark over
-      // its lots' basis, plus what its shorts have settled to it. It is cut whole past the margin
-      // its future leg posted; it is cut to what the line carries when the line no longer carries it.
-      const shorts = book.filter((c) => c.classId === 'BOND_FUTURE' && c.reference.kind === 'SOVEREIGN' && c.reference.bondId === bondId && c.b.kind === 'INSTITUTION' && c.b.id === fund.id);
+      // its lots' basis, the borrow's net (collateral against the paper owed), and what its lines
+      // have settled to it. It is cut whole past the margin its future leg posted; it is cut to
+      // what the line carries when the line no longer carries it.
+      const lines = book.filter((c) => c.classId === 'BOND_FUTURE' && c.reference.kind === 'SOVEREIGN' && c.reference.bondId === bondId
+        && ((c.b.kind === 'INSTITUTION' && c.b.id === fund.id) || (c.a.kind === 'INSTITUTION' && c.a.id === fund.id)));
       const pnlLocal = pairPnLLocal({
-        cashValueLocal: rows.reduce((a, r) => a + r.valueLocal, 0),
+        cashValueLocal: rows.reduce((a, r) => a + r.valueLocal, 0) + stockLoanNetLocal(loanBook, fund.id, () => cashPrice),
         cashBasisLocal: rows.reduce((a, r) => a + rowBasisLocal(ctx.v2, r.row), 0),
-        futuresSettledToFundLocal: -shorts.reduce((a, c) => a + (c.settledMarkLocal ?? 0), 0),
+        futuresSettledToFundLocal: lines.reduce((a, c) => a + (c.a.kind === 'INSTITUTION' && c.a.id === fund.id ? 1 : -1) * (c.settledMarkLocal ?? 0), 0),
       });
-      const stopped = stoppedOut(pnlLocal, shorts.reduce((a, c) => a + c.initialMarginLocal, 0));
+      const stopped = stoppedOut(pnlLocal, lines.reduce((a, c) => a + c.initialMarginLocal, 0));
       const carriedFace = capacityLocal / cashPrice;
-      const targetFace = stopped ? 0 : Math.min(share * carriedFace, Math.max(heldFace, shortFace) > carriedFace ? carriedFace : Number.POSITIVE_INFINITY);
-      const forced = stopped || Math.max(heldFace, shortFace) > carriedFace;
-      const cashDelta = targetFace - heldFace;
-      const futureDelta = targetFace - shortFace;
+      const exposureFace = Math.max(Math.abs(netFace), Math.abs(netFuture));
+      const targetFace = stopped ? 0 : exposureFace > carriedFace ? Math.sign(share || netFace) * carriedFace : share * carriedFace;
+      const forced = stopped || exposureFace > carriedFace;
+      const cashDelta = targetFace - netFace;
+      const futureLegFace = -targetFace - netFuture;
       const legs = bondBasisLegs({
-        regionId, bondId, futureId, faceLocal: Math.max(cashDelta, futureDelta),
+        regionId, bondId, futureId, faceLocal: Math.max(cashDelta, -futureLegFace),
         cashPrice, futurePrice, couponRate: terms.couponRate, repoRateAnnual, yearsToDelivery,
         carryBps: read.carryBps, weeklyPriceMove, budgetLocal: Math.min(Math.max(0, cashDelta) * cashPrice, capacityLocal),
       });
       // Each leg moves its own side to the target: added when the edge is there, taken off when
-      // it has gone, and at any price when the pair is cut.
-      if (Math.abs(cashDelta) > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: cashDelta, forced });
-      if (Math.abs(futureDelta) > 1) ctx.relativeValueLegs.push({ ...legs.future, entityId: fund.id, faceLocal: -futureDelta, forced });
+      // it has gone, and at any price when the pair is cut. A cash leg below what the book holds
+      // sells what it has and BORROWS the rest (§3.17e-iii-a): the lending book clears the need.
+      if (cashDelta > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: cashDelta, forced });
+      else if (cashDelta < -1) {
+        const sellFace = Math.min(-cashDelta, heldFace);
+        if (sellFace > 1) ctx.relativeValueLegs.push({ ...legs.cash, entityId: fund.id, faceLocal: -sellFace, forced });
+        const borrowFace = -cashDelta - sellFace;
+        if (borrowFace > 1) ctx.borrowNeeds.push({ entityId: fund.id, regionId, instrumentId: bondId, units: borrowFace });
+      }
+      if (Math.abs(futureLegFace) > 1) ctx.relativeValueLegs.push({ ...legs.future, entityId: fund.id, faceLocal: futureLegFace, forced });
     });
   });
 }

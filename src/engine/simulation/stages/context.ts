@@ -150,6 +150,9 @@ export interface WeeklyStepContext {
   /** §3.17e-ii-a — the relative-value books' legs for the week, stated before any book opens;
    *  the market that clears each leg reads it here (`stages/relative-value.ts`). */
   relativeValueLegs: (import('../../../domain/relative-value').RelativeValueLeg & { entityId: import('../../../domain/ids').EntityId })[];
+  /** §3.17e-iii-a — what the books need to borrow to be short a cash instrument this week; the
+   *  lending book reads it as borrow demand. */
+  borrowNeeds: import('../../../domain/relative-value').BorrowNeed[];
   /** GUARD — books whose demand side could not grow at any price this week: no participant's
    * holding ceiling exceeded what it already held. A market that cannot trade is a defect, not
    * a quiet pass (§7.102's shape). Asserted empty by the harness. */
@@ -421,6 +424,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     defaultedTickers: [],
     damperBoundInstrumentIds: [],
     relativeValueLegs: [],
+    borrowNeeds: [],
     lentSharesByLender: new Map(),
     buyInSharesByBorrower: new Map(),
     deadCeilingBooks: [],

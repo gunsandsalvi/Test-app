@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bondBasisRead, bondBasisLegs, edgeBps, arbSizeShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
+import { bondBasisRead, bondBasisMirrorRead, bondBasisLegs, edgeBps, arbSizeShare, arbTargetShare, arbCapacityLocal, pairPnLLocal, stoppedOut } from '../src/domain/relative-value';
 import { bondFuturesCarryPrice } from '../src/domain/derivatives/classes/bond-future';
 import { asInstrumentId } from '../src/domain/ids';
 
@@ -53,4 +53,17 @@ test('the pair\'s P&L is the cash mark over basis plus what the short has settle
   const legs = bondBasisLegs({ regionId: 'USA', bondId: asInstrumentId('B'), futureId: asInstrumentId('F'), faceLocal: -400, cashPrice: 0.98, futurePrice: 0.99, couponRate: 0.04, repoRateAnnual: 0.05, yearsToDelivery: 0.25, carryBps: 100, weeklyPriceMove: 0.006, budgetLocal: 0 });
   assert.equal(legs.cash.faceLocal, -400);
   assert.equal(legs.future.faceLocal, 400);
+});
+
+// §3.17e-iii-a — the pair has two directions, each with its own carry, and the book takes the one
+// whose edge is there.
+test('the mirror read turns the disagreement and charges the borrow fee; the target is signed by which edge pays', () => {
+  const m = bondBasisMirrorRead({ netBasis: -0.005, cashPrice: 1, yearsToDelivery: 0.25, borrowFeeBps: 30, marginRate: 0.02, requiredReturnAnnual: 0.10 });
+  assert.ok(Math.abs(m.deviationBps - 200) < 1e-9, 'a cheap future is a rich mirror');
+  assert.ok(Math.abs(m.carryBps - 50) < 1e-9);
+  assert.equal(arbTargetShare(80, -300, 40), 1);
+  assert.equal(arbTargetShare(20, -300, 40), 0.5);
+  assert.equal(arbTargetShare(-300, 150, 40), -1);
+  assert.equal(arbTargetShare(-300, 20, 40), -0.5);
+  assert.equal(arbTargetShare(-10, -10, 40), 0);
 });

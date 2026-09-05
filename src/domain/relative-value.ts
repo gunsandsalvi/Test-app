@@ -20,7 +20,7 @@
  */
 
 import type { RegionId } from './geography';
-import type { InstrumentId } from './ids';
+import type { EntityId, InstrumentId } from './ids';
 import { bondFuturesCarryPrice } from './derivatives/classes/bond-future';
 
 /** The markets a leg can clear in. A comparable joins by naming the two its legs need. */
@@ -66,6 +66,22 @@ export interface ComparableRead { deviationBps: number; carryBps: number }
 /** The edge: what is left of the disagreement after carrying it. */
 export const edgeBps = (r: ComparableRead): number => r.deviationBps - r.carryBps;
 
+/** §3.17e-iii-a — what a book needs to BORROW to be short a cash instrument: the units beyond what
+ *  it holds, stated for the lending book that clears the borrow. */
+export interface BorrowNeed { entityId: EntityId; regionId: RegionId; instrumentId: InstrumentId; units: number }
+
+/**
+ * §3.17e-iii-a — THE SIGNED TARGET. A pair has two directions and each has its own carry: long
+ * the cash leg pays the financing, short it pays the borrow. The book takes the direction whose
+ * edge is there — the long trade first, the mirror when the future is cheap — and none when
+ * neither pays. + is the long-cash trade, − its mirror, as a share of what the book can carry.
+ */
+export function arbTargetShare(longEdgeBps: number, mirrorEdgeBps: number, weeklyMoveBps: number): number {
+  if (longEdgeBps > 0) return arbSizeShare(longEdgeBps, weeklyMoveBps);
+  if (mirrorEdgeBps > 0) return -arbSizeShare(mirrorEdgeBps, weeklyMoveBps);
+  return 0;
+}
+
 /** How much of its capacity the book commits: it scales in over the move the relationship can
  *  make in a week — past that the edge is plainly there and it takes all it can carry. */
 export function arbSizeShare(edge: number, weeklyMoveBps: number): number {
@@ -91,6 +107,22 @@ export function bondBasisRead(args: {
   const deviationBps = (args.netBasis / Math.max(1e-9, args.cashPrice) / T) * 10000;
   const carryBps = Math.max(0, args.financingRateAnnual - args.repoRateAnnual) * 10000
     + Math.max(0, args.marginRate) * Math.max(0, args.requiredReturnAnnual) * 10000;
+  return { deviationBps, carryBps };
+}
+
+/**
+ * §3.17e-iii-a — THE BOND BASIS, READ FROM THE OTHER SIDE. A cheap future is long the line and
+ * SHORT the cash bond: the disagreement is the same number with its sign turned, and carrying the
+ * mirror costs the borrow fee on the paper (the lending book's own print, in bps of its value a
+ * year) and the return the long's margin needs. Nothing is financed: the sale funds itself.
+ */
+export function bondBasisMirrorRead(args: {
+  netBasis: number; cashPrice: number; yearsToDelivery: number;
+  borrowFeeBps: number; marginRate: number; requiredReturnAnnual: number;
+}): ComparableRead {
+  const T = Math.max(1 / 52, args.yearsToDelivery);
+  const deviationBps = -(args.netBasis / Math.max(1e-9, args.cashPrice) / T) * 10000;
+  const carryBps = Math.max(0, args.borrowFeeBps) + Math.max(0, args.marginRate) * Math.max(0, args.requiredReturnAnnual) * 10000;
   return { deviationBps, carryBps };
 }
 

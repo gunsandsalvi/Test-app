@@ -547,11 +547,29 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17e-iii. **The negative basis needs a bond borrow.** The book trades one direction — future rich:
-    long cash on the line, short the future. A cheap future is the mirror: long the future and
-    SHORT the cash bond, which needs the sovereign BORROWED through the securities-lending book
-    (`contract-ledger.ts:securityLoanBookOf`, equities only today). Small once SBL takes a
-    GOV_BOND row; `bondBasisLegs` already states the pair as signed faces.
+17e-iii-b. **The lending book lends a sovereign.** 17e-iii-a states the mirror trade's need
+    (`ctx.borrowNeeds`: the face a book wants short beyond what it holds — §9); nothing fills it.
+    `stages/securities-lending.ts` is equity-shaped end to end: `store.scan(e.id, 'EQUITY')`,
+    `stockPrice`, `equityIssuerId`, `shortsEquity` funds sized off fair value, `addShares`. The
+    tree (`securities-lending.md` B1: *"the borrower needs the security: to deliver a short…"*)
+    says any lendable security, and the registry says `GOV_BOND` is `lendable`. Generalise the
+    stage over a LENDABLE VIEW per kind — the instrument's price (`trancheClearedPricePerFace`
+    for a rung), the units a holder can deliver (face, off `sovereignRowsOf`), the delivery (a
+    units move on the store and its wire, `HoldingSpec.units`), the one-week gap (the rung's
+    own price move, `engine2/prices.ts:weeklyPriceMoveOf`) — with the equity path unchanged,
+    the borrow demand for a rung read from `ctx.borrowNeeds`, and two things the equity path
+    also lacks: a RETURN (a borrower that holds the paper and no longer needs the borrow
+    delivers it back and its collateral comes back — today a short is only ever recalled, never
+    covered) and 07c reading the lent face the way 07e reads `lentSharesByLender`, so a lender
+    is not sent out to re-buy what it lent. Then the fund sells the delivered paper in 07c next
+    week through its sell leg, and covers through its buy leg and the return.
+17e-iv. **Offsetting lines net at the house.** A book that reverses on a line — short contracts
+    standing, a long struck against them — carries BOTH at the house, each margined
+    (`derivative-lifecycle.ts:postInitialMargin`), where a real clearing house nets a member's
+    positions on one line and returns the margin. Small: at strike, a new contract between the
+    same two members on the same instrument and reference that opposes a standing one closes
+    the standing one at the print (a mark-leg settlement) and stands only for the excess.
+    Surfaced by 17e-iii-a, whose mirror trade reverses the book's line.
 17f. **The relative-value book, and it need not be written strategy by strategy** (user: "is there
     a programmatic way to do that across asset classes?"). *(17e-ii-a built the mechanism — the
     registry `domain/relative-value.ts`, the `RELATIVE_VALUE` strategy, the legs the markets read
@@ -1592,7 +1610,21 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17e-ii-b — THE BASIS TRADER IS CUT.** The book comes off as it went on: each leg is the
+**17e-iii-a — THE MIRROR TRADE, AND ITS BORROW NEED.** The pair has two directions with two
+  carries: `bondBasisMirrorRead` turns the disagreement's sign and charges the paper's borrow
+  fee (the lending book's last print for the rung, `borrowFeeBpsByCompanyId[bondId]`, 0 until
+  it has one — an unpriced borrow the lending book prices the week it is asked) plus the return
+  the long's margin needs; `arbTargetShare` is signed — the long-cash trade when its edge pays,
+  the mirror when the future is cheap, none when neither. The book's position is NET: register
+  face less what it has borrowed (`sharesOnLoan` on the region's loan book), long less short on
+  the line; the pair's P&L adds the borrow's net (`stockLoanNetLocal` at the cash price) and
+  signs each line's settled mark by the side the fund is on; the stop reads the margin on both
+  sides. A cash leg below what the book holds sells what it has and states the rest as a
+  `BorrowNeed` on `ctx.borrowNeeds` (17e-iii-b's lending book fills it); the future leg is the
+  signed delta to the target's opposite. Two follow-ups inserted: 17e-iii-b (the lending book
+  lends a sovereign, with a return path and 07c's lent read) and 17e-iv (offsetting lines net
+  at the house). Gates green; no run.
+- **17e-ii-b — THE BASIS TRADER IS CUT.** The book comes off as it went on: each leg is the
   delta to target, signed, so a target below the position is a REDUCTION — the deliverable sold
   in 07c to target at what the auction clears (`minHoldingLocal` = `maxHoldingLocal` = what it
   keeps), the line bought back below the edge price (`bondFutureHolderQuote` with a positive
