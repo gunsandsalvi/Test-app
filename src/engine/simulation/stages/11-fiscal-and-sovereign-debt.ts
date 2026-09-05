@@ -85,8 +85,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
     const cpiLevel = computeCpiLevel(reg, reg.cpiBasket);
     const coreCpiLevel = computeCpiLevel(reg, reg.cpiBasket, true);
-    const cpiHistory = [...(reg.cpiHistory ?? []).slice(-52), cpiLevel];
-    const coreCpiHistory = [...(reg.coreCpiHistory ?? []).slice(-52), coreCpiLevel];
+    const cpiHistory = [...(reg.cpiHistory).slice(-52), cpiLevel];
+    const coreCpiHistory = [...(reg.coreCpiHistory).slice(-52), coreCpiLevel];
     const yearAgoCpi = cpiHistory.length >= 53 ? cpiHistory[0] : null;
     const yearAgoCoreCpi = coreCpiHistory.length >= 53 ? coreCpiHistory[0] : null;
 
@@ -152,7 +152,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // the raw number is too noisy to publish, the smoothing two lines below is the honest tool.
       ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpLocal / gdpLevelLastWeek - 1) - (reg.inflation / 52)))
       : 0;
-    const prevSmoothedWeeklyRate = reg.smoothedWeeklyGrowthRate ?? rawWeeklyRealGrowthRate;
+    const prevSmoothedWeeklyRate = reg.smoothedWeeklyGrowthRate;
     // Kept for the fiscal output-gap signal in macro/evolution.ts, which wants a rough weekly
     // growth impulse — not used for the headline growth rate below any more (see next block).
     const smoothedWeeklyRate = prevSmoothedWeeklyRate * 0.85 + rawWeeklyRealGrowthRate * 0.15;
@@ -166,7 +166,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // A real year-over-year comparison: the window holds 53 levels so that index 0 is the level
     // exactly 52 weeks before the newest one. It used to keep 52 and compare against index 0,
     // which is 51 weeks back — a year-over-year reading taken a week short of a year.
-    const gdpHistory = reg.nominalGdpHistory ?? [];
+    const gdpHistory = reg.nominalGdpHistory;
     const updatedGdpHistory = [...gdpHistory.slice(-52), newDerivedNominalGdpLocal];
     const yearAgoGdpLevel = updatedGdpHistory.length >= 53 ? updatedGdpHistory[0] : null;
     // The bootstrap seeds a full trailing year (macro/initialization.ts), so the fallback below
@@ -505,7 +505,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       }
     });
     const householdAccrualWeeklyLocal = (reg.householdState.cohorts ?? []).reduce((a, c) => a + c.taxLocal, 0) / 52;
-    const consumptionAccrualWeeklyLocal = (reg.householdState.cohorts ?? []).reduce((a, c) => a + (c.consumptionTaxLocal ?? 0), 0) / 52;
+    const consumptionAccrualWeeklyLocal = (reg.householdState.cohorts ?? []).reduce((a, c) => a + (c.consumptionTaxLocal), 0) / 52;
 
     reg.accruedSmeTaxLocal = (reg.accruedSmeTaxLocal ?? 0) + smeAccrualWeeklyLocal;
     reg.accruedHouseholdTaxLocal = (reg.accruedHouseholdTaxLocal ?? 0) + householdAccrualWeeklyLocal;
@@ -545,7 +545,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     if (process.env.FISCAL_TRACE === '1') {
       console.log(`  [fiscal] ${regionId} corpAccrual ${(((ctx.taxAccruedByRegion[regionId] ?? 0)) / 1e6).toFixed(1)}M`
         + ` sme ${(smeAccrualWeeklyLocal / 1e6).toFixed(1)}M hh ${(householdAccrualWeeklyLocal / 1e6).toFixed(1)}M`
-        + ` budget ${((reg.governmentSpendingWeeklyLocal ?? 0) / 1e6).toFixed(1)}M`);
+        + ` budget ${((reg.governmentSpendingWeeklyLocal) / 1e6).toFixed(1)}M`);
     }
     reg.taxCollectedSmeLocal = Math.round(smeTaxWeeklyLocal);
     reg.taxCollectedHouseholdLocal = Math.round(householdTaxWeeklyLocal);

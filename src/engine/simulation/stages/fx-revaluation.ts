@@ -48,7 +48,7 @@ const bankNetOf = (state: GameState, ticker: Ticker): number => {
 
 /** A central bank's book, both sides, in its own money. */
 const centralBankNetOf = (state: GameState, region: RegionId): number => {
-  const cb = state.regions[region]?.centralBankSheet;
+  const cb = state.regions[region].centralBankSheet;
   if (!cb) return 0;
   const v2 = state.v2!;
   const reserves = state.companies
@@ -83,7 +83,7 @@ export function runFxRevaluationStage(state: GameState): void {
   });
 
   REGION_IDS.forEach((r) => {
-    const cb = state.regions[r]?.centralBankSheet;
+    const cb = state.regions[r].centralBankSheet;
     if (!cb) return;
     // A central bank's revaluation account, which is what the account is FOR: the gain is
     // unrealised and is not remitted (the sheet's "no retained earnings" note is about income).

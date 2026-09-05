@@ -93,7 +93,7 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
     if (names.length === 0) return;
     const money = currencyOf(regionId);
     const recoveryRate = creditRecoveryRate(reg);
-    const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
+    const creditConditionsIndex = reg.bankingSector.creditConditionsIndex;
     const instrumentId = creditIndexInstrumentId(live.seriesId);
     const reference: DerivativeContract['reference'] = { kind: 'BASKET', regionId, seriesId: live.seriesId };
     const marginRate = initialMarginRateOf({ classId: 'CDS_INDEX', regionId, reference, termKey: '', maturityWeek: week + CDS_INDEX_TENOR_WEEKS }, view);
@@ -108,7 +108,7 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
       }), 0) / names.length;
     const singleNamePrints = names.map((c) => c.cdsSpreadBps).filter((b): b is number => b !== undefined && b > 0);
     const history = reg.creditIndexSpreadHistoryBySeries ?? (reg.creditIndexSpreadHistoryBySeries = {});
-    const lastPrint = history[live.seriesId]?.[history[live.seriesId].length - 1];
+    const lastPrint = history[live.seriesId][history[live.seriesId].length - 1];
 
     const participants: ClearingParticipant[] = [];
     const openingByParticipant = new Map<string, number>();
@@ -173,7 +173,7 @@ function runCdsIndexMarket({ ctx, week, view, standing }: DerivativeMarketRun): 
       tradableFloatLocal: floatLocal,
       // Opens at the line's last print, before that at the constituents' average single-name
       // print: the alternative a writer is pricing against.
-      currentStat: Math.max(1, lastPrint ?? (singleNamePrints.length > 0 ? singleNamePrints.reduce((a, b) => a + b, 0) / singleNamePrints.length : 1)),
+      currentStat: Math.max(1, lastPrint),
       statKind: 'YIELD_LIKE',
       durationYears: CDS_INDEX_TENOR_WEEKS / 52,
     };

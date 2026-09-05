@@ -64,7 +64,7 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
   // resolutions IS a stressed credit market, and it is the market saying so about itself.
   const recoveryStress = (Object.keys(ctx.updatedRegions) as (keyof typeof ctx.updatedRegions)[])
     .map((r) => {
-      const realised = ctx.updatedRegions[r]?.realisedRecoveryRates ?? [];
+      const realised = ctx.updatedRegions[r].realisedRecoveryRates ?? [];
       if (realised.length === 0) return 0;
       const mean = realised.reduce((a, b) => a + b, 0) / realised.length;
       return Math.max(0, (CREDIT_RECOVERY_RATE - mean) / CREDIT_RECOVERY_RATE);

@@ -109,7 +109,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const mcapByRegion: Record<string, number> = {};
     (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
       mcapByRegion[r] = ctx.prevActiveFirms
-        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapAt(ctx.v2, c) ?? 0), 0);
+        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapAt(ctx.v2, c)), 0);
     });
     const regionEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.entityType !== 'ETF'
@@ -121,7 +121,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // model — the measured register says so — and households reach listed equity through the
     // funds that bid here, so there is no passive holder to carve out. `1 - equityOwnership
     // .bankShare` withheld 3% of every register from one.
-    const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
+    const riskFreeRate = reg.zeroRates.tenor10Y;
 
     /** The book's reference: a listed name's last cleared print, a debut's own price talk. */
     const refPriceOf = (c: Company) =>
@@ -198,7 +198,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       bookEquityArr[ci] = bookEquityById.get(c.id) ?? 0;
       netInvRateArr[ci] = netInvestmentRateById.get(c.id) ?? 0;
       liveSharesArr[ci] = liveSharesOf(c);
-      betaArr[ci] = c.beta ?? 1;
+      betaArr[ci] = c.beta;
       defaultedArr[ci] = c.isDefaulted ? 1 : 0;
       netIncomeArr[ci] = c.netIncome;
     });
@@ -295,7 +295,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // to be recomputed here as `liveShares − institutions − desks`, a residual struck a second
     // time and by a different route than `householdDirectEquityLocal`'s, so the sector could be
     // sold a quantity its own net-worth line never agreed it had.
-    const hhSaleNeedLocal = Math.max(0, reg.householdState?.pendingDirectEquitySaleLocal ?? 0);
+    const hhSaleNeedLocal = Math.max(0, reg.householdState.pendingDirectEquitySaleLocal ?? 0);
     if (process.env.HH_EQ_TRACE === '1' && hhSaleNeedLocal > 0) {
       console.log(`  [hh-eq] ${regionId} forced direct-equity sale announced: ${(hhSaleNeedLocal / 1e6).toFixed(1)}M`);
     }

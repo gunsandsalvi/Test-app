@@ -139,7 +139,7 @@ function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
 
 export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContext): void {
   const week = ctx.nextWeek;
-  const estates: Estate[] = ctx.estates ?? [];
+  const estates: Estate[] = ctx.estates;
   const byCompanyId = new Map(estates.map((e) => [e.companyId, e]));
   const index = buildEstateIndex(ctx);
   indexClaimHolders(index, estates);
@@ -322,7 +322,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
  * so a dead SELLER's consignments sailed on for ever against a firm that no longer exists.
  */
 function scrapConsignmentsOf(state: GameState, ticker: Ticker, companyId: string): void {
-  const inFlight = state.goodsInTransit ?? [];
+  const inFlight = state.goodsInTransit;
   // §3.13-BOOK (c-then-3b): a shipment names its buyer by ENTITY id; its seller key is still the
   // goods book's two-space key, so both names are tried on that side (`05-unit-bidding`'s `byKey`).
   const isDead = (sh: { buyerId: EntityId; sellerKey?: unknown }): boolean =>
@@ -372,7 +372,7 @@ function sellPlantToBidders(
   peersOf(ctx, estate, comp).forEach((peer) => {
     const netPpeLocal = plantNetLocal(peer.plant, ctx.nextWeek);
     if (!(netPpeLocal > 0)) return; // no plant of its own: no return on capital to read a bid from
-    const roc = (peer.ebit ?? 0) / netPpeLocal;
+    const roc = (peer.ebit) / netPpeLocal;
     // §3.26-f-iv-c — WHAT THE PLANT ON OFFER CAN PRODUCE FOR THIS BIDDER: the effective plant it
     // adds to the bidder's register in the bidder's own mix of kinds, per unit of book. A slice
     // in the wrong kinds (buildings for a firm short of machines) adds little and is bid for as
@@ -389,7 +389,7 @@ function sellPlantToBidders(
     // beta and its own board's risk aversion, not one hurdle for every bidder.
     const reservation = Math.min(1, productiveShare * roc / costOfCapitalOf(peer, riskFreeRateOf(ctx.updatedRegions[estate.regionId])));
     if (!(reservation > 0.01)) return;
-    const wantLocal = Math.max(0, (peer.growthCapex ?? 0) + (peer.maintenanceCapex ?? 0));
+    const wantLocal = Math.max(0, (peer.growthCapex) + (peer.maintenanceCapex));
     if (!(wantLocal > 1)) return;
     bidders.push({
       id: peer.id,
@@ -583,7 +583,7 @@ function reduceHolding(
     }
     // §3.18-iii: no floor at zero (rule 6) — a loss past its equity leaves the holder insolvent,
     // and hiding that is what the floor did.
-    e.equityCapitalLocal = (e.equityCapitalLocal ?? 0) - (isLoss ? amountLocal : 0);
+    e.equityCapitalLocal = (e.equityCapitalLocal) - (isLoss ? amountLocal : 0);
     return;
   }
   // §3.17-iv-c-ii: the clearing house holds no paper of the dead firm — its claim is the close-out
@@ -740,7 +740,7 @@ function regionalPpeAbsorptionWeeks(
   ctx.updatedCompanies.forEach((c) => {
     if (c.region !== regionId) return;
     installedLocal += plantNetLocal(c.plant, ctx.nextWeek);
-    weeklyCapexLocal += Math.max(0, (c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)) / 52;
+    weeklyCapexLocal += Math.max(0, (c.maintenanceCapex) + (c.growthCapex)) / 52;
   });
   const out = (!(weeklyCapexLocal > 0) || !(installedLocal > 0)) ? 52
     // One plant is a small share of the base; the weeks it takes is that share of the turnover.

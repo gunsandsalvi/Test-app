@@ -172,7 +172,7 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
   // to them. Where demand is thin the basis clears near zero; where it exceeds what the desks can
   // carry, it rises until enough hedgers walk — the post-2008 mechanism the formula imitated.
   const annualSigmaByRegion = new Map<RegionId, number>();
-  (ctx.updatedFxPairs ?? []).forEach((fx) => {
+  (ctx.updatedFxPairs).forEach((fx) => {
     const sigma = fxWeeklySigma(fx.historicalRates) * Math.sqrt(52);
     [fx.base, fx.quote].forEach((r: RegionId) => {
       if (r === 'USA') return;
@@ -229,9 +229,9 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
       const oneSigma = annualSigmaFor(foreign) * Math.sqrt(horizonYears);
       const mustHedgeLocal = exposureToHedgeLocal({
         exposureLocal,
-        ebitAnnualLocal: c.ebit ?? 0,
+        ebitAnnualLocal: c.ebit,
         interestAnnualLocal: (c.interestCoverage > 0 && isFinite(c.interestCoverage))
-          ? Math.max(0, c.ebit ?? 0) / c.interestCoverage : 0,
+          ? Math.max(0, c.ebit) / c.interestCoverage : 0,
         oneSigma,
         riskAversion: riskAversionOf(c.management),
       });
@@ -288,7 +288,7 @@ function runFxForwardMarket({ state, ctx, week, standing, view }: DerivativeMark
     issuers.forEach((issuer) => {
       const key = bookKey(holderRegion, issuer);
       const { floatLocal, premiumBps } = deskSide(issuer);
-      const allInBps = (reg?.xcsBasisBps?.[issuer] ?? 0) + premiumBps;
+      const allInBps = (reg.xcsBasisBps?.[issuer] ?? 0) + premiumBps;
       forwardBasisBps.set(key, allInBps);
       byIssuer[issuer] = Number(allInBps.toFixed(1));
       /** What a holder takes at this basis: its gap, scaled by how far the basis sits below its tolerance. */

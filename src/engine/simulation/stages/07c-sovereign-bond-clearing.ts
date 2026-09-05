@@ -130,7 +130,7 @@ function expectedInflationOverTenor(
   reg: { expectedInflation: number; targetInflation: number },
   tenorYears: number
 ): number {
-  const target = reg.targetInflation ?? 0.02;
+  const target = reg.targetInflation;
   const gap = reg.expectedInflation - target;
   const x = Math.max(0.01, tenorYears) / INFLATION_MEAN_REVERSION_YEARS;
   const averagingFactor = (1 - Math.exp(-x)) / x;
@@ -418,7 +418,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           reservationStat: priceAtYieldBps(b,
             computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS)
             + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
-                ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate))),
+                ctx.updatedRegions[entity.region].policyRate, reg.policyRate))),
           maxHoldingLocal: entityTarget * shareOfMarket * maxOverweightMultipleOf(entity),
           fullSizeStatRange: priceRangeOfYieldRange(b, curveYieldBpsOf(b), SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS),
           maxNetPurchaseLocal: classBudgetLocal * shareOfMarket,
@@ -597,7 +597,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       .filter((p): p is { tenorYears: number; yield: number } => p !== undefined);
     if (process.env.SOV_TRACE === '1') {
       console.log(`  [sov-trace] ${regionId} w${ctx.nextWeek}: bonds=${bonds.length} points=${observedPoints.length} ` +
-        bonds.slice(0, 4).map((b) => `${b.id}@${b.years.toFixed(2)}y out=${(b.outstandingLocal / 1e9).toFixed(1)}B float=${((instruments.find((i) => i.id === b.id)?.tradableFloatLocal ?? 0) / 1e9).toFixed(1)}B px=${result.printById.get(b.id)?.stat?.toFixed(5) ?? 'none'}`).join(' | '));
+        bonds.slice(0, 4).map((b) => `${b.id}@${b.years.toFixed(2)}y out=${(b.outstandingLocal / 1e9).toFixed(1)}B float=${((instruments.find((i) => i.id === b.id)?.tradableFloatLocal ?? 0) / 1e9).toFixed(1)}B px=${result.printById.get(b.id)?.stat.toFixed(5) ?? 'none'}`).join(' | '));
     }
     // §3.13-SOV row 5 / §3.25 — THIS STAGE DOES NOT OWN THE CURVE. It cleared bonds against the
     // curve standing at week start, which is what a real session prices against, and deposits what

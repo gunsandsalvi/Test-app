@@ -97,11 +97,11 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
 
     // What the region's listed equity actually pays — market-cap-weighted, real state.
     const regionListed = state.companies.filter(
-      (c) => c.region === regionId && !c.isDefaulted && (marketCapAt(ensureV2(state), c) ?? 0) > 0
+      (c) => c.region === regionId && !c.isDefaulted && (marketCapAt(ensureV2(state), c)) > 0
     );
     const regionMcap = regionListed.reduce((a, c) => a + marketCapAt(ensureV2(state), c), 0);
     const regionAvgDividendYield = regionMcap > 0
-      ? regionListed.reduce((a, c) => a + (c.dividendYield ?? 0) * marketCapAt(ensureV2(state), c), 0) / regionMcap
+      ? regionListed.reduce((a, c) => a + (c.dividendYield) * marketCapAt(ensureV2(state), c), 0) / regionMcap
       : 0;
 
     const { updatedRegion, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(

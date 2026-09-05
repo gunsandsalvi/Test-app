@@ -62,7 +62,7 @@ export function findRegionMmf(entities: InstitutionalEntity[], regionId: RegionI
  */
 function quoteMmfNetYieldAnnual(v2: V2World, entity: InstitutionalEntity, cashLocal: number, reg: Region, week: number, govLadder: GovDebtTrancheView[]): number {
   const rrpRateAnnual = repoCorridorBps(reg.policyRate).floorBps / 10000;
-  const repoRateAnnual = reg.repoRateAnnual ?? rrpRateAnnual;
+  const repoRateAnnual = reg.repoRateAnnual;
 
   // §3.13-SOV row 3: a holding is a bill because the LADDER says the bond it names is one —
   // short at issue (`isDiscountBill`). It used to be decided by parsing a bucket key out of the
@@ -288,7 +288,7 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   issuedByRegion.forEach((issuedLocal, regionId) => {
     if (!(issuedLocal > 0)) return;
     const reg = ctx.updatedRegions[regionId];
-    const hhSharesLocal = Math.max(0, reg?.householdState?.mmfSharesLocal ?? 0);
+    const hhSharesLocal = Math.max(0, reg.householdState.mmfSharesLocal ?? 0);
     const corpSharesLocal = ctx.updatedCompanies.reduce(
       (a, c) => a + (c.region === regionId ? Math.max(0, c.mmfSharesLocal ?? 0) : 0), 0);
     const totalHeldLocal = hhSharesLocal + corpSharesLocal;

@@ -199,7 +199,7 @@ function runCdsMarket({ state, ctx, week, standing, view }: DerivativeMarketRun)
     // FUNDING, and the difference between the two prices is exactly what a basis is. §3.17c: the
     // quote is two-way at that reservation — written above it, bought below it — stated to the
     // engine as a holder of its own short capacity (`twoWayProtectionQuote`). ----
-    const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
+    const creditConditionsIndex = reg.bankingSector.creditConditionsIndex;
     const participants: ClearingParticipant[] = [];
     /** Each two-way participant's opening position per name: what it holds if it does nothing. */
     const openingByParticipant = new Map<string, Map<InstrumentId, number>>();

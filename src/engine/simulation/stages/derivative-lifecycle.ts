@@ -130,16 +130,16 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
       const c = companyById.get(issuerId);
       return !c || !!c.isDefaulted;
     },
-    overnightRateAnnual: (r) => { const reg = region(r); return reg?.repoRateAnnual ?? reg?.policyRate ?? 0; },
+    overnightRateAnnual: (r) => { const reg = region(r); return reg.repoRateAnnual; },
     parRateAnnual: (r, termKey) => {
-      const v = region(r)?.swapParRateByTenor?.[termKey];
+      const v = region(r).swapParRateByTenor?.[termKey];
       return typeof v === 'number' ? v : Number.NaN;
     },
     // §3.17d-iii: the curve's store is the region's print history per name and tenor; the
     // company's one quoted spread is the benchmark tenor's last print.
     cdsSpreadBps: (issuerId, termKey) => {
       const c = companyById.get(issuerId);
-      const hist = c ? region(c.region)?.cdsSpreadHistoryByIssuer?.[issuerId]?.[termKey] : undefined;
+      const hist = c ? region(c.region).cdsSpreadHistoryByIssuer?.[issuerId]?.[termKey] : undefined;
       const v = hist?.[hist.length - 1];
       return typeof v === 'number' && v > 0 ? v : Number.NaN;
     },
@@ -185,7 +185,7 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
     },
     cdsSpreadWeeklyMoveBps: (issuerId, termKey) => {
       const c = companyById.get(issuerId);
-      return measuredWeeklyBpsMove(c ? region(c.region)?.cdsSpreadHistoryByIssuer?.[issuerId]?.[termKey] : undefined);
+      return measuredWeeklyBpsMove(c ? region(c.region).cdsSpreadHistoryByIssuer?.[issuerId]?.[termKey] : undefined);
     },
     // §3.17b-i — the shares an option is on: the print, the realised vol (the name's own off its
     // price ring, its region's index before it can estimate one), the weekly move.
@@ -201,16 +201,16 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
     // it after this phase, so a strike is at the latest published level), the IMPLIED vol its
     // option book cleared when it has one and the realised vol before, and its weekly move.
     indexLevel: (r) => { const v = regionIndexOf(ctx.updatedCompositeIndices, r).value; return v > 0 ? v : Number.NaN; },
-    indexAnnualVol: (r) => region(r)?.indexImpliedVol ?? realizedAnnualVol(regionIndexOf(ctx.updatedCompositeIndices, r).historical, VOL_WINDOW_WEEKS),
+    indexAnnualVol: (r) => region(r).indexImpliedVol ?? realizedAnnualVol(regionIndexOf(ctx.updatedCompositeIndices, r).historical, VOL_WINDOW_WEEKS),
     indexWeeklyMove: (r) => measuredWeeklyMove(regionIndexOf(ctx.updatedCompositeIndices, r).historical),
     // §3.17d-i — the basket a credit index is on, off the region that rolled it.
-    creditIndexSeries: (r, seriesId) => region(r)?.creditIndexSeries?.[seriesId],
+    creditIndexSeries: (r, seriesId) => region(r).creditIndexSeries?.[seriesId],
     creditIndexSpreadBps: (r, seriesId) => {
-      const hist = region(r)?.creditIndexSpreadHistoryBySeries?.[seriesId];
+      const hist = region(r).creditIndexSpreadHistoryBySeries?.[seriesId];
       const v = hist?.[hist.length - 1];
       return typeof v === 'number' && v > 0 ? v : Number.NaN;
     },
-    creditIndexWeeklyMoveBps: (r, seriesId) => measuredWeeklyBpsMove(region(r)?.creditIndexSpreadHistoryBySeries?.[seriesId]),
+    creditIndexWeeklyMoveBps: (r, seriesId) => measuredWeeklyBpsMove(region(r).creditIndexSpreadHistoryBySeries?.[seriesId]),
     // §3.17e-i — the deliverable: its cleared cash price and its terms off the sovereign ladder.
     sovereignBondPrice: (_r, bondId) => trancheClearedPricePerFace(ctx.v2, bondId) ?? Number.NaN,
     sovereignBondTerms: (r, bondId) => {
@@ -218,7 +218,7 @@ export function buildDerivativeMarketView(ctx: WeeklyStepContext): DerivativeMar
       return rung ? { couponRate: rung.couponRate, maturityWeek: rung.maturityWeek } : undefined;
     },
     bondFuturePrint: (r, _termKey, deliveryWeek) => {
-      const hist = region(r)?.bondFuturesPriceHistory?.[bondFutureInstrumentId(r, deliveryWeek)];
+      const hist = region(r).bondFuturesPriceHistory?.[bondFutureInstrumentId(r, deliveryWeek)];
       const v = hist?.[hist.length - 1];
       return typeof v === 'number' && v > 0 ? v : Number.NaN;
     },

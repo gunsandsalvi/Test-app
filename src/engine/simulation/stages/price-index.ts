@@ -57,7 +57,7 @@ function shelfPriceFor(
   if (typeof written === 'number' && isFinite(written) && written > 0) return written;
   const landed = demand.unitPriceLocal;
   if (!(typeof landed === 'number' && isFinite(landed) && landed > 0)) return 0;
-  const shortRate = region.zeroRates?.tenor3M ?? region.policyRate ?? 0;
+  const shortRate = region.zeroRates.tenor3M;
   return shelfPriceLocal(landed, subUnitId, shortRate);
 }
 

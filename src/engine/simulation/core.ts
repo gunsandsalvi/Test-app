@@ -133,7 +133,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   {
     // Any entity that entered the world by any path without a management gets its two
     // primitives drawn here, once, from its own stream.
-    ensureManagements(state.companies, state.institutionalEntities ?? [], state.currentWeek);
+    ensureManagements(state.companies, state.institutionalEntities, state.currentWeek);
   }
   const baseCtx = createInitialContext(state);
   // §5-STRUCT step 5: `ctx` is a binding the stage closures read at call time, so the runner can
@@ -162,9 +162,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // The REGISTER opens the same way. A holding's issuer is the party its instrument names: a
     // firm for equity and corporate paper (the id IS the company's), the treasury for a sovereign
     // tranche, the fund itself for its own shares.
-    const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+    const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities);
     const issuerOfHolding = (h: ItemizedHolding): PartyRef => issuerOfHoldingRow(v2, h, companyById);
-    for (const e of state.institutionalEntities ?? []) {
+    for (const e of state.institutionalEntities) {
       if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
     }
   }
@@ -447,7 +447,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // nothing in a week reads or writes the arrays (§3.13-BOOK d1), so carrying one forward
     // aliases nothing.
     const dirtyBooks = v2.holdings.dirty;
-    for (const e of nextState.institutionalEntities ?? []) {
+    for (const e of nextState.institutionalEntities) {
       if (dirtyBooks.has(e.id)) e.itemizedHoldings = materializeBook(v2, e.id);
     }
     clearDirtyBooks(v2);
@@ -495,7 +495,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
         // region the money moved in, and that is the whole point of the fallback.
         // §3.13-BOOK (c-then-3b): the tallies are keyed by the bank's ENTITY id.
         const nowById = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities).companyById;
-        const wasById = buildEntityIndex(state.companies, state.institutionalEntities ?? []).companyById;
+        const wasById = buildEntityIndex(state.companies, state.institutionalEntities).companyById;
         const regionOfBank = (bankId: EntityId): string | undefined =>
           (nowById.get(bankId) ?? wasById.get(bankId))?.region;
         const mergeMapsForRegion = (x: Map<EntityId, number>, y: Map<EntityId, number>): Map<EntityId, number> => {

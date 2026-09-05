@@ -47,7 +47,6 @@ import {
   GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { UNEMPLOYMENT_REPLACEMENT_RATE } from '../../bootstrap/national-accounts';
 import { clearLabourMatches, remainingLabourBids, labourPrintOf, LabourBid } from '../../../domain/labour-clearing';
-import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and-wages';
 import { isActiveCompany, fullStaffingCapHeads, RECEIPTS_MEASUREMENT_WEIGHT } from '../../../domain/company';
 import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
@@ -114,7 +113,7 @@ function outputPriceVsBaselineOf(comp: Company, reg: Region): number {
   return outputPriceVsBaseline((comp.productLines ?? []).map((line) => {
     const cd = reg.categoryDemand[line.subUnitId];
     return {
-      weight: Math.max(0, line.revenueShare ?? 0),
+      weight: Math.max(0, line.revenueShare),
       base: cd?.baseUnitPriceLocal ?? 0,
       now: cd?.unitPriceLocal ?? 0,
     };
@@ -178,7 +177,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     const separationsByOcc = { ...vacanciesByOcc };
 
     // Real output growth is what hiring follows, so the revenue signal is deflated.
-    const inflationAnnual = reg.inflation ?? 0.02;
+    const inflationAnnual = reg.inflation;
     // LAB: the occupation wage table this region's employers pay against.
     const baseAnnualWageLocal = getBaseAnnualWageLocal(regionId);
 
@@ -235,7 +234,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // above keeps them, which is what makes a raise do something rather than just cost money.
       // Execution quality retains too — a well-run firm loses fewer of them.
       const quits = current * Math.min(1,
-        quitRateWeekly * firmQuitMultiplier(comp.offeredWageIndex ?? 1.0, comp.executionQuality ?? 1.0));
+        quitRateWeekly * firmQuitMultiplier(comp.offeredWageIndex ?? 1.0, comp.executionQuality));
 
       // ---- LAB: WHAT THE FIRM CAN AFFORD. ----
       //
@@ -279,7 +278,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // output needs and what its earnings can carry. The need is the level target this stage's
       // header has always described — its own annualised output at its own baseline
       // productivity — which is a measurement off the firm's own books and not a new parameter.
-      const baselineRevPerHeadLocal = (comp.baselineEmployeeCount ?? 0) > 0
+      const baselineRevPerHeadLocal = (comp.baselineEmployeeCount) > 0
         ? (comp.baselineAnnualRevenue || comp.annualRevenue) / comp.baselineEmployeeCount!
         : 0;
       // Both sides of this ratio in the SAME dollars: this week's revenue deflated back to the
@@ -303,7 +302,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const demandPull = demandPullFromFill((comp.productLines ?? []).map((l) => {
         const cd = reg.categoryDemand[l.subUnitId];
         return {
-          weight: Math.max(0, l.revenueShare ?? 0),
+          weight: Math.max(0, l.revenueShare),
           demanded: Number(cd?.totalUnitsDemandedThisWeek) || 0,
           supplied: Number(cd?.totalUnitsSuppliedThisWeek) || 0,
         };
@@ -479,7 +478,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     });
     // Government is an employer too — its headcount is a policy quantity set in stage 02.
     Object.entries(GOVERNMENT_OCCUPATION_MIX).forEach(([occ, share]) => {
-      employedByOccBefore[occ as OccupationType] += reg.governmentEmployment * (share ?? 0);
+      employedByOccBefore[occ as OccupationType] += reg.governmentEmployment * (share);
     });
 
     // ---- 3. Matching, per occupation. An open vacancy carries over; a seeker who does not
@@ -528,7 +527,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     const reservationIndex = UNEMPLOYMENT_REPLACEMENT_RATE;
 
     OCCUPATIONS.forEach((occ) => {
-      const supplyForOcc = totalLaborForce * (shares[occ] ?? BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] ?? 0.2);
+      const supplyForOcc = totalLaborForce * (shares[occ]);
       // NOT clipped to supply. Clipping it here was a measurement that lied: an occupation
       // already staffed above its own labor-force share reported itself exactly at the share,
       // which left `seekers` positive, let hiring continue, and pushed the real overshoot
@@ -539,7 +538,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const separations = Math.min(employedBefore, separationsByOcc[occ]);
       // The separated are searching again this week: gross flows, not the net.
       const seekers = Math.max(0, supplyForOcc - employedBefore + separations);
-      const openVacancies = Math.max(0, (pools[occ]?.vacancies ?? 0) + vacanciesByOcc[occ]);
+      const openVacancies = Math.max(0, (pools[occ].vacancies ?? 0) + vacanciesByOcc[occ]);
 
       const matches = (seekers > 0 && openVacancies > 0)
         ? MATCHING_EFFICIENCY
@@ -578,8 +577,9 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     // occupation shares are the STATE this flow moves: they were a wage-gap drift at three
     // stated speeds in `evolution.ts`, which nothing measured and which went with this. ----
     {
-      const unmatched = {} as Record<OccupationType, number>;
-      const unfilled = {} as Record<OccupationType, number>;
+      // Filled per occupation as the matching finds one — SPARSE, and the reads below say so.
+      const unmatched: Partial<Record<OccupationType, number>> = {};
+      const unfilled: Partial<Record<OccupationType, number>> = {};
       OCCUPATIONS.forEach((occ) => {
         unmatched[occ] = Math.max(0, own[occ].seekers - hiresByOcc[occ]);
         unfilled[occ] = Math.max(0, own[occ].openVacancies - hiresByOcc[occ]);
@@ -591,7 +591,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         const second = clearLabourMatches(remainingLabourBids(bidsByOcc[occ], filledByKeyByOcc[occ]), moved.into[occ], reservationIndex);
         second.filledByKey.forEach((u, k) => filledByKeyByOcc[occ].set(k, (filledByKeyByOcc[occ].get(k) ?? 0) + u));
         hiresByOcc[occ] += second.filledUnits;
-        nextShares[occ] = Math.max(0, (shares[occ] ?? BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] ?? 0.2)
+        nextShares[occ] = Math.max(0, (shares[occ])
           + (moved.into[occ] - moved.outOf[occ]) / totalLaborForce);
       });
       reg.occupationLaborForceShare = nextShares;
@@ -613,7 +613,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // are drawn ACROSS the cross-section (a layoff does not select on tenure here), and the
       // reinjection is the hires, at the bottom.
       {
-        const priorStrata = pools[occ]?.tenureStrata;
+        const priorStrata = pools[occ].tenureStrata;
         const strata = (priorStrata && priorStrata.length > 0)
           ? priorStrata.map((st) => ({ ...st }))
           // Cold start: one cohort per year of a working life, spread evenly — the steady state
@@ -747,7 +747,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       });
     });
     Object.entries(GOVERNMENT_OCCUPATION_MIX).forEach(([occ, share]) => {
-      const w = Math.max(0, reg.governmentEmployment) * (share ?? 0);
+      const w = Math.max(0, reg.governmentEmployment) * (share);
       wageNumeratorByOcc[occ as OccupationType] += w;
       wageDenomByOcc[occ as OccupationType] += w;
     });
@@ -762,7 +762,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // Real wages fall while that happens, which is what a price surge does to them.
       const catchup = avgPaid - 1;
       marketCatchupByOcc[occ] = catchup;
-      const prev = pools[occ]?.wageIndex ?? 1.0;
+      const prev = pools[occ].wageIndex;
       // LAB: the going rate is a price and carries no band. It used to sit in [0.1, 20] with its
       // growth held to [-20%, +35%] — bounds that could only bind by disagreeing with what
       // employers were actually offering, which is the one thing the going rate IS.
@@ -838,16 +838,16 @@ export function reconcileEmploymentView(
     });
   });
   Object.entries(GOVERNMENT_OCCUPATION_MIX).forEach(([occ, share]) => {
-    employedByOcc[occ as OccupationType] += reg.governmentEmployment * (share ?? 0);
+    employedByOcc[occ as OccupationType] += reg.governmentEmployment * (share);
   });
 
   let totalEmployed = 0;
   let totalVacancies = 0;
   let totalSeekers = 0;
   OCCUPATIONS.forEach((occ) => {
-    const supplyForOcc = totalLaborForce * (shares[occ] ?? BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] ?? 0.2);
+    const supplyForOcc = totalLaborForce * (shares[occ]);
     const employed = Math.max(0, employedByOcc[occ]);
-    const vacancies = carriedVacanciesByOcc ? carriedVacanciesByOcc[occ] : (pools[occ]?.vacancies ?? 0);
+    const vacancies = carriedVacanciesByOcc ? carriedVacanciesByOcc[occ] : (pools[occ].vacancies ?? 0);
     totalEmployed += employed;
     totalVacancies += vacancies;
     totalSeekers += Math.max(0, supplyForOcc - employed);
@@ -877,7 +877,7 @@ export function reconcileEmploymentView(
   // happens, naming the inputs, instead of publishing it into every consumer.
   if (!(totalLaborForce > 0) || !isFinite(totalVacancies) || totalVacancies > totalLaborForce) {
     const byOcc = OCCUPATIONS.map((occ) => `${occ} ${Math.round(
-      carriedVacanciesByOcc ? carriedVacanciesByOcc[occ] : (pools[occ]?.vacancies ?? 0))}`).join(', ');
+      carriedVacanciesByOcc ? carriedVacanciesByOcc[occ] : (pools[occ].vacancies ?? 0))}`).join(', ');
     throw new Error(
       `ENGINE DEFECT: vacancy reading departed sanity — vacancies ${Math.round(totalVacancies)} against labor force ${Math.round(totalLaborForce)} (by occupation: ${byOcc})`);
   }
@@ -902,7 +902,7 @@ export function runLaborReconciliationStage(state: GameState, ctx: WeeklyStepCon
  * capped by both sides of every pair, so no seeker moves twice and no opening fills twice.
  */
 export function occupationalMobility(
-  unmatched: Record<OccupationType, number>, unfilled: Record<OccupationType, number>
+  unmatched: Partial<Record<OccupationType, number>>, unfilled: Partial<Record<OccupationType, number>>
 ): { into: Record<OccupationType, number>; outOf: Record<OccupationType, number> } {
   const zero = (): Record<OccupationType, number> => ({ GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0, SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0 });
   const into = zero(); const outOf = zero();

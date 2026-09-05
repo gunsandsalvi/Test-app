@@ -67,7 +67,7 @@ function runBondFuturesMarket({ ctx, week, view, standing }: DerivativeMarketRun
     const reference: DerivativeContract['reference'] = { kind: 'SOVEREIGN', regionId, bondId: bond.id };
     const marginRate = initialMarginRateOf({ classId: 'BOND_FUTURE', regionId, reference, termKey: BOND_FUTURE_TERM_KEY, maturityWeek: deliveryWeek }, view);
     const history = reg.bondFuturesPriceHistory ?? (reg.bondFuturesPriceHistory = {});
-    const lastPrint = history[instrumentId]?.[history[instrumentId].length - 1];
+    const lastPrint = history[instrumentId][history[instrumentId].length - 1];
 
     // ---- 2. THE QUOTES. ----
     const participants: ClearingParticipant[] = [];
@@ -138,7 +138,7 @@ function runBondFuturesMarket({ ctx, week, view, standing }: DerivativeMarketRun
       tradableFloatLocal: floatLocal,
       // Opens at its own last print; before one, at carry — the level the cash bond financed to
       // delivery implies, which is what every quote here is written against.
-      currentStat: Math.max(1e-6, lastPrint ?? carryPrice),
+      currentStat: Math.max(1e-6, lastPrint),
       statKind: 'PRICE_LIKE',
       durationYears,
     };

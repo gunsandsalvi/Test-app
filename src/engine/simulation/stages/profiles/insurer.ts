@@ -38,7 +38,7 @@ export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
     const region = comp.region;
     const operating = input.ctx.updatedCompanies.filter((c) => c.region === region && isActiveCompany(c) && !c.isBankEntity && !c.isInstitutionalEntity);
     const regionBaseLocal = operating.reduce((a, c) => a + corporateInsurableBaseLocal(c, input.ctx.nextWeek), 0)
-      + householdInsurableBaseLocal(input.reg.householdState?.netWorthLocal ?? 0, input.reg.estimatedHouseholdIncomeLocal ?? 0);
+      + householdInsurableBaseLocal(input.reg.householdState.netWorthLocal, input.reg.estimatedHouseholdIncomeLocal);
     let regionSurplusLocal = 0;
     entityById.forEach((e) => { if (e.region === region && e.entityType === 'INSURER' && !e.isDefaulted) regionSurplusLocal += Math.max(0, e.equityCapitalLocal); });
     instEnt.insurance = openInsuranceBook({ regionBaseLocal, ownSurplusLocal: instEnt.equityCapitalLocal, regionSurplusLocal, seedLossRatio: SEED_LOSS_RATIO });

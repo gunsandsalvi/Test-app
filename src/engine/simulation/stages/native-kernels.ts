@@ -25,7 +25,7 @@ interface NativeAddon {
 }
 
 function loadAddon(): NativeAddon | null {
-  if (typeof process === 'undefined' || !process.versions?.node) return null;
+  if (typeof process === 'undefined' || !process.versions.node) return null;
   if (process.env.NATIVE_KERNELS === '0') return null;
   try {
     const req = createRequire(import.meta.url);

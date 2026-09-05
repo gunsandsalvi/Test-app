@@ -79,7 +79,7 @@ function aggregateRegionalHoldings(state: GameState, regionId: RegionId): Region
     for (const h of materializeBook(v2a, e.id)) {
       const type = h.instrumentType;
       institutionalHoldings.push(h);
-      const v = h.quantityOrNotionalLocal ?? 0;
+      const v = h.quantityOrNotionalLocal;
       // CP: an issuer's short paper is corporate credit like its bonds — one view of the
       // institutional sector's claim on companies, whatever book prices it.
       // step 4 — the class comes from the registry (domain/assets), which is also where
@@ -284,7 +284,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   // default wave (measured accounted 1.02→1.07 in the UK's). Debt on a company with an
   // OPEN estate is still outstanding; its equity is not (dead equity is worthless).
   const openEstateCompanyIds = new Set(
-    (state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
+    (state.estates).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   const companyRegionById = new Map<string, RegionId>();
   state.companies.forEach((c) => {
     if (!isActiveCompany(c) && !openEstateCompanyIds.has(c.id)) return;
@@ -292,7 +292,7 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     const a = acc(c.region);
     if (!a) return;
     if (isActiveCompany(c)) {
-      if (isPubliclyListed(c)) a.equity.outstandingLocal += Math.max(0, marketCapAt(v2hv, c) ?? 0);
+      if (isPubliclyListed(c)) a.equity.outstandingLocal += Math.max(0, marketCapAt(v2hv, c));
     }
     {
       // Ladder read on rows (fold order = chain order = array order).

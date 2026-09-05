@@ -38,7 +38,7 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // first week and shed their entire workforce to the one-employee floor by week 3 (§7.108).
   // Credit loss belongs to the books that carry credit, at the rate this bank actually
   // experienced. (Removing the `random()` draw relabels the RNG stream — declared.)
-  const loanLosses = (creditBookLocal * (bs.loanLossProvisionRateAnnualPct ?? 0)) / 52;
+  const loanLosses = (creditBookLocal * (bs.loanLossProvisionRateAnnualPct)) / 52;
   // Smooth against last week's OWN revenue for noise damping (85/15, same order as other
   // week-to-week smoothing in this file) rather than a 98/2 blend anchored on this
   // company's original generation-time seed — that seed comes from the same small-scale

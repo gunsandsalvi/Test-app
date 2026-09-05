@@ -138,9 +138,9 @@ export class HoldingsStore {
     let sum = 0;
     for (let i = 0; i < slot.rows.length; i++) {
       const c = slot.claimed[i];
-      if (c === 0 || c === this.epoch) sum += slot.rows[i].quantityOrNotionalLocal ?? 0;
+      if (c === 0 || c === this.epoch) sum += slot.rows[i].quantityOrNotionalLocal;
     }
-    for (const r of slot.appended) sum += r.quantityOrNotionalLocal ?? 0;
+    for (const r of slot.appended) sum += r.quantityOrNotionalLocal;
     return sum;
   }
 
@@ -294,7 +294,7 @@ export class HoldingsStore {
     this.slots.forEach((slot) => {
       for (const h of slot.appended) {
         if (h.quantityShares !== undefined && h.quantityShares > 0 && !markById.has(`${h.instrumentType}|${h.issuerRegion}|${h.instrumentId}`)) {
-          markById.set(`${h.instrumentType}|${h.issuerRegion}|${h.instrumentId}`, (h.quantityOrNotionalLocal ?? 0) / h.quantityShares);
+          markById.set(`${h.instrumentType}|${h.issuerRegion}|${h.instrumentId}`, (h.quantityOrNotionalLocal) / h.quantityShares);
         }
       }
     });
@@ -314,7 +314,7 @@ export class HoldingsStore {
             const key = `${h.instrumentType}|${h.issuerRegion}`;
             let m = byBook.get(key); if (!m) { m = new Map(); byBook.set(key, m); }
             const cur = m.get(h.instrumentId) ?? { valueLocal: 0, shares: undefined, units: 0 };
-            cur.valueLocal += h.quantityOrNotionalLocal ?? 0;
+            cur.valueLocal += h.quantityOrNotionalLocal;
             if (h.quantityShares !== undefined) cur.shares = (cur.shares ?? 0) + h.quantityShares;
             // §9.13-CREDIT row 5 — the QUANTITY, which is what the two sides have in common. The
             // rows claimed off the book carry last week's mark and the rows appended are written
@@ -399,7 +399,7 @@ export class HoldingsStore {
           before += rowUnits(H, old); moveLotsTo(v2, old, r);
           addAccrued(v2, r, H.accruedLocal[old]); addAccrued(v2, old, -H.accruedLocal[old]);
         }
-        const px = markById.get(k) ?? (h.quantityShares !== undefined && h.quantityShares > 0 ? (h.quantityOrNotionalLocal ?? 0) / h.quantityShares : (clearedPriceOf(v2, h.instrumentId) ?? 1));
+        const px = markById.get(k) ?? (h.quantityShares !== undefined && h.quantityShares > 0 ? (h.quantityOrNotionalLocal) / h.quantityShares : (clearedPriceOf(v2, h.instrumentId) ?? 1));
         adjustLots(v2, r, rowUnits(H, r) - before, px, week);
         ids.push(r);
       }

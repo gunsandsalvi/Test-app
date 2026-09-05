@@ -313,7 +313,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           heldByBond.set(p.bondId, (heldByBond.get(p.bondId) ?? 0) + p.faceLocal);
         });
         const cashLocal = cashOf(ctx.v2, comp);
-        const targetLocal = corporateTreasuryTargetLocal(cashLocal, comp.annualRevenue ?? 0, riskAversionOf(comp.management));
+        const targetLocal = corporateTreasuryTargetLocal(cashLocal, comp.annualRevenue, riskAversionOf(comp.management));
         const heldLocal = Array.from(heldByBond.values()).reduce((a, v) => a + v, 0);
         if (!(targetLocal > 1) && !(heldLocal > 1)) return;
         const budgetLocal = Math.max(0, cashLocal
@@ -340,7 +340,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       if (cbOrder) participants.push(cbOrder.participant);
       if (reg.centralBankSheet) {
         reg.centralBankSheet.lastOrderPlacedLocal =
-          (reg.centralBankSheet.lastOrderPlacedLocal ?? 0) + (cbOrder?.orderedLocal ?? 0);
+          (reg.centralBankSheet.lastOrderPlacedLocal) + (cbOrder?.orderedLocal ?? 0);
       }
 
       // OWN7, first half: the float that every bidder EXCEPT the desks makes up, set before the
@@ -479,7 +479,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // onto its register book — the paper it bought with the reserves it created.
         const filled = bookCentralBankFills(ctx.v2, regionId, billIdList, cbFills, 'bill clearing fill');
         reg.centralBankSheet.lastOpenMarketPurchasesLocal =
-          Math.round(((reg.centralBankSheet.lastOpenMarketPurchasesLocal ?? 0) + filled));
+          Math.round(((reg.centralBankSheet.lastOpenMarketPurchasesLocal) + filled));
       }
 
       // Refit the curve through BOTH the cleared bills and 07c's cleared bonds, so the sub-2Y
@@ -735,9 +735,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         if (!(TSf.flags[r] & TR_FLOATING)) annualInterest += TSf.principalLocal[r] * (Number.isNaN(TSf.couponRate[r]) ? 0.05 : TSf.couponRate[r]);
         else annualInterest += TSf.principalLocal[r] * (reg.policyRate + (Number.isNaN(TSf.floatingMarginBps[r]) ? 200 : TSf.floatingMarginBps[r]) / 10000);
       }
-      const latestSnap = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
-      const dividendsQuarterLocal = Math.abs(latestSnap?.cashFlowStatement?.dividendsPaid ?? 0);
-      const quarterOutflowsLocal = annualInterest / 4 + (comp.maintenanceCapex ?? 0) / 4 + dividendsQuarterLocal;
+      const latestSnap = comp.historicalFundamentals[comp.historicalFundamentals.length - 1];
+      const dividendsQuarterLocal = Math.abs(latestSnap.cashFlowStatement.dividendsPaid);
+      const quarterOutflowsLocal = annualInterest / 4 + (comp.maintenanceCapex) / 4 + dividendsQuarterLocal;
       const quarterInflowLocal = Math.max(0, comp.ebitda) / 4;
       const projectedCashLocal = cashOf(ctx.v2, comp) - cpOutstandingLocal + quarterInflowLocal - quarterOutflowsLocal;
       const workingCapitalStockLocal = comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;

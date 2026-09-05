@@ -57,7 +57,7 @@ function exportFlowUSDBySubUnit(
     const units = split.unitsByOrigin[comp.region] ?? 0;
     const landed = split.expectedLandedCostByOrigin[comp.region] ?? 0;
     if (!(units > 0) || !(landed > 0)) return;
-    const flowLocal = units * landed * 52 * Math.max(0, line.categoryMarketShare ?? 0);
+    const flowLocal = units * landed * 52 * Math.max(0, line.categoryMarketShare);
     if (flowLocal > 0) out[line.subUnitId] = flowLocal;
   });
   return out;
@@ -100,7 +100,7 @@ export function runForeignDirectInvestment(
       counters[target] = landedDisadvantage(comp, target, ctx) ? (counters[target] ?? 0) + 1 : 0;
     });
     comp.fdiDisadvantageWeeksByRegion = counters;
-    const peak = Math.max(0, ...Object.values(counters).map((v) => v ?? 0));
+    const peak = Math.max(0, ...Object.values(counters).map((v) => v));
     if (peak > 0) armedFirms += 1;
     if (peak > maxCounter) maxCounter = peak;
 

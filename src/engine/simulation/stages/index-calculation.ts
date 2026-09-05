@@ -146,7 +146,7 @@ function basketValueLocal(v2: V2World, def: IndexDefinition, constituents: Index
 export function runIndexCalculationStage(state: GameState, ctx: WeeklyStepContext): void {
   const v2 = ensureV2(state);
   const { companyById: byId } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
-  const previous = new Map((state.marketIndexes ?? []).map((i) => [i.id, i]));
+  const previous = new Map((state.marketIndexes).map((i) => [i.id, i]));
   const week = ctx.nextWeek;
 
   ctx.updatedMarketIndexes = INDEX_DEFINITIONS.map((def): MarketIndex => {

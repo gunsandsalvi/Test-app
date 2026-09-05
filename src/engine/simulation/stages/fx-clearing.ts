@@ -162,7 +162,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   // drawn down as the pairs clear.
   const reserveBudgetRemaining = new Map<RegionId, number>();
   REGIONS.forEach(r => {
-    const cb = ctx.updatedRegions[r]?.centralBankSheet;
+    const cb = ctx.updatedRegions[r].centralBankSheet;
     const reservesLocal = cb ? centralBankFxReservesLocal(cb) : 0;
     reserveBudgetRemaining.set(r, Math.max(0, reservesLocal) * CENTRAL_BANK_FX_INTERVENTION_SHARE);
   });
@@ -271,11 +271,11 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     // a book quoted the other way up, it made the defending bank a seller of the thing it was
     // defending.)
     const defender = soldIsBase ? fx.base : fx.quote;
-    const cbDefend = ctx.updatedRegions[defender]?.centralBankSheet;
+    const cbDefend = ctx.updatedRegions[defender].centralBankSheet;
     const defenceBudgetLocal = soldIsBase
       ? (reserveBudgetRemaining.get(fx.base) ?? 0)
       : Math.min(reserveBudgetRemaining.get(fx.quote) ?? 0,
-                 Math.max(0, Number(ctx.updatedRegions[fx.quote]?.centralBankSheet?.fxReservesByRegion?.[fx.base]) || 0));
+                 Math.max(0, Number(ctx.updatedRegions[fx.quote].centralBankSheet?.fxReservesByRegion?.[fx.base]) || 0));
     if (cbDefend && defenceBudgetLocal > 0) {
       const demand = new Map<InstrumentId, ParticipantDemand>();
       demand.set(instrument.id, {
@@ -317,8 +317,8 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     // selling and the price of that is the basis (XB2b's own number; DER makes it clear).
     // The width of a desk's own quote: the cleared cross-currency basis where one has printed —
     // what its balance sheet is actually fetching this week — and the posted scale before that.
-    const clearedBasis = ctx.updatedRegions[fx.base]?.crossCurrencyBasisBps?.[fx.quote]
-      ?? ctx.updatedRegions[fx.quote]?.crossCurrencyBasisBps?.[fx.base];
+    const clearedBasis = ctx.updatedRegions[fx.base].crossCurrencyBasisBps?.[fx.quote]
+      ?? ctx.updatedRegions[fx.quote].crossCurrencyBasisBps?.[fx.base];
     const basisFrac = Math.max(1, clearedBasis ?? DEALER_QUOTE_WIDTH_BPS) / 10000;
     deskCapacityByTicker.forEach((capLocal, ticker) => {
       const bank = ctx.updatedCompanies.find((c) => c.ticker === ticker);

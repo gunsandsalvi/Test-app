@@ -217,7 +217,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       banks.map((bank) => ({ bank, sheet: bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, bank.bankMarketShare ?? 1 / banks.length) })),
       reg, regionId
     );
-    ctx.g2DeclinedOriginationLocal[regionId] = (ctx.g2DeclinedOriginationLocal[regionId] ?? 0) + smePlan.declinedLocal;
+    ctx.g2DeclinedOriginationLocal[regionId] = (ctx.g2DeclinedOriginationLocal[regionId]) + smePlan.declinedLocal;
     const newSheets: { bank: Company; sheet: BankingSector }[] = banks.map((bank) => {
       const share = bank.bankMarketShare ?? 1 / banks.length;
       const prevSheet = bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, share);
@@ -365,7 +365,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         mortgageDischargeLocal: household.mortgageDischargeLocal,
         mortgageRateQuotedAnnual: household.mortgageRateQuotedAnnual,
         turnoverRateAnnual: household.turnoverRateAnnual,
-        mortgageBookLocal: (household.sheet.householdLoans ?? [])
+        mortgageBookLocal: (household.sheet.householdLoans)
           .filter((pl) => pl.kind === 'MORTGAGE').reduce((a, pl) => a + pl.principalLocal, 0),
         consumerCreditOriginationLocal: household.consumerCreditOriginationLocal,
         principalLocal: household.principalWeeklyLocal,
@@ -377,7 +377,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
           (businessLoanBookOf(lentSheet, facilityBookLocal) > 0 ? (lending.loanLossWeeklyLocal * 52) / businessLoanBookOf(lentSheet, facilityBookLocal) : 0).toFixed(4)
         ),
       };
-      ctx.g2DeclinedOriginationLocal[regionId] = (ctx.g2DeclinedOriginationLocal[regionId] ?? 0) + lending.declinedOriginationLocal;
+      ctx.g2DeclinedOriginationLocal[regionId] = (ctx.g2DeclinedOriginationLocal[regionId]) + lending.declinedOriginationLocal;
       // A3.4/A3.6c-iii: what this bank's own book did to its household line this stage
       // the evolution's interest debit and deposit-interest credit (to the dollar), then the
       // loans it wrote and retired and the amortization it took — is the household sector's row
@@ -500,8 +500,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // The region's overnight book is the sum of the named banks' real positions. The
       // RATE is one market print per region and lives on reg.repoRateAnnual — never a second
       // copy on any sheet.
-      repoLentLocal: sumField((s) => s.repoLentLocal ?? 0),
-      repoBorrowedLocal: sumField((s) => s.repoBorrowedLocal ?? 0),
+      repoLentLocal: sumField((s) => s.repoLentLocal),
+      repoBorrowedLocal: sumField((s) => s.repoBorrowedLocal),
       // Itemized loans live per bank; the aggregate carries no copy (a flattened region
       // view would be a second ledger). Corporate deposits sum like everything else.
       businessLoans: [],
@@ -540,7 +540,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       0
     );
     const hs = reg.householdState;
-    const priorMortgageDebtLocal = hs.mortgageDebtLocal ?? 0;
+    const priorMortgageDebtLocal = hs.mortgageDebtLocal;
     const mortgageDebtLocal = Math.round(sumPools('MORTGAGE'));
     const creditCardDebtLocal = Math.round(sumPools('CREDIT_CARD'));
     const otherConsumerLoanDebtLocal = Math.round(sumPools('CONSUMER_TERM'));
@@ -611,7 +611,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // §3.26b-ii — what the owners must fetch: every vintage's payoff per dwelling, measured off
       // the region's books for next week's dwelling book (an owner cannot sell below it).
       reg.housingMarket.sellerPayoffLadder = sellerPayoffLadderOf(
-        newSheets.flatMap(({ sheet }) => (sheet.householdLoans ?? []).filter((pl) => pl.kind === 'MORTGAGE').flatMap((pl) => pl.vintages ?? [])));
+        newSheets.flatMap(({ sheet }) => (sheet.householdLoans).filter((pl) => pl.kind === 'MORTGAGE').flatMap((pl) => pl.vintages ?? [])));
     }
   });
 }

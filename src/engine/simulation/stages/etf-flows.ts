@@ -211,7 +211,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const mmf = ctx.updatedInstitutionalEntities.find(
       (e) => e.region === region && e.entityType === 'MONEY_MARKET_FUND'
     );
-    const depositYield = mmf?.mmfNetYieldAnnual ?? reg.policyRate ?? 0;
+    const depositYield = mmf?.mmfNetYieldAnnual ?? reg.policyRate;
     const equityShareOfSaving = earningsYield > 0
       ? Math.max(0, Math.min(1, (earningsYield - depositYield) / earningsYield))
       : 0;
@@ -229,7 +229,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // shortfall is not to sell at once: it runs its cash down first and sells only what its
     // deposits cannot cover. That ordering is why forced selling is rare, and why it is violent
     // when it comes — every buffer is exhausted at the same time, near the bottom.
-    const weeklySavingLocal = (reg.estimatedHouseholdIncomeLocal * (hs.savingsRate ?? 0)) / 52;
+    const weeklySavingLocal = (reg.estimatedHouseholdIncomeLocal * (hs.savingsRate)) / 52;
     let intoFundsLocal: number;
     if (weeklySavingLocal >= 0) {
       intoFundsLocal = weeklySavingLocal * equityShareOfSaving;
@@ -459,8 +459,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // payment, the same trim applies to it, or a household would be paid for shares it does not
     // hold. One number for both legs.
     if (householdExecutedLocal < 0) {
-      const held = ctx.updatedRegions[fund.region]?.householdState?.etfShares
-        ?.find((x) => x.fundId === fund.id);
+      const held = ctx.updatedRegions[fund.region].householdState.etfShares
+        .find((x) => x.fundId === fund.id);
       const heldLocal = (held?.shares ?? 0) * navPerShare;
       householdExecutedLocal = Math.max(-heldLocal, householdExecutedLocal);
     }

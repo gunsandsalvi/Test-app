@@ -316,7 +316,7 @@ export function runRegionalRepoSession(
   // back is one map, built once, rather than a scan per fill.
   const bankIdByTicker = new Map(banks.map((b) => [b.ticker, b.id]));
   const tickerOfBankId = new Map(banks.map((b) => [b.id, b.ticker]));
-  const priorRepoRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
+  const priorRepoRateAnnual = reg.repoRateAnnual;
   const policyBps = reg.policyRate * 10000;
   const { floorBps: rrpBps, ceilingBps: srfBps } = repoCorridorBps(reg.policyRate);
   const corridorWidthBps = Math.max(1, srfBps - rrpBps);
@@ -524,7 +524,7 @@ export function runRegionalRepoSession(
   // NOT sit in this book, because the standing facility is overnight — so a term need the
   // private market will not fund simply is not funded, and falls back to overnight below. That
   // is a funding squeeze, and it could not previously happen.
-  const termBps = Math.max(0, (reg.zeroRates?.tenor3M ?? reg.policyRate) * 10000);
+  const termBps = Math.max(0, (reg.zeroRates.tenor3M) * 10000);
   const term = totalTermNeedLocal > 0
     ? runBook({
         instrumentId: termInstrumentId,
@@ -716,8 +716,8 @@ export function drawReverseRepoAtTheClose(ctx: WeeklyStepContext): number {
     return { ...e, rrpLentLocal: parkedLocal, rrpRateAnnual: rateAnnual };
   });
   parkedByRegion.forEach((usd, regionId) => {
-    const cb = ctx.updatedRegions[regionId as RegionId]?.centralBankSheet;
-    if (cb) cb.reverseRepoBorrowedLocal = (cb.reverseRepoBorrowedLocal ?? 0) + usd;
+    const cb = ctx.updatedRegions[regionId as RegionId].centralBankSheet;
+    if (cb) cb.reverseRepoBorrowedLocal = (cb.reverseRepoBorrowedLocal) + usd;
   });
   ctx.rrpIntendedByEntity.clear();
   return parkedTotal;
@@ -725,7 +725,7 @@ export function drawReverseRepoAtTheClose(ctx: WeeklyStepContext): number {
 
 /** Last week's parked cash, back with the interest it earned at the rate it was struck at. */
 function returnParkedCash(ctx: WeeklyStepContext, regionId: RegionId): void {
-  const cb = ctx.updatedRegions[regionId]?.centralBankSheet;
+  const cb = ctx.updatedRegions[regionId].centralBankSheet;
   if (cb) cb.lastReverseRepoInterestLocal = 0;
   let returnedLocal = 0;
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
@@ -743,7 +743,7 @@ function returnParkedCash(ctx: WeeklyStepContext, regionId: RegionId): void {
     });
     return { ...e, rrpLentLocal: 0, rrpRateAnnual: undefined };
   });
-  if (cb) cb.reverseRepoBorrowedLocal = Math.max(0, (cb.reverseRepoBorrowedLocal ?? 0) - returnedLocal);
+  if (cb) cb.reverseRepoBorrowedLocal = Math.max(0, (cb.reverseRepoBorrowedLocal) - returnedLocal);
 }
 
 /**

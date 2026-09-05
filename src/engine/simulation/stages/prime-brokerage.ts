@@ -190,7 +190,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       // above it repays — so a fund that spent its cash on securities last week draws to fund
       // them, and one sitting on cash does not borrow at all. The line is a constraint on that,
       // never a driver of it, which is what a credit line is.
-      const sleeveTargetLocal = Math.max(0, fund.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, institutionTotalAssetsLocal(ctx, fund));
+      const sleeveTargetLocal = Math.max(0, fund.assetAllocationTarget.cashPct) * Math.max(0, institutionTotalAssetsLocal(ctx, fund));
       const cashGapLocal = sleeveTargetLocal - Math.max(0, entityCashOf(ctx.v2, fund));
       const targetDrawnLocal = Math.max(0, Math.min(lineLocal, drawnLocal + cashGapLocal));
       const deltaLocal = targetDrawnLocal - drawnLocal;

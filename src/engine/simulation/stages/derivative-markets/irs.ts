@@ -196,7 +196,7 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
       floatByTenor.set(k, totalLocal);
       const seated = rvSeats.some((p) => p.demandByInstrumentId.has(swapInstrumentId(regionId, k)));
       if (!(totalLocal > 0) && !seated) return;
-      const zeroRate = reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]] ?? reg.policyRate;
+      const zeroRate = reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]];
       // §3.13-BOOK dII: the tenor's book is declared on the instrument index where it is built.
       registerBook(ctx.v2, swapInstrumentId(regionId, k), 'IRS', currencyOf(regionId));
       instruments.push({
@@ -226,7 +226,7 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
       if (durationGapLocal <= 0) return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
       SWAP_TENORS.forEach((k) => {
         if (!(floatByTenor.get(k)! > 0)) return;
-        const zeroBps = (reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]] ?? reg.policyRate) * 10000;
+        const zeroBps = (reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]]) * 10000;
         demandByInstrumentId.set(swapInstrumentId(regionId, k), {
           // It will not receive less fixed than the bond of the same tenor already pays it.
           reservationStat: zeroBps,
@@ -305,7 +305,7 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
 
     reg.swapParRateByTenor = parByTenor;
     // The published benchmark: the overnight print compounded, exactly as an overnight index is.
-    const overnightRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
+    const overnightRateAnnual = reg.repoRateAnnual;
     reg.securedOvernightIndex = Number(
       ((reg.securedOvernightIndex ?? 100) * (1 + overnightRateAnnual / 52)).toFixed(6)
     );
@@ -325,7 +325,7 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
     // referencing an administered rate. It is the first cross-market basis this model produces.
     reg.swapSpreadBpsByTenor = Object.fromEntries(SWAP_TENORS.map((k) => [
       k,
-      Number((((parByTenor[k] ?? 0) - (reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]] ?? 0)) * 10000).toFixed(1)),
+      Number((((parByTenor[k] ?? 0) - (reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]])) * 10000).toFixed(1)),
     ]));
   });
 }

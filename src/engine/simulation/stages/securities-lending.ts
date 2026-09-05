@@ -284,13 +284,13 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     const mcapByRegion: Record<string, number> = {};
     (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
       mcapByRegion[r] = ctx.prevActiveFirms
-        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapAt(ctx.v2, c) ?? 0), 0);
+        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, marketCapAt(ctx.v2, c)), 0);
     });
     const floatValueById = new Map(listed.map((c) => [c.id, issuedSharesOf(ctx.v2, c.id) * c.stockPrice]));
     const totalFloatValueLocal = listed.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;
     const bookEquityById = new Map(listed.map((c) => [c.id, companyBookEquityLocal(c, cashOf(ctx.v2, c), ladderTotalLocal(ctx.v2, c.id), ctx.nextWeek)]));
     const netInvestmentRateById = new Map(listed.map((c) => [c.id, companyNetInvestmentRate(c, ctx.nextWeek)]));
-    const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
+    const riskFreeRate = reg.zeroRates.tenor10Y;
 
     const shortFunds = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === regionId && !e.isDefaulted
@@ -315,7 +315,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
           bookEquityLocal: bookEquityById.get(c.id) ?? 0,
           netInvestmentRate: netInvestmentRateById.get(c.id) ?? 0,
           riskFreeRate,
-          beta: c.beta ?? 1,
+          beta: c.beta,
           holderRequiredReturn: requiredReturn,
         });
         const structuralShares = (poolLocal * ((floatValueById.get(c.id) ?? 0) / totalFloatValueLocal))

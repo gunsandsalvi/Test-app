@@ -116,7 +116,7 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
     const bufferLocal = sheet.bankEquityLocal - rwaLocal * BANK_MIN_CAPITAL_RATIO;
     // The book's own measured provision rate (02b re-derives it weekly from the pools' real
     // default experience); the floor is consumerAnnualLossRate's own de-minimis.
-    const lossRateAnnual = Math.max(0.005, sheet.loanLossProvisionRateAnnualPct ?? 0.01);
+    const lossRateAnnual = Math.max(0.005, sheet.loanLossProvisionRateAnnualPct);
     const distance = bufferLocal / (rwaLocal * lossRateAnnual);
     return normalCdf(-distance);
   }
@@ -140,9 +140,9 @@ export function computeAnnualDefaultProbability(v2: V2World, comp: Company): num
   // a cash flow statement does, as a NEGATIVE financing outflow; this needs the magnitude of the
   // outflow, so take the absolute value — added signed, it subtracted from fixed outflows and
   // made a dividend-paying company look SAFER for paying one.
-  const latestSnap = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
-  const dividendsAnnualLocal = Math.abs(latestSnap?.cashFlowStatement?.dividendsPaid ?? 0) * 4;
-  const fixedOutflowsLocal = interest + (comp.maintenanceCapex ?? 0) + dividendsAnnualLocal;
+  const latestSnap = comp.historicalFundamentals[comp.historicalFundamentals.length - 1];
+  const dividendsAnnualLocal = Math.abs(latestSnap.cashFlowStatement.dividendsPaid) * 4;
+  const fixedOutflowsLocal = interest + (comp.maintenanceCapex) + dividendsAnnualLocal;
   const shockToCash = 1 - (fixedOutflowsLocal - Math.max(0, cashOf(v2, comp))) / ebitda;
   const distance = Math.max(shockToCoverage, shockToCash);
 
@@ -199,7 +199,7 @@ export function computeOccupationDemand(companies: Company[], privateSegments: S
 
   if (governmentEmployment) {
     Object.entries(GOVERNMENT_OCCUPATION_MIX).forEach(([occ, share]) => {
-      demand[occ] += governmentEmployment * (share ?? 0);
+      demand[occ] += governmentEmployment * (share);
     });
   }
 

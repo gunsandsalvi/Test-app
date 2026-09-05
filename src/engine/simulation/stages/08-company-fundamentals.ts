@@ -81,7 +81,7 @@ function groupSupplyRelationships(
 
 // §7.315's method — name the term before converting: a per-phase split of this stage's 280 ms
 // (12wk profile). One-run diagnostic, free when off.
-const S08_PROF = typeof process !== 'undefined' && process.env?.S08_PROF === '1';
+const S08_PROF = typeof process !== 'undefined' && process.env.S08_PROF === '1';
 
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
   const __p0 = S08_PROF ? performance.now() : 0;
@@ -155,7 +155,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   carryingCostByTicker.forEach((costLocal, ticker) => {
     const owner = prevActiveFirms.find(c => c.ticker === ticker);
     if (!owner) return;
-    ctx.channelShareByRegion[owner.region]?.forEach((share, holderId) => {
+    ctx.channelShareByRegion[owner.region].forEach((share, holderId) => {
       if (holderId === owner.id) return; // a distributor warehouses its own stock
       const amountLocal = costLocal * share;
       if (amountLocal > 0) {
@@ -588,7 +588,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   if (S08_PROF) {
     console.log(`[s08] front+indexes ${(__p1 - __p0).toFixed(0)} kernel ${(__p2 - __p1).toFixed(0)}`
       + ` sweeps ${(__p2a - __p2).toFixed(0)} corp-actions ${(__p2b - __p2a).toFixed(0)} accruals ${(__p3 - __p2b).toFixed(0)}`);
-    if (process.env?.S08K_PROF === '1') {
+    if (process.env.S08K_PROF === '1') {
       console.log(`[s08k] capital ${s08k.capital.toFixed(0)} cash ${s08k.cash.toFixed(0)} debt ${s08k.debt.toFixed(0)} tail ${s08k.tail.toFixed(0)}`);
       s08k.capital = 0; s08k.cash = 0; s08k.debt = 0; s08k.tail = 0;
     }
@@ -608,7 +608,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (!isActiveCompany(c)) return;
       (c.productLines || []).forEach((pl) => {
         const key = `${c.region}:${pl.subUnitId}`;
-        shareSumByKey.set(key, (shareSumByKey.get(key) ?? 0) + (pl.categoryMarketShare ?? 0));
+        shareSumByKey.set(key, (shareSumByKey.get(key) ?? 0) + (pl.categoryMarketShare));
       });
     });
     // SCALE §7.303 — in place, like every other write in this stage: the { ...c } spread here

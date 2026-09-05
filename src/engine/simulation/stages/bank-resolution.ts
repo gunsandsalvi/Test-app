@@ -45,9 +45,9 @@ import type { Ticker, EntityId } from '../../../domain/ids';
 const sheetLinesLocal = (s: BankingSector, cashLocal: number, lines: DepositLines, facilityBookLocal: number, sovLocal: number, marginAtHouseLocal: number, swapLineLocal: number): number =>
   Math.abs(lines.householdLocal) + Math.abs(lines.corporateLocal) + Math.abs(lines.institutionalLocal)
   + Math.abs(lines.ccpLocal) + Math.abs(lines.smeLocal) + Math.abs(s.centralBankLoanLocal ?? 0)
-  + Math.abs(s.bankEquityLocal) + Math.abs(s.srfBorrowingLocal ?? 0) + Math.abs(s.repoBorrowedLocal ?? 0)
+  + Math.abs(s.bankEquityLocal) + Math.abs(s.srfBorrowingLocal) + Math.abs(s.repoBorrowedLocal)
   + Math.abs(businessLoanBookOf(s, facilityBookLocal)) + Math.abs(consumerLoanBookOf(s)) + Math.abs(sovLocal)
-  + Math.abs(cashLocal) + Math.abs(s.repoLentLocal ?? 0) + Math.abs(s.onRrpLendingLocal ?? 0)
+  + Math.abs(cashLocal) + Math.abs(s.repoLentLocal) + Math.abs(s.onRrpLendingLocal)
   + Math.abs(s.sovereignAccruedCouponLocal ?? 0) + Math.abs(s.primeBrokerageLoansLocal ?? 0) + Math.abs(marginAtHouseLocal) + Math.abs(swapLineLocal);
 
 /**

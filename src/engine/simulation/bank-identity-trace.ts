@@ -67,11 +67,11 @@ export function fieldsOf(bs: BankingSector, cashLocal: number, lines: DepositLin
     institutionalDepositsLocal: lines.institutionalLocal,
     ccpDepositsLocal: lines.ccpLocal, smeDepositsLocal: lines.smeLocal,
     centralBankLoanLocal: bs.centralBankLoanLocal ?? 0, bankEquityLocal: bs.bankEquityLocal,
-    srfBorrowingLocal: bs.srfBorrowingLocal ?? 0, repoBorrowedLocal: bs.repoBorrowedLocal ?? 0,
+    srfBorrowingLocal: bs.srfBorrowingLocal, repoBorrowedLocal: bs.repoBorrowedLocal,
     businessLoanBookLocal: businessLoanBookOf(bs, facilityBookLocal), consumerLoanBookLocal: consumerLoanBookOf(bs),
     sovHoldingsLocal: sovLocal,
-    cashReservesLocal: cashLocal, repoLentLocal: bs.repoLentLocal ?? 0,
-    onRrpLendingLocal: bs.onRrpLendingLocal ?? 0,
+    cashReservesLocal: cashLocal, repoLentLocal: bs.repoLentLocal,
+    onRrpLendingLocal: bs.onRrpLendingLocal,
     sovereignAccruedCouponLocal: bs.sovereignAccruedCouponLocal ?? 0,
     // §3.13-BOOK d3d: the desks' rows, off the register (`deskGrossLocal`), handed in like the book.
     deskInventoryAbsLocal: deskGrossLocal,
@@ -87,9 +87,9 @@ export function residualOf(bs: BankingSector, cashLocal: number, lines: DepositL
   return (
     lines.householdLocal + lines.corporateLocal + lines.institutionalLocal
     + lines.ccpLocal + lines.smeLocal + (bs.centralBankLoanLocal ?? 0) + swapLineLocal
-    + bs.bankEquityLocal + (bs.srfBorrowingLocal ?? 0) + (bs.repoBorrowedLocal ?? 0)
+    + bs.bankEquityLocal + (bs.srfBorrowingLocal) + (bs.repoBorrowedLocal)
     - businessLoanBookOf(bs, facilityBookLocal) - consumerLoanBookOf(bs) - sovLocal - cashLocal
-    - (bs.repoLentLocal ?? 0) - (bs.onRrpLendingLocal ?? 0)
+    - (bs.repoLentLocal) - (bs.onRrpLendingLocal)
     - (bs.sovereignAccruedCouponLocal ?? 0)
     // The harness counts a desk row at Math.abs — a SHORT counted as an asset. trade.ts books
     // cash on the SIGNED delta, so if a desk sits net short the two conventions differ by twice

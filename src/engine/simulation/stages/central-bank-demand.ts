@@ -54,7 +54,7 @@ export function centralBankParticipant(
   centralBankPositions(v2, regionId).forEach((p) => heldByBond.set(p.bondId, (heldByBond.get(p.bondId) ?? 0) + p.faceLocal));
   bondIds.forEach((key) => {
     const heldLocal = heldByBond.get(key) ?? 0;
-    const orderLocal = Math.max(0, Number(cb.plannedPurchasesByBond?.[key]) || 0);
+    const orderLocal = Math.max(0, Number(cb.plannedPurchasesByBond[key]) || 0);
     orderedLocal += orderLocal;
     holdings.set(key, heldLocal);
     demand.set(key, {

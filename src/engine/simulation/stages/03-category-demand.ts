@@ -200,7 +200,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       const intensities = firmInputIntensities(c.productLines, profileKeyOf(c));
       Object.entries(intensities).forEach(([unitId, intensity]) => {
         corpInputDemandByCategory[unitId] =
-          (corpInputDemandByCategory[unitId] ?? 0) + c.annualRevenue * (intensity ?? 0);
+          (corpInputDemandByCategory[unitId] ?? 0) + c.annualRevenue * (intensity);
       });
     });
 
@@ -222,7 +222,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           const capexDemandLocal = ctx.updatedCompanies.reduce((a, c) => (
             c.region === regionId && isActiveCompany(c)
               // §3.26-f-iv-b: each buyer's capex in ITS industry's mix, the split stage 05 bids.
-              ? a + ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)) * (capitalMixOf(c.productLines, profileKeyOf(c))[su.unitId] ?? 0)
+              ? a + ((c.maintenanceCapex) + (c.growthCapex)) * (capitalMixOf(c.productLines, profileKeyOf(c))[su.unitId] ?? 0)
               : a), 0);
           // §7.245 — THE GOVERNMENT'S CAPEX-CATEGORY DEMAND IS APPROPRIATED, LIKE EVERYWHERE
           // ELSE. This branch used to `return` before the govBudgetByCategory write, so the five

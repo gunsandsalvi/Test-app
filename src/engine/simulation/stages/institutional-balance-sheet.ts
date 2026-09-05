@@ -86,7 +86,7 @@ function availablePurchaseCapacityLocal(entity: InstitutionalEntity, cashLocal: 
   // clearing residual swinging 72B → 23B → 32B → 18B week to week, and once institutional
   // balances became real bank liabilities (SETL5) that swing went straight into bank reserves
   //. Below the sleeve an entity is a net seller, which is what a fund short of cash is.
-  const sleeveTargetLocal = Math.max(0, entity.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, totalAssetsLocal);
+  const sleeveTargetLocal = Math.max(0, entity.assetAllocationTarget.cashPct) * Math.max(0, totalAssetsLocal);
   // Plus what this week's already-agreed trades will settle — negative once the fund has
   // committed, so the five books cannot each spend the same balance. The clearing legs are
   // payment instructions now (stages/book-settlement.ts) and the cash moves at the settlement
@@ -266,7 +266,7 @@ export function institutionTotalAssetsFromState(state: GameState, entity: Instit
   const v2 = ensureV2(state);
   const portfolioLocal = entity.entityType === 'PRIVATE_EQUITY' && entity.peFund
     ? sponsorPortfolioLocal(entity, comparableMultiple(ensureV2(state), state, entity.region, state.companies.filter((c) => isActiveCompany(c))),
-        buildEntityIndex(state.companies, state.institutionalEntities ?? []).companyById, v2)
+        buildEntityIndex(state.companies, state.institutionalEntities).companyById, v2)
     : 0;
   return totalAssetsRead(entity, entityCashOf(v2, entity), institutionBookLocal(v2, entity.id), 0, portfolioLocal, bookAccruedLocal(v2, entity.id));
 }

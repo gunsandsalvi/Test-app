@@ -95,8 +95,8 @@ export function probeSteadyState(s: GameState): Record<string, number> {
   out['goods fill ratio'] = demanded > 0 ? supplied / demanded : 1;
 
   for (const rid of REGION_IDS) {
-    out[`${rid} CPI level`] = Number(s.regions[rid]?.consumerPriceIndex) || 0;
-    out[`${rid} unemployment`] = Number(s.regions[rid]?.unemploymentRate) || 0;
+    out[`${rid} CPI level`] = Number(s.regions[rid].consumerPriceIndex) || 0;
+    out[`${rid} unemployment`] = Number(s.regions[rid].unemploymentRate) || 0;
   }
   out['USA CPI level'] = Number(s.regions.USA.consumerPriceIndex) || 0;
   out['USA unemployment'] = Number(s.regions.USA.unemploymentRate) || 0;
@@ -106,7 +106,7 @@ export function probeSteadyState(s: GameState): Record<string, number> {
   out['defaults this week'] = s.companies.filter((c) => c.defaultedWeek === s.currentWeek).length;
   // Estates still working. It only falls when a workout finishes, so a number that only ever
   // rises means the close condition cannot be met and the dead firms' holders are stuck.
-  out['open estates'] = (s.estates ?? []).filter((e) => e.closedWeek === undefined).length;
+  out['open estates'] = (s.estates).filter((e) => e.closedWeek === undefined).length;
   let ppe = 0;
   let mothballed = 0;
   for (const c of s.companies) {
@@ -251,7 +251,7 @@ export function burnIn(
     if (mode.mode === 'auto' && quiet >= SETTLED_WEEKS) { converged = true; break; }
   }
   const last = trace[trace.length - 1];
-  const drifting = converged ? [] : (last?.moved ?? []);
+  const drifting = converged ? [] : (last.moved);
   if (verbose) {
     console.log(converged
       ? `  [burn-in] SETTLED after ${w} weeks (${SETTLED_WEEKS} quiet weeks)`

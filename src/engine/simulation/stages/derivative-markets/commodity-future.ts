@@ -65,7 +65,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
   const consumerIdOfTicker = (t: Ticker) => buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities).companyByTicker.get(t)?.id;
   const firmById = new Map(firms.map((c) => [c.id, c]));
   // The USA short rate finances a carry position; it is the one this model quotes globally.
-  const financingRateAnnual = ctx.updatedRegions.USA?.zeroRates?.tenor3M ?? 0.03;
+  const financingRateAnnual = ctx.updatedRegions.USA.zeroRates.tenor3M;
   const riskFreeRate = riskFreeRateOf(ctx.updatedRegions.USA);
 
   // ---- 1. WHO HAS TO HEDGE, on each side, measured off real books, net of what each already
@@ -88,7 +88,7 @@ function runCommodityFuturesMarket({ state, ctx, week, standing, view }: Derivat
       firms.forEach((c) => {
         const spendLocal = (c.productLines || []).reduce((a, line) => {
           const intensity = CATEGORY_INPUT_REQUIREMENTS[line.subUnitId]?.[linkage.subUnitId] ?? 0;
-          return a + c.annualRevenue * (line.revenueShare ?? 0) * intensity * linkage.intensityShare;
+          return a + c.annualRevenue * (line.revenueShare) * intensity * linkage.intensityShare;
         }, 0);
         if (spendLocal > 0) consumerExposureLocal.set(c.id, spendLocal);
       });

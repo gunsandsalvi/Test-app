@@ -379,7 +379,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
     lookup.byId.set(c.id, c);
     lookup.byKey.set(c.id, c); // ids first; the ticker pass below overwrites any collision
     index.activeFirms.push(c);
-    if ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0) > 0) index.capexBuyers.push(c);
+    if ((c.maintenanceCapex) + (c.growthCapex) > 0) index.capexBuyers.push(c);
     (c.productLines || []).forEach((l) => {
       const arr = index.suppliersBySubUnit.get(l.subUnitId);
       if (arr) arr.push(c); else index.suppliersBySubUnit.set(l.subUnitId, [c]);
@@ -404,7 +404,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
   // other book, but its stock is real goods and the buyers of those goods are here. It is a
   // supplier of every row it holds, at no reservation, and nothing else: not a buyer, not a
   // capex buyer, no product line, no production.
-  const openEstateIds = new Set((ctx.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
+  const openEstateIds = new Set((ctx.estates).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   if (openEstateIds.size > 0) {
     ctx.updatedCompanies.forEach((c) => {
       if (!openEstateIds.has(c.id)) return;
@@ -783,8 +783,8 @@ function settleContracts(
     const cs = custSlotOf(customer);
     custSlot[i] = cs;
     needLocal[i] = needBySlot[cs];
-    marketPrice[i] = regionReferencePrice[customer.region as RegionId] ?? T.priceLocal[r];
-    supRegPx[i] = regionReferencePrice[supplier.region as RegionId] ?? T.priceLocal[r];
+    marketPrice[i] = regionReferencePrice[customer.region as RegionId];
+    supRegPx[i] = regionReferencePrice[supplier.region as RegionId];
     let slot = slotBySupplier.get(supplier);
     if (slot === undefined) {
       slot = slotSuppliers.length;
@@ -980,7 +980,7 @@ function buildRegionSupplyPlans(
       plantEffectiveNetLocal(comp.plant, capitalMixOf([{ subUnitId, revenueShare: 1 }], profileKeyOf(comp)), week));
     if (!(line.unitsPerNetPpeDollar! > 0)) {
       const openingCapacityUnits =
-        ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / referencePriceLocal;
+        ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare) / referencePriceLocal;
       // SAME VINTAGE ON BOTH SIDES (rule 8). The line's share belongs INSIDE the
       // anchor: dividing by the opening share here and re-multiplying by the CURRENT share on
       // every read made physical capacity track the line's revenue share week to week — plant
@@ -1042,7 +1042,7 @@ function buildRegionSupplyPlans(
       firmWeeklyCostLocal = currentPayrollWeeklyLocal + comp.realInputConsumptionCostWeeklyLocal + residualWeeklyLocal;
       firmAvoidableCostLocal = comp.realInputConsumptionCostWeeklyLocal;
     }
-    const weeklyOperatingCostLocal = firmWeeklyCostLocal * (line.revenueShare ?? 1.0);
+    const weeklyOperatingCostLocal = firmWeeklyCostLocal * (line.revenueShare);
     // LVL — THE SHORT-RUN DECISION IS TAKEN ON AVOIDABLE COST.
     //
     // The week's wages are owed whether or not the plant runs (the labour market hires and sheds
@@ -1055,7 +1055,7 @@ function buildRegionSupplyPlans(
     // warns of. A plant runs while the price covers what running it costs; a firm that cannot
     // cover its wages sheds them (the labour rule) and, persistently, mothballs. Until
     // stage 08 has measured the decomposition (week 1) the seed's break-even full cost stands.
-    const weeklyAvoidableCostLocal = (firmAvoidableCostLocal ?? firmWeeklyCostLocal) * (line.revenueShare ?? 1.0);
+    const weeklyAvoidableCostLocal = (firmAvoidableCostLocal ?? firmWeeklyCostLocal) * (line.revenueShare);
 
     // CAP — A FIRM THAT CANNOT COVER UNIT COST STOPS PRODUCING.
     //
@@ -1082,7 +1082,7 @@ function buildRegionSupplyPlans(
     // "fully staffed" at its old headcount and doubled output nobody worked for; scaled with
     // net PP&E, more plant needs more people to run it — which is what makes hiring the way a
     // grown firm's output actually grows.
-    const staffedShare = Math.max(0, (comp.employeeCount ?? 0) / fullStaffingCapHeads(comp, week));
+    const staffedShare = Math.max(0, (comp.employeeCount) / fullStaffingCapHeads(comp, week));
     // What the plant can make THIS WEEK. A harvest is not a decision: the crop ripens
     // once a year and no price makes it ripen twice. Averages to 1 over the year, so this moves
     // output around the calendar and never adds any.
@@ -1131,7 +1131,7 @@ function buildRegionSupplyPlans(
     // stage 08's capacity-retirement rule integrates this into the mothball/scrap stock response.
     if (!coversUnitCost) {
       const up = wk.updateOf(comp);
-      up.idleLineRevenueShare = (up.idleLineRevenueShare ?? 0) + Math.max(0, line.revenueShare ?? 0);
+      up.idleLineRevenueShare = (up.idleLineRevenueShare ?? 0) + Math.max(0, line.revenueShare);
     }
     const uncappedProductionUnits = staffedNormalSeasonUnits * seasonalPlantFactor;
     // PRODUCE TO SALES, NOT TO THE WAREHOUSE. The throttle above only bites once stock
@@ -1160,7 +1160,7 @@ function buildRegionSupplyPlans(
       // capacity-retirement rule (stage 08) into the mothball stock response, like the idle share.
       const up = wk.updateOf(comp);
       up.demandSlackRevenueShare = (up.demandSlackRevenueShare ?? 0)
-        + Math.max(0, line.revenueShare ?? 0) * (1 - plannedProductionUnits / uncappedProductionUnits);
+        + Math.max(0, line.revenueShare) * (1 - plannedProductionUnits / uncappedProductionUnits);
     }
     const targetProductionUnits = coversUnitCost ? plannedProductionUnits : 0;
     if (process.env.CAT_TRACE === subUnitId) {
@@ -1229,7 +1229,7 @@ function buildRegionSupplyPlans(
     // plant, this line's share of it, over the week's units. It was `(0.05 + pd × 0.60) × 1.5`: a
     // stated hurdle, a stated loss-given-default and a stated shape, beside the cost of capital the
     // labour stage already charged the same firm with.
-    const lineCapitalChargeWeeklyLocal = weeklyCapitalChargeLocal(comp, riskFreeRateOf(reg), week) * Math.max(0, line.revenueShare ?? 1);
+    const lineCapitalChargeWeeklyLocal = weeklyCapitalChargeLocal(comp, riskFreeRateOf(reg), week) * Math.max(0, line.revenueShare);
 
     // SHARE VERSUS MARGIN, expressed only through the real offer price.
     //
@@ -1295,7 +1295,7 @@ function buildRegionSupplyPlans(
   // to undercut, which is the real reason small firms in low-margin trades are price-takers.
   {
     const owningIndustry = industryOfSubUnit(subUnitId);
-    const pool = owningIndustry ? reg.smePools?.find(p => p.industry === owningIndustry) : undefined;
+    const pool = owningIndustry ? reg.smePools.find(p => p.industry === owningIndustry) : undefined;
     if (pool && owningIndustry) {
       const siblings = smePoolSubUnits(owningIndustry);
       const measured = pool.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
@@ -1381,7 +1381,7 @@ function buildRegionDemandPlans(
   customers.forEach(comp => {
     let demandLocal: number;
     if (isCapexSupplierCategory) {
-      const realCapexLocal = (comp.maintenanceCapex ?? 0) + (comp.growthCapex ?? 0);
+      const realCapexLocal = (comp.maintenanceCapex) + (comp.growthCapex);
       // §3.26-f-iv-b: this buyer's capex in ITS industry's capital mix, not one basket for all.
       demandLocal = (realCapexLocal / 52) * (capitalMixOf(comp.productLines, profileKeyOf(comp))[subUnitId] ?? 0);
     } else if (isRecipeInputCategory) {
@@ -1431,7 +1431,7 @@ function buildRegionDemandPlans(
   // land on a real named supplier instead of being credited as an ambient revenue bump.
   if (isCapexSupplierCategory) {
     reg.smePools.forEach(segment => {
-      const segCapexLocal = segment.capexLocal ?? 0;
+      const segCapexLocal = segment.capexLocal;
       if (segCapexLocal <= 0) return;
       const demandUnits = ((segCapexLocal / 52) * (INDUSTRY_REGISTRY[segment.industry].capitalMix[subUnitId] ?? 0)) / referencePriceLocal;
       if (demandUnits <= 0.001) return;
@@ -1462,7 +1462,7 @@ function buildRegionDemandPlans(
       if (!intensity) return;
       const demandUnits = ((pool.annualRevenueLocal / 52) * intensity) / referencePriceLocal;
       if (demandUnits <= 0.001) return;
-      const poolReach = intensity > 0 ? 1 + Math.max(0, pool.marginPct ?? 0) / intensity : 1;
+      const poolReach = intensity > 0 ? 1 + Math.max(0, pool.marginPct) / intensity : 1;
       plans.push({
         key: privateSegmentOfferId(regionId, pool.industry),
         regionId,
@@ -1501,8 +1501,8 @@ function buildRegionDemandPlans(
     // A household's money buys what it buys AT THE SHELF, which is the landed price plus
     // what the channel charges to hold the stock it is buying out of. Dividing the budget by the
     // factory-gate price was the model paying no one to move the goods.
-    const channelMargin = channelMarginRate(subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
-    const shelfPrice = shelfPriceLocal(referencePriceLocal, subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
+    const channelMargin = channelMarginRate(subUnitId, reg.zeroRates.tenor3M);
+    const shelfPrice = shelfPriceLocal(referencePriceLocal, subUnitId, reg.zeroRates.tenor3M);
     // THE BUDGET IS THE MEASURED HOUSEHOLD LEG, NOT A SLICE OF THE DEMAND LEVEL (rule 4).
     //
     // `demandLevelAnnualLocal × hhShare` carved the household's money out of the category's TOTAL demand
@@ -1656,10 +1656,10 @@ function buildRegionDemandPlans(
  * gate and the buyer pays the freight.
  */
 const s05Phase = { settleRows: 0, plans: 0, settle: 0, settleCore: 0, settlePre: 0, settleEff: 0, demand: 0, books: 0, trade: 0, sellers: 0, buyers: 0, tail: 0 };
-const S05_PROF = typeof process !== 'undefined' && process.env?.S05_PROF === '1';
+const S05_PROF = typeof process !== 'undefined' && process.env.S05_PROF === '1';
 // One-run diagnostic split INSIDE the buyers walk (method: name the term before
 // converting anything). ~3 clock reads per lot — relative shares only, not absolute times.
-const S05B_PROF = typeof process !== 'undefined' && process.env?.S05B_PROF === '1';
+const S05B_PROF = typeof process !== 'undefined' && process.env.S05B_PROF === '1';
 const s05Buyers = { pay: 0, invoice: 0, lots: 0, planRest: 0 };
 function runSubUnitMarkets(
   v2: V2World,
@@ -1950,7 +1950,7 @@ function runSubUnitMarkets(
     // credited through two different hardcoded routes, and each route's write subtracted the
     // other's prior contribution as if it were its own.
     const owningIndustry = industryOfSubUnit(subUnitId);
-    const pool = owningIndustry ? reg.smePools?.find(p => p.industry === owningIndustry) : undefined;
+    const pool = owningIndustry ? reg.smePools.find(p => p.industry === owningIndustry) : undefined;
     if (pool && owningIndustry) {
       const amountLocal = results[regionId].salesByKey.get(privateSegmentOfferId(regionId, owningIndustry))?.amount ?? 0;
       const newAnnualizedLocal = amountLocal * 52;
@@ -2183,10 +2183,10 @@ function runSubUnitMarkets(
         }
         const termWeeks = paymentTermWeeks({
           buyerAnnualDefaultProbability: buyerPd,
-          recoveryRate: seller.recoveryRate ?? 0.4,
-          sellerMarginShare: Math.max(0, (seller.ebitda ?? 0) / Math.max(1, seller.annualRevenue ?? 1)),
+          recoveryRate: seller.recoveryRate,
+          sellerMarginShare: Math.max(0, (seller.ebitda) / Math.max(1, seller.annualRevenue)),
           sellerCashLocal: cashOf(v2, seller),
-          sellerWeeklySalesLocal: (seller.annualRevenue ?? 0) / 52,
+          sellerWeeklySalesLocal: (seller.annualRevenue) / 52,
         });
         ctx.tradeInvoicesBooked.push({
           sellerId: seller.id, sellerRegion: origin,
@@ -2301,10 +2301,10 @@ function runSubUnitMarkets(
     hhSpentByRegion.forEach((hhLocal, buyerRegion) => {
       const buyerReg = ctx.updatedRegions[buyerRegion];
       const channelLocal = hhLocal * channelMarginRate(
-        subUnitId, buyerReg?.zeroRates?.tenor3M ?? buyerReg?.policyRate ?? 0);
+        subUnitId, buyerReg.zeroRates.tenor3M);
       if (!(channelLocal > 0)) return;
       // A region with no distribution firm has no channel to pay and no margin is charged.
-      ctx.channelShareByRegion[buyerRegion]?.forEach((share, distributorId) => {
+      ctx.channelShareByRegion[buyerRegion].forEach((share, distributorId) => {
         const amountLocal = channelLocal * share;
         if (!(amountLocal > 0)) return;
         ctx.channelMarginRevenue[distributorId] = (ctx.channelMarginRevenue[distributorId] ?? 0) + amountLocal;
@@ -2429,7 +2429,7 @@ function runSubUnitMarkets(
     // one, because that is genuinely what a firm pays.
     const reg05 = ctx.updatedRegions[regionId];
     demandState.shelfUnitPriceLocal = roundN(shelfPriceLocal(
-      publishedPrice[regionId], subUnitId, reg05?.zeroRates?.tenor3M ?? reg05?.policyRate ?? 0), 1e2);
+      publishedPrice[regionId], subUnitId, reg05.zeroRates.tenor3M), 1e2);
 
     // The published totals include the contracts FORMED this week (step 11 pushed into the
     // same array this line used to read), so the chain is re-walked, not the settle survivors.
@@ -2581,7 +2581,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
       if (c.region !== regionId) return;
       const w = (c.productLines || []).reduce((a, line) => (
         line.subUnitId === DISTRIBUTION_SUBUNIT_ID
-          ? a + Math.max(0, c.annualRevenue) * (line.revenueShare ?? 0) : a), 0);
+          ? a + Math.max(0, c.annualRevenue) * (line.revenueShare) : a), 0);
       if (w > 0) { weights.set(c.ticker, w); total += w; }
     });
     if (total > 0) weights.forEach((w, t) => weights.set(t, w / total));
@@ -2598,10 +2598,10 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     // Snapshotted ONCE: getFxToUsd scans the pair list per call, and stage 05 converts per LOT.
     // Same values, one table lookup instead of a linear search (rates are fixed within the pass).
     fxToUsd: fromTable(snapshotFxToUsd(MARKET_REGION_IDS, (r) => getFxToUsd(state.fxPairs, r))),
-    fxPairIlliquidity: state.fxPairIlliquidity ?? {},
+    fxPairIlliquidity: state.fxPairIlliquidity,
     quotedPairs: state.fxPairs.map(p => ({ base: p.base, quote: p.quote })),
     sellerIsShort: (subUnitId: string, origin: RegionId) => {
-      const d = ctx.updatedRegions[origin]?.categoryDemand[subUnitId];
+      const d = ctx.updatedRegions[origin].categoryDemand[subUnitId];
       return (Number(d?.totalUnitsDemandedThisWeek) || 0) > (Number(d?.totalUnitsSuppliedThisWeek) || 0);
     },
     buyerAnnualPdByTicker: new Map(),
@@ -2674,8 +2674,8 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   Object.values(INDUSTRY_SUBUNITS).flat()
     .slice()
     .sort((a, b) => {
-      const upA = 1 - (a.buyerMix.GOVERNMENT ?? 0) - (a.buyerMix.HOUSEHOLD ?? 0);
-      const upB = 1 - (b.buyerMix.GOVERNMENT ?? 0) - (b.buyerMix.HOUSEHOLD ?? 0);
+      const upA = 1 - (a.buyerMix.GOVERNMENT) - (a.buyerMix.HOUSEHOLD);
+      const upB = 1 - (b.buyerMix.GOVERNMENT) - (b.buyerMix.HOUSEHOLD);
       if (upA !== upB) return upB - upA;
       return a.unitId < b.unitId ? -1 : a.unitId > b.unitId ? 1 : 0;
     })
@@ -2698,7 +2698,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     const savedStream = beginEntityScope(subUnit.unitId, ctx.nextWeek);
     runSubUnitMarkets(
       v2, ctx, subUnit.unitId,
-      subUnit.buyerMix.GOVERNMENT ?? 0, subUnit.buyerMix.HOUSEHOLD ?? 0,
+      subUnit.buyerMix.GOVERNMENT, subUnit.buyerMix.HOUSEHOLD,
       indexes, lookup, wk, sourcing
     );
     endEntityScope(savedStream);

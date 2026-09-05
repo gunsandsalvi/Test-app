@@ -88,7 +88,7 @@ export function fuelPriceUsdPerTonne(region: Region, unitMassTonnes: Record<stri
 /** A carrier's crew wage: the region's real going rate for the trades that operate equipment. */
 export function crewAnnualWageLocal(region: Region, regionId: RegionId): number {
   const base = getBaseAnnualWageLocal(regionId).SKILLED_TRADES;
-  const index = region.occupationPools?.SKILLED_TRADES?.wageIndex;
+  const index = region.occupationPools.SKILLED_TRADES.wageIndex;
   return base * (typeof index === 'number' && index > 0 ? index : 1);
 }
 

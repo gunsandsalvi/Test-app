@@ -52,9 +52,9 @@ export function reassignConsignments(
   from: { ticker: Ticker; id: EntityId },
   to: { ticker: Ticker; id: EntityId }
 ): void {
-  (state.goodsInTransit ?? []).forEach((sh) => {
+  (state.goodsInTransit).forEach((sh) => {
     if (sh.buyerId === from.id) sh.buyerId = to.id;
-    const seller = String(sh.sellerKey ?? '');
+    const seller = String(sh.sellerKey);
     const sellerId = seller.replace(/^.*:/, '');
     if (sellerId !== from.id && sellerId !== from.ticker) return;
     sh.sellerKey = seller.slice(0, seller.length - sellerId.length)
@@ -63,7 +63,7 @@ export function reassignConsignments(
 }
 
 export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): void {
-  const inFlight = state.goodsInTransit ?? [];
+  const inFlight = state.goodsInTransit;
   if (inFlight.length === 0) return;
   const v2 = ensureV2(state);
 
@@ -81,7 +81,7 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
   ctx.prevActiveFirms.forEach(c => firmById.set(c.id, c));
   // A dead buyer with an OPEN estate still takes delivery — the receiver
   // liquidates what arrives (the workout sells input lots to peers as it sells finished stock).
-  const openEstateIds = new Set((ctx.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
+  const openEstateIds = new Set((ctx.estates).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   const estateById = new Map<EntityId, (typeof ctx.updatedCompanies)[number]>();
   ctx.updatedCompanies.forEach((c) => { if (c.isDefaulted && openEstateIds.has(c.id)) estateById.set(c.id, c); });
 

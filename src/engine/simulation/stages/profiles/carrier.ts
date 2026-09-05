@@ -30,7 +30,7 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
     const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);
     const perWeek = weeklyCapacityTonnes(asset, distanceNm);
     const voyages = asset.capacityTonnes > 0 ? perWeek / asset.capacityTonnes : 0;
-    fullFleetFuelTonnes += voyages * (asset.fuelTonnesPerNm ?? 0) * distanceNm;
+    fullFleetFuelTonnes += voyages * (asset.fuelTonnesPerNm) * distanceNm;
     capacityTonneNm += perWeek * distanceNm;
   });
   const utilization = capacityTonneNm > 0

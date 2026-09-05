@@ -447,7 +447,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     wireJournal: newWireJournal((state as { nextWireId?: number }).nextWireId ?? 1, state.currentWeek + 1),
     pendingTouchedIds: [],
     g2DeclinedOriginationLocal: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
-    primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],
+    primaryOfferingsWorking: [...(state.primaryOfferings)],
     primarySettlements: new Map(),
 
     updatedRegions: { ...state.regions },
@@ -458,7 +458,7 @@ function buildContext(state: GameState, nextWeek: number): WeeklyStepContext {
     pendingHolderReplacements: new Map<string, InstrumentId>(),
     pendingHolderCashLocal: new Map<string, number>(),
     householdEtfPurchasesLocal: new Map<string, { spentLocal: number; navPerShare: number }>(),
-    updatedMarketIndexes: [...(state.marketIndexes ?? [])],
+    updatedMarketIndexes: [...(state.marketIndexes)],
     updatedCommodities: [...state.commodities],
     updatedCompositeIndices: { ...state.compositeIndices },
     marketVolPremium: state.marketVolPremium || 0,

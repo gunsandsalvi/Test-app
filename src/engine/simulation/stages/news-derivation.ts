@@ -106,7 +106,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   // what a firm is now against what it was, so the week-start array is a second population and
   // not a stale mirror of the first.
   const { companyByTicker: byTicker, companyById } = buildEntityIndex(ctx.updatedCompanies, ctx.updatedInstitutionalEntities);
-  const { companyByTicker: prevByTicker } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+  const { companyByTicker: prevByTicker } = buildEntityIndex(state.companies, state.institutionalEntities);
   const bankRef = (c: Company): Ref | undefined => {
     const b = c.homeBankId ? companyById.get(c.homeBankId) : undefined;
     return b ? company(b) : undefined;
@@ -266,9 +266,9 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
 
   // ---- 6b. §3.20-LLR-iii: the run — a bank's uninsured depositors left it this week. ----
   banksOf(ctx.updatedCompanies).forEach((b) => {
-    const fledLocal = ctx.updatedRegions[b.region]?.depositorFlightLocal?.[b.id] ?? 0;
+    const fledLocal = ctx.updatedRegions[b.region].depositorFlightLocal?.[b.id] ?? 0;
     if (!(fledLocal > 1e6)) return;
-    const streak = ctx.updatedRegions[b.region]?.bankFundingShortStreakWeeks?.[b.id] ?? 0;
+    const streak = ctx.updatedRegions[b.region].bankFundingShortStreakWeeks?.[b.id] ?? 0;
     push({
       id: `run-${b.ticker}-${week}`,
       kind: 'depositors leave',
@@ -286,7 +286,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   // ---- 6a. §3.20-LLR-ii: a bank that could not fund. The market and the window have run and it
   // still ends the week below its buffer — nothing lends against that any more. ----
   banksOf(ctx.updatedCompanies).forEach((b) => {
-    const shortLocal = ctx.updatedRegions[b.region]?.bankFundingShortfallsLocal?.[b.id] ?? 0;
+    const shortLocal = ctx.updatedRegions[b.region].bankFundingShortfallsLocal?.[b.id] ?? 0;
     if (!(shortLocal > 1e6)) return;
     const sheet = ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet;
     push({
@@ -294,7 +294,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
       kind: 'bank short of funding',
       category: 'CENTRAL_BANK',
       title: `${b.name} ends the week ${M(shortLocal)} short of reserves`,
-      description: `${b.ticker} could not fund its buffer at the close: the repo book, the unsecured interbank book and the standing facility together left it ${M(shortLocal)} short. Reserves ${M(bankReservesOf(ctx.v2, b.id))} against ${M(householdDepositsAt(ctx.v2, b.ticker, currencyOf(b.region)))} of household deposits${sheet ? `, capital ratio ${P(sheet.bankCapitalRatio)}, at the window ${M(sheet.srfBorrowingLocal ?? 0)}` : ''}.`,
+      description: `${b.ticker} could not fund its buffer at the close: the repo book, the unsecured interbank book and the standing facility together left it ${M(shortLocal)} short. Reserves ${M(bankReservesOf(ctx.v2, b.id))} against ${M(householdDepositsAt(ctx.v2, b.ticker, currencyOf(b.region)))} of household deposits${sheet ? `, capital ratio ${P(sheet.bankCapitalRatio)}, at the window ${M(sheet.srfBorrowingLocal)}` : ''}.`,
       cause: `Its collateral, its name and the market's spare reserves did not cover what the week's flows took.`,
       refs: [company(b), region(b.region)],
       materialityLocal: shortLocal,
@@ -307,7 +307,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   banksOf(ctx.updatedCompanies).forEach((b) => {
     const sheet = ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet;
     if (!sheet) return;
-    const now = sheet.srfBorrowingLocal ?? 0;
+    const now = sheet.srfBorrowingLocal;
     const toldLastWeek = state.newsFeed.some((n) => n.id === `window-${b.ticker}-${week - 1}`);
     if (now > 1e6 && !toldLastWeek) {
       push({
@@ -325,9 +325,9 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   });
 
   // ---- 7. Estates closed: what the creditors got. ----
-  (ctx.estates ?? []).filter((e) => e.closedWeek === week).forEach((e) => {
+  (ctx.estates).filter((e) => e.closedWeek === week).forEach((e) => {
     const c = byTicker.get(e.ticker) ?? prevByTicker.get(e.ticker);
-    const owed = e.claims.reduce((a, cl) => a + (cl.principalLocal ?? 0), 0);
+    const owed = e.claims.reduce((a, cl) => a + (cl.principalLocal), 0);
     push({
       id: `estate-${e.ticker}-${week}`,
       kind: 'estate closed',
@@ -343,7 +343,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   // ---- 7b. §3.15b-i: a workout that DEVELOPS — each week an open estate pays a class or sells a
   // slice, the story names what was paid to whom, what was sold to which peers, and what is
   // still owed against what is left. The default (1) and the close (7) are its two ends. ----
-  (ctx.estates ?? []).filter((e) => e.closedWeek === undefined && e.lastWeek?.week === week).forEach((e) => {
+  (ctx.estates).filter((e) => e.closedWeek === undefined && e.lastWeek?.week === week).forEach((e) => {
     const w = e.lastWeek!;
     const paid = estateWeekPaidLocal(w);
     const sold = w.inventorySoldLocal + w.ppeSoldLocal;
@@ -446,7 +446,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
   // ---- 7e. §3.17-iv-c-ii: a clearing house ran its waterfall — a member defaulted owing it
   // money, and the stack paid in its stated order. Past the end is the story of the week. ----
   REGION_IDS.forEach((rid) => {
-    const w = ctx.updatedRegions[rid]?.lastWaterfall;
+    const w = ctx.updatedRegions[rid].lastWaterfall;
     if (!w || w.week !== week) return;
     const c = w.member.kind === 'INSTITUTION' ? undefined : companyById.get(w.member.id);
     const fund = w.member.kind === 'INSTITUTION' ? ctx.updatedInstitutionalEntities.find((e) => e.id === w.member.id) : undefined;
@@ -482,7 +482,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
     const byCounterparty = new Map<string, { usd: number; banks: Set<string> }>();
     draws.forEach((d) => { const e = byCounterparty.get(d.counterpartyRegion) ?? { usd: 0, banks: new Set() }; e.usd += convert(d.foreignLocal, currencyOf(d.counterpartyRegion), currencyOf(rid), ctx.fx); e.banks.add(d.bankId); byCounterparty.set(d.counterpartyRegion, e); });
     byCounterparty.forEach((e, counterparty) => {
-      const basis = ctx.updatedRegions[rid]?.xcsBasisBps?.[counterparty];
+      const basis = ctx.updatedRegions[rid].xcsBasisBps?.[counterparty];
       push({
         id: `swap-line-${rid}-${counterparty}-${week}`,
         kind: 'swap line drawn',
@@ -506,7 +506,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
     if (Math.abs(du) < 0.005) return;
     const movers = ctx.updatedCompanies
       .filter((c) => c.region === rid && !c.isBankEntity)
-      .map((c) => ({ c, d: c.employeeCount - (c.previousEmployeeCount ?? c.employeeCount) }))
+      .map((c) => ({ c, d: c.employeeCount - (c.previousEmployeeCount) }))
       .filter((x) => (du > 0 ? x.d < 0 : x.d > 0))
       .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
       .slice(0, 3);
@@ -522,7 +522,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         + (dead.length ? `${dead.length} firm${dead.length > 1 ? 's' : ''} defaulted (${N(deadHeads)} people): ${dead.map((c) => c.ticker).join(', ')}. ` : '')
         + `Inflation ${P(after.inflation)}, policy rate ${P(after.policyRate, 2)}, tightness ${(after.laborMarketTightness ?? 0).toFixed(2)}.`,
       refs: [region(rid), ...movers.map((x) => company(x.c)), ...dead.map(company)],
-      materialityLocal: Math.abs(du) * (after.derivedNominalGdpLocal ?? after.estimatedNominalGdpLocal ?? 0),
+      materialityLocal: Math.abs(du) * (after.derivedNominalGdpLocal),
       impactRegion: rid,
       urgent: Math.abs(du) >= 0.02,
     });
@@ -552,7 +552,7 @@ export function runNewsDerivationStage(state: GameState, ctx: WeeklyStepContext)
         : `index at ${after.consumerPriceIndex.toFixed(1)}; no year of history yet`}). `
         + (cats.length ? `Biggest moves: ${cats.map((x) => `${x.k.replace(/_/g, ' ')} ${x.move > 0 ? '+' : ''}${P(x.move, 0)} (${P(x.fill, 0)} of demand served)`).join('; ')}.` : ''),
       refs: [region(rid)],
-      materialityLocal: Math.abs(dp) * (after.derivedNominalGdpLocal ?? after.estimatedNominalGdpLocal ?? 0),
+      materialityLocal: Math.abs(dp) * (after.derivedNominalGdpLocal),
       impactRegion: rid,
       urgent: Math.abs(dp) >= 0.05,
     });

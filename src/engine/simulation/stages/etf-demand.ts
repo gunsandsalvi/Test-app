@@ -135,7 +135,7 @@ export function indexFundsForBook(
     // (measured: USAEQX overdrawn by <5M for 21 straight weeks at the §7.271 reference). The
     // sleeve is a year of its OWN expense ratio — the fund's own measured obligation, no new
     // constant — which is also what real index funds hold cash for.
-    const investableLocal = (holdingsLocal + entityCashOf(v2, e)) * (1 - (e.etf?.expenseRatioAnnual ?? 0));
+    const investableLocal = (holdingsLocal + entityCashOf(v2, e)) * (1 - (e.etf.expenseRatioAnnual));
     if (investableLocal > 0) out.push({ fund: e, index, investableLocal });
   });
   return out;

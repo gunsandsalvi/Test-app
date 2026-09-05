@@ -125,9 +125,9 @@ function runDivestitures(ctx: WeeklyStepContext): void {
     && (c.productLines?.length ?? 0) >= 2 && issuedSharesOf(ctx.v2, c.id) > 0 && c.stockPrice > 0);
   blocked.forEach((parent) => {
     const line = [...(parent.productLines ?? [])]
-      .sort((a, b) => (b.categoryMarketShare ?? 0) - (a.categoryMarketShare ?? 0)).at(0);
+      .sort((a, b) => (b.categoryMarketShare) - (a.categoryMarketShare)).at(0);
     if (!line) return;
-    const share = Math.max(0.05, Math.min(0.9, line.revenueShare ?? 0));
+    const share = Math.max(0.05, Math.min(0.9, line.revenueShare));
 
     const tickers = new Set(ctx.updatedCompanies.map((c) => c.ticker));
     // §3.13-BOOK slice (c2c): a spin-off's ticker is minted here, from its parent's.

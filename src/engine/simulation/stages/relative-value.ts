@@ -288,7 +288,7 @@ function readSeniority(ctx: WeeklyStepContext, funds: InstitutionalEntity[], wee
     if (regionFunds.length === 0) return;
     const pbBook = primeBrokerageBookOf(ctx.v2, regionId);
     const loanBook = securityLoanBookOf(ctx.v2, regionId);
-    const repoRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
+    const repoRateAnnual = reg.repoRateAnnual;
     const tenorYears = CDS_TENOR_YEARS[CDS_BENCHMARK_TENOR];
     const TS = ctx.v2.tranches;
     ctx.updatedCompanies.forEach((issuer) => {

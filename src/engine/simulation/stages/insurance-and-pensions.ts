@@ -205,7 +205,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     // The contribution IS the life-cycle saving the cohorts decided on — measured, squeezed
     // by each cohort's own budget, and already excluding retirees because it is a share of the
     // WORKING population's disposable income (household-cohorts.ts).
-    const weeklyContributionsLocal = Math.max(0, reg.householdState?.lifeCycleSavingAnnualLocal ?? 0) / 52;
+    const weeklyContributionsLocal = Math.max(0, reg.householdState.lifeCycleSavingAnnualLocal ?? 0) / 52;
     const pensionEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === region && e.entityType === 'PENSION_FUND' && !e.isDefaulted
     );

@@ -82,7 +82,7 @@ const MARKET_ACCESS_DENIED: CreditRating[] = ['D'];
  * every firm levered to its covenant whenever debt was cheap.
  */
 export function targetLeverageOf(rating: CreditRating, management: Preferences | undefined): number {
-  return (COVENANT_LEVERAGE_CEILING[rating] ?? 4.0) / riskAversionOf(management);
+  return (COVENANT_LEVERAGE_CEILING[rating]) / riskAversionOf(management);
 }
 
 /** §3.20d-i — THE PACE IS THE MANAGEMENT'S HORIZON: it closes the gap to its target over its own
@@ -102,7 +102,7 @@ const WORKING_CAPITAL_SHARE_OF_REVENUE = 0.15;
  * multiple and an invented floor.
  */
 function weeklyDeploymentLocal(comp: Company): number {
-  return Math.max(0, (comp.growthCapex ?? 0) + (comp.maintenanceCapex ?? 0)) / 52;
+  return Math.max(0, (comp.growthCapex) + (comp.maintenanceCapex)) / 52;
 }
 
 /** Spread of return over cost, in decimal, wide enough to be worth acting on either way. */

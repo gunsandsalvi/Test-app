@@ -258,7 +258,7 @@ export function computeSourcingIntent(args: {
 export function carryRatesByRegion(regions: Record<RegionId, Region>): Record<string, number> {
   const rates: Record<string, number> = {};
   SOURCING_REGION_IDS.forEach(r => {
-    rates[r] = pipelineCarryCostRatePerWeek(regions[r]?.policyRate ?? 0.045);
+    rates[r] = pipelineCarryCostRatePerWeek(regions[r].policyRate);
   });
   return rates;
 }
@@ -270,7 +270,7 @@ export function runSourcingIntentStage(state: GameState, ctx: WeeklyStepContext)
     regions: ctx.updatedRegions,
     subUnitIds: Object.values(INDUSTRY_SUBUNITS).flat().map(su => su.unitId),
     unitMassTonnes: state.unitMassTonnes,
-    freightRatePerTonneLaneMoneyByLane: state.freightRatePerTonneLaneMoneyByLane ?? {},
+    freightRatePerTonneLaneMoneyByLane: state.freightRatePerTonneLaneMoneyByLane,
     marginalRatePerTonneLaneMoneyByLane: marginal,
     fxToUsd,
     carryCostRatePerWeekByRegion: carryRatesByRegion(ctx.updatedRegions),

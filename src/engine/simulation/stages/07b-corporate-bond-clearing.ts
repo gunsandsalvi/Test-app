@@ -188,7 +188,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // and it is repaid below rather than migrated onto the borrower's other bonds.
     const regionIssuerIds = new Set(regionActive.map((c) => c.id));
 
-    const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
+    const creditConditionsIndex = reg.bankingSector.creditConditionsIndex;
 
     // WS8: this week's primary offerings in THIS book — new fixed-rate paper priced alongside
     // the outstanding stock. The issuer's walk-away rides on the instrument; the engine

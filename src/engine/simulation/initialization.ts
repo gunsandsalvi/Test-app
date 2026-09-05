@@ -226,7 +226,7 @@ function seedRegionCategoryDemand(
         const demandLevelAnnualLocal = totalOutputBySubUnit[su.unitId] ?? finalDemandBySubUnit[su.unitId];
         reg.categoryDemand[su.unitId] = createSeedCategoryDemandState(
           demandLevelAnnualLocal,
-          reg.gdpGrowth ?? 0.02,
+          reg.gdpGrowth,
           // §7.127: FINAL demand prices the good; total output is the quantity behind it. The
           // intermediate slice is passed so a PURE intermediate prices off its producer buyers.
           deriveSubUnitUnitPrice(
@@ -257,9 +257,9 @@ function seedRegionCategoryDemand(
     // proportion to those sub-units' own demand — the same mix rule stage 05 uses when a pool
     // decides where to put its capacity.
     const smeRevenueBySubUnit = new Map<string, number>();
-    (reg.smePools ?? []).forEach((pool) => {
+    (reg.smePools).forEach((pool) => {
       const spec = INDUSTRY_REGISTRY[pool.industry];
-      const subUnits: { unitId: string }[] = spec?.subUnits ?? [];
+      const subUnits: { unitId: string }[] = spec.subUnits;
       const demandOf = (id: string) => Number(reg.categoryDemand[id]?.demandLevelAnnualLocal) || 0;
       const totalDemandLocal = subUnits.reduce((a, su) => a + demandOf(su.unitId), 0);
       if (!(totalDemandLocal > 0)) return;
@@ -311,9 +311,9 @@ function solveSeedInvestmentFixedPoint(
     let worstDrift = 0;
     (Object.keys(regions) as RegionId[]).forEach((regionId) => {
       const reg = regions[regionId];
-      const before = reg.laggedCorporateDemandBase ?? 0;
+      const before = reg.laggedCorporateDemandBase;
       seedRegionCategoryDemand(reg, regionId, companies);
-      const after = reg.laggedCorporateDemandBase ?? 0;
+      const after = reg.laggedCorporateDemandBase;
       const denom = Math.max(1, Math.abs(after));
       worstDrift = Math.max(worstDrift, Math.abs(after - before) / denom);
     });
@@ -363,14 +363,14 @@ function openSeededBooks(state: GameState): void {
   setActiveWireJournal(j);
   // §3.13-BOOK d2: the seed is the first world the write is checked against — every opening
   // wire resolves its issuer, its holder and its instrument, or the seed throws where it is wrong.
-  setActiveWireWorld(wireWorldOf(v2, state.companies, state.institutionalEntities ?? []));
+  setActiveWireWorld(wireWorldOf(v2, state.companies, state.institutionalEntities));
   try {
     // §3.13-BOOK (dI): every company's equity and every fund's shares are DECLARED on the
     // instrument index before any wire names them — a wire resolves its instrument against the
     // index, so an undeclared equity would be refused at the site. The ladders declare their
     // own rungs as they are issued below.
     for (const c of state.companies) registerCompanyEquity(v2, c);
-    for (const e of state.institutionalEntities ?? []) registerFundShares(v2, e);
+    for (const e of state.institutionalEntities) registerFundShares(v2, e);
     for (const c of state.companies) {
       if (!v2.tranches.synced.has(c.id)) seedLadder(v2, { id: c.id, ticker: c.ticker, region: c.region }, c.debtTranches);
     }
@@ -384,19 +384,19 @@ function openSeededBooks(state: GameState): void {
       if (!ladder.length) return;
       seedLadder(v2, governmentIssuer(regionId), ladder);
     });
-    const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+    const { companyById } = buildEntityIndex(state.companies, state.institutionalEntities);
     const issuerOfHolding = (h: ItemizedHolding): PartyRef => issuerOfHoldingRow(v2, h, companyById);
-    for (const e of state.institutionalEntities ?? []) {
+    for (const e of state.institutionalEntities) {
       if (!v2.holdings.synced.has(e.id)) seedBook(v2, { kind: 'INSTITUTION', id: e.id }, e.itemizedHoldings, issuerOfHolding);
     }
     // §3.13-BOOK d4c-vi: the private funds' LP commitments, struck on the contract store now
     // that every institution they name resolves.
-    drainSeedCommitments(v2, state.institutionalEntities ?? []);
+    drainSeedCommitments(v2, state.institutionalEntities);
     // §3.13-BOOK d3a — THE CENTRAL BANKS' BOOKS, opened by wire like every other holder's: each
     // bond the seed's close sized (`seedCentralBankBookOf`) is issued by the treasury to the
     // central bank at its face. The stash dies here; the rows are the book from now on.
     (Object.keys(state.regions) as RegionId[]).forEach((regionId) => {
-      const cb = state.regions[regionId]?.centralBankSheet;
+      const cb = state.regions[regionId].centralBankSheet;
       if (!cb) return;
       const book: ItemizedHolding[] = Object.entries(seedCentralBankBookOf(cb))
         .filter(([, v]) => (Number(v) || 0) > 0)
@@ -424,7 +424,7 @@ function openSeededBooks(state: GameState): void {
       const H = v2.holdings;
       const equityRef = typeRefOf(v2, 'EQUITY');
       if (equityRef >= 0) {
-        for (const e of state.institutionalEntities ?? []) {
+        for (const e of state.institutionalEntities) {
           for (let r = bookHeadOf(v2, e.id); r >= 0; r = H.next[r]) {
             if (H.typeRef[r] !== equityRef) continue;
             const id = instrumentIdAt(v2, r);
@@ -447,7 +447,7 @@ function openSeededBooks(state: GameState): void {
     // The seed's wires are a real journal and the world carries it, so week 0 can be asked what
     // it wired exactly as any week is. There are no payments at the seed, so the pending money it
     // is netted against is zero.
-    const { companyById: companyById2 } = buildEntityIndex(state.companies, state.institutionalEntities ?? []);
+    const { companyById: companyById2 } = buildEntityIndex(state.companies, state.institutionalEntities);
     state.lastWires = summarizeWires(j, { numeraire: 0, byCurrency: {} }, (id: EntityId) => companyById2.get(id)?.region, reasonText, v2.fx);
     (state as { nextWireId?: number }).nextWireId = j.base + j.n;
   } finally {
@@ -492,7 +492,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   drainSeedRevenueHistories(state);
   drainSeedRings(state);
   // §5-BRAINS — every deciding entity is born with its two preference primitives.
-  ensureManagements(state.companies, state.institutionalEntities ?? [], 0);
+  ensureManagements(state.companies, state.institutionalEntities, 0);
   openSeededBooks(state);
   // §3.37-SEED / D2 and §3.13, AFTER THE BOOKS ARE OPEN (§3.13-BOOK d3b moved both here: they ran
   // inside `buildSeededGameState` against an empty store, so the accruals opened at zero for every
@@ -1024,7 +1024,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       // stated here that the demography does not already say.
       const pensionEntitlementStockLocal = (() => {
         const retiredShare = Math.max(0, Math.min(1,
-          reg.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0.2));
+          reg.lifeCycleDistribution.RETIRED.shareOfPopulation));
         const annualContributionsLocal = Math.max(0, reg.estimatedHouseholdIncomeLocal) * retiredShare;
         const workingLifeYears = Math.max(1, RETIREMENT_AGE_YEARS - WORKFORCE_ENTRY_AGE_YEARS);
         const drawdownYears = Math.max(1, remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS));
@@ -1180,7 +1180,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const week1DemandTotal = Object.values(week1OccDemand).reduce((s, v) => s + v, 0);
     (Object.keys(reg.occupationLaborForceShare) as OccupationType[]).forEach((occ) => {
       reg.occupationLaborForceShare[occ] = week1DemandTotal > 0
-        ? (week1OccDemand[occ] ?? 0) / week1DemandTotal
+        ? (week1OccDemand[occ]) / week1DemandTotal
         : 0.2;
     });
 
@@ -1189,7 +1189,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     // the market's rest point rather than at zero (see restingVacancies).
     reconcileEmploymentView(reg, regionCompanies.filter(c => isActiveCompany(c)));
     (Object.keys(reg.occupationPools) as OccupationType[]).forEach((occ) => {
-      const supply = totalLaborForce * (reg.occupationLaborForceShare[occ] ?? 0.2);
+      const supply = totalLaborForce * (reg.occupationLaborForceShare[occ]);
       const employedInOcc = reg.occupationPools[occ].employed;
       reg.occupationPools[occ].vacancies = Math.round(
         restingVacancies(employedInOcc, Math.max(1, supply - employedInOcc))
@@ -1269,7 +1269,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     const realEmployedForWages = (Object.keys(reg.occupationPools) as OccupationType[])
       .reduce((sum, occ) => sum + reg.occupationPools[occ].employed, 0);
     const realUnemploymentBenefitsLocal = (Object.keys(reg.occupationPools) as OccupationType[]).reduce((sum, occ) => {
-      const unemployedInPool = totalLaborForce * (reg.occupationLaborForceShare[occ] ?? 0) - reg.occupationPools[occ].employed;
+      const unemployedInPool = totalLaborForce * (reg.occupationLaborForceShare[occ]) - reg.occupationPools[occ].employed;
       return sum + baseAnnualWageLocal[occ] * Math.max(0, unemployedInPool) * UNEMPLOYMENT_REPLACEMENT_RATE;
     }, 0);
     // §7.4: this restatement is the SECOND computation of household income at seed (the macro
@@ -1281,7 +1281,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       interestWeeklyLocal: reg.governmentInterestWeeklyLocal ?? 0,
       payrollWeeklyLocal: reg.governmentPayrollWeeklyLocal ?? 0,
       unemploymentBenefitsWeeklyLocal: realUnemploymentBenefitsLocal / 52,
-      retiredPopulation: reg.totalPopulation * (reg.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0),
+      retiredPopulation: reg.totalPopulation * (reg.lifeCycleDistribution.RETIRED.shareOfPopulation),
       averageAnnualWageLocal: realEmployedForWages > 0 ? realWageIncomeLocal / realEmployedForWages : 0,
       fiscalStanceScore: reg.fiscalStanceScore,
     });
@@ -1403,13 +1403,13 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   (Object.keys(regions) as RegionId[]).forEach(regionId => {
     const cb = regions[regionId].centralBankSheet;
     if (!cb) return;
-    const quarterlyImportsLocal = (regions[regionId].importsLocal ?? 0) / 4;
+    const quarterlyImportsLocal = (regions[regionId].importsLocal) / 4;
     if (!(quarterlyImportsLocal > 0)) { cb.fxReservesByRegion = {}; return; }
     const sourcesLocal: Record<string, number> = {};
     let totalSourced = 0;
     (Object.keys(regions) as RegionId[]).forEach(origin => {
       if (origin === regionId) return;
-      const x = regions[origin].exportsLocal ?? 0;
+      const x = regions[origin].exportsLocal;
       sourcesLocal[origin] = x;
       totalSourced += x;
     });
@@ -1730,7 +1730,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   companies.forEach((c) => { if (!(c.isBankEntity && c.bankBalanceSheet)) openAccount(seedV2, companyParty(c), currencyOf(c.region), openingCashOf(c)); });
   institutionalEntities.forEach((e) => openAccount(seedV2, { kind: 'INSTITUTION', id: e.id }, currencyOf(e.region), openingCashOf(e)));
   // A3.5: the treasury's account opens at the operating balance the seed sized (macro/initialization.ts).
-  (Object.keys(regions) as RegionId[]).forEach((r) => { const cb = regions[r]?.centralBankSheet; if (cb) openAccount(seedV2, { kind: 'GOVERNMENT', region: r }, currencyOf(r), openingCashOf(cb)); });
+  (Object.keys(regions) as RegionId[]).forEach((r) => { const cb = regions[r].centralBankSheet; if (cb) openAccount(seedV2, { kind: 'GOVERNMENT', region: r }, currencyOf(r), openingCashOf(cb)); });
 
   // §5-CLOSE C2: the seed closes — depositors fund the banks (wholesale is nobody's and is
   // zero), the central bank's book backs reserves and the treasury's account to the dollar, and

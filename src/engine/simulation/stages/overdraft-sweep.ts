@@ -79,7 +79,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     const balanceLocal = cashOf(ctx.v2, c) + pendingLocal(companyParty(c));
     if (!(balanceLocal < -1)) return;
     const drawLocal = -balanceLocal;
-    const reg = ctx.updatedRegions[c.region] ?? defect(`firm ${c.id} is in ${c.region}, which is not a region`);
+    const reg = ctx.updatedRegions[c.region];
     const homeBank = companyById.get(c.homeBankId);
     if (!homeBank) return defect(`firm ${c.id} banks at ${c.homeBankId}, which is not an entity`);
     const marginBps = facilityMarginBpsFor(v2, c, reg, homeBank);
@@ -157,7 +157,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
     const banks = banksOf(ctx.updatedCompanies, regionId);
     const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
     const smeDrawByBank = new Map<Ticker, { industry: string; poolId: string; usd: number }[]>();
-    (reg.smePools ?? []).forEach((seg) => {
+    (reg.smePools).forEach((seg) => {
       const balanceLocal = poolCashOf(ctx.v2, regionId, seg.industry) + pendingLocal({ kind: 'SEGMENT', region: regionId, industry: seg.industry });
       if (balanceLocal >= -1 || !(totalShare > 0)) return;
       const drawLocal = -balanceLocal;
@@ -189,7 +189,7 @@ export function runOverdraftSweep(ctx: WeeklyStepContext): void {
       const drawnLocal = drawnByBroker.get(c.id) ?? 0;
       const smeRows = smeDrawByBank.get(c.ticker);
       if (!drawnLocal && !smeRows) return c;
-      const loans = [...(c.bankBalanceSheet.businessLoans ?? [])];
+      const loans = [...(c.bankBalanceSheet.businessLoans)];
       (smeRows ?? []).forEach((r) => {
         const existing = loans.find((l) => l.borrowerId === r.poolId);
         if (existing) existing.principalLocal = Math.round(existing.principalLocal + r.usd);

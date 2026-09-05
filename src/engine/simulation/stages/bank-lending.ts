@@ -383,9 +383,9 @@ export function runBankWeeklyLending(
  * bank pass has run (§7.4).
  */
 export function currentMortgageRateAnnual(reg: Region): number {
-  const quoted = reg.housingMarket?.bestMortgageRateAnnual;
+  const quoted = reg.housingMarket.bestMortgageRateAnnual;
   if (quoted !== undefined && quoted > 0) return quoted;
-  return Math.max(0.005, (reg.zeroRates?.tenor10Y ?? 0.04) + MORTGAGE_SEED_SPREAD_OVER_10Y_BPS / 10000);
+  return Math.max(0.005, (reg.zeroRates.tenor10Y) + MORTGAGE_SEED_SPREAD_OVER_10Y_BPS / 10000);
 }
 
 /**
@@ -436,8 +436,8 @@ export function migrateHouseholdDebtAtSeed(
       // this seed knows. What comes out is a cross-section, and it comes out rather than being
       // put in.
       (() => {
-        const bookLocal = Math.round((hs.mortgageDebtLocal ?? 0) * share);
-        const priceNowLocal = Math.max(1, reg.housingMarket?.medianHomePriceLocal ?? 1);
+        const bookLocal = Math.round((hs.mortgageDebtLocal) * share);
+        const priceNowLocal = Math.max(1, reg.housingMarket.medianHomePriceLocal);
         const cohorts = MORTGAGE_SEED_VINTAGE_COHORTS;
         const raw: MortgageVintage[] = [];
         for (let i = 0; i < cohorts; i++) {
@@ -491,12 +491,12 @@ export function migrateHouseholdDebtAtSeed(
       })(),
       {
         kind: 'CREDIT_CARD',
-        principalLocal: Math.round((hs.creditCardDebtLocal ?? 0) * share),
+        principalLocal: Math.round((hs.creditCardDebtLocal) * share),
         marginBps: cardMarginBps,
       },
       {
         kind: 'CONSUMER_TERM',
-        principalLocal: Math.round((hs.otherConsumerLoanDebtLocal ?? 0) * share),
+        principalLocal: Math.round((hs.otherConsumerLoanDebtLocal) * share),
         marginBps: termMarginBps,
         wamWeeks: CONSUMER_TERM_SEED_WAM_WEEKS,
       },
@@ -618,10 +618,10 @@ export function runBankHouseholdLending(
   // the confidence index this read is gone; its content was real wage growth (the index's
   // equilibrium was 150 × that on a 100 base, read at 0.5 per unit, so 0.75 per unit of real
   // wage growth), and the ×2 cap is gone with it (rule 6). An appetite cannot be negative.
-  const neutralRate = reg.neutralRate ?? policyRate;
-  const appetite = Math.max(0, 1.0 + ((hs?.wageGrowth ?? 0) - reg.inflation) * 0.75 - (policyRate - neutralRate) * 4);
+  const neutralRate = reg.neutralRate;
+  const appetite = Math.max(0, 1.0 + ((hs.wageGrowth) - reg.inflation) * 0.75 - (policyRate - neutralRate) * 4);
 
-  const unsecuredLossRateAnnual = consumerAnnualLossRate(adjustedUnemploymentRate, hs?.creditTierBooks);
+  const unsecuredLossRateAnnual = consumerAnnualLossRate(adjustedUnemploymentRate, hs.creditTierBooks);
   // Mortgage severity reads the sector's REAL home equity (HH2): foreclosure recovers the house
   // less the cost of selling it, against the loan — deep equity means small severity, and a
   // price crash walks severity up as LTV approaches 1.
@@ -635,10 +635,10 @@ export function runBankHouseholdLending(
   // produce a mortgage credit event at all (§6.1). The book is vintages now, each marked against
   // the price it was written at, so the losses come from the part of the distribution that is
   // actually above the kink — which is where every dollar of real mortgage loss comes from.
-  const medianHomePriceLocal = Math.max(0, reg.housingMarket?.medianHomePriceLocal ?? 0);
+  const medianHomePriceLocal = Math.max(0, reg.housingMarket.medianHomePriceLocal);
   // §3.26b-ii — what changed hands this week, at the price it struck: the base every mortgage
   // flow below is written on. The book clears in 02 before this pass runs, so it is this week's.
-  const unitsChangedHandsThisWeek = reg.housingMarket?.unitsClearedThisWeek
+  const unitsChangedHandsThisWeek = reg.housingMarket.unitsClearedThisWeek
     ?? defect(`${reg.id}: the mortgage pass ran before the week's dwelling book cleared`);
   const clearedTurnoverLocal = unitsChangedHandsThisWeek * medianHomePriceLocal;
   const mortgagePool = pools.find((p) => p.kind === 'MORTGAGE');
@@ -661,7 +661,7 @@ export function runBankHouseholdLending(
   // written against, so turnover rises as rates fall and falls back to the forced-move floor as
   // they rise. `HOUSING_TURNOVER_RATE_ANNUAL` decided all of that with one number.
   const bankMortgageRate = Math.max(0.005,
-    (reg.zeroRates?.tenor10Y ?? 0.04)
+    (reg.zeroRates.tenor10Y)
     + quoteHouseholdMarginBps({
       annualLossRate: mortgageLossRateAnnual,
       riskWeight: MORTGAGE_RISK_WEIGHT,
@@ -673,7 +673,7 @@ export function runBankHouseholdLending(
   // The lending standard, hoisted: what one household's income supports at THIS bank's quote.
   // Both the turnover rate below and the origination block further down read it, and computing it
   // twice is how two answers to one question appear (rule 4).
-  const householdsCount = Math.max(1, (reg.totalPopulation ?? 0) / AVERAGE_HOUSEHOLD_SIZE);
+  const householdsCount = Math.max(1, (reg.totalPopulation) / AVERAGE_HOUSEHOLD_SIZE);
   const weeklyIncomePerHouseholdLocal = Math.max(0, reg.estimatedHouseholdIncomeLocal) / 52 / householdsCount;
   const rWeekly = Math.max(0.00001, marketMortgageRate / 52);
   const affordableLoanLocal = (weeklyIncomePerHouseholdLocal * MORTGAGE_DSTI_LIMIT)
@@ -700,7 +700,7 @@ export function runBankHouseholdLending(
 
   // This bank's share of the region's household demand ≈ its share of the existing books.
   const regionBookLocal = Math.max(1,
-    (hs?.mortgageDebtLocal ?? 0) + (hs?.creditCardDebtLocal ?? 0) + (hs?.otherConsumerLoanDebtLocal ?? 0));
+    (hs.mortgageDebtLocal) + (hs.creditCardDebtLocal) + (hs.otherConsumerLoanDebtLocal));
   const bankBookLocal = pools.reduce((a, pl) => a + pl.principalLocal, 0);
   const bankShare = Math.min(1, bankBookLocal / regionBookLocal) || 0.25;
 
@@ -974,7 +974,7 @@ export function applyBankFundingSplit(
   // have to cover.
   const fundingNeedLocal = Math.round((
     bankTotalAssetsLocal(sheet, cashLocal, facilityBookLocal, sovLocal) + pendingCashLocal - sheet.bankEquityLocal
-      - (sheet.repoBorrowedLocal ?? 0) - (sheet.srfBorrowingLocal ?? 0)
+      - (sheet.repoBorrowedLocal) - (sheet.srfBorrowingLocal)
   ));
   // §5-CLOSE: household money funds what the real corporate, institutional and segment
   // balances do not; nothing is written to a lender that does not exist. The seed's own close

@@ -566,7 +566,7 @@ export function runPeLifecycleForRegion(
     // equity cheque and a higher levered yield on it.
     if (availablePowderLocal > 1e6) {
       const owned = new Set(sponsor.peFund!.portfolioCompanyIds);
-      const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
+      const riskFreeRate = reg.zeroRates.tenor10Y;
       const listedTarget = ctx.updatedCompanies.find((c) => {
         if (c.region !== regionId || !isActiveCompany(c) || c.listingStatus === 'PRIVATE') return false;
         if (c.isBankEntity || c.isInstitutionalEntity) return false;
@@ -803,7 +803,7 @@ function fundNewbornDebt(c: Company, reg: Region, ctx: WeeklyStepContext, nextWe
   // The generator's sketch is the birth's DECLARATION, read once; the ladder itself is opened
   // in the store — empty here, then the facility by wire — and `c.debtTranches` is the view the
   // week end materialises from it (§3.13-BOOK d1b), never written here.
-  const seeded = c.debtTranches ?? [];
+  const seeded = c.debtTranches;
   const debtLocal = seeded.reduce((a, t) => a + t.principalLocal, 0);
   const issuer = { id: c.id, ticker: c.ticker, region: c.region };
   seedLadder(ctx.v2, issuer, []);
@@ -867,7 +867,7 @@ export function runFirmBirthsForRegion(
     .map((seg) => ({
       seg,
       ratio: (seg.annualRevenueLocal / Math.max(1, namedBySegment.get(seg.industry) ?? 1))
-        * Math.max(0, seg.marginPct ?? 0),
+        * Math.max(0, seg.marginPct),
     }))
     .filter((x) => x.seg.annualRevenueLocal > 0 && x.ratio > 0)
     .sort((a, b) => b.ratio - a.ratio);

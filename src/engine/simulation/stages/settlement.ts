@@ -697,9 +697,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // claims net to zero.
   // §3.13c: booked in the NUMÉRAIRE, because it is one bilateral claim and not two local ones.
   report.crossBorderNumeraireByRegion.forEach((delta, region) => {
-    const cb = ctx.updatedRegions[region as keyof typeof ctx.updatedRegions]?.centralBankSheet;
+    const cb = ctx.updatedRegions[region as keyof typeof ctx.updatedRegions].centralBankSheet;
     if (!cb) { report.unresolvedLocal += delta; return; }
-    cb.foreignOfficialClaimsUSD = (cb.foreignOfficialClaimsUSD ?? 0) + delta;
+    cb.foreignOfficialClaimsUSD = (cb.foreignOfficialClaimsUSD) + delta;
   });
 
   // ---- 4b (retired, step 10). SETL2b booked a loan row on the lender here for
@@ -715,7 +715,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // of its net position at the central bank — projected above. A region the tallies name but
   // the store does not is money with no account.
   report.tgaDeltaByRegion.forEach((deltaLocal, region) => {
-    if (!ctx.updatedRegions[region as RegionId]?.centralBankSheet) report.unresolvedLocal += deltaLocal;
+    if (!ctx.updatedRegions[region as RegionId].centralBankSheet) report.unresolvedLocal += deltaLocal;
   });
 
   if (xborderByPair) {

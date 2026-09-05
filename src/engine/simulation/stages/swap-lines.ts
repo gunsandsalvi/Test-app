@@ -35,7 +35,7 @@ const addTo = (rec: Record<string, number> | undefined, key: string, delta: numb
  *  lending region, and the home money it gave for them. */
 export function syncSwapLineSheets(ctx: WeeklyStepContext, home: RegionId): void {
   const book = swapLineBookOf(ctx.v2, home);
-  const cbHome = ctx.updatedRegions[home]?.centralBankSheet;
+  const cbHome = ctx.updatedRegions[home].centralBankSheet;
   if (cbHome) {
     cbHome.swapLineLentByRegion = swapLineLentByRegionOf(book);
     cbHome.swapLineDepositsLocal = Math.round(swapLineDepositsOf(book));
@@ -47,8 +47,8 @@ export function syncSwapLineSheets(ctx: WeeklyStepContext, home: RegionId): void
 }
 
 export function drawSwapLine(ctx: WeeklyStepContext, home: RegionId, foreign: RegionId, bank: Company, foreignLocal: number, week: number): SwapLineDraw | undefined {
-  const cbHome = ctx.updatedRegions[home]?.centralBankSheet;
-  const cbForeign = ctx.updatedRegions[foreign]?.centralBankSheet;
+  const cbHome = ctx.updatedRegions[home].centralBankSheet;
+  const cbForeign = ctx.updatedRegions[foreign].centralBankSheet;
   if (!cbHome || !cbForeign || !bank.bankBalanceSheet || !(foreignLocal > 0)) return undefined;
   const foreignMoney = currencyOf(foreign), homeMoney = currencyOf(home);
   const homeLocal = convert(foreignLocal, foreignMoney, homeMoney, ctx.fx);
@@ -70,7 +70,7 @@ export function drawSwapLine(ctx: WeeklyStepContext, home: RegionId, foreign: Re
 export function serviceSwapLines(ctx: WeeklyStepContext, week: number, view: Pick<DerivativeMarketView, 'overnightRateAnnual'>): void {
   const bankById = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((home) => {
-    const cbHome = ctx.updatedRegions[home]?.centralBankSheet;
+    const cbHome = ctx.updatedRegions[home].centralBankSheet;
     const book = swapLineBookOf(ctx.v2, home);
     if (!cbHome || book.length === 0) return;
     const homeMoney = currencyOf(home);
@@ -79,7 +79,7 @@ export function serviceSwapLines(ctx: WeeklyStepContext, week: number, view: Pic
       const bank = bankById.get(d.bankId);
       const foreign = d.counterpartyRegion;
       const foreignMoney = currencyOf(foreign);
-      const cbForeign = ctx.updatedRegions[foreign]?.centralBankSheet;
+      const cbForeign = ctx.updatedRegions[foreign].centralBankSheet;
       if (!bank?.bankBalanceSheet) { kept.push(d); return; }
       if (d.drawnWeek < week) {
         const interestLocal = convert(swapLineInterestLocal(d.foreignLocal, view.overnightRateAnnual(foreign)), foreignMoney, homeMoney, ctx.fx);

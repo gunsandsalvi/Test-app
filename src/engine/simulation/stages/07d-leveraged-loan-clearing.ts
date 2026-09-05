@@ -164,7 +164,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     if (regionActive.length === 0) return;
     const regionIssuerIds = new Set(regionActive.map((c) => c.id));
 
-    const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
+    const creditConditionsIndex = reg.bankingSector.creditConditionsIndex;
     // The loan's recovery is derived from the same senior-lien discount that scales its expected
     // loss, and the collateral that raises recovery also lowers the capital its spread risk
     // consumes — one lien, both consequences.

@@ -92,7 +92,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const hs = reg.householdState;
 
     // ---- 2. Index-fund shares bought this week settle onto the household register. ----
-    const etfShares = [...(hs.etfShares ?? [])];
+    const etfShares = [...(hs.etfShares)];
     ctx.updatedInstitutionalEntities.forEach((fund) => {
       if (fund.entityType !== 'ETF' || fund.region !== region) return;
       // SIGNED. A negative figure is a REDEMPTION: the household sold shares to raise cash
@@ -136,7 +136,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // read, `domain/housing.ts`) — never backed out of the debt, so a move in home prices moves
     // household wealth, which is the transmission the omission was suppressing.
     const housingStockLocal = housingStockValueLocal(reg.housingMarket);
-    const mortgageLocal = hs.mortgageDebtLocal ?? 0;
+    const mortgageLocal = hs.mortgageDebtLocal;
     const homeEquityLocal = housingStockLocal - mortgageLocal;
 
     // The cash side of the fund-share purchase is a PAYMENT now (etf-flows pays it, the
@@ -153,7 +153,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // the middle tiers' net worth that moves, and when equities rally it is the top's — the
     // difference the tier wealth-effect MPCs exist to price.
     {
-      const consumerDebtLocal = (hs.creditCardDebtLocal ?? 0) + (hs.otherConsumerLoanDebtLocal ?? 0);
+      const consumerDebtLocal = (hs.creditCardDebtLocal) + (hs.otherConsumerLoanDebtLocal);
 
       // THE DEPOSIT SPLIT IS AN OUTCOME OF WHO SAVED, not a stated weight.
       //
@@ -170,9 +170,9 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // drive this split and the three below it, so a tier's saving backed every asset class at
       // once and a house-rich, pension-rich tier looked as cash-rich as one holding deposits.
       const accumulatedByTier = WEALTH_TIERS.map((t: WealthTier) =>
-        Math.max(0, reg.wealthDistribution?.[t]?.accumulatedSavingsLocal ?? 0));
+        Math.max(0, reg.wealthDistribution[t].accumulatedSavingsLocal ?? 0));
       const liquidByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
-        Math.max(0, reg.wealthDistribution?.[t]?.liquidSavingsLocal ?? accumulatedByTier[i]));
+        Math.max(0, reg.wealthDistribution[t].liquidSavingsLocal ?? accumulatedByTier[i]));
       const liquidTotal = liquidByTier.reduce((a, b) => a + b, 0);
       const depositShareOf = (_t: WealthTier, i: number) =>
         liquidTotal > 0 ? liquidByTier[i] / liquidTotal : 0;
@@ -199,11 +199,11 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // away, split by the same appetite that decided to put it there — so the two halves of the
       // balance sheet are now two stocks rather than one wearing two hats.
       const investedByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
-        Math.max(0, reg.wealthDistribution?.[t]?.investedSavingsLocal ?? accumulatedByTier[i]));
+        Math.max(0, reg.wealthDistribution[t].investedSavingsLocal ?? accumulatedByTier[i]));
       const riskyByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
-        investedByTier[i] * Math.max(0, reg.wealthDistribution?.[t]?.equityExposureShare ?? 0));
+        investedByTier[i] * Math.max(0, reg.wealthDistribution[t].equityExposureShare));
       const cautiousByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
-        investedByTier[i] * Math.max(0, 1 - Math.max(0, reg.wealthDistribution?.[t]?.equityExposureShare ?? 0)));
+        investedByTier[i] * Math.max(0, 1 - Math.max(0, reg.wealthDistribution[t].equityExposureShare)));
       const riskyTotal = riskyByTier.reduce((a, b) => a + b, 0);
       const cautiousTotal = cautiousByTier.reduce((a, b) => a + b, 0);
       const riskyShareOf = (t: WealthTier, i: number) =>
@@ -226,12 +226,12 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       //   measured per tier from the cohorts' own budgets, so the split is `(1 − savings rate) x
       //   income` — the propensity to borrow times the base it is borrowed against.
       const incomeByTier = WEALTH_TIERS.map((t: WealthTier) =>
-        Math.max(0, reg.wealthDistribution?.[t]?.shareOfIncomeLocal ?? 0));
+        Math.max(0, reg.wealthDistribution[t].shareOfIncomeLocal));
       const incomeTotal = incomeByTier.reduce((a, b) => a + b, 0);
       const incomeShareOf = (t: WealthTier, i: number) =>
         incomeTotal > 0 ? incomeByTier[i] / incomeTotal : 0;
       const borrowByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
-        incomeByTier[i] * Math.max(0, 1 - Math.max(0, Math.min(1, reg.wealthDistribution?.[t]?.savingsRate ?? 0))));
+        incomeByTier[i] * Math.max(0, 1 - Math.max(0, Math.min(1, reg.wealthDistribution[t].savingsRate))));
       const borrowTotal = borrowByTier.reduce((a, b) => a + b, 0);
       const borrowShareOf = (t: WealthTier, i: number) =>
         borrowTotal > 0 ? borrowByTier[i] / borrowTotal : 0;
@@ -264,7 +264,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     reg.householdState = {
       ...hs,
       // Last week's marked net worth, so next week's wealth effect can read a CHANGE.
-      priorNetWorthLocal: hs.netWorthLocal ?? 0,
+      priorNetWorthLocal: hs.netWorthLocal,
       housingStockLocal,
       homeEquityLocal,
       mmfSharesLocal,
@@ -279,6 +279,6 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // national accounts. Omitting the asset while carrying the debt understated net worth by
       // the entire housing stock.
       netWorthLocal: depositsLocal + mmfSharesLocal + equityHoldingsLocal + housingStockLocal
-        - (mortgageLocal + (hs.creditCardDebtLocal ?? 0) + (hs.otherConsumerLoanDebtLocal ?? 0)) };
+        - (mortgageLocal + (hs.creditCardDebtLocal) + (hs.otherConsumerLoanDebtLocal)) };
   });
 }

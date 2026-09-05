@@ -62,7 +62,7 @@ export function executeTrade(
     if (bankIndex >= 0) {
       const bank = state.companies[bankIndex];
       const sheet = bank.bankBalanceSheet!;
-      const book = DESK_BOOK_BY_ASSET_TYPE[posData.assetType] ?? 'derivatives';
+      const book = DESK_BOOK_BY_ASSET_TYPE[posData.assetType];
       // §3.13-BOOK slice (a): a ticket names a TRANCHE where it has one and the equity of its
       // symbol's issuer where it does not — the same crossing `instrument-keys.ts` records.
       const instrumentId: InstrumentId = posData.trancheId
@@ -97,7 +97,7 @@ export function executeTrade(
         const units = Math.abs(inventoryDeltaLocal) / px;
         const j = newWireJournal((state as { nextWireId?: number }).nextWireId ?? 1, state.currentWeek);
         setActiveWireJournal(j);
-        setActiveWireWorld(wireWorldOf(v2, state.companies, state.institutionalEntities ?? []));
+        setActiveWireWorld(wireWorldOf(v2, state.companies, state.institutionalEntities));
         try {
           const desk = bankSecuritiesPartyOf(bank.id);
           const house = { kind: 'CLEARING_HOUSE' as const, region: posData.region };
