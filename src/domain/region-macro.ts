@@ -4,7 +4,6 @@
 import { RegionId } from './geography';
 
 import { PrimeBrokerageLine } from './prime-brokerage';
-import { SecurityLoan } from './securities-lending';
 import { Industry } from './industry';
 import { CentralBank } from './central-bank';
 import { BankingSectorView, AssetOwnershipShares } from './banking';
@@ -722,7 +721,8 @@ export interface Region {
   // DRV — the swap and CDS books moved to the ONE derivative book (GameState.derivativesBook).
   /** HF — the stock loans outstanding in this region: who lent what to whom, at what fee. The
    * short interest in every name is a measurement of this book. */
-  securityLoanBook?: SecurityLoan[];
+  // §3.13-BOOK d4c-iii: the stock-loan book is rows of the world's contract store, read through
+  // `contract-ledger.ts:securityLoanBookOf`; not a field.
   /** HF — the last cleared borrow fee per name, in annual bps; this book's own prior print. */
   borrowFeeBpsByCompanyId?: Record<string, number>;
   /** DER1 — the cleared par swap rate per tenor (annualised decimal). */

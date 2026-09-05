@@ -516,14 +516,12 @@ written from here):
         it: the derivatives are NOT in `v2.contracts`, which is the supply-contract table; they
         are `state.derivativesBook`, an object array with one lifecycle writer). d4a (one party
         union and one key across the bilateral books) is in §9. What is left, in order:
-    d4c. **ONE STORE** — one kind per commit, in this order; d4c-i (the derivatives) and d4c-ii
-        (the repo book) are in §9.
+    d4c. **ONE STORE** — one kind per commit, in this order; d4c-i (the derivatives), d4c-ii
+        (the repo book) and d4c-iii (the stock-loan book) are in §9.
         `engine2/obligations.ts` is the store: kind, class, region, money, party A, party B,
         size, strike, units, settled mark, struck and maturity weeks, the reference and the term;
         each kind below adds its own columns where it has them and joins the same chains, door
         (`contract-ledger.ts`) and liveness check.
-    d4c-iii. **THE STOCK-LOAN BOOK** (`reg.securityLoanBook`): lender, borrower, the instrument,
-        shares, fee, collateral, the lender's position at strike, recall week.
     d4c-iv. **THE PRIME-BROKERAGE BOOK** (`reg.primeBrokerageBook`): broker, fund, drawn, haircut, rate.
     d4c-v. **THE TRADE INVOICES** (`state.tradeInvoices`): seller, buyer, the sub-unit, the invoice
         currency and amount, the booked rate, booked and due weeks.
@@ -1723,6 +1721,16 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-BOOK d4c-iii — THE STOCK-LOAN BOOK IS ROWS OF THE CONTRACT STORE.** `Region.securityLoanBook`
+is deleted. A stock loan is a row of `engine2/obligations.ts` — the lender as A, the borrower as B,
+the collateral as the size, the fee as the strike, the shares as the units — with the three
+columns this kind adds: the instrument on loan, the lender's position at strike (a recall is a
+fall below it) and the recall week. Read as the loans the session and the settlement's collateral
+read already walk (`contract-ledger.ts:securityLoanBookOf`, memoised on the epoch — the array
+identity the settlement's own memo keys on is stable within an epoch), written back whole by
+`publishSecurityLoanBook(v2, region, book)` at the session's four publish points, every party
+resolving and the region's order kept. Byte-identical. Gates green; no run.
 
 **13-BOOK d4c-ii — THE REPO BOOK IS ROWS OF THE CONTRACT STORE.** `Region.repoBook` is deleted.
 A repo is a row of `engine2/obligations.ts` — the lender as party A, the borrowing bank as party

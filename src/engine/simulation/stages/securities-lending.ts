@@ -15,7 +15,7 @@
  */
 
 import { hedgeFundStrategyProfile } from '../../../domain/institution-profiles';
-import { publishSecurityLoanBook } from '../../ledger/contract-ledger';
+import { publishSecurityLoanBook, securityLoanBookOf } from '../../ledger/contract-ledger';
 import { marketCapAt, issuedSharesOf } from '../../../engine2/instruments';
 import { GameState, RegionId, Company } from '../../../types';
 import { ensureV2, ringFill, rowOf } from '../../../engine2/world';
@@ -59,7 +59,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
   regionIds.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     if (!reg) return;
-    const priorBook: SecurityLoan[] = reg.securityLoanBook ?? [];
+    const priorBook: SecurityLoan[] = securityLoanBookOf(ctx.v2, regionId); // §3.13-BOOK d4c-iii: the store's rows
     const lastFee: Record<string, number> = reg.borrowFeeBpsByCompanyId ?? {};
 
     const listed = ctx.prevActiveFirms.filter(
@@ -262,7 +262,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
 
     const priceOf = (instrumentId: string) => companyById.get(equityIssuerId(asInstrumentId(instrumentId)))?.stockPrice ?? 0;
     if (listed.length === 0) {
-      publishBook(ctx, reg, carried, lastFee, priceOf);
+      publishBook(ctx, regionId, reg, carried, lastFee, priceOf);
       return;
     }
 
@@ -342,7 +342,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     // like the equity book it sits beside. ----
     const borrowNames = listed.filter((c) => (borrowDemandByCompany.get(c.id)?.length ?? 0) > 0);
     if (borrowNames.length === 0) {
-      publishBook(ctx, reg, carried, lastFee, priceOf);
+      publishBook(ctx, regionId, reg, carried, lastFee, priceOf);
       return;
     }
 
@@ -421,7 +421,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     });
 
     if (participants.length === 0) {
-      publishBook(ctx, reg, carried, lastFee, priceOf);
+      publishBook(ctx, regionId, reg, carried, lastFee, priceOf);
       return;
     }
 
@@ -521,7 +521,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     });
 
     const nextBook = [...carried, ...struck];
-    publishBook(ctx, reg, nextBook, lastFee, priceOf);
+    publishBook(ctx, regionId, reg, nextBook, lastFee, priceOf);
     // Short interest, as a measurement of the book rather than a number anyone stated.
     borrowNames.forEach((c) => {
       const onLoan = nextBook.reduce((a, l) => (equityIssuerId(l.instrumentId) === c.id ? a + l.shares : a), 0);
@@ -537,12 +537,13 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
  */
 function publishBook(
   ctx: WeeklyStepContext,
-  reg: { securityLoanBook?: SecurityLoan[]; borrowFeeBpsByCompanyId?: Record<string, number> },
+  regionId: RegionId,
+  reg: { borrowFeeBpsByCompanyId?: Record<string, number> },
   book: SecurityLoan[],
   fees: Record<string, number>,
   priceOf: (instrumentId: string) => number
 ): void {
-  publishSecurityLoanBook(reg, book); // §3.13-BOOK d4b: the contract ledger's door
+  publishSecurityLoanBook(ctx.v2, regionId, book); // §3.13-BOOK d4b/d4c-iii: the contract ledger's door
   reg.borrowFeeBpsByCompanyId = fees;
   publishLent(ctx, book);
   const parties = new Set<string>();

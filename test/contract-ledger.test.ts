@@ -8,12 +8,13 @@ import assert from 'node:assert/strict';
 import { ensureV2 } from '../src/engine2/world';
 import { setActiveWireWorld } from '../src/engine/ledger/wire';
 import { wireWorldOf } from '../src/engine/ledger/wire-world';
-import { bookTradeInvoices, publishRepoBook, repoBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
+import { bookTradeInvoices, publishRepoBook, repoBookOf, publishSecurityLoanBook, securityLoanBookOf, strikeDerivatives, derivativesOf, derivativesBookOf, keepDerivatives, novateDerivatives, derivativeContractOf } from '../src/engine/ledger/contract-ledger';
 import type { WeeklyStepContext } from '../src/engine/simulation/stages/context';
 import type { DerivativeContract } from '../src/domain/derivatives/contract';
 import { asEntityId, asInstrumentId } from '../src/domain/ids';
 import type { TradeInvoice } from '../src/domain/trade-invoice';
 import type { RepoContract } from '../src/domain/repo';
+import type { SecurityLoan } from '../src/domain/securities-lending';
 
 const invoice = (sellerId: string, buyerId: string): TradeInvoice => ({
   sellerId: asEntityId(sellerId), sellerRegion: 'USA', buyerId: asEntityId(buyerId), buyerRegion: 'USA',
@@ -88,6 +89,28 @@ test('§3.13-BOOK d4c-i: a struck derivative is a row of the contract store, and
     novateDerivatives(ctx, (p) => (p.id === a.id ? c : p));
     assert.deepEqual(derivativesOf(v2)[0].b, c);
     assert.equal(derivativeContractOf(v2, 'USA-IRS-s5-1-0'), undefined, 'a freed row is gone');
+  } finally {
+    setActiveWireWorld(undefined);
+  }
+});
+
+test('§3.13-BOOK d4c-iii: a stock loan is a row of the contract store, recall week and all', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const lender = { kind: 'INSTITUTION' as const, id: asEntityId('INST-L') };
+  const borrower = { kind: 'INSTITUTION' as const, id: asEntityId('INST-B') };
+  setActiveWireWorld(wireWorldOf(v2, [], [{ id: lender.id }, { id: borrower.id }]));
+  try {
+    const loan: SecurityLoan = {
+      id: 'USA-SBL-USA_ACME-1-0', regionId: 'USA', instrumentId: asInstrumentId('USA_ACME'), lender, borrower, shares: 1_000,
+      feeBps: 35.5, currency: 'USD', collateralLocal: 20_000, lenderPositionAtStrike: 5_000, struckWeek: 1,
+    };
+    publishSecurityLoanBook(v2, 'USA', [loan]);
+    assert.deepEqual(securityLoanBookOf(v2, 'USA'), [loan]);
+    const recalled: SecurityLoan = { ...loan, id: `${loan.id}-R`, shares: 400, collateralLocal: 8_000, recalledWeek: 3 };
+    const rest: SecurityLoan = { ...loan, shares: 600, collateralLocal: 12_000 };
+    publishSecurityLoanBook(v2, 'USA', [recalled, rest]);
+    assert.deepEqual(securityLoanBookOf(v2, 'USA'), [recalled, rest]);
+    assert.throws(() => publishSecurityLoanBook(v2, 'USA', [{ ...loan, id: 'x', borrower: { kind: 'INSTITUTION', id: asEntityId('INST-GHOST') } }]), /no entity, region or bank/);
   } finally {
     setActiveWireWorld(undefined);
   }

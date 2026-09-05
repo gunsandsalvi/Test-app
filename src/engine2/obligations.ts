@@ -15,10 +15,11 @@
  * the row (`materializeDerivative`), the way a ladder row materializes a `DebtTranche`.
  */
 import type { V2World } from './world';
-import { internType, typeOf, internRegion, regionOf, internPartyKey, partyKeyOf, CURRENCY_ID, currencyOfId } from './world';
-import { ABSENT_REF, newRefColumn, type RefColumn, type TypeRef, type RegionRef, type PartyKeyRef } from './refs';
+import { internType, typeOf, internRegion, regionOf, internPartyKey, partyKeyOf, internInstrument, instrumentOf, CURRENCY_ID, currencyOfId } from './world';
+import { ABSENT_REF, newRefColumn, type RefColumn, type TypeRef, type RegionRef, type PartyKeyRef, type InstrRef } from './refs';
 import type { DerivativeContract, DerivativeReference, DerivativeParty } from '../domain/derivatives/contract';
 import type { RepoContract, RepoPledge, RepoParty } from '../domain/repo';
+import type { SecurityLoan } from '../domain/securities-lending';
 import { bankPartyOf } from '../domain/party';
 import { currencyOf } from '../domain/geography';
 import { partyFromKey, partyKey } from '../engine/ledger/party';
@@ -57,6 +58,12 @@ export interface ObligationStore {
   id: string[];
   /** §3.13-BOOK d4c-ii — a repo's pledges: which bond, how much face; undefined for every other kind. */
   pledges: (RepoPledge[] | undefined)[];
+  /** §3.13-BOOK d4c-iii — the instrument a stock loan is in; ABSENT_REF for every other kind. */
+  instrRef: RefColumn<InstrRef>;
+  /** d4c-iii — the lender's whole position in the name at strike (a recall is a fall below it); NaN elsewhere. */
+  positionAtStrike: Float64Array;
+  /** d4c-iii — the week the lender sold out from under the loan; -1 = not recalled. */
+  recalledWeek: Int32Array;
   /** Bumped by every write, so a materialized view can tell whether it is current. */
   epoch: number;
   next: Int32Array;
@@ -93,6 +100,7 @@ export function newObligationStore(): ObligationStore {
     struckWeek: new Int32Array(cap), maturityWeek: new Int32Array(cap),
     refKind: new Int8Array(cap), refText: new Array(cap), termKey: new Array(cap), id: new Array(cap),
     pledges: new Array(cap), epoch: 0,
+    instrRef: newRefColumn<InstrRef>(cap, -1), positionAtStrike: new Float64Array(cap).fill(Number.NaN), recalledWeek: new Int32Array(cap).fill(-1),
     next: new Int32Array(cap).fill(-1),
     headByKind: new Map(), tailByKind: new Map(), rowById: new Map(),
   };
@@ -110,6 +118,7 @@ function grow(S: ObligationStore): void {
   S.struckWeek = gI(S.struckWeek); S.maturityWeek = gI(S.maturityWeek);
   const rk = new Int8Array(cap); rk.set(S.refKind); S.refKind = rk;
   S.refText.length = cap; S.termKey.length = cap; S.id.length = cap; S.pledges.length = cap;
+  S.instrRef = gR(S.instrRef); S.positionAtStrike = gF(S.positionAtStrike, Number.NaN); S.recalledWeek = gI(S.recalledWeek, -1);
   S.next = gI(S.next, -1);
   S.cap = cap;
 }
@@ -157,6 +166,7 @@ function freeRow(S: ObligationStore, r: number): void {
   S.kindRef[r] = ABSENT_REF; S.classRef[r] = ABSENT_REF; S.aRef[r] = ABSENT_REF; S.bRef[r] = ABSENT_REF;
   S.notional[r] = 0; S.strike[r] = 0; S.units[r] = Number.NaN; S.settledMark[r] = Number.NaN;
   S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = ''; S.pledges[r] = undefined;
+  S.instrRef[r] = ABSENT_REF; S.positionAtStrike[r] = Number.NaN; S.recalledWeek[r] = -1;
   S.next[r] = S.freeHead; S.freeHead = r;
 }
 
@@ -258,6 +268,53 @@ export function materializeRepo(v2: V2World, r: number): RepoContract {
     principalLocal: S.notional[r], rateAnnual: S.strike[r], struckWeek: S.struckWeek[r], maturityWeek: S.maturityWeek[r],
     collateral: (S.pledges[r] ?? []).map((p) => ({ bondId: p.bondId, faceLocal: p.faceLocal })),
   };
+}
+
+// ---- §3.13-BOOK d4c-iii — THE STOCK-LOAN BOOK: lender as A, borrower as B, the collateral as the
+// size, the fee as the strike, the shares as the units, the name as the instrument. ----
+
+/** Write a stock loan as a new row (ledger-internal). Returns the row. */
+export function writeLoanRow(v2: V2World, l: SecurityLoan): number {
+  const S = mutableObligations(v2);
+  if (S.rowById.has(l.id)) return defect(`stock loan ${l.id} struck twice`);
+  const r = allocRow(S);
+  const kindRef = internType(v2, 'STOCK_LOAN');
+  S.kindRef[r] = kindRef; S.classRef[r] = kindRef; S.regionRef[r] = internRegion(v2, l.regionId);
+  S.currencyId[r] = CURRENCY_ID[l.currency];
+  S.aRef[r] = internPartyKey(v2, partyKey(l.lender)); S.bRef[r] = internPartyKey(v2, partyKey(l.borrower));
+  S.notional[r] = l.collateralLocal; S.strike[r] = l.feeBps; S.units[r] = l.shares; S.settledMark[r] = Number.NaN;
+  S.struckWeek[r] = l.struckWeek | 0; S.maturityWeek[r] = 0;
+  S.refKind[r] = 0; S.refText[r] = undefined; S.termKey[r] = ''; S.id[r] = l.id;
+  S.instrRef[r] = internInstrument(v2, l.instrumentId); S.positionAtStrike[r] = l.lenderPositionAtStrike;
+  S.recalledWeek[r] = l.recalledWeek === undefined ? -1 : l.recalledWeek | 0;
+  S.rowById.set(l.id, r);
+  appendToKind(S, kindRef, r);
+  S.epoch++;
+  return r;
+}
+
+/** A live loan row takes the loan's current terms (ledger-internal). */
+export function writeLoanTerms(v2: V2World, r: number, l: SecurityLoan): void {
+  const S = mutableObligations(v2);
+  S.aRef[r] = internPartyKey(v2, partyKey(l.lender)); S.bRef[r] = internPartyKey(v2, partyKey(l.borrower));
+  S.notional[r] = l.collateralLocal; S.strike[r] = l.feeBps; S.units[r] = l.shares;
+  S.positionAtStrike[r] = l.lenderPositionAtStrike; S.recalledWeek[r] = l.recalledWeek === undefined ? -1 : l.recalledWeek | 0;
+  S.epoch++;
+}
+
+/** One loan row materialized back to the loan the stage and the settlement read. */
+export function materializeLoan(v2: V2World, r: number): SecurityLoan {
+  const S = v2.obligations;
+  const lender = partyFromKey(partyKeyOf(v2, S.aRef[r]));
+  const borrower = partyFromKey(partyKeyOf(v2, S.bRef[r]));
+  if (lender?.kind !== 'INSTITUTION' || borrower?.kind !== 'INSTITUTION') return defect(`stock loan row ${r} (${S.id[r]}) names a party that is no institution`);
+  const l: SecurityLoan = {
+    id: S.id[r], regionId: regionOf(v2, S.regionRef[r]) as RegionId, instrumentId: instrumentOf(v2, S.instrRef[r]),
+    lender, borrower, shares: S.units[r], feeBps: S.strike[r], currency: currencyOfId(S.currencyId[r]),
+    collateralLocal: S.notional[r], lenderPositionAtStrike: S.positionAtStrike[r], struckWeek: S.struckWeek[r],
+  };
+  if (S.recalledWeek[r] >= 0) l.recalledWeek = S.recalledWeek[r];
+  return l;
 }
 
 /** Relink one kind's chain so that, within `regionId`, exactly `kept` (in order) survive; rows of

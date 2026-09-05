@@ -14,7 +14,7 @@
  * columnar store for the six is slice d4c's.
  */
 import type { V2World } from '../../engine2/world';
-import { rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms } from '../../engine2/obligations';
+import { rowsOfKind, rowsOfKindInRegion, relinkKind, relinkKindInRegion, materializeDerivative, materializeRepo, materializeLoan, derivativeRowOf, writeDerivativeRow, writeSettledMark, writeDerivativeParties, writeRepoRow, writeRepoTerms, writeLoanRow, writeLoanTerms } from '../../engine2/obligations';
 import type { RegionId } from '../../domain/geography';
 import type { WeeklyStepContext } from '../simulation/stages/context';
 import type { DerivativeContract, DerivativeParty } from '../../domain/derivatives/contract';
@@ -128,10 +128,33 @@ export function publishRepoBook(v2: V2World, regionId: RegionId, book: RepoContr
   relinkKindInRegion(v2, 'REPO', regionId, rows);
 }
 
-/** The region's stock-loan book: every lender and borrower resolves. */
-export function publishSecurityLoanBook(reg: { securityLoanBook?: SecurityLoan[] }, book: SecurityLoan[]): void {
-  book.forEach((l) => { resolvePartyRef(l.lender, `stock loan ${l.id} lender`); resolvePartyRef(l.borrower, `stock loan ${l.id} borrower`); });
-  reg.securityLoanBook = book;
+/**
+ * §3.13-BOOK d4c-iii — THE STOCK-LOAN BOOK IS ROWS OF THE CONTRACT STORE, read and written the way
+ * the repo book is: a region's loans materialized and memoised on the epoch, and the whole book
+ * published back — every party resolves, a loan the store holds takes its current terms, a new
+ * one gets a row, the region's rows the book no longer names are freed. `Region.securityLoanBook`
+ * is gone.
+ */
+const loanBookMemo = new WeakMap<V2World, { epoch: number; byRegion: Map<string, SecurityLoan[]> }>();
+export function securityLoanBookOf(v2: V2World, regionId: RegionId): SecurityLoan[] {
+  let memo = loanBookMemo.get(v2);
+  if (!memo || memo.epoch !== v2.obligations.epoch) { memo = { epoch: v2.obligations.epoch, byRegion: new Map() }; loanBookMemo.set(v2, memo); }
+  let book = memo.byRegion.get(regionId);
+  if (!book) { book = rowsOfKindInRegion(v2, 'STOCK_LOAN', regionId).map((r) => materializeLoan(v2, r)); memo.byRegion.set(regionId, book); }
+  return book;
+}
+
+/** The region's stock-loan book, as the session leaves it. */
+export function publishSecurityLoanBook(v2: V2World, regionId: RegionId, book: SecurityLoan[]): void {
+  const rows = book.map((l) => {
+    if (l.regionId !== regionId) return defect(`stock loan ${l.id} of ${l.regionId} published on ${regionId}'s book`);
+    resolvePartyRef(l.lender, `stock loan ${l.id} lender`); resolvePartyRef(l.borrower, `stock loan ${l.id} borrower`);
+    const r = derivativeRowOf(v2, l.id);
+    if (r === undefined) return writeLoanRow(v2, l);
+    writeLoanTerms(v2, r, l);
+    return r;
+  });
+  relinkKindInRegion(v2, 'STOCK_LOAN', regionId, rows);
 }
 
 /** The region's prime-brokerage book: every broker and fund resolves. */

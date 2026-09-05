@@ -30,6 +30,7 @@
  */
 
 import { RegionId } from '../../../types';
+import { securityLoanBookOf } from '../../ledger/contract-ledger';
 import { buildAccountMirror, applySettledRow, projectBooks, settledTallies, entityCashOf } from '../../ledger/accounts';
 import { WeeklyStepContext } from './context';
 
@@ -358,9 +359,10 @@ export function pendingSettlementLocal(ctx: WeeklyStepContext, party: PartyRef):
 const collateralHeldByBook = new WeakMap<object, Map<string, number>>();
 export function stockLoanCollateralHeldLocal(ctx: WeeklyStepContext, entityId: EntityId): number {
   let heldLocal = 0;
-  for (const reg of Object.values(ctx.updatedRegions)) {
-    const book = reg?.securityLoanBook;
-    if (!book || book.length === 0) continue;
+  // §3.13-BOOK d4c-iii: the store's rows, memoised per epoch — the array identity keys the memo.
+  for (const regionId of Object.keys(ctx.updatedRegions) as RegionId[]) {
+    const book = securityLoanBookOf(ctx.v2, regionId);
+    if (book.length === 0) continue;
     let byLender = collateralHeldByBook.get(book);
     if (!byLender) {
       byLender = new Map<string, number>();

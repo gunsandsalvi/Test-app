@@ -99,7 +99,7 @@ checked by `scripts/check-atlas.sh`.
 | D2 a squeeze is possible | `src/engine/simulation/stages/07e-equity-clearing.ts:buyInShares` | ✅ |
 | D2.a VERIFY a consequence of B4 and C, never scripted | `src/domain/company.ts:shortInterestShares` | ✅ |
 | D3 a recall forces the borrower to find it or close | `src/engine/simulation/stages/securities-lending.ts:soldByLender` | ✅ |
-| E1 FORBID no short without a borrow | `src/domain/securities-lending.ts:SecurityLoan` · `src/engine/ledger/contract-ledger.ts:publishSecurityLoanBook` | ✅ |
+| E1 FORBID no short without a borrow | `src/domain/securities-lending.ts:SecurityLoan` · `src/engine2/obligations.ts:materializeLoan` · `src/engine/ledger/contract-ledger.ts:publishSecurityLoanBook` | ✅ |
 | E2 FORBID no double-counting the loaned security | `src/domain/securities-lending.ts:stockLoanNetLocal` | ✅ |
 | E3 FORBID no free borrow | `src/engine/simulation/stages/securities-lending.ts:clearedBps` | ✅ |
 
