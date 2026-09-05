@@ -667,7 +667,6 @@ export function generateInitialCompanies(
             netInterestMarginPct: bs.netInterestMarginPct,
             loanLossProvisionRateAnnualPct: bs.loanLossProvisionRateAnnualPct,
             creditConditionsIndex: bs.creditConditionsIndex,
-            centralBankReservesLocal: bs.centralBankReservesLocal * share,
             moneySupplyM2Local: bs.moneySupplyM2Local * share,
             itemizedHoldings: [],
             srfBorrowingLocal: 0,

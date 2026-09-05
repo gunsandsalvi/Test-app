@@ -1,7 +1,7 @@
 import { RegionId } from '../../domain/geography';
 import { ensureV2 } from '../../engine2/world';
 import { materializeGovLadder } from '../../engine2/tranches';
-import { householdDepositsOf, treasuryAccountOf } from '../../engine/ledger/accounts';
+import { householdDepositsOf, treasuryAccountOf, bankReservesOf } from '../../engine/ledger/accounts';
 /**
  * AU · macro — the region's dashboard: activity, prices, labour, money, the external account,
  * households, banks, the treasury — each line the number and its month-on-month where the tape
@@ -84,7 +84,7 @@ export const macro: FunctionModule = {
         <KV k="capital ratio" hint={sub('bank capital')} v={pctLevel(bs?.bankCapitalRatio, 2)} />
         <KV k="net interest margin" hint={sub('bank nim')} v={pctLevel(bs?.netInterestMarginPct, 2)} />
         <KV k="loans" hint="business · household" v={`${money(books.businessLoanLocal)} · ${money(books.consumerLoanLocal)}`} />
-        <KV k="reserves at the central bank" v={money(bs?.centralBankReservesLocal)} />
+        <KV k="reserves at the central bank" v={money(world.state.companies.reduce((a, c) => a + (c.isBankEntity && c.bankBalanceSheet && c.region === r.id ? bankReservesOf(ensureV2(world.state), c.id) : 0), 0))} />
         <KV k="at the window" v={money(bs?.srfBorrowingLocal)} />
         <KV k="the banks" v={<Link to={ref} fn="banks" nav={nav}>{count(world.state.companies.filter((c) => c.region === r.id && c.isBankEntity && !c.isDefaulted).length)} banks</Link>} />
       </Card>

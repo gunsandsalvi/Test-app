@@ -1,6 +1,6 @@
 /** AU · object: central bank — a region's monetary authority: its sheet, its rate, its operations. */
 
-import { treasuryAccountOf, waysAndMeansOf } from '../../engine/ledger/accounts';
+import { treasuryAccountOf, waysAndMeansOf, bankReservesOf } from '../../engine/ledger/accounts';
 import { ReactNode } from 'react';
 import { Region } from '../../types';
 import { defineObject } from './registry';
@@ -48,7 +48,7 @@ export const centralbank = defineObject<Region>({
     const policy = tapeSeries(world, `region:${ref.id}:policy`).values;
     const banks = banksOf(world.state.companies, asRegionId(ref.id));
     const atWindow = banks.filter((b) => (b.bankBalanceSheet!.srfBorrowingLocal ?? 0) > 1e6);
-    const reserves = r.bankingSector?.centralBankReservesLocal ?? 0;
+    const reserves = banks.reduce((a, b) => a + bankReservesOf(ensureV2(world.state), b.id), 0);
     return (
       <>
         <ObjectHeader name={r.centralBank} sub={<>central bank of <RegionLink id={ref.id} nav={nav} /> · target inflation {pctLevel(r.targetInflation)} · {r.currency}</>} />

@@ -89,7 +89,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 the monopoly issuer of reserves | `src/engine/ledger/party.ts:CENTRAL_BANK` | ✅ |
 | A1.a it can always meet an obligation in its own money | `src/engine/simulation/stages/central-bank-demand.ts:bookCentralBankFills` | ✅ |
 | A2 it has a balance sheet, and a real one | `src/domain/central-bank.ts:CentralBank` | ✅ |
-| A2.a liabilities: reserves, currency, the TGA, the RRP window | `src/domain/central-bank.ts:centralBankLiabilitiesLocal` | ✅ |
+| A2.a liabilities: reserves, currency, the TGA, the RRP window | `src/domain/central-bank.ts:centralBankLiabilitiesLocal` · `src/engine/ledger/accounts.ts:bankReservesOf` | ✅ |
 | A2.b assets: sovereign paper, loans to banks, FX, foreign claims | `src/domain/central-bank.ts:centralBankAssetsLocal` | ✅ |
 | A2.c VERIFY it closes weekly, with a revaluation account | `src/engine/audit/money.ts:m1` | ✅ |
 | A3 a mandate: a stated objective | `src/domain/region-macro.ts:targetInflation` | ⚠️ |

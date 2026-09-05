@@ -91,7 +91,7 @@ export function recordTape(tape: Tape, state: GameState): void {
       put(`centralbank:${r}:sovereign book`, centralBankBookLocal(ensureV2(state), r));
       put(`centralbank:${r}:currency`, cb.currencyInCirculationLocal);
       put(`centralbank:${r}:foreign claims`, cb.foreignOfficialClaimsUSD);
-      put(`centralbank:${r}:reserves`, reg.bankingSector?.centralBankReservesLocal);
+      put(`centralbank:${r}:reserves`, state.companies.reduce((a, c) => a + (c.isBankEntity && c.bankBalanceSheet && c.region === r ? bankReservesOf(ensureV2(state), c.id) : 0), 0));
     }
     Object.entries(reg.categoryDemand).forEach(([su, d]) => {
       if (!d) return;

@@ -62,7 +62,6 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     netInterestMarginPct: bs.netInterestMarginPct,
     loanLossProvisionRateAnnualPct: bs.loanLossProvisionRateAnnualPct,
     creditConditionsIndex: bs.creditConditionsIndex,
-    centralBankReservesLocal: bs.centralBankReservesLocal * share,
     moneySupplyM2Local: bs.moneySupplyM2Local * share,
     itemizedHoldings: [],
     srfBorrowingLocal: bs.srfBorrowingLocal * share,
@@ -511,7 +510,6 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       netInterestMarginPct: Number(weightedAvg((s) => s.netInterestMarginPct).toFixed(4)),
       loanLossProvisionRateAnnualPct: Number(weightedAvg((s) => s.loanLossProvisionRateAnnualPct).toFixed(4)),
       creditConditionsIndex: Number(weightedAvg((s) => s.creditConditionsIndex).toFixed(3)),
-      centralBankReservesLocal: sumField((s) => s.centralBankReservesLocal),
       // G2 slice 5: M2 = the real deposits at the named banks + the region's money-fund
       // shares (WS7's real liabilities — money held outside a bank is still money).
       moneySupplyM2Local: sumField((s) => s.moneySupplyM2Local)

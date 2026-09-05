@@ -556,6 +556,21 @@ written from here):
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
+20-LLR-a. **THE CENTRAL BANK'S CLAIMS ON ITS BANKS ARE A BOOK, NOT SCALARS** (user, 2026-09-05:
+    *"make sure it's nice and tidy in that sector as well"* — the reserve side, checked: a bank's
+    reserves are one row at the central bank moved only by settlement legs, read by
+    `bankReservesOf`, closed by M1/M6, and the sheet's weekly copy of that row is gone (§9
+    20-LLR-0). What is NOT tidy is the asset side of the same sheet: `loansToBanksLocal` is a
+    scalar the funding close adds to and 02b subtracts from, and the swap-line draws are a
+    per-region map on each bank — neither is a contract with a lender, a borrower, a rate and a
+    maturity, so neither can be matured, audited per counterparty, refused or novated the way
+    the repo, prime-brokerage and interbank books are.) Each central-bank loan becomes a row of
+    the contract store (kind `CB_LOAN`, the central bank as lender, the bank as borrower, struck
+    at the close, repaid at the open), `loansToBanksLocal` and `centralBankLoanLocal` become
+    reads of the book, and the swap-line draws follow (`swapLineDrawnByRegion` → rows). Sits
+    directly under 20-LLR because 20-LLR deletes the unbounded loan this book would carry: build
+    the book first so what 20-LLR replaces it with — the window as a seat in the close session —
+    has rows to write into.
 20-LLR. **NOTHING CAN FAIL FOR WANT OF LIQUIDITY, AND THAT IS THE MONEY SYSTEM'S LARGEST HOLE**
     (user, 2026-09-03, asking whether the desks and the central bank are buyers of last resort so
     that an auction cannot fail — half right, and the half that is right is not in the auctions).
@@ -1508,6 +1523,16 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20-LLR-0 — THE RESERVES COPY IS GONE.** (user, 2026-09-05, asking whether reserves are kept the
+  way other assets are: yes — a bank's reserves are one RESERVES row at the central bank, moved
+  only by settlement legs, read by `bankReservesOf`, closed by M1 and M6.) The one exception was
+  a report: `BankingSector.centralBankReservesLocal`, written every week as `max(0, cash)` by the
+  evolution, seeded off its own GDP ratio (`centralBankReservesToGdp`, read by nothing else),
+  restated by resolution and stage 11, and read only by three UI views. Deleted with its ratio;
+  the views sum the banks' rows. The asset side of the central bank's sheet is NOT a book —
+  inserted as 20-LLR-a, directly under the step that will delete the unbounded loan it would
+  carry. `the-central-bank.md` A2.a re-cited. Gates green; no run.
 
 **20c-ii — THE BORROWER SHOPS.** The SME pool's week of demand was split across the region's
   banks by each bank's share of the pool's EXISTING loans, so a wide quote lost no volume to a

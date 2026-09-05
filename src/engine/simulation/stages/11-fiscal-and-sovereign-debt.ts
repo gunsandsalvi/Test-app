@@ -696,8 +696,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // The issuance calendar and 07c already place the paper for real.
     void issuanceCalendarWeek; void marketFundedDeficitLocal;
 
-    if (updatedBankingSector.centralBankReservesLocal < 0) throw new Error("Invariant Violation: centralBankReservesLocal cannot be negative");
-    updatedBankingSector.centralBankReservesLocal = Math.round(updatedBankingSector.centralBankReservesLocal);
 
     // PUB1d: the new issue is NOT force-placed. It exists, and 07c prices the enlarged bucket
     // next week against budget-constrained demand, the dealer holding what finds no buyer —

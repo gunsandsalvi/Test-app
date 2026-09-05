@@ -496,8 +496,9 @@ export function evolveBankingSector(
   const newCreditConditionsIndex = (capitalGap * 8 + (0.025 - netInterestMarginPct) * 10 + spilloverAdjustment);
 
   // PUB2: the phantom 1e12 reserves scalar and its stance drift are gone. Reserves are this
-  // bank's own cash, which is what the central bank's balance sheet counts as its liability.
-  const newCentralBankReservesLocal = Math.max(0, cashLocal);
+  // bank's own cash — its row at the central bank (`bankReservesOf`), which the central bank's
+  // balance sheet counts as its liability. The sheet carried a weekly copy of that row until
+  // §3.20-LLR-0; every reader reads the row now.
   // G2 slice 5: M2 is a DERIVED SUM of the real money that exists — this bank's household and
   // corporate deposits, plus the money-fund shares its region's holders own (02b adds those
   // once per region). The `deposits + centralBankReserves x 0.1` formula is deleted: it added
@@ -522,7 +523,6 @@ export function evolveBankingSector(
     // G2: reported from the REAL book by bank-lending.ts after its write-offs; carried here.
     loanLossProvisionRateAnnualPct: prevBanking.loanLossProvisionRateAnnualPct,
     creditConditionsIndex: Number(newCreditConditionsIndex.toFixed(3)),
-    centralBankReservesLocal: Math.round(newCentralBankReservesLocal),
     moneySupplyM2Local: Math.round(newMoneySupplyM2Local),
     itemizedHoldings: prevBanking.itemizedHoldings || [],
     // REPO1: this week's secured positions are struck AFTER this function, once the week's cash

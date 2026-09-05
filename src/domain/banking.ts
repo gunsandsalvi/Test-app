@@ -112,7 +112,6 @@ export interface BankingSector {
   netInterestMarginPct: number;
   loanLossProvisionRateAnnualPct: number;
   creditConditionsIndex: number; // -1 (very loose) to +1 (very tight)
-  centralBankReservesLocal: number;
   moneySupplyM2Local: number;
   itemizedHoldings: ItemizedHolding[];
   // Wall Street Phase 2: real central bank facility usage — a genuine, named operation each

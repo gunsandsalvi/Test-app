@@ -264,7 +264,6 @@ const BANK_BALANCE_SHEET_RATIOS = {
   sovereignBondHoldingsToGdp: 0.020,
   cashReservesToGdp: 0.011,
   bankEquityToGdp: 0.014,
-  centralBankReservesToGdp: 0.060,
   centralBankBalanceSheetToGdp: 0.44,
 };
 const NIM_TO_POLICY_RATE_RATIO = 0.55;
@@ -461,7 +460,6 @@ function buildRegion(regionId: RegionId): Region {
     netInterestMarginPct,
     loanLossProvisionRateAnnualPct: LOAN_LOSS_PROVISION_RATE,
     creditConditionsIndex: 0,
-    centralBankReservesLocal: Math.round((estimatedNominalGdpLocal * BANK_BALANCE_SHEET_RATIOS.centralBankReservesToGdp)),
     moneySupplyM2Local: 0,
     itemizedHoldings: [],
     srfBorrowingLocal: 0,
