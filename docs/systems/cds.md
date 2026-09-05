@@ -100,12 +100,12 @@ checked by `scripts/check-atlas.sh`.
 | A3 the protection leg is contingent; its value a read from the cleared spread | `src/domain/derivatives/classes/cds.ts:markToMarketUSDToA` | ✅ |
 | A4 the reference entity exists here and can default | `src/engine/audit/ownership.ts:o8` | ✅ |
 | A4.a FORBID no protection on an entity nobody can observe failing | `src/engine/audit/ownership.ts:o5` | ✅ |
-| B1 the buyer of protection has a reason | `src/domain/derivatives/classes/cds.ts:protectionNeedLocal` | ⚠️ |
+| B1 the buyer of protection has a reason | `src/domain/derivatives/classes/cds.ts:protectionNeedLocal` · `src/engine/simulation/stages/derivative-markets/cds.ts:runCdsMarket` | ✅ |
 | B1.a a bank hedges a loan it cannot sell | `src/domain/derivatives/classes/cds.ts:LARGE_EXPOSURE_LIMIT_OF_CAPITAL` | ✅ |
 | B2 the seller of protection has a reason | `src/engine/simulation/stages/asset-allocation.ts:computeReservationSpreadBps` | ✅ |
 | B2.a short a jump — capital and margin matter more than the mark | `src/domain/derivatives/classes/cds.ts:pfeAddOnRateFor` | ⚠️ |
-| B3 naked positions are possible on both sides | `src/domain/institution-profiles.ts:sellsCdsProtection` | ⚠️ |
-| B4 a dealer intermediates, and its book is rarely flat | `src/engine/simulation/stages/derivative-markets/cds.ts:cdsInstrumentId` | ⚠️ |
+| B3 naked positions are possible on both sides | `src/domain/institution-profiles.ts:quotesCdsProtection` · `src/domain/derivatives/classes/cds.ts:twoWayProtectionQuote` | ✅ |
+| B4 a dealer intermediates, and its book is rarely flat | `src/domain/derivatives/classes/cds.ts:twoWayProtectionQuote` | ✅ |
 | C1 the spread clears from the two sides' schedules | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | **C2 the implied default probability is DERIVED from the spread** | `src/engine/simulation/stages/shared-helpers.ts:computeAnnualDefaultProbability` | ❌ |
 | C3 VERIFY the CDS spread and the cash bond's spread are close | `src/engine/audit/prices.ts:p2` | ✅ |
@@ -219,7 +219,22 @@ payoff does not read. And the audit's own P2 hard-codes the prior: `prices.ts:59
 realised recovery is more than 0.2 away from `0.4` with the message *"every spread is priced at
 40%"*, which stopped being true when `creditRecoveryRate` started blending.
 
-### ⚠️ B1 / B3 / B4 — ONE BUYER, ONE REASON, AND NO TWO-WAY DEALER
+### ✅ B1 / B3 / B4 — TWO REASONS TO BUY, AND EVERY QUOTE IS TWO-WAY
+
+*2026-09-05 (§9.17c). Three demands joined the one. A bank's exposure to a name is its loan book
+AND its desk's paper on the name AND the protection the desk has written (`runCdsMarket`); a firm's
+is its receivables on a buyer, the contracts it still has to deliver on and what it has paid a
+supplier ahead — the invoices and contracts the lane already held, priced for the first time — at
+the same large-exposure share of its own book equity (`protectionNeedLocal`). And every writer
+quotes BOTH WAYS at its one reservation (`twoWayProtectionQuote`): it opens the auction holding
+its short capacity of the credit, writes above the spread that covers its own cost of the risk and
+buys below it, so a fund with a higher cost of capital than a desk buys what the desk writes — a
+view, not a need, and the print is where two costs of capital meet. A name the market has printed
+stays quoted whether or not anyone has to lay it off this week. What remains of B4 is the fee: the
+desk quotes at its reservation with no spread of its own on the two sides, which is the
+`dealer-desks.md` question, not this tree's.*
+
+The paragraph below is the state before it.
 
 The demand side of this market is a single formula applied to a single class of participant.
 `runCdsMarket:56-80` builds hedge demand from **banks only**, and within a bank only from

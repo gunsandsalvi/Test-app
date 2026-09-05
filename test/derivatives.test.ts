@@ -18,6 +18,7 @@ import { StandingBook } from '../src/domain/derivatives/standing-book';
 import { asEntityId } from '../src/domain/ids';
 import { writerReservationVol, ATM_PRICE_PER_VOL_SQRT_T } from '../src/domain/derivatives/classes/option';
 import { lenderReservationBps } from '../src/domain/derivatives/classes/xcs';
+import { protectionNeedLocal, twoWayProtectionQuote, LARGE_EXPOSURE_LIMIT_OF_CAPITAL } from '../src/domain/derivatives/classes/cds';
 import { cipForwardRate, forwardStrikeOf } from '../src/domain/derivatives/classes/fx-forward';
 import type { DerivativeLeg, DerivativeLegs } from '../src/domain/derivatives/profile';
 
@@ -350,4 +351,29 @@ test('§3.17b-iv-b FX forward: the strike is parity plus the basis, and the mark
   assert.ok(Math.abs(DERIVATIVE_CLASSES.FX_FORWARD.markToMarketUSDToA(c, atStrike)!) < 1e-9, 'struck at parity: worth nothing, the carry still to run is not a gain');
   const atExpiry = view({ week: 23, fxToUsd: rates(1, 1.1), overnightRateAnnual: rates(0.05, 0.03) });
   assert.ok(Math.abs(DERIVATIVE_CLASSES.FX_FORWARD.markToMarketUSDToA(c, atExpiry)! - 1_000_000 * (cip - 1.1) / cip) < 1e-9, 'at expiry, against spot: the carry has been earned');
+});
+
+// §3.17c — the need is a measurement of the holder's own book, whoever the holder is.
+test('CDS: the protection need is the exposure above the large-exposure share of equity, net of cover', () => {
+  assert.equal(protectionNeedLocal({ exposureLocal: 100, equityLocal: 200, alreadyHedgedLocal: 0 }), 100 - 200 * LARGE_EXPOSURE_LIMIT_OF_CAPITAL);
+  assert.equal(protectionNeedLocal({ exposureLocal: 100, equityLocal: 200, alreadyHedgedLocal: 30 }), 100 - 200 * LARGE_EXPOSURE_LIMIT_OF_CAPITAL - 30);
+  assert.equal(protectionNeedLocal({ exposureLocal: 40, equityLocal: 200, alreadyHedgedLocal: 0 }), 0);
+  assert.equal(protectionNeedLocal({ exposureLocal: 40, equityLocal: -50, alreadyHedgedLocal: 0 }), 40);
+});
+
+// §3.17c — one reservation, both sides: at the print equal to it the quoter does nothing; the
+// engine's ramp writes above and buys below, each side to the same size.
+test('CDS: a two-way quote opens holding its short capacity and is flat at its reservation', () => {
+  const q = twoWayProtectionQuote({ reservationBps: 200, rangeBps: 50, sizeLocal: 1000 });
+  assert.equal(q.currentHoldingLocal, 1000);
+  assert.equal(q.maxHoldingLocal, 2000);
+  assert.equal(q.reservationStat, 150);
+  assert.equal(q.fullSizeStatRange, 100);
+  // The engine's linear ramp from the reservation stat over the range: the target at a print.
+  const target = (print: number) => q.maxHoldingLocal * Math.max(0, Math.min(1, (print - q.reservationStat) / q.fullSizeStatRange));
+  assert.equal(target(200) - q.currentHoldingLocal, 0);
+  assert.equal(target(250) - q.currentHoldingLocal, 1000);
+  assert.equal(target(150) - q.currentHoldingLocal, -1000);
+  assert.equal(target(175) - q.currentHoldingLocal, -500);
+  assert.equal(twoWayProtectionQuote({ reservationBps: 200, rangeBps: 50, sizeLocal: -5 }).maxHoldingLocal, 0);
 });

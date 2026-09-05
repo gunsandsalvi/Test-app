@@ -30,16 +30,36 @@ export const CDS_TENOR_WEEKS = 5 * 52;
 export const LARGE_EXPOSURE_LIMIT_OF_CAPITAL = 0.25;
 
 /**
- * What a lender must lay off: the exposure to one name beyond what its capital lets it carry,
- * net of protection it has already bought. A measurement of the bank's own book, not a view.
+ * What a holder must lay off: the exposure to one name beyond what its capital lets it carry,
+ * net of protection it has already bought. A measurement of the holder's own book, not a view —
+ * §3.17c: a bank's against its loans, its desk's paper and the protection it wrote; a firm's
+ * against the receivables and the contracts it carries on one buyer, at the same rule, because a
+ * name that fails takes the same share of whoever's equity it was.
  */
 export function protectionNeedLocal(args: {
   exposureLocal: number;
-  bankEquityLocal: number;
+  equityLocal: number;
   alreadyHedgedLocal: number;
 }): number {
-  const carryableLocal = Math.max(0, args.bankEquityLocal) * LARGE_EXPOSURE_LIMIT_OF_CAPITAL;
+  const carryableLocal = Math.max(0, args.equityLocal) * LARGE_EXPOSURE_LIMIT_OF_CAPITAL;
   return Math.max(0, args.exposureLocal - carryableLocal - Math.max(0, args.alreadyHedgedLocal));
+}
+
+/**
+ * §3.17c — A TWO-WAY QUOTE. One reservation, both sides of it: above the spread that covers what
+ * the credit costs this participant to carry, it WRITES protection; below it, it BUYS — the print
+ * is too tight for the risk at its own cost of capital, which is a view, and two participants with
+ * different costs of capital disagree. Stated for the clearing engine as a HOLDER: it opens the
+ * auction holding its short capacity of the credit, so selling that down is buying protection and
+ * adding to it is writing, and at the reservation exactly it does neither. One ramp of twice the
+ * range covers both sides, so the book is as elastic on the bid as on the offer.
+ */
+export function twoWayProtectionQuote(args: { reservationBps: number; rangeBps: number; sizeLocal: number }): {
+  reservationStat: number; fullSizeStatRange: number; maxHoldingLocal: number; currentHoldingLocal: number;
+} {
+  const size = Math.max(0, args.sizeLocal);
+  const range = Math.max(1e-9, args.rangeBps);
+  return { reservationStat: args.reservationBps - range, fullSizeStatRange: 2 * range, maxHoldingLocal: 2 * size, currentHoldingLocal: size };
 }
 
 export const CDS_PROFILE: DerivativeClassProfile = {

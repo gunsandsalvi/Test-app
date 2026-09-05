@@ -547,17 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-17c. **Credit protection has ONE buyer and ONE reason** (user). `derivative-markets/cds.ts:60`
-    builds hedge demand from the region's BANKS only, and within a bank only from
-    `facilityRowsOf` — its loan book. So a bank's BOND book is unhedged, and nobody else in the
-    world can buy protection at all. Three demands are missing and each is a real one:
-    (a) the bank's bond and desk exposure to the same names, on the same large-exposure rule;
-    (b) **a non-financial firm's counterparty exposure** — a long-term supply contract or a large
-    receivable is credit risk on a named buyer, and a firm carrying it has every reason to lay it
-    off. The contracts and invoices already exist as objects on the lane; this is the first thing
-    that would price them;
-    (c) an asset manager or credit fund taking a VIEW rather than a hedge — the other side of the
-    market, and the reason a spread is a price rather than a bank's internal transfer.
 17d. **The credit index** (user). `cds.ts:83` builds one instrument per reference entity: there is
     no index product. A CDX is a fixed basket of names traded as one line, which is how broad
     credit risk is actually bought and sold, and it is the natural instrument for an asset
@@ -1607,7 +1596,25 @@ changed, why, and the measured numbers. The long-form record it was compressed f
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
 
-**17b-v — THE SWAP LINES.** Step 17b is closed. `domain/swap-lines.ts`: the line's price is
+**17c — CREDIT PROTECTION HAS EVERY BUYER IT SHOULD, AND EVERY QUOTE IS TWO-WAY.** The CDS
+  book's float was one regulatory quantity — a bank's loan-book excess over 25% of its equity —
+  and nobody else could buy. (a) A bank's exposure to a name is now its facility rows AND its
+  desk's paper on the name (`deskRowsOf` through `isTrancheId`/`issuerIdOf`) AND the protection
+  its desk has written (the standing book's `b` side), one need at the same rule. (b) A firm's is
+  its receivables on a buyer (`tradeInvoicesOf`, at the booked rate into the buyer's money), the
+  contracts it still has to deliver on (`forEachContract`: units × price × weeks remaining, in
+  the customer's money) and what it has paid a supplier ahead — against its own book equity
+  (`companyBookEquityLocal` off `cashOf` + `ladderTotalLocal`), the firm a COMPANY member of the
+  house. A need is routed to the REFERENCE's region and money, wherever the holder is.
+  (c) Every writer quotes both ways: `twoWayProtectionQuote` states one reservation to the engine
+  as a holder of its short capacity — a ramp of twice the range, flat at the reservation — so the
+  same participant writes above its cost of the risk and buys below it; what it holds against its
+  opening after the print is what it did, and a net buyer joins the buyers' allocation as a view.
+  The float is the hedgers' need plus every opening short; a name the market has printed
+  (`cdsSpreadHistoryByIssuer`) stays quoted with no hedger. `sellsCdsProtection` →
+  `quotesCdsProtection`; `protectionNeedLocal`'s `bankEquityLocal` → `equityLocal`. Atlas: cds
+  B1/B3/B4 ✅. Gates green; no run.
+- **17b-v — THE SWAP LINES.** Step 17b is closed. `domain/swap-lines.ts`: the line's price is
 overnight plus `SWAP_LINE_SPREAD_BPS` (25, the standing dollar lines' — a policy primitive like the
 corridor), a draw runs `SWAP_LINE_TERM_WEEKS` (13), and the line lends what the funding market
 left unfilled once the basis cleared PAST its price, or when nobody lent (`swapLineDrawLocal`);
