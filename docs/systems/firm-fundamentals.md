@@ -109,7 +109,7 @@ checked by `scripts/check-atlas.sh`.
 | E1 the price and quantity it offers | `src/engine/simulation/stages/05-unit-bidding.ts:runUnitBiddingStage` | ✅ |
 | E2 how many people to employ | `src/domain/company-week/labor-demand.ts:employerWeekPosting` | ✅ |
 | E3 how much to invest | `src/domain/company-week/capital-programme.ts:planCapitalProgramme` | ⚠️ |
-| E4 how to fund itself, on what each costs | `src/engine/simulation/stages/corporate-financing.ts:decideCorporateFinancing` | ✅ |
+| E4 how to fund itself, on what each costs | `src/engine/simulation/stages/corporate-financing.ts:decideCorporateFinancing` · `src/engine/simulation/stages/corporate-financing.ts:targetLeverageOf` | ✅ |
 | E5 what to pay out | `src/domain/company-week/distributions.ts:dividendDecision` | ✅ |
 | E6 every decision from its own state and prices | `src/engine2/stage08-back.ts:runBackCoreA` | ✅ |
 | F1 FORBID no revenue without a buyer | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |

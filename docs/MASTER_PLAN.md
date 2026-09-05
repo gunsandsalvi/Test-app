@@ -549,10 +549,27 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-20d. **Management is a state that decides.** `management-review` reviews; it does not decide.
-    Capital-allocation policy (target leverage, payout versus reinvestment), growth-versus-margin
-    orientation, risk appetite, product-line entry and exit, acquisition intent, guidance — each a
-    real decision with a real consequence, replacing a coefficient that stands in for one.
+20d-ii. **A product line can be EXITED.** (20d — management is a state that decides — split per
+    rule 1.10: 20d-i the leverage policy is §9; risk appetite already IS the management's
+    `riskAversion` in every hurdle and buffer; growth-versus-margin orientation is the investment
+    project's hurdle and horizon — 37-COSTOFCAPITAL, where it is noted; acquisition intent is
+    the acquirer's own valuation — 37-MANDA, where it is noted; product-line entry is 20d-iv,
+    inserted after 37-COSTOFCAPITAL because entering a line is an investment project.) Today a
+    firm's `productLines` are fixed at the seed for life: a line whose plant has idled past the
+    management's horizon has its plant mothballed and, after a year, scrapped
+    (`capital-programme.ts:capacityRetirement`), but the LINE stays — it keeps its revenue
+    share, keeps posting offers at zero production, keeps a category market share. Exit is the
+    decision the retirement implies: when a line's plant is scrapped, the line goes with it —
+    its revenue share to the firm's other lines, its category share to the market — and a firm
+    whose last line goes is a firm with nothing to sell (`firm-birth-and-death.md` B4's
+    distressed firm, not a death by rule).
+20d-iii. **Guidance is the management's own expectation, published.** `stage08-back.ts` picks one
+    of three fixed prose snippets by the sign of the EPS surprise and `newsGenerator.ts` puts it
+    in the headline as management's guidance. A management already HAS an expectation — the
+    adaptive `expectedEbitdaLocal` it is judged on at review — and guidance is that number
+    said out loud: the report carries the margin management guided and the margin it delivered,
+    the surprise is against the guidance as well as the dealers' consensus, and the three
+    snippets go. Small; 37-SURFACE then moves the story into the derivation with the rest.
 
 ### PART IV — EVERY PRICE IS CLEARED (rule 3)
 
@@ -969,6 +986,10 @@ step that owns its node; where it does not yet, the step below is the owner.
     representation, one class over) and 37-MARGIN (the other forced seller). Medium.
 
 37-COSTOFCAPITAL. **NOBODY PAYS FOR MONEY, SO PRICE CANNOT REACH A DECISION.** (banks-funding B2/B2.a;
+    20d's growth-versus-margin orientation lands here: when the investment decision becomes a
+    project with a return and a hurdle, the hurdle is the management's own cost of capital
+    weighted by its `riskAversion` and the horizon its `patienceWeeks` — an orientation read off
+    the two primitives, not a stated posture.)
     banks-lending C1/C1.a; the-capital-programme B1/B1.b/B5/B3; dealer-desks D3.) The transmission
     channel this whole model exists to have, broken at three joints:
     · **a bank has no cost of funds.** `quoteLoanMarginBps` has no funding term; the all-in rate is
@@ -984,6 +1005,14 @@ step that owns its node; where it does not yet, the step below is the owner.
       position is free and the desk has no reason to shed it.
     Large, and it is the step that makes every cleared price in Part IV actually do something.
 
+20d-iv. **A product line can be ENTERED.** (Sits after 37-COSTOFCAPITAL because entering a line is
+    an investment project: plant for a good the firm does not yet make.) A firm whose industry's
+    registry lists a sub-unit it does not produce, in a category that is short
+    (`categoryShortfall` is already read by the capital programme), enters it when the project
+    clears its hurdle — the new line's plant is commissioned through the same
+    `capexUnderConstruction` lag as any capex, it posts nothing until the plant is in service,
+    and its revenue share is what it then sells. Entry and exit (20d-ii) together are what
+    makes a sector's line-up an outcome.
 37-BANKEQUITY. **A BANK CANNOT RAISE CAPITAL, AND IT HAS ONE LAYER OF IT.** (banks-capital
     A2.b/A2.c, A3, C2/C2.a/C2.b, B2; banks-funding A3.) No bank issues equity —
     `evolveBankingSector` records the old equity-rescale write as deleted and says a bank "stays
@@ -1167,7 +1196,10 @@ step that owns its node; where it does not yet, the step below is the owner.
     touched) and on 37-LOANBOOK (a loan has to be a row before it can be transferred). Large; the
     same step gives housing C6 its pool.
 
-37-MANDA. **THERE IS NO M&A MARKET. THERE IS A COIN FLIP.** (m-and-a B5/B2/B2.a/B3/B4/C1/C2/C3,
+37-MANDA. **THERE IS NO M&A MARKET. THERE IS A COIN FLIP.** (20d's acquisition intent lands here:
+    an acquirer's intent is its own valuation of the target — the target's expected earnings at
+    the acquirer's hurdle — against the price, formed by its management, never a screen
+    threshold.) (m-and-a B5/B2/B2.a/B3/B4/C1/C2/C3,
     E3/A4, D4.) `merger.ts:24` fires `random() < 0.20`, quarterly, at most one deal in the world,
     at `marketCap × 1.15`. No funding test, no acceptance, no rival bidder, no walk-away — so the
     credit market does not decide which deals happen and a target's owners cannot refuse. Two
@@ -1523,6 +1555,22 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20d-i — THE LEVERAGE POLICY IS THE MANAGEMENT'S.** Step 20d split per rule 1.10 (see 20d-ii's
+  head for where each of its six decisions went). `decideCorporateFinancing` levered every firm
+  to its covenant ceiling whenever debt was cheap, at a stated 4% of the gap a week, delevered at
+  6% of cash, and capped the raise at three times the larger of its growth run-rate and 2% of
+  market cap. Now `corporate-financing.ts:targetLeverageOf` is the management's own target — the
+  lender's covenant line (the lender's, step 34's) divided by its `riskAversion`, so the median
+  runs to the line and a management twice as averse runs half of it; the pace is its own horizon
+  (`1 / patienceWeeks`, replacing both rates); what new money is raised into is the firm's own
+  capital programme (the week's growth and maintenance spend — a firm with no programme raises
+  nothing; the ×3 and the 2%-of-market-cap floor are gone); and a management ABOVE its target
+  pays down toward it whatever debt costs (`DELEVER_TO_TARGET`, stage 08 routes it with the
+  expensive-debt branch). The 50bp action band stays as the one stated number in the decision.
+  Test: target scales with aversion, raise = gap over horizon capped by the programme, no
+  programme no raise, above target delevers over the horizon. `firm-fundamentals.md` E4
+  re-cited. Gates green; no run.
 
 **20-LLR-0 — THE RESERVES COPY IS GONE.** (user, 2026-09-05, asking whether reserves are kept the
   way other assets are: yes — a bank's reserves are one RESERVES row at the central bank, moved

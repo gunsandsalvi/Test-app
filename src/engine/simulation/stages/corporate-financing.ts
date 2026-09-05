@@ -28,7 +28,7 @@
  * closes to them precisely when they most want it open.
  */
 
-import { riskAversionOf } from '../../../domain/preferences';
+import { riskAversionOf, patienceWeeksOf, Preferences } from '../../../domain/preferences';
 import { Company, CreditRating } from '../../../types';
 
 /**
@@ -73,23 +73,36 @@ export const COVENANT_LEVERAGE_CEILING: Record<CreditRating, number> = {
 const MARKET_ACCESS_DENIED: CreditRating[] = ['D'];
 
 /**
- * Share of the gap between current and covenant-permitted leverage a company will actually take
- * down in one week when debt is cheap. Real issuance is lumpy and deliberate, not instantaneous.
+ * §3.20d-i — THE LEVERAGE TARGET IS THE MANAGEMENT'S. The covenant ceiling above is the LENDER's
+ * line — what it would still fund at this credit quality. How much of that room a management
+ * runs is its own risk aversion: the median management runs to the line, one twice as averse
+ * runs half of it, and one that weighs a shortfall lightly runs closer to it than the median.
+ * A capital-allocation POLICY, read off the two preference primitives, replacing the rule that
+ * every firm levered to its covenant whenever debt was cheap.
  */
-const WEEKLY_ISSUANCE_TAKEUP_RATE = 0.04;
+export function targetLeverageOf(rating: CreditRating, management: Preferences | undefined): number {
+  return (COVENANT_LEVERAGE_CEILING[rating] ?? 4.0) / riskAversionOf(management);
+}
 
-/** Share of surplus cash a company applies to paying debt down when debt is expensive. */
-const WEEKLY_DELEVERAGING_RATE = 0.06;
+/** §3.20d-i — THE PACE IS THE MANAGEMENT'S HORIZON: it closes the gap to its target over its own
+ *  patience, so the share of the gap it moves in a week is `1 / patienceWeeks`. This replaces the
+ *  4% issuance take-up and 6% deleveraging rates that stood in for that horizon. */
+function weeklyPaceOf(management: Preferences | undefined): number {
+  return 1 / Math.max(1, patienceWeeksOf(management));
+}
 
 /** Working capital as a share of revenue — the non-PP&E half of invested capital. */
 const WORKING_CAPITAL_SHARE_OF_REVENUE = 0.15;
 /**
- * How much faster than its standing growth-capex run-rate a company can actually deploy new
- * money. Cheap debt does not create projects: a CFO can pull the pipeline forward and lever
- * buybacks, but cannot invest unlimited capital at the firm's return just because the coupon is
- * low. Without this cap the issuance decision reads covenant headroom as deployment capacity.
+ * §3.20d-i — WHAT NEW MONEY CAN BE DEPLOYED INTO is the firm's own capital programme: the week's
+ * growth and maintenance spend it has decided on. Cheap debt does not create projects; a firm
+ * with no programme raises nothing, and one with a programme raises for it. This replaces a cap
+ * of three times the larger of the growth run-rate and 2% of market cap — a bound with a stated
+ * multiple and an invented floor.
  */
-const DEPLOYMENT_MULTIPLE = 3;
+function weeklyDeploymentLocal(comp: Company): number {
+  return Math.max(0, (comp.growthCapex ?? 0) + (comp.maintenanceCapex ?? 0)) / 52;
+}
 
 /** Spread of return over cost, in decimal, wide enough to be worth acting on either way. */
 const ACTION_THRESHOLD = 0.005;
@@ -97,7 +110,7 @@ const ACTION_THRESHOLD = 0.005;
 interface FinancingDecision {
   /** Positive: raise this much new debt. Negative: pay down this much. Zero: do nothing. */
   netDebtChangeLocal: number;
-  reason: 'ISSUE_CHEAP_DEBT' | 'DELEVER_EXPENSIVE_DEBT' | 'NONE';
+  reason: 'ISSUE_CHEAP_DEBT' | 'DELEVER_EXPENSIVE_DEBT' | 'DELEVER_TO_TARGET' | 'NONE';
   /**
    * WS8 — the all-in annual cost at which this issuer is indifferent to raising: the best use
    * of proceeds grossed back up for tax. Beyond it a launched offering is WITHDRAWN — the
@@ -154,26 +167,35 @@ export function decideCorporateFinancing(params: {
   const walkAwayCostAnnual = bestUseOfProceeds / Math.max(0.01, 1 - effectiveTaxRate);
 
   const currentLeverage = totalDebtLocal / ebitdaAnnual;
-  const covenantCeiling = COVENANT_LEVERAGE_CEILING[rating] ?? 4.0;
+  // §3.20d-i: the management's own target and pace, not the lender's line and a stated rate.
+  const targetLeverage = targetLeverageOf(rating, comp.management);
+  const pace = weeklyPaceOf(comp.management);
+  void marketCapLocal;
 
-  if (spreadOverCost > ACTION_THRESHOLD * ra && currentLeverage < covenantCeiling) {
-    // Cheap debt, room under the covenant — and a real limit on how fast the money can be put
-    // to work: the covenant bounds the STOCK, the deployment pipeline bounds the FLOW.
-    const headroomLocal = (covenantCeiling - currentLeverage) * ebitdaAnnual;
-    const weeklyDeploymentCapLocal =
-      (Math.max(comp.growthCapex ?? 0, marketCapLocal * 0.02) / 52) * DEPLOYMENT_MULTIPLE;
+  if (spreadOverCost > ACTION_THRESHOLD * ra && currentLeverage < targetLeverage) {
+    // Cheap debt and room under the target: the target bounds the STOCK, the firm's own capital
+    // programme bounds the FLOW, and the horizon sets the pace.
+    const headroomLocal = (targetLeverage - currentLeverage) * ebitdaAnnual;
+    const raiseLocal = Math.min(headroomLocal * pace, weeklyDeploymentLocal(comp));
+    if (raiseLocal > 0) return { netDebtChangeLocal: raiseLocal, reason: 'ISSUE_CHEAP_DEBT', walkAwayCostAnnual };
+  }
+
+  if (spreadOverCost < -ACTION_THRESHOLD * ra && cashLocal > 0 && totalDebtLocal > 0) {
+    // Debt that costs more than the money can earn is paid down out of cash, at the pace.
     return {
-      netDebtChangeLocal: Math.min(headroomLocal * WEEKLY_ISSUANCE_TAKEUP_RATE / ra, weeklyDeploymentCapLocal),
-      reason: 'ISSUE_CHEAP_DEBT',
+      netDebtChangeLocal: -Math.min(cashLocal, totalDebtLocal) * pace,
+      reason: 'DELEVER_EXPENSIVE_DEBT',
       walkAwayCostAnnual,
     };
   }
 
-  if (spreadOverCost < -ACTION_THRESHOLD * ra && cashLocal > 0 && totalDebtLocal > 0) {
-    // Debt costs more than the money can earn: pay it down out of surplus cash.
+  if (currentLeverage > targetLeverage && cashLocal > 0 && totalDebtLocal > 0) {
+    // Above the target it chose, a management pays down toward it whatever debt costs: the
+    // policy decides, and the price decides only how fast the branch above re-levers later.
+    const gapLocal = (currentLeverage - targetLeverage) * ebitdaAnnual;
     return {
-      netDebtChangeLocal: -Math.min(cashLocal * WEEKLY_DELEVERAGING_RATE * ra, totalDebtLocal * WEEKLY_DELEVERAGING_RATE * ra),
-      reason: 'DELEVER_EXPENSIVE_DEBT',
+      netDebtChangeLocal: -Math.min(cashLocal, gapLocal) * pace,
+      reason: 'DELEVER_TO_TARGET',
       walkAwayCostAnnual,
     };
   }
