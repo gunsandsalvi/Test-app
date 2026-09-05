@@ -477,6 +477,8 @@ interface SupplyPlan {
   targetProductionLocal: number;
   /** What came OUT of the pipeline this week: what it can actually sell. */
   arrivedProductionUnits: number;
+  /** §3.13-INV-v — what that arrival COST to make: the batch's own cost, for its lot. */
+  arrivedProductionCostLocal: number;
   /** The line's pipeline after this week's advance, to be persisted. */
   wipQueue?: WipLot[];
   openOfferUnits: number;
@@ -931,7 +933,7 @@ function buildRegionSupplyPlans(
       if (held > 0.0001) {
         plans.push({
           key: comp.ticker, regionId, company: comp, initialInventoryUnits: held,
-          targetProductionUnits: 0, targetProductionLocal: 0, arrivedProductionUnits: 0,
+          targetProductionUnits: 0, targetProductionLocal: 0, arrivedProductionUnits: 0, arrivedProductionCostLocal: 0,
           openOfferUnits: held, minPriceLocal: 0,
         });
       }
@@ -1279,6 +1281,7 @@ function buildRegionSupplyPlans(
       targetProductionUnits,
       targetProductionLocal: targetProductionUnits * referencePriceLocal,
       arrivedProductionUnits: arrivedUnits,
+      arrivedProductionCostLocal: pipeline.arrivedValueLocal,
       wipQueue: pipeline.queue,
       openOfferUnits,
       // Cost per unit of what this plant actually makes, in dollars. Falls back to the
@@ -1350,6 +1353,7 @@ function buildRegionSupplyPlans(
           targetProductionUnits: 0,
           targetProductionLocal: 0,
           arrivedProductionUnits: 0,
+          arrivedProductionCostLocal: 0,
           openOfferUnits: poolOfferUnits,
           // Its own unit cost: a pool earning a 9% margin cannot sell below 91 cents on the
           // dollar of the reference price and stay solvent.
@@ -1958,6 +1962,13 @@ function runSubUnitMarkets(
     // still stand on the estate's row.
     settleOutputInventory(indexes[plan.regionId].estateSellers.has(comp) ? comp : supUp, plan.regionId, subUnitId, plan.initialInventoryUnits, plan.arrivedProductionUnits,
       contractSalesUnitsThisSubUnit, soldUnits, results[plan.regionId].clearedPriceLocal);
+    // §3.13-INV-v: the same week, gross, for the register's finished rows — reconciled at the one
+    // place the stock is finally decided (`stage08-back`), so no mid-week path can desync them.
+    (supUp.finishedFlowBySubUnit ??= {})[subUnitId] = {
+      arrivedUnits: plan.arrivedProductionUnits,
+      arrivedCostLocal: plan.arrivedProductionCostLocal,
+      deliveredUnits: contractSalesUnitsThisSubUnit + soldUnits,
+    };
     if (plan.wipQueue) {
       if (!supUp.wipBySubUnit) supUp.wipBySubUnit = { ...(comp.wipBySubUnit ?? {}) };
       supUp.wipBySubUnit[subUnitId] = plan.wipQueue;

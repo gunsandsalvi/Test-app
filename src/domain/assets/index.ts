@@ -44,7 +44,13 @@ export type InstrumentKind =
   | 'DWELLING'
   // §3.13-BOOK g-ii: a firm's plant — a row per capital good and life on its own book, in units
   // of COST, whose lots are the vintages at the week each entered service.
-  | 'PLANT';
+  | 'PLANT'
+  // §3.13-INV-v: a firm's FINISHED stock of a good — its own row, in the good's units, whose lots
+  // are the batches at what each COST TO MAKE. Distinct from `GOOD`, which is the INPUT side: the
+  // register permits one GOOD row per (firm, sub-unit) and the production pass addresses those
+  // chains by `firmRow × NSUB + sub`, so a second chain of the same kind would be orphaned — and
+  // a merged one would feed a firm its own output as a recipe input.
+  | 'FINISHED_GOOD';
 
 /** Where an instrument sits when a book is summed by class. */
 type AssetClass = 'EQUITY' | 'CREDIT' | 'SOVEREIGN' | 'DERIVATIVE' | 'COMMODITY' | 'CASH_LIKE' | 'GOODS' | 'HOUSING' | 'PLANT';
@@ -145,6 +151,7 @@ export const ASSET_REGISTRY: Record<InstrumentKind, AssetModule> = {
   OPTION:           { assetClass: 'DERIVATIVE', carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   TRS:              { assetClass: 'DERIVATIVE', carriesCoupon: true,  lendable: false, hasCreditRisk: true,  quotedAs: 'SPREAD_LIKE', countedIn: 'CONTRACTS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   GOOD:             { assetClass: 'GOODS',      carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'GOODS_UNITS', ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
+  FINISHED_GOOD:    { assetClass: 'GOODS',      carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'GOODS_UNITS', ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   DWELLING:         { assetClass: 'HOUSING',    carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'DWELLINGS',   ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
   PLANT:            { assetClass: 'PLANT',      carriesCoupon: false, lendable: false, hasCreditRisk: false, quotedAs: 'PRICE',       countedIn: 'COST',        ladderPaper: false, vehicleClaim: false, hedgedAsFixedIncome: false, carriesRateDuration: false },
 };

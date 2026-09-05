@@ -11,7 +11,7 @@
  */
 
 import { commissionPlant, retirePlant, scrapPlant, writePlantRows, plantVintagesOf } from '../engine/ledger/plant-ledger';
-import { spoilOutputStock } from '../engine/ledger/goods-ledger';
+import { spoilOutputStock, writeFinishedRows } from '../engine/ledger/goods-ledger';
 import type { PrimarySettlement } from '../engine/simulation/stages/context';
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
 import { equityInstrumentId } from '../domain/instrument-keys';
@@ -1971,6 +1971,11 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
     const mergedOutputInventoryBySubUnit = spoilOutputStock(
       { ...newOutputInventoryBySubUnit, ...(update?.outputInventoryBySubUnit || {}) },
       comp.region, (su) => annualSpoilageRateOf(su) / 52);
+    // §3.13-INV-v — AND THE REGISTER'S OWN ROWS, from the same decision: the week's batch at what
+    // it cost, the deliveries drawn first-in-first-out, and the row trued to the record it must
+    // equal until §3.13-INV-vii retires the record. Nothing reads the basis yet (writers first);
+    // `O17` is what watches the two agree.
+    writeFinishedRows(v2, comp.id, comp.region, mergedOutputInventoryBySubUnit, update?.finishedFlowBySubUnit, nextWeek);
     let buybacksThisWeek = buybacksFromCore;
     const __k3 = S08K_PROF ? performance.now() : 0;
     const isReportingThisWeek = !isDefaulted && isPubliclyListed(comp)

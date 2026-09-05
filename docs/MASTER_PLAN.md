@@ -405,15 +405,11 @@ written from here):
     earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
     all). Seven slices, in this order, because each one is load-bearing for the next:
 
-    v. **FINISHED STOCK IS LOTS AT COST.** Not a GOOD row: the register permits exactly one GOOD
-       row per (firm, sub-unit) and `openGoodsPass` addresses chains by `firmRow × NSUB + sub`, so
-       a second chain is silently orphaned — and merging the two would make the recipe draw consume
-       a firm's own output as an input. A DISTINCT KIND is invisible to both (each filters on the
-       GOOD typeRef) and to `register-marking`, which prices only tranches, sovereigns and equity —
-       so a basis parked there cannot be silently marked to market, which a field on `Company`
-       could. The audit's goods snapshot switches to the rows in the SAME commit: it sums the
-       record and the rows into one `region|subUnit` key, so both at once double-counts W4 in
-       week one.
+    v-b. **THE READERS TAKE THE BASIS.** The rows carry the cost and `writeFinishedRows` hands back
+       the week's COGS; nothing reads either yet. The filed balance sheet's finished-goods line,
+       the estate's inventory and the firm's own P&L take them, and `goods.md` F5 — *revenue on
+       delivery; COGS is the units that left* — stops pointing at the input draw, which is expensed
+       in the week it is DRAWN whatever was made or sold.
     vi. **LOWER OF COST AND NET REALISABLE VALUE** (`goods.md` E2/E2.a/E2.c/E3, the user's *"apply
        real world facts"*). Cost until the market falls below it, then written down to market, and
        **the write-down is a charge to income in the period it happens** — E3's missing writer.
@@ -1223,6 +1219,33 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-v-a — FINISHED STOCK IS LOTS AT WHAT IT COST TO MAKE.** A firm's finished goods are a row
+  of kind `FINISHED_GOOD` on its own register book now, the sub-unit its instrument, and the row's
+  lots are the BATCHES: the units a week's production finished, at what that week's line cost to
+  make them (§9.13-INV-iv). A delivery draws them first-in-first-out and hands back what those
+  units COST — the cost of goods sold, which this model has never had.
+  **A distinct kind, and that choice removed a constraint rather than working around one.** It is
+  not a `GOOD` row: that kind is the INPUT side, the register permits one GOOD row per
+  (firm, sub-unit), and the production pass addresses those chains by `firmRow × NSUB + sub`, so a
+  second chain of the same kind is silently orphaned — and merging the two would feed a firm its
+  own output back as a recipe input. Being its own kind it is invisible to both of those, to
+  `goodsHeldBy` (which filters the GOOD typeRef), and to `register-marking`, which prices tranches,
+  sovereigns and equity and nothing else — so a cost basis parked here cannot be quietly marked to
+  market, which a field on the firm could. It also means W4's snapshot **cannot** double-count the
+  stock, so the record can stay its source while the rows are written beside it: the transition
+  commit that would have broken the goods identity is not needed.
+  **One writer, where the week's stock is decided** — the single point §9.13-INV-ii made and
+  §9.13-INV-ii-b already perishes at. Gross first (a week that made a hundred and sold a hundred
+  nets to nothing, but its lots must still take the new batch in at ITS cost and draw the oldest
+  out, or every later week reads the wrong basis), then trued to the record it must equal; a row
+  drawn to nothing leaves the book, as the input lots' own draw does. `O17` fails the week a row
+  and its record disagree — excluding DEAD firms, and that exclusion is the finding rather than an
+  exemption: stage 08 returns early for one, so an estate's stock is written by stage 05 and never
+  reconciled, and `13-INV-vii` is where the record stops being a second copy and the question stops
+  arising. Writers first (§3.13-BOOK f1's discipline): **nothing reads the basis yet.** Pinned in
+  `test/inventory.test.ts`. Gates green; no run (rule 11). Split (rule 1.10): `13-INV-v-b`, the
+  readers.
 
 **13-INV-iv-b — THE OPENING PIPELINE IS AN OPENING STOCK, AND NOW IT SAYS SO.** A firm that has
   never run a line is handed `lead` weeks of work in progress at this week's rate. The UNITS were

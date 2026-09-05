@@ -172,3 +172,40 @@ test('a firm\'s first week on a line opens in steady state, and its opening batc
   // The unit cost of what arrives is the unit cost of what it is making — no windfall, no infinity.
   assert.equal(first.arrivedValueLocal / first.arrivedUnits, 4);
 });
+
+// §3.13-INV-v — FINISHED STOCK IS LOTS AT WHAT IT COST TO MAKE.
+import { writeFinishedRows, finishedStockOf, finishedUnitsOf, drawFinishedFifo, produceFinishedLot } from '../src/engine/ledger/goods-ledger';
+
+test('a week\'s production is a lot at its own cost, and a delivery draws the oldest and returns what it cost', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const sub = SUBUNITS[0];
+  produceFinishedLot(v2, 'USA_ACME', 'USA', sub, 100, 200, 1);  // 2.00 a unit
+  produceFinishedLot(v2, 'USA_ACME', 'USA', sub, 100, 500, 2);  // 5.00 a unit — a dearer week
+  assert.equal(finishedUnitsOf(v2, 'USA_ACME', sub), 200);
+  assert.deepEqual(finishedStockOf(v2, 'USA_ACME'), [{ subUnitId: sub, units: 200, costLocal: 700 }]);
+  // Selling 150 takes the whole cheap batch and half the dear one: COGS is what THOSE units cost.
+  const cogs = drawFinishedFifo(v2, 'USA_ACME', sub, 150, 3);
+  assert.equal(cogs, 200 + 50 * 5);
+  assert.equal(finishedUnitsOf(v2, 'USA_ACME', sub), 50);
+  assert.deepEqual(finishedStockOf(v2, 'USA_ACME'), [{ subUnitId: sub, units: 50, costLocal: 250 }],
+    'what is left is the dear batch, at the dear batch\'s cost');
+});
+
+test('the week\'s rows are reconciled to the record they must equal, gross first', () => {
+  const v2 = ensureV2({} as Parameters<typeof ensureV2>[0]);
+  const sub = SUBUNITS[0], other = SUBUNITS[1];
+  // Made 100 at 2.00 and sold 100: it nets to nothing, but the lot churn is real — the old batch
+  // goes out at ITS cost and the new one comes in at its own.
+  produceFinishedLot(v2, 'USA_ACME', 'USA', sub, 100, 100, 1); // last week, 1.00 a unit
+  const r1 = writeFinishedRows(v2, 'USA_ACME', 'USA',
+    { [sub]: { unitsHeld: 100, valueLocal: 999 } },
+    { [sub]: { arrivedUnits: 100, arrivedCostLocal: 200, deliveredUnits: 100 } }, 2);
+  assert.equal(r1.cogsLocal, 100, 'the units that left cost 1.00 each, not this week\'s 2.00');
+  assert.deepEqual(finishedStockOf(v2, 'USA_ACME'), [{ subUnitId: sub, units: 100, costLocal: 200 }]);
+  // Units that arrive from outside the goods flow (an estate's reclassified lots) come in at the
+  // record's own value per unit, and a row the record no longer carries is closed.
+  const r2 = writeFinishedRows(v2, 'USA_ACME', 'USA', { [other]: { unitsHeld: 40, valueLocal: 120 } }, undefined, 3);
+  assert.equal(r2.cogsLocal, 0);
+  assert.deepEqual(finishedStockOf(v2, 'USA_ACME'), [{ subUnitId: other, units: 40, costLocal: 120 }],
+    'the good the record dropped is off the book; the one it gained is on it at 3.00 a unit');
+});

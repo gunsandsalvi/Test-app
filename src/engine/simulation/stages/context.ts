@@ -78,6 +78,14 @@ export interface CompanyWeekUpdate {
    *  capital delivered but not yet commissioned. */
   outputInventoryBySubUnit?: Partial<Record<string, { unitsHeld: number; valueLocal: number }>>;
   wipBySubUnit?: Record<string, { units: number; valueLocal: number }[]>;
+  /**
+   * §3.13-INV-v — WHAT THE WEEK MADE AND WHAT LEFT, per sub-unit, GROSS. The register's finished
+   * rows are reconciled from this at the one place the week's stock is decided (`stage08-back`),
+   * and gross is the point: a week that made a hundred and sold a hundred nets to nothing, but
+   * its lots must still take in the new batch at ITS cost and draw the oldest out, or the basis
+   * every later week reads is the wrong one.
+   */
+  finishedFlowBySubUnit?: Record<string, { arrivedUnits: number; arrivedCostLocal: number; deliveredUnits: number }>;
   capexUnderConstruction?: import('../../../domain/plant').ConstructionLot[];
   /** The production target stage 05 set, carried so stage 08 books against the same number. The
    *  underscore is the original author's marker that it is a hand-off and not a company field. */

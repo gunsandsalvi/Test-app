@@ -1,6 +1,7 @@
 /** O — OWNERSHIP. Every asset has exactly one owner and every owner exists. */
 
 import { GameState, RegionId } from '../../types';
+import { finishedStockOf } from '../ledger/goods-ledger';
 import { derivativesOf, repoBookOf, primeBrokerageBookOf, tradeInvoicesOf, liveObligationPartiesOf, securityLoanBookOf, ccpSheetAt } from '../ledger/contract-ledger';
 import { accountKey } from '../ledger/accounts';
 import { ccpOwnCapitalLocal } from '../../domain/clearing-house';
@@ -650,8 +651,38 @@ function o14(state: GameState, week: number): AuditFinding[] {
   return out;
 }
 
+/**
+ * O17 — §3.13-INV-v. THE FINISHED ROWS ARE THE FINISHED STOCK. Every active firm's FINISHED_GOOD
+ * rows hold exactly the units its `outputInventoryBySubUnit` record carries: the register is
+ * written from the same decision that writes the record, so a firm whose two disagree is a path
+ * that moved the stock without reconciling it. Writers first — nothing reads the basis until
+ * §3.13-INV-vi — so this is the check that makes reading it safe.
+ *
+ * DEAD firms are excluded, and that is the finding rather than an exemption: stage 08 returns
+ * early for one, so an estate's stock is written by stage 05 and never reconciled. §3.13-INV-vii
+ * is where the record stops being a second copy and the question stops arising.
+ */
+function o17(state: GameState, week: number): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const v2 = ensureV2(state);
+  let off = 0, gapUnits = 0;
+  for (const c of state.companies) {
+    if (!isActiveCompany(c)) continue;
+    const onRow = new Map(finishedStockOf(v2, c.id).map((r) => [r.subUnitId, r.units]));
+    const keys = new Set([...Object.keys(c.outputInventoryBySubUnit), ...onRow.keys()]);
+    keys.forEach((su) => {
+      const held = c.outputInventoryBySubUnit[su]?.unitsHeld ?? 0;
+      const rows = onRow.get(su) ?? 0;
+      const gap = Math.abs(rows - held);
+      if (gap > floatDust(Math.abs(rows) + Math.abs(held), 3)) { off++; gapUnits += gap; }
+    });
+  }
+  if (off) out.push({ family: 'O', check: 'O17 the finished rows are the finished stock', week, usd: gapUnits, message: `${off} firm-goods' register rows disagree with the stock they hold (${gapUnits.toFixed(3)} units in all)` });
+  return out;
+}
+
 export function auditOwnership(state: GameState, week: number): AuditFinding[] {
-  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week), ...o13(state, week), ...o14(state, week), ...o15(state, week)];
+  return [...o1(state, week), ...o2(state, week), ...o3(state, week), ...o4(state, week), ...o5(state, week), ...o6(state, week), ...o7(state, week), ...o8(state, week), ...o9(state, week), ...o10(state, week), ...o11(state, week), ...o12(state, week), ...o13(state, week), ...o14(state, week), ...o15(state, week), ...o17(state, week)];
 }
 export type { RegionId };
 
