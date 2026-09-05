@@ -206,6 +206,16 @@ by. It is `sovereign-credit.md` branch G's whole finding, and it is stated here 
 is where the two types are meant to differ and this is the row where the difference was never
 written down at all.
 
+**A tap, not a new facility (2026-09-05, §9.16-i/ii).** An issuer that wants more of the same
+debt REOPENS a tranche it has: `tranche-ledger.ts:tapTranche` adds face to the existing row by
+wire to its holder at the tap price and touches no term; a corporate deal names the printed
+senior bond nearest the standard tenor (`primary-market.ts:tapTargetOf`), 07b offers the added
+face beside that bond's outstanding stock in one solve at its price, and stage 08 taps the row
+with what was placed — the sovereign primary had always worked this way (its unheld face is
+offered on the bond itself). A revolver is one line per borrower and bank, tapped by every draw
+(`drawRevolver`). A debut, or an issuer with no printed bond near the tenor, still opens a fresh
+tranche.
+
 ### ✅ N14 BOTH TYPES — THE NAME IS THE ONE A MARKET WOULD USE
 
 Closed 2026-09-05 (§9.14). `domain/instruments.ts:instrumentDisplayName` is the one grammar —

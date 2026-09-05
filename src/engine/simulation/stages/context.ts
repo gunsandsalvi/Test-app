@@ -82,6 +82,20 @@ export interface CompanyWeekUpdate {
   _targetProductionLocal?: number;
 }
 
+/** WS8 — what a book did with an offering this week; ONE type (it was spelled in three files). */
+export interface PrimarySettlement {
+  offering: import('../../../domain/primary-market').PrimaryOffering;
+  clearedStat: number;
+  /** §3.13: the terms the book STRUCK the paper on, for the stage that issues it. */
+  struckTerms?: { couponRate: number; maturityWeek: number };
+  withdrawn: boolean;
+  marketTakeLocal: number;
+  issuedLocal: number;
+  proceedsLocal: number;
+  /** §3.16-ii: the instrument the book LISTED the deal as — the bond it tapped, or the fresh tranche's id. */
+  listedInstrumentId?: import('../../../domain/ids').InstrumentId;
+}
+
 export interface WeeklyStepContext {
   /** §7.307 flips — the persistent columnar world, one access point for every stage. */
   v2: import('../../../engine2/world').V2World;
@@ -207,7 +221,7 @@ export interface WeeklyStepContext {
    *  whatever the book took — while `marketTakeLocal` is only the part the book bought. They differ
    *  by the residual the lead is left holding, and creating the tranche at the take instead of at
    *  the issue is how the lead came to hold paper that did not exist (a ledger minting claims). */
-  primarySettlements: Map<string, { offering: import('../../../domain/primary-market').PrimaryOffering; clearedStat: number; struckTerms?: { couponRate: number; maturityWeek: number }; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>;
+  primarySettlements: Map<string, PrimarySettlement>;
 
   // Main working state, threaded and reassigned stage to stage
   updatedRegions: Record<RegionId, Region>;

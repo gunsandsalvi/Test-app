@@ -166,6 +166,7 @@ export function settlePricedOfferings(
 
     ctx.primarySettlements.set(offering.id, {
       offering,
+      listedInstrumentId: instrumentId,
       clearedStat: outcome.clearedStat,
       // §3.13: the paper the market priced is the paper that gets issued. The book that struck
       // the coupon hands it over rather than leaving stage 08 to re-derive one off a curve the

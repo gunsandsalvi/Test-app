@@ -10,6 +10,7 @@
  * engine2 columns (tranches first, then lots, then the firm scalars) without touching the stage.
  */
 
+import type { PrimarySettlement } from '../engine/simulation/stages/context';
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
 import { equityInstrumentId } from '../domain/instrument-keys';
 import { setIssuedUnits } from '../engine/ledger/instrument-ledger';
@@ -39,7 +40,7 @@ import { PROFILE_REGISTRY, profileKeyOf } from '../engine/simulation/stages/prof
 import { measureBeta, regionIndexOf } from '../engine/macro/indices';
 import { pay, payByIds, internReason, PartyRef, settlementWeek, CORPORATE_TAX_REASON } from '../engine/simulation/stages/settlement';
 import { defect } from '../domain/defect';
-import { setClearedPrice } from './prices';
+import { setClearedPrice, clearedPriceOf } from './prices';
 import { rowSpreadBps, issuerSpreadAtOnCurve } from '../engine/credit-price';
 import { partyId } from '../engine/ledger/party';
 import { planCapitalProgramme, capacityRetirement } from '../domain/company-week/capital-programme';
@@ -51,11 +52,11 @@ import { dividendDecision } from '../domain/company-week/distributions';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../engine/equity-valuation';
 import { random } from '../engine/rng';
 import { FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from './stage08-front';
-import { ladderRowsOf, materializeTranche, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY, trancheIdOf } from './tranches';
-import { issueTranche, retireTranche, commitLadder, drawRevolver } from '../engine/ledger/tranche-ledger';
+import { ladderRowsOf, materializeTranche, trancheScheduleOf, TR_FLOATING, TR_CP, TR_FACILITY, TR_SUBORDINATED, trancheIdOf } from './tranches';
+import { issueTranche, retireTranche, commitLadder, drawRevolver, tapTranche } from '../engine/ledger/tranche-ledger';
 import { ringFill, ringPush, ratingCodeOf, revHistLen, revHistAt, rowOf, V2World, entityOf } from './world';
 import { totalInputValueLocal } from './lots';
-import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS } from '../domain/primary-market';
+import { primaryTrancheId, STANDARD_CORP_TENOR_YEARS, tapTargetOf } from '../domain/primary-market';
 import { TRANCHE_DEFAULT_COUPON, TRANCHE_DEFAULT_MARGIN_BPS } from '../domain/stated';
 import { trancheWeekAccrual } from './front-core';
 import { maintenanceBridgeTrancheId, calledRefinanceTrancheId } from '../domain/instrument-keys';
@@ -113,7 +114,7 @@ export interface BackKernelDeps {
   systemicStressFactorGlobal: number;
   retainCashLedger: boolean;
   mmfSweepBooks: ReturnType<typeof openCorporateSweepBooks>;
-  primarySettlementByIssuerId: Map<string, { offering: PrimaryOffering; clearedStat: number; struckTerms?: { couponRate: number; maturityWeek: number }; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>;
+  primarySettlementByIssuerId: Map<string, PrimarySettlement>;
   pendingOfferingIssuerIds: Set<string>;
   leadBankFor: (comp: Company, sizeLocal: number) => EntityId;
   enqueueOffering: (o: PrimaryOffering) => void;
@@ -1329,6 +1330,13 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
     }
     const preActionFixedLocal = preFixedSumLocal + primaryFixedAdjLocal;
     const preActionFloatingLocal = preFloatingSumLocal + primaryFloatingAdjLocal;
+    // §3.16-ii: the senior fixed bond a new deal would TAP — nearest the standard tenor, printed.
+    const tapTargetFor = (): InstrumentId | undefined => tapTargetOf(
+      rowList
+        .filter((r) => !(TS.flags[r] & (TR_FLOATING | TR_CP | TR_FACILITY | TR_SUBORDINATED)) && TS.principalLocal[r] > 0.01)
+        .map((r) => { const id = trancheIdOf(v2, r); return { id, maturityWeek: TS.maturityWeek[r], priced: clearedPriceOf(v2, id) !== undefined }; }),
+      nextWeek,
+    );
 
     /**
      * What retiring `amountLocal` of `tranche` early costs this issuer ON TOP of the principal —
@@ -1516,6 +1524,8 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
           ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
           : L8.facilityMarginBps[row],
         rateType: refinanceAsFixed ? 'FIXED' : 'FLOATING',
+        // §3.16-ii: a tap of the bond nearest the tenor, when there is one; a fresh tranche otherwise.
+        tapOfTrancheId: refinanceAsFixed ? tapTargetFor() : undefined,
         leadBankId: leadBankFor(comp, TS.principalLocal[rTr]),
         announcedWeek: nextWeek,
       });
@@ -1600,7 +1610,18 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         debtRepaymentThisWeek += retiredLocal;
         post('term-out: maintenance bridges retired', -retiredLocal, bankCredit);
       }
-      if (placedLocal > 1000) {
+      // §3.16-ii: a TAP — the book listed the deal as a live bond and cleared added face of it at
+      // that bond's price; the face joins the row, the price is the row's own print, and the
+      // buyers' rows (the book's fills) already name it. Every other holder's row is untouched.
+      const tapRow = o.tapOfTrancheId !== undefined && settlement.listedInstrumentId === o.tapOfTrancheId
+        ? rowList.find((r) => trancheIdOf(v2, r) === o.tapOfTrancheId)
+        : undefined;
+      if (placedLocal > 1000 && tapRow !== undefined) {
+        tapTranche(v2, issuer, tapRow, placedLocal, settlement.clearedStat, `primary ${o.purpose.toLowerCase()} tap placed`);
+        // 13b: the tapped face was placed by the book itself; it is pre-action face, or the
+        // pro-rata action below would hand the holders the same paper twice.
+        preFaceByRow.set(tapRow, (preFaceByRow.get(tapRow) ?? 0) + placedLocal);
+      } else if (placedLocal > 1000) {
         const newRow = issueTranche(v2, issuer, newTranche, `primary ${o.purpose.toLowerCase()} placed`);
         rowList.push(newRow);
         // §3.13: the deal's own cleared price is this paper's opening print — the market said it
@@ -1681,6 +1702,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
             ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
             : L8.facilityMarginBps[row],
           rateType: asFixed ? 'FIXED' : 'FLOATING',
+          tapOfTrancheId: asFixed ? tapTargetFor() : undefined,
           refinancesTrancheIds: bridges.map(r => trancheIdOf(v2, r)),
           leadBankId: leadBankFor(comp, bridgeLocal),
           announcedWeek: nextWeek,
@@ -1812,6 +1834,7 @@ export function runBackCoreB(comp: Company, row: number, d: BackKernelDeps, a: R
         sizeLocal: dealSizeLocal,
         walkAwayStat: walkAwayOasBps,
         rateType: 'FIXED',
+        tapOfTrancheId: tapTargetFor(),
         leadBankId: leadBankFor(comp, dealSizeLocal),
         announcedWeek: nextWeek,
       });

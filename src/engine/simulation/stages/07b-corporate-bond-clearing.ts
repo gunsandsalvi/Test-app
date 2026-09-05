@@ -241,6 +241,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       /** The distressed bid's reservation, discounted over THIS paper's own life. */
       distressedReservationBps: number;
       isPrimary: boolean;
+      /** §3.16-ii: the deal this paper carries — its own, if it is the primary; the tap, if it is
+       *  a live bond being reopened. The walk-away rides on it either way. */
+      offering?: PrimaryOffering;
     };
     const S = v2.tranches;
     const bonds: BondInstrument[] = [];
@@ -292,9 +295,25 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // the price it implies, so a deal is pulled when the market asks a bigger concession than the
     // borrower will wear.
     const primaryTermsById = new Map<string, { couponRate: number; maturityWeek: number }>();
+    /** §3.16-ii: what each offering LISTS as — the bond it taps, or a fresh tranche's id. */
+    const listedIdByOfferingId = new Map<string, InstrumentId>();
     offeringsByIssuerId.forEach((o, issuerId) => {
       const ci = ciById.get(issuerId);
       if (ci === undefined || !(o.sizeLocal > 0)) return;
+      // §3.16-ii — A TAP: the offering is added face of a bond this book already prices. It
+      // clears in the same solve as the outstanding stock at that bond's price (as 07c does for
+      // a sovereign's unheld face); the terms stage 08 is handed are the bond's own. A tap whose
+      // bond is gone (called, retired) brings a fresh tranche below, as it would have anyway.
+      if (o.tapOfTrancheId !== undefined) {
+        const tapped = bonds.find((b) => b.id === o.tapOfTrancheId && b.ci === ci);
+        if (tapped) {
+          tapped.offeringLocal += o.sizeLocal;
+          tapped.offering = o;
+          primaryTermsById.set(tapped.id, { couponRate: tapped.terms.annualCouponRate, maturityWeek: week + tapped.terms.weeksToMaturity });
+          listedIdByOfferingId.set(o.id, tapped.id);
+          return;
+        }
+      }
       const sovAt = zeroRateAt(curve, STANDARD_CORP_TENOR_YEARS);
       // A DEBUT has no credit curve to read, and inventing one for it is what this replaces: it
       // launches on the price talk it published, which is what price talk is for.
@@ -303,12 +322,13 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       const couponRate = sovAt + talkBps / 10000;
       const id = primaryTrancheId(issuerId, o.purpose, week);
       primaryTermsById.set(id, { couponRate, maturityWeek: week + STANDARD_CORP_TENOR_YEARS * 52 });
-      bonds.push(bondOf(ci, id, 0, o.sizeLocal, {
+      listedIdByOfferingId.set(o.id, id);
+      bonds.push({ ...bondOf(ci, id, 0, o.sizeLocal, {
         annualCouponRate: couponRate,
         // The period the tranche stage 08 issues will carry, from the one owner of that default.
         periodWeeks: defaultPeriodWeeks({ originationWeek: week, rateType: 'FIXED' }),
         weeksToMaturity: STANDARD_CORP_TENOR_YEARS * 52,
-      }, true));
+      }, true), offering: o });
     });
     if (bonds.length === 0) return;
     const nB = bonds.length;
@@ -338,8 +358,10 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       statKind: 'PRICE_LIKE',
       durationYears: b.tenorYears,
       primaryOfferingLocal: b.offeringLocal > 0 ? b.offeringLocal : undefined,
-      primaryWithdrawStat: b.isPrimary
-        ? priceAtSpread(b, offeringsByIssuerId.get(companyTerms[b.ci].id)!.walkAwayStat)
+      // §3.16-ii: the walk-away rides on whichever paper carries the deal — the fresh tranche
+      // or the bond being tapped.
+      primaryWithdrawStat: b.offering !== undefined && b.offeringLocal > 0
+        ? priceAtSpread(b, b.offering.walkAwayStat)
         : undefined,
       // No floor and no ceiling. The floor is an outcome: every bidder's reservation already
       // covers its own expected loss and capital cost, so demand richer than that is genuinely
@@ -605,11 +627,12 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       }),
       BOOK,
       {
-        instrumentIdOf: (o) => primaryTrancheId(o.issuerId, o.purpose, week),
+        // §3.16-ii: the deal lists as the bond it taps, or as its own fresh tranche.
+        instrumentIdOf: (o) => listedIdByOfferingId.get(o.id) ?? primaryTrancheId(o.issuerId, o.purpose, week),
         unitPriceOfStat: (clearedPrice) => clearedPrice,
         // The paper the market priced is the paper that gets issued: stage 08 takes these terms
         // rather than re-striking a coupon off a curve this book has already moved past.
-        termsOf: (o) => primaryTermsById.get(primaryTrancheId(o.issuerId, o.purpose, week)),
+        termsOf: (o) => primaryTermsById.get(listedIdByOfferingId.get(o.id) ?? primaryTrancheId(o.issuerId, o.purpose, week)),
       });
 
     // SETL6: the book's whole cash side, through the clearing house.

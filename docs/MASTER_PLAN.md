@@ -547,17 +547,6 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-16. **A tap, not a new facility** (user) — split 2026-09-05; 16-i (the ledger taps; a revolver
-    is one line per borrower and bank, tapped) is in §9. What is left:
-16-ii. **A BOND TAP.** An issuer that wants more of the same debt REOPENS an existing tranche:
-    stage 08's new issue (`stage08-back.ts` primary placed, `setClearedPrice(newTranche)`) mints a
-    fresh tranche per offering with a coupon struck at the cleared spread. When the issuer has a
-    live bond of the same kind and seniority whose remaining life is within a year of the tenor
-    it wants, the offering is a TAP of that bond: the primary offers added face of the existing
-    tranche, it clears in the same solve as the outstanding stock at that bond's price (as 07c
-    already does for a sovereign's unheld face), the proceeds are the price × the added face
-    (`tranche-ledger.ts:tapTranche`), and every other holder's row is untouched. A debut, or an
-    issuer with no bond near the tenor, still opens a new one. Requires step 13 (done).
 16b. **Insurance is a market, not three price-takers.** A policy moves to the insurer that
     prices lower, and an insurer's price answers its own losses and its own capital. The three
     insurers exist; the market between them does not. Verify: premium shares move week to week,
@@ -1643,6 +1632,22 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**16-ii — A BOND TAP.** A corporate deal REOPENS the bond it has. `primary-market.ts:tapTargetOf`
+names the issuer's senior fixed bond whose remaining life is nearest the standard tenor and
+within a year of it, and only one a market has printed (a tap prices off a real price); stage
+08's three offering builders (a refinancing, a term-out, an opportunistic deal) carry it as
+`tapOfTrancheId`. 07b then lists the deal AS THAT BOND: the offering is added face of a paper
+the book already prices, cleared in the same solve as its outstanding stock at its own price
+with the walk-away riding on it (`primaryWithdrawStat`), the terms handed back are the bond's
+own, and the settlement records what the deal listed as (`listedInstrumentId`). Stage 08 taps
+the row with the placed face at the cleared price (`tapTranche`) — the buyers' rows are the
+book's own fills on that tranche, its accrued leg is the seasoned paper's and goes to the
+issuer as it already did, the price is the bond's own print — and counts the tapped face as
+pre-action so the pro-rata action does not hand the holders the same paper twice. A debut, an
+issuer with no printed bond near the tenor, or a tap whose bond was called between the announce
+and the book, brings a fresh tranche exactly as before. With this, step 16 is done.
+`test/tap.test.ts`. Gates green; no run.
 
 **16-i — A TAP, NOT A NEW FACILITY: THE LEDGER TAPS, AND A REVOLVER IS ONE LINE.**
 `tranche-ledger.ts:tapTranche(v2, issuer, row, addedFace, price, reason)`: face is added to the

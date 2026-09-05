@@ -78,6 +78,10 @@ export interface PrimaryOffering {
   walkAwayStat: number;
   /** For credit: the rate type the new tranche carries if placed. */
   rateType?: 'FIXED' | 'FLOATING';
+  /** §3.16-ii — A TAP. The live bond this offering REOPENS: the book offers added face of that
+   *  tranche beside its outstanding stock, at that bond's own price, and stage 08 adds the placed
+   *  face to its row (`tranche-ledger.ts:tapTranche`). Unset: a fresh tranche, as a debut brings. */
+  tapOfTrancheId?: InstrumentId;
   /** MAINTENANCE_TERM_OUT: the bridge tranche ids this offering retires at settlement. */
   refinancesTrancheIds?: string[];
   leadBankId: EntityId;
@@ -278,4 +282,27 @@ export function assignHouseBanks<T extends { id: string; homeBankId?: EntityId |
     byBank.set(won, (byBank.get(won) ?? 0) + cashLocal);
   });
   return byBank;
+}
+
+/**
+ * §3.16-ii — WHICH BOND A TAP REOPENS. An issuer that wants more of the same debt reopens the
+ * bond it has whose remaining life is nearest the tenor it would otherwise bring new paper at,
+ * within a year of it — and only a bond a market has PRINTED, because a tap prices off a real
+ * price (rule 3; step 13). Nothing near the tenor, or nothing priced: a fresh tranche.
+ */
+export function tapTargetOf(
+  bonds: readonly { id: InstrumentId; maturityWeek: number; priced: boolean }[],
+  week: number,
+  tenorYears: number = STANDARD_CORP_TENOR_YEARS,
+  toleranceWeeks: number = 52,
+): InstrumentId | undefined {
+  const wantWeeks = tenorYears * 52;
+  let best: { id: InstrumentId; off: number } | undefined;
+  for (const b of bonds) {
+    if (!b.priced) continue;
+    const off = Math.abs(b.maturityWeek - week - wantWeeks);
+    if (off > toleranceWeeks) continue;
+    if (best === undefined || off < best.off) best = { id: b.id, off };
+  }
+  return best?.id;
 }

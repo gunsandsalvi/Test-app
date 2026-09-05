@@ -11,6 +11,7 @@ import { seedLadder, tapTranche, drawRevolver } from '../src/engine/ledger/tranc
 import { facilitiesOfBorrower, materializeLadder, trancheRowOf } from '../src/engine2/tranches';
 import { revolverTrancheId } from '../src/domain/instrument-keys';
 import { asEntityId, asInstrumentId, asTicker } from '../src/domain/ids';
+import { tapTargetOf } from '../src/domain/primary-market';
 
 const acme = { id: asEntityId('USA_ACME'), ticker: asTicker('ACME'), region: 'USA' as const };
 const bank = asEntityId('USA_BANK');
@@ -60,4 +61,13 @@ test('a bond tap adds face at the price given, by wire, and touches no other ter
     setActiveWireJournal(undefined);
     setActiveWireWorld(undefined);
   }
+});
+
+test('§3.16-ii: a deal taps the printed bond nearest the standard tenor, within a year of it', () => {
+  const b = (id: string, maturityWeek: number, priced = true) => ({ id: asInstrumentId(id), maturityWeek, priced });
+  const week = 100;
+  assert.equal(tapTargetOf([b('A', week + 4 * 52), b('B', week + 5 * 52 + 10), b('C', week + 9 * 52)], week), 'B');
+  assert.equal(tapTargetOf([b('A', week + 4 * 52 + 1), b('B', week + 5 * 52 + 10, false)], week), 'A', 'an unprinted bond cannot be tapped — it prices off nothing');
+  assert.equal(tapTargetOf([b('A', week + 3 * 52), b('C', week + 9 * 52)], week), undefined, 'nothing within a year of the tenor: a fresh tranche');
+  assert.equal(tapTargetOf([], week), undefined);
 });

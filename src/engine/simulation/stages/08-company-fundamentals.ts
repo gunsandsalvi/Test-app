@@ -9,6 +9,7 @@
  * point at does not exist in this tree; `docs/MASTER_PLAN.md` §2 is the map.)
  */
 
+import type { PrimarySettlement } from './context';
 import {
   GameState, Company, NewsItem, RegionId,
 } from '../../../types';
@@ -168,7 +169,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
   // WS8: this week's priced offerings, indexed by issuer, and the pending queue by issuer so a
   // company never runs two books at once. Lead banks are chosen per region from the named banks.
-  const primarySettlementByIssuerId = new Map<string, { offering: PrimaryOffering; clearedStat: number; struckTerms?: { couponRate: number; maturityWeek: number }; withdrawn: boolean; marketTakeLocal: number; issuedLocal: number; proceedsLocal: number }>();
+  const primarySettlementByIssuerId = new Map<string, PrimarySettlement>();
   ctx.primarySettlements.forEach((s) => primarySettlementByIssuerId.set(s.offering.issuerId, s));
   const pendingOfferingIssuerIds = new Set(ctx.primaryOfferingsWorking.map((o) => o.issuerId));
   // G3c: mandates go to the bank that carries the issuer's credit, and — with no incumbent —
