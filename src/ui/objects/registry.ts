@@ -39,6 +39,9 @@ export interface ObjectModule<T = unknown> {
   keywords?(world: World, id: string, obj: T): string[];
   /** A typed phrase that names one of this kind exactly ("usa apparel", "eur/usd", "oil"). */
   parse?(world: World, phrase: string): string | undefined;
+  /** §3.15-i: a CLASS word alone ("bonds", "bills") opens the screener over that peer group —
+   *  the word, to the group's name as `peers.groups` spells it. */
+  kindWords?: Record<string, string>;
   overview(p: OverviewProps<T>): ReactNode;
   series?(world: World, id: string, obj: T): Series[];
   peers?: {

@@ -91,6 +91,12 @@ export function kindOfWord(world: World, phrase: string): { type: ObjectType; re
   const p = phrase.trim().toLowerCase();
   for (const type of OBJECT_TYPES) {
     const m = OBJECTS[type];
+    // §3.15-i: a class word ("bonds", "bills") is the kind's screener opened on that class.
+    const classTab = m.kindWords?.[p];
+    if (classTab !== undefined) {
+      const first = m.list(world)[0];
+      return first ? { type, ref: { type, id: first.id }, tab: classTab } : { type };
+    }
     if (m.words[0] !== p && m.words[1] !== p && !(type === 'company' && (p === 'firms' || p === 'firm')) && !(type === 'institution' && (p === 'institutions' || p === 'institution')) && !(type === 'index' && p === 'indexes') && !(type === 'fx' && (p === 'fx' || p === 'currencies'))) continue;
     const first = m.list(world)[0];
     if (!first) return { type };
@@ -128,7 +134,8 @@ export function searchObjects(world: World, query: string, limit = 12): SearchHi
       kindHits.push({ ref: { type, id }, label, score });
     }
     kindHits.sort((a, b) => b.score - a.score || a.label.ticker.localeCompare(b.label.ticker));
-    hits.push(...kindHits.slice(0, type === 'company' || type === 'institution' ? limit : 4));
+    // §3.15-i: a tranche is searched by issuer and class, so a query that names them wants more than four.
+    hits.push(...kindHits.slice(0, type === 'company' || type === 'institution' || type === 'tranche' ? limit : 4));
   }
   return hits.sort((a, b) => b.score - a.score || a.label.ticker.localeCompare(b.label.ticker)).slice(0, limit);
 }

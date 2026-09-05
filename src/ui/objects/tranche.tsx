@@ -1,16 +1,20 @@
-/** AU · object: tranche — one tranche of debt: a firm's, or a sovereign's. Reached from a ladder. */
+/** AU · object: tranche — one tranche of debt: a firm's, or a sovereign's. Reached from a ladder,
+ *  and (§3.15-i) from the command bar: by its market name, its issuer or its class. */
 
 import { defineObject } from './registry';
 import { ensureV2 } from '../../engine2/world';
 import { materializeGovLadder } from '../../engine2/tranches';
 import { Card, KV, Link, Stat, StatGrid } from '../ui';
 import { money, pctLevel } from '../format';
-import { formatDate, formatSpan, yearOfWeek } from '../calendar';
+import { formatDate, formatSpan, formatMonthYear, yearOfWeek } from '../calendar';
+import { REGION_IDS } from '../../domain/geography';
 import { instrumentDisplayName } from '../../domain/instruments';
 import { isDiscountBill } from '../../domain/government';
 import { World, companyOf, regionOf, displayWeek } from '../world';
 import { materializeLadder } from '../../engine2/tranches';
 import { ObjectHeader, FunctionTiles, AllRow, RegionLink, words } from './common';
+import type { DebtTranche } from '../../domain/company';
+import type { GovDebtTrancheView } from '../../domain/region-macro';
 
 export interface TrancheView {
   ownerRef: { type: 'company' | 'region'; id: string };
@@ -18,6 +22,10 @@ export interface TrancheView {
   id: string;
   /** §3.14: the name a market would use — `KRLN 4.75% 2031`, `USA 3M bill`. */
   name: string;
+  /** §3.15-i: the class a market files it under — the search's and the screener's word. */
+  kind: TrancheKind;
+  issuerTicker: string;
+  region: string;
   principalLocal: number;
   couponRate: number;
   rateType?: string;
@@ -32,6 +40,40 @@ export interface TrancheView {
   callProtection?: unknown;
 }
 export const trancheId = (ownerId: string, id: string): string => `${ownerId}|${id}`;
+export type TrancheKind = 'bond' | 'subordinated bond' | 'loan' | 'facility' | 'commercial paper' | 'sovereign bond' | 'bill';
+/** The class words a market files a tranche under, plural as the kind word and singular as a keyword. */
+const CLASS_GROUP: Record<TrancheKind, string> = { bond: 'bonds', 'subordinated bond': 'bonds', loan: 'loans', facility: 'facilities', 'commercial paper': 'commercial paper', 'sovereign bond': 'sovereigns', bill: 'bills' };
+const CLASS_GROUPS = ['bonds', 'loans', 'commercial paper', 'facilities', 'sovereigns', 'bills'];
+
+function sovereignView(world: World, regionId: string, t: GovDebtTrancheView): TrancheView {
+  const isBill = isDiscountBill(t.tenorAtIssuanceYears);
+  const name = instrumentDisplayName(regionId, { rateType: 'FIXED', couponRate: t.couponRate, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, isBill }, yearOf(world));
+  return { ownerRef: { type: 'region', id: regionId }, ownerName: `${regionId} treasury`, id: t.id, name, kind: isBill ? 'bill' : 'sovereign bond', issuerTicker: regionId, region: regionId, principalLocal: t.principalLocal, couponRate: t.couponRate, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, tenorYears: t.tenorAtIssuanceYears };
+}
+function companyView(world: World, c: { id: string; name: string; ticker: string; region: string }, policy: number, t: DebtTranche): TrancheView {
+  const coupon = t.rateType === 'FLOATING' ? policy + (t.floatingMarginBps ?? 0) / 10_000 : (t.couponRate ?? 0);
+  const kind: TrancheKind = t.isCommercialPaper ? 'commercial paper' : t.isBankFacility ? 'facility' : t.rateType === 'FLOATING' ? 'loan' : t.seniority === 'SUBORDINATED' ? 'subordinated bond' : 'bond';
+  return { ownerRef: { type: 'company', id: c.id }, ownerName: c.name, id: t.id, name: instrumentDisplayName(c.ticker, t, yearOf(world)), kind, issuerTicker: c.ticker, region: c.region, principalLocal: t.principalLocal, couponRate: coupon, rateType: t.rateType, floatingMarginBps: t.floatingMarginBps, seniority: t.seniority, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, callProtection: t.callProtection, isCommercialPaper: t.isCommercialPaper, isBankFacility: t.isBankFacility, facilityBankId: t.facilityBankId };
+}
+
+/** §3.15-i: every live tranche in the world, once per world (the search reads it per keystroke). */
+const listMemo = new WeakMap<World, { id: string; obj: TrancheView }[]>();
+function allTranches(world: World): { id: string; obj: TrancheView }[] {
+  let out = listMemo.get(world);
+  if (out) return out;
+  out = [];
+  const v2 = ensureV2(world.state);
+  for (const c of world.state.companies) {
+    const policy = regionOf(world, c.region)?.policyRate ?? 0;
+    for (const t of materializeLadder(v2, c.id)) out.push({ id: trancheId(c.id, t.id), obj: companyView(world, c, policy, t) });
+  }
+  for (const r of REGION_IDS) {
+    if (!world.state.regions[r]) continue;
+    for (const t of materializeGovLadder(v2, r)) out.push({ id: trancheId(r, t.id), obj: sovereignView(world, r, t) });
+  }
+  listMemo.set(world, out);
+  return out;
+}
 /** The UI's calendar, on the display week (§3.14: a maturity's year in a name). */
 export const yearOf = (world: World) => (w: number): number => yearOfWeek(displayWeek(world.state, w));
 
@@ -41,26 +83,45 @@ function trancheOf(world: World, key: string): TrancheView | undefined {
   const reg = regionOf(world, owner);
   if (reg) {
     const t = materializeGovLadder(ensureV2(world.state), reg.id).find((x) => x.id === id);
-    if (!t) return undefined;
-    const name = instrumentDisplayName(reg.id, { rateType: 'FIXED', couponRate: t.couponRate, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, isBill: isDiscountBill(t.tenorAtIssuanceYears) }, yearOf(world));
-    return { ownerRef: { type: 'region', id: owner }, ownerName: `${owner} treasury`, id, name, principalLocal: t.principalLocal, couponRate: t.couponRate, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, tenorYears: t.tenorAtIssuanceYears };
+    return t ? sovereignView(world, reg.id, t) : undefined;
   }
   const c = companyOf(world, owner);
   if (!c) return undefined;
   const t = materializeLadder(world.v2, c.id).find((x) => x.id === id);
   if (!t) return undefined;
-  const policy = regionOf(world, c.region)?.policyRate ?? 0;
-  const coupon = t.rateType === 'FLOATING' ? policy + (t.floatingMarginBps ?? 0) / 10_000 : (t.couponRate ?? 0);
-  return { ownerRef: { type: 'company', id: c.id }, ownerName: c.name, id, name: instrumentDisplayName(c.ticker, t, yearOf(world)), principalLocal: t.principalLocal, couponRate: coupon, rateType: t.rateType, floatingMarginBps: t.floatingMarginBps, seniority: t.seniority, originationWeek: t.originationWeek, maturityWeek: t.maturityWeek, callProtection: t.callProtection, isCommercialPaper: t.isCommercialPaper, isBankFacility: t.isBankFacility, facilityBankId: t.facilityBankId };
+  return companyView(world, c, regionOf(world, c.region)?.policyRate ?? 0, t);
 }
 
 export const tranche = defineObject<TrancheView>({
   type: 'tranche',
   words: ['tranche', 'tranches'],
-  searchable: false,
+  // §3.15-i: searchable by name, issuer and class; a class word opens the screener on that class.
+  searchable: true,
   find: trancheOf,
-  list: () => [],
-  label: (_w, _id, t) => ({ ticker: t.name, name: `${t.ownerName} · ${money(t.principalLocal)}`, kind: t.ownerRef.type === 'region' ? 'sovereign tranche' : t.isCommercialPaper ? 'commercial paper' : t.isBankFacility ? 'bank facility' : 'debt tranche' }),
+  list: allTranches,
+  label: (_w, _id, t) => ({ ticker: t.name, name: `${t.ownerName} · ${money(t.principalLocal)}`, kind: t.kind, region: t.region }),
+  keywords: (_w, _id, t) => [t.issuerTicker.toLowerCase(), ...t.ownerName.toLowerCase().split(/\s+/), t.kind, CLASS_GROUP[t.kind], t.region.toLowerCase(), 'tranche', ...(t.kind === 'commercial paper' ? ['cp'] : []), ...(t.ownerRef.type === 'region' ? ['sovereign', 'government'] : [])],
+  parse: (world, phrase) => { const q = phrase.trim().toLowerCase(); return allTranches(world).find((x) => x.obj.name.toLowerCase() === q)?.id; },
+  kindWords: { bond: 'bonds', bonds: 'bonds', loan: 'loans', loans: 'loans', cp: 'commercial paper', 'commercial paper': 'commercial paper', paper: 'commercial paper', facility: 'facilities', facilities: 'facilities', sovereign: 'sovereigns', sovereigns: 'sovereigns', bill: 'bills', bills: 'bills' },
+  peers: {
+    groups: (world, _id, t) => {
+      const all = allTranches(world);
+      return [
+        { name: `${t.issuerTicker} ladder`, ids: all.filter((x) => x.obj.ownerRef.id === t.ownerRef.id).map((x) => x.id) },
+        ...CLASS_GROUPS.map((g) => ({ name: g, ids: all.filter((x) => CLASS_GROUP[x.obj.kind] === g).map((x) => x.id) })),
+        { name: 'all tranches', ids: all.map((x) => x.id) },
+      ];
+    },
+    defaultSort: 'principal',
+    columns: [
+      { key: 'name', label: 'tranche', width: 1.8, render: (r, _w, nav) => <Link to={{ type: 'tranche', id: r.id }} nav={nav}>{r.obj.name}</Link>, value: (r) => r.obj.name },
+      { key: 'issuer', label: 'issuer', render: (r, _w, nav) => <Link to={r.obj.ownerRef} nav={nav}>{r.obj.issuerTicker}</Link>, value: (r) => r.obj.issuerTicker },
+      { key: 'class', label: 'class', render: (r) => r.obj.kind, value: (r) => r.obj.kind },
+      { key: 'principal', label: 'principal', render: (r) => money(r.obj.principalLocal), value: (r) => r.obj.principalLocal },
+      { key: 'rate', label: 'rate', render: (r) => pctLevel(r.obj.couponRate, 2), value: (r) => r.obj.couponRate },
+      { key: 'due', label: 'due', render: (r, w) => formatMonthYear(displayWeek(w.state, r.obj.maturityWeek)), value: (r) => r.obj.maturityWeek },
+    ],
+  },
   headline: (_w, _id, t) => ({ value: money(t.principalLocal), sub: pctLevel(t.couponRate, 2) }),
   overview({ world, obj: t, nav }) {
     const now = world.state.currentWeek;

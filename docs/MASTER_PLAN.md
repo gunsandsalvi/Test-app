@@ -547,16 +547,19 @@ written from here):
     `O8` is the SEED's own rounding — 37-SEED (b).** And of `bond.md` D7, that the accrual is
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
-15. **Search by asset, price and spread together** (rule 9). `ui/objects/tranche.tsx:50` is
-    `searchable: false` — make bonds, loans, CP and bills searchable by class and by issuer. Every
-    fixed-income view shows PRICE and DM/OAS side by side (needs step 13). Fix the UI unit errors the
-    audit found while here: `commodity.tsx:37` and `fx.tsx:29` render an absolute move with
-    `pctLevel` (a $2 move prints "200.0%"), `:39` prints an 0–100 field as "4800%",
-    `macro.tsx:79` shows home ownership as "0.6%", `:63` reports a permanent 0.0% current account,
-    `all.tsx:46` guesses a unit by magnitude, and `formatters.ts:97,150,163,178` render NaN as
-    `$0.00` / `0.00%` / `100.00% Par`. Unify the two calendars (`formatters.ts:7` vs
-    `ui/calendar.ts:5` differ by a year). `statements.tsx:174` calls engine interning in render —
-    stop it.
+15. **Search by asset, price and spread together** (rule 9) — split 2026-09-05, one commit each:
+15-ii. **PRICE and DM/OAS side by side in every fixed-income view** (needs step 13): the ladder,
+    the holders lists, the tranche object and its screener show the cleared price and the spread
+    it implies, from the ONE price store.
+15-iii. **The UI unit errors the audit found.** `commodity.tsx:37` and `fx.tsx:29` render an
+    absolute move with `pctLevel` (a $2 move prints "200.0%"), `:39` prints an 0–100 field as
+    "4800%", `macro.tsx:79` shows home ownership as "0.6%", `:63` reports a permanent 0.0% current
+    account, `all.tsx:46` guesses a unit by magnitude, and `formatters.ts:97,150,163,178` render
+    NaN as `$0.00` / `0.00%` / `100.00% Par`.
+15-iv. **One calendar.** `formatters.ts:7` and `ui/calendar.ts:5` differ by a year; the engine's
+    traces and the UI's dates disagree about which year a week is in, and step 14's names take
+    the caller's. One epoch, in the domain, read by both.
+15-v. **`statements.tsx:174` calls engine interning in render** — stop it.
 15b. **News slice 2.** The derivation cites the books and ranks by size; what it still cannot
     tell is a story that develops. Follow-ups through an estate, an auction that failed or came
     in under-subscribed, and contract-break streaks. (The fourth item on the original list,
@@ -1651,6 +1654,18 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**15-i — TRANCHES ARE SEARCHABLE, BY CLASS AND BY ISSUER.** `objects/tranche.tsx` was
+`searchable: false` and listed nothing. Every live tranche now lists once per world (a memo the
+search reads per keystroke), under its market name, with its issuer's ticker and name, its class
+(`bond`, `subordinated bond`, `loan`, `facility`, `commercial paper`, `sovereign bond`, `bill`)
+and its region as keywords, so `krln bonds` and `usa bills` find paper; a name typed exactly
+resolves (`parse`); a class word alone (`bonds`, `loans`, `cp`, `facilities`, `sovereigns`,
+`bills`) opens the screener on that class through the module's new `kindWords` contract
+(`registry.ts`, read by `index.ts:kindOfWord`); and a tranche has peers — its issuer's ladder,
+each class, all — with name, issuer, class, principal, rate and due columns (price and spread are
+15-ii's). The search's per-kind cap of four is lifted for tranches as it is for firms and funds.
+Gates green; no run.
 
 **14 — NOMENCLATURE.** `domain/instruments.ts:instrumentDisplayName` is the one grammar (bond.md
 N14, both types ✅): a bond is issuer + coupon + maturity (`KRLN 4.75% 2031`), a loan and a bank

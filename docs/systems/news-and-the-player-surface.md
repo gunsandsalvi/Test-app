@@ -278,7 +278,10 @@ hint, `book.tsx`'s 60 and `index-object.tsx`'s 40 in silence, `contracts.tsx`'s 
 80 are gone). And the on-screen keyboard moves the command bar, not the page: `index.html` asks the
 keyboard to overlay the page rather than resize it, and `Aurora.tsx:useVisualViewport` reads what
 the keyboard did to the visual viewport — the shell counter-moves by its scroll offset and the bar
-alone moves up by the keyboard's height.
+alone moves up by the keyboard's height. §9.15-i: a tranche is searchable from the bar by its
+market name, its issuer and its class (`objects/tranche.tsx`), a class word alone (`bonds`,
+`bills`, …) opens the screener over that class (`objects/index.ts:kindOfWord`, through the
+module's `kindWords`), and a tranche has peers — its issuer's ladder, its class, all.
 
 ### Also marked, briefly
 
