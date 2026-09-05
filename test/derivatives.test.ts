@@ -55,13 +55,18 @@ test('IRS: the periodic leg is fixed-minus-overnight on the notional, weekly, to
   assert.equal(leg.reason, 'swap settlement');
 });
 
-test('IRS: close-out equals the remaining weekly nets at today\'s par — carry and close-out agree', () => {
+test('§3.17-iii IRS: the mark is the remaining fixed-leg difference at today\'s par, discounted; it is zero at maturity and null without a print', () => {
   const c = base({ strike: 0.05, maturityWeek: 62 });
   const m = view({ week: 10, parRateAnnual: () => 0.04, overnightRateAnnual: () => 0.04 });
-  const closeOut = DERIVATIVE_CLASSES.IRS.closeOutUSDToB(c, m);
-  const weeklyAtPar = DERIVATIVE_CLASSES.IRS.periodicLegUSDToB(c, m)!.usdToB;
-  assert.ok(Math.abs(closeOut - weeklyAtPar * 52) < 1e-6);
-  assert.equal(DERIVATIVE_CLASSES.IRS.closeOutUSDToB(c, view({ parRateAnnual: () => Number.NaN })), 0);
+  const mark = DERIVATIVE_CLASSES.IRS.markToMarketUSDToA(c, m)!;
+  // Paying 5% against a 4% par is a loss to the payer: 52 weeks of −1% on 1M, discounted at 4%.
+  const weekly = 1_000_000 * (0.04 - 0.05) / 52;
+  const annuity = (1 - Math.pow(1 + 0.04 / 52, -52)) / (0.04 / 52);
+  assert.ok(Math.abs(mark - weekly * annuity) < 1e-6);
+  assert.ok(mark < 0 && mark > weekly * 52, 'discounted, so smaller in size than the undiscounted sum');
+  assert.equal(DERIVATIVE_CLASSES.IRS.markToMarketUSDToA(c, view({ week: 62, parRateAnnual: () => 0.04 })), 0, 'nothing left to value at maturity');
+  assert.equal(DERIVATIVE_CLASSES.IRS.markToMarketUSDToA(c, view({ parRateAnnual: () => Number.NaN })), null);
+  assert.equal(DERIVATIVE_CLASSES.IRS.closeOutUSDToB(c, m), 0, 'a mark class closes out at the mark');
 });
 
 test('CDS: premium weekly to the seller; a reference default pays par less recovery to the buyer', () => {
@@ -71,12 +76,21 @@ test('CDS: premium weekly to the seller; a reference default pays par less recov
   assert.equal(DERIVATIVE_CLASSES.CDS.eventTermination(c, view()), null);
   const ev = DERIVATIVE_CLASSES.CDS.eventTermination(c, view({ isIssuerDefaulted: () => true }))!;
   assert.ok(Math.abs(ev.usdToB - -(1_000_000 * 0.6)) < 1e-9, 'seller pays the buyer (negative to B)');
+  // §3.17-iii: what variation margin already paid the buyer on the way is netted from the payout.
+  const evAfterVm = DERIVATIVE_CLASSES.CDS.eventTermination(base({ ...c, settledMarkLocal: 100_000 }), view({ isIssuerDefaulted: () => true }))!;
+  assert.ok(Math.abs(evAfterVm.usdToB - -(1_000_000 * 0.6 - 100_000)) < 1e-9);
 });
 
-test('CDS: close-out is the spread move over the remaining life, owed to the buyer when spreads widened', () => {
+test('§3.17-iii CDS: the mark is the spread move over the remaining life on a risky annuity — to the buyer when spreads widened', () => {
   const c = base({ classId: 'CDS', strike: 100, reference: { kind: 'ISSUER', issuerId: asEntityId('ISSUER') }, maturityWeek: 62 });
-  const toB = DERIVATIVE_CLASSES.CDS.closeOutUSDToB(c, view({ week: 10, cdsSpreadBps: () => 300 }));
-  assert.ok(Math.abs(toB - -(0.02 * 1_000_000 * 1)) < 1e-6);
+  const mark = DERIVATIVE_CLASSES.CDS.markToMarketUSDToA(c, view({ week: 10, cdsSpreadBps: () => 300, overnightRateAnnual: () => 0.03, recoveryRate: () => 0.4 }))!;
+  const undiscounted = 0.02 * 1_000_000;
+  assert.ok(mark > 0 && mark < undiscounted, 'positive to the buyer, and less than the undiscounted move');
+  const hazard = (0.03 / 0.6) / 52, r = 0.03 / 52;
+  const annuity = (1 - Math.pow(1 + r + hazard, -52)) / (r + hazard);
+  assert.ok(Math.abs(mark - (undiscounted / 52) * annuity) < 1e-6);
+  assert.equal(DERIVATIVE_CLASSES.CDS.markToMarketUSDToA(c, view({ cdsSpreadBps: () => Number.NaN })), null, 'no print, no mark');
+  assert.equal(DERIVATIVE_CLASSES.CDS.closeOutUSDToB(c, view()), 0);
 });
 
 test('futures: the mark telescopes — settling every weekly delta sums to (delivery spot − strike) × units', () => {
@@ -146,9 +160,9 @@ test('every registered class states both roles and admissible facts — the comp
     const move = p.closeOutMoveOf(base({ classId: p.id, reference: referenceFor(p.id) }), view());
     assert.ok(move !== undefined && move > 0 && move < 1, `${p.id}: the reference's move sizes its margin`);
     const marks = p.markToMarketUSDToA(base({ classId: p.id, units: 1, reference: referenceFor(p.id), settledMarkLocal: 0 }), view()) !== null;
-    const periodic = p.periodicLegUSDToB(base({ classId: p.id }), view()) !== null;
-    assert.ok(marks !== periodic, `${p.id}: exactly one leg family`);
-    if (marks) assert.ok(p.markReasonLive && p.markReasonFinal, `${p.id}: a mark class labels its legs`);
+    // §3.17-iii: every class marks; a periodic leg is the cash a rate contract exchanges beside it.
+    assert.ok(marks, `${p.id}: every class carries a mark`);
+    assert.ok(p.markReasonLive && p.markReasonFinal, `${p.id}: a mark class labels its legs`);
   }
 });
 

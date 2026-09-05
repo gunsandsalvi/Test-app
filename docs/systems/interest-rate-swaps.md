@@ -103,11 +103,11 @@ checked by `scripts/check-atlas.sh`.
 | C3 the swap curve and the sovereign curve are different curves | `src/domain/derivatives/classes/irs.ts:SWAP_TENOR_ZERO_FIELD` | ✅ |
 | C3.a the swap spread is a consequence, measured and never set | `src/engine/simulation/stages/derivative-markets/irs.ts:runSwapMarket` | ✅ |
 | C4 VERIFY policy moves the short end through the reference, the long end through expectations | — | ❌ |
-| **D1 after inception the swap has a mark** | `src/domain/derivatives/classes/irs.ts:markToMarketUSDToA` | ❌ |
-| D2 the mark moves with the curve; a real gain and a real loss | — | ❌ |
-| **D3 variation margin turns the mark into cash** | — | ❌ |
-| D3.a a winning hedge is receiving cash while the hedged item shows a loss | — | ❌ |
-| D4 VERIFY Σ marks = 0 and Σ net payments = 0, every period | — | ❌ |
+| D1 after inception the swap has a mark | `src/domain/derivatives/classes/irs.ts:markToMarketUSDToA` | ✅ |
+| D2 the mark moves with the curve; a real gain and a real loss | `src/domain/derivatives/classes/irs.ts:markToMarketUSDToA` | ✅ |
+| D3 variation margin turns the mark into cash | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ✅ |
+| D3.a a winning hedge is receiving cash while the hedged item shows a loss | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ⚠️ |
+| D4 VERIFY Σ marks = 0 and Σ net payments = 0, every period | `src/engine/audit/ownership.ts:o9` | ⚠️ |
 | E1 FORBID no notional exchange | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ✅ |
 | **E2 FORBID no fixed rate solved from the discount curve alone** | `src/engine/pricing.ts:calculateParSwapRate` | ⚠️ |
 | E3 FORBID no floating leg on a rate this world does not produce | `src/domain/derivatives/profile.ts:DerivativeMarketView` | ⚠️ |
@@ -116,32 +116,20 @@ checked by `scripts/check-atlas.sh`.
 
 ## 3. THE DIFF
 
-### ❌ D1–D4 — THE SWAP HAS NO MARK, SO SECTION D DOES NOT EXIST
+### ✅ D1 / D2 / D3 / ⚠️ D3.a / D4 — THE SWAP HAS A MARK, AND THE MARK PAYS
 
-`classes/irs.ts:IRS_PROFILE` sets `markToMarketUSDToA: () => null`. A swap in this model is worth
-**zero to both sides between its weekly nets**, for its entire two-to-ten-year life. Everything in
-section D follows from that one line:
-
-- **D1/D2** — there is no mark, so there is no gain and no loss to move with the curve. A payer of
-  fixed struck at 3% when the curve is now 6% carries no asset;
-- **D3** — no mark means **no variation margin flows** on the largest class in the book (§9.17-ii:
-  initial margin now posts at strike off the tenor's own rate move, `irs.ts:closeOutMoveOf`; the
-  mark and its weekly flow are §3.17-iii's). The node's point — *"a rate move is a liquidity event long before it is a P&L
-  event"* — has no channel;
-- **D3.a** — the hedger's funding mismatch (winning hedge paying cash against an unrealised loss
-  on the hedged item) cannot occur, so the one thing swaps do to a balance sheet in a stress week
-  does not happen;
-- **D4** — nothing to sum.
-
-The value does exist in one place and only one: `closeOutUSDToB`, computed when a **counterparty
-dies** (`derivative-lifecycle.ts:250`) as the remaining weekly nets at today's par, undiscounted.
-So the model knows how to value a swap and does it exactly once per contract, at the moment the
-contract can no longer be a liquidity channel.
-
-**Already §3 step 17**, which requires *"variation margin is the mark, daily"* for every class and
-names the undiscounted close-out (`irs.ts:47`) in the same breath. Recorded here because the
-IRS-shaped consequence is bigger than the step's wording suggests: this is not one class missing a
-number, it is the whole of `interest-rate-swaps.md` section D having no code.
+Closed 2026-09-05 (§9.17-iii). `classes/irs.ts:markToMarketUSDToA` values a swap to the payer of
+fixed as the remaining fixed-leg difference against today's par on the notional, DISCOUNTED at the
+par rate (the annuity a par swap's own rate prices), zero at maturity, null while the tenor has no
+print. It moves with the curve (D2), and the one lifecycle settles its weekly change as variation
+margin between the two parties (`settleMark`, D3) beside the periodic net — so a rate move is a
+cash event the week it happens. The close-out at a counterparty's death is the mark's delta
+(`closeOutUSDToB` is retired to zero for the class), which also ends the undiscounted
+replacement value step 17 named. What is still open: **D3.a** — the winning hedger receives cash
+while its hedged item shows a loss, but the hedged item (an insurer's liability,
+`insurers-and-pensions.md` B1) still has no present value to show it on; and **D4** — `O9` sums
+the settled marks to zero across parties, while Σ net payments = 0 holds by construction (each
+leg is one instruction between the two parties) and nobody adds it up — §3 step 38's measurement.
 
 ### ⚠️ C1.a — TWO CURVES, AND THE SWAP RESERVATION READS THE FITTED ONE
 

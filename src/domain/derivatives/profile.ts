@@ -9,7 +9,9 @@
  * add-next list (options premium/exercise, TRS, XCS all decompose into them):
  *  - a PERIODIC leg: a rate on the notional exchanged on schedule (swap net, CDS premium);
  *  - a MARK leg: the contract's current value settled as the CHANGE since last settled
- *    (variation margin — futures, FX forwards; §7.241's delta rule, owned by the lifecycle).
+ *    (variation margin; §7.241's delta rule, owned by the lifecycle). §3.17-iii: EVERY class
+ *    marks — a swap and protection carry both legs, the periodic one being the cash the
+ *    contract exchanges and the mark being what the legs still to come are worth.
  * Early termination is an EVENT the profile detects (a CDS credit event, a dead reference); a
  * dead COUNTERPARTY is the lifecycle's own close-out and no profile's business.
  */
@@ -83,9 +85,9 @@ export interface DerivativeClassProfile {
   /** The week's periodic exchange on a live contract, signed to B. Null for mark-leg classes. */
   periodicLegUSDToB(c: DerivativeContract, m: DerivativeMarketView): DerivativeLeg | null;
   /**
-   * The contract's cumulative value to A at current prints (mark-leg classes). The lifecycle
-   * settles the delta against `settledMarkLocal` and owns the delta rule. Null: no marking this
-   * week (no fresh print) — for rate-leg classes, always null.
+   * The contract's cumulative value to A at current prints. The lifecycle settles the delta
+   * against `settledMarkLocal` and owns the delta rule. Null: no marking this week (no fresh
+   * print). §3.17-iii: every class marks — a periodic-leg class values the legs still to come.
    */
   markToMarketUSDToA(c: DerivativeContract, m: DerivativeMarketView): number | null;
   /** Ledger labels for the mark leg, so a trace still says what the flow is. */

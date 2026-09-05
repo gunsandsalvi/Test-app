@@ -97,7 +97,7 @@ checked by `scripts/check-atlas.sh`.
 | A1.c D7 price — the running spread in bps, cleared | `src/engine/simulation/stages/derivative-markets/cds.ts:runCdsMarket` | ✅ |
 | **A1.d D6 term — a stated tenor, and a CURVE of them** | `src/domain/derivatives/classes/cds.ts:CDS_TENOR_WEEKS` | ❌ |
 | A2 the premium leg is a real periodic payment, and it stops on the event | `src/domain/derivatives/classes/cds.ts:periodicLegUSDToB` | ✅ |
-| A3 the protection leg is contingent; its value a read from the cleared spread | `src/domain/derivatives/classes/cds.ts:closeOutUSDToB` | ⚠️ |
+| A3 the protection leg is contingent; its value a read from the cleared spread | `src/domain/derivatives/classes/cds.ts:markToMarketUSDToA` | ✅ |
 | A4 the reference entity exists here and can default | `src/engine/audit/ownership.ts:o8` | ✅ |
 | A4.a FORBID no protection on an entity nobody can observe failing | `src/engine/audit/ownership.ts:o5` | ✅ |
 | B1 the buyer of protection has a reason | `src/domain/derivatives/classes/cds.ts:protectionNeedLocal` | ⚠️ |
@@ -272,8 +272,8 @@ CDS's `referenceId` is not re-keyed there. **§3 step 34, and 13-BOOK (d) for th
 
 ### Also marked, briefly
 
-- **A1 ⚠️** — the profile satisfies the contract as far as D8/D9 do — no mark between nets, no margin.
+- **A1 ⚠️** — the profile satisfies the contract as far as D8/D9 do; §9.17-ii/iii gave it initial margin off the name's own spread move and a weekly mark — what is left is the CCP (§3.17-iv).
 - **A1.b ⚠️** — the payoff is `par − the REGION's recovery`, not the estate's own — D2/D2.a above.
-- **A3 ⚠️** — the protection leg is valued only at close-out (`closeOutLocalToB`), at replacement value, never as a survival-weighted read of the cleared spread.
+- **A3 ✅** (2026-09-05, §9.17-iii) — `cds.ts:markToMarketUSDToA` values protection every week as the spread move on a RISKY annuity: discounted at the overnight rate and survival-weighted at the hazard the cleared spread implies; the credit event nets what the mark already paid.
 - **C3.b ⚠️** — `P2` reports the basis and fires only above a quota, so a persistently large one on a minority of names is invisible.
 - **C4 ⚠️** — `P3` measures it with the same quota.

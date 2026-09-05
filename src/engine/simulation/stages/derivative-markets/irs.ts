@@ -255,6 +255,8 @@ function runSwapMarket({ state, ctx, week, standing, view }: DerivativeMarketRun
             termKey: k,
             // §3.13c: the market it clears in.
             currency: currencyOf(regionId),
+            // §3.17-iii: marked from strike — nothing settled yet.
+            settledMarkLocal: 0,
             struckWeek: week,
             maturityWeek: week + Math.round(SWAP_TENOR_YEARS[k] * 52),
           }, view));

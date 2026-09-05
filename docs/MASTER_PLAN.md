@@ -548,13 +548,9 @@ written from here):
     apportioned weekly rather than daily, which is the model's clock everywhere and not a defect.
 
 17. **Derivatives are centrally cleared, and margin is risk-based** (user) — split 2026-09-05,
-    one commit each; 17-i (the margin a contract carries is the amount posted) and 17-ii
-    (initial margin is the reference's own move) are in §9. What is left, in order:
-17-iii. **VARIATION MARGIN IS THE MARK, FOR EVERY CLASS.** IRS and CDS carry no mark, so half the
-    book pays no variation margin and A4/D2.b cannot be measured: give the two rate-leg classes
-    a mark (the swap's fixed-versus-par value over its remaining life; the CDS's spread change on
-    its risky duration), settle the delta weekly through the one lifecycle, and measure Σ paid =
-    Σ received.
+    one commit each; 17-i (the margin a contract carries is the amount posted), 17-ii (initial
+    margin is the reference's own move) and 17-iii (variation margin is the mark, for every
+    class) are in §9. What is left, in order:
 17-iv. **THE CCP.** Novate every contract to the region's clearing house: each side faces the
     CCP, initial margin is posted TO it, variation flows THROUGH it, and a member's default is
     its waterfall (the defaulter's margin, then a default fund the members contribute to, then
@@ -563,10 +559,10 @@ written from here):
 17-v. **CAPACITY IS A CLEARING-MEMBER LIMIT (rule 5), and the market view:** open interest,
     margin held and net position per member, by class — the "stats on the derivative markets
     overall" the user asked for.
-17-vi. **The close-out replacement values are undiscounted** (`irs.ts:47`, `cds.ts:69`) **and a
-    credit event pays a REGIONAL AVERAGE recovery** (`cds.ts:58` + `derivative-lifecycle.ts:122`)
-    instead of the estate's own workout on that issuer. Discount the replacement value over the
-    remaining life; settle the credit event off the estate's realised recovery when it closes.
+17-vi. **A credit event pays a REGIONAL AVERAGE recovery** (`cds.ts` `eventTermination` +
+    `derivative-lifecycle.ts`) instead of the estate's own workout on that issuer. Settle the
+    credit event off the estate's realised recovery when it closes (the undiscounted close-outs
+    the original entry named went with 17-iii: the close-out is the mark's delta now).
 
 17b. **An options class, and the FX swap lines.** Premium is a periodic leg paid once and
     exercise is an event termination at intrinsic value — two profile methods on the one contract.
@@ -1632,6 +1628,23 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**17-iii — VARIATION MARGIN IS THE MARK, FOR EVERY CLASS.** A swap and protection were worth
+zero between their weekly nets and were valued exactly once, at a counterparty's death,
+undiscounted. `irs.ts:markToMarketUSDToA`: the remaining fixed-leg difference against today's par
+on the notional, discounted at the par rate (`pricing:annuityFactor`), zero at maturity, null
+without a print. `cds.ts:markToMarketUSDToA`: the spread move on the notional over the weeks
+left on a RISKY annuity — discounted at the overnight rate, survival-weighted at the hazard the
+cleared spread implies (`spread / (1 − recovery)`); the credit event pays par less recovery LESS
+what the mark already paid the buyer. Both classes strike with `settledMarkLocal: 0`, the one
+lifecycle settles each week's change as variation margin beside the periodic net, and the
+close-out at a death is the mark's delta — so `closeOutUSDToB` retires to zero for both, and the
+undiscounted replacement values 17-vi named are gone with it (17-vi keeps the credit event's
+recovery). `O9` now measures Σ marks = 0 on the whole book (atlas A4 ✅; D2.b Σ paid = Σ
+received holds by construction, one instruction per delta, and is step 38's to sum). Swaps D1–D3
+✅, D3.a/D4 ⚠️; CDS A3 ✅. `test/derivatives.test.ts`: the swap's mark is the discounted
+difference and telescopes to zero, protection's is the risky-annuity move, every class marks.
+Gates green; no run.
 
 **17-ii — INITIAL MARGIN IS THE REFERENCE'S OWN MOVE.** `initialMarginRate` — 0 for IRS, CDS and
 commodity futures, 0.02 for every FX forward — is deleted. A class profile states

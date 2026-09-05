@@ -97,7 +97,7 @@ checked by `scripts/check-atlas.sh`.
 | A1 a long-lived bilateral obligation | `src/engine2/obligations.ts:ObligationStore` · `src/domain/derivatives/contract.ts:DerivativeContract` · `src/domain/derivatives/contract.ts:DerivativeReference` | ✅ |
 | A2 the exposure is managed, and how is this system | `src/engine/simulation/stages/derivatives.ts:runDerivativesStage` | ✅ |
 | A3 the same obligation twice, one number from two sides | `src/engine/simulation/stages/derivative-lifecycle.ts:payToB` | ✅ |
-| **A4 VERIFY Σ marks = 0 per contract and in aggregate** | — | ❌ |
+| A4 VERIFY Σ marks = 0 per contract and in aggregate | `src/engine/audit/ownership.ts:o9` | ✅ |
 | B1 two parties agree terms at a cleared price | `src/engine/simulation/stages/financial-clearing-engine.ts:clearFinancialAsset` | ✅ |
 | B2 recorded on both books; one contract, not two | `src/engine/ledger/contract-ledger.ts:strikeDerivatives` | ✅ |
 | B3 closed by an offset, an early termination, or expiry | `src/engine/simulation/stages/derivative-lifecycle.ts:settleDerivativeClass` | ⚠️ |
@@ -112,9 +112,9 @@ checked by `scripts/check-atlas.sh`.
 | C4.a a member's loss can come from another member's default | — | ❌ |
 | **C5 FORBID the CCP is not a guarantor of last resort** | — | ❌ |
 | D1 initial margin, sized from the risk of the position | `src/domain/derivatives/registry.ts:initialMarginAtStrike` | ✅ |
-| **D2 variation margin: the change in the mark, in cash, every period** | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ⚠️ |
+| D2 variation margin: the change in the mark, in cash, every period | `src/engine/simulation/stages/derivative-lifecycle.ts:settleMark` | ✅ |
 | D2.a real money leaving one account and arriving in another | `src/engine/simulation/stages/settlement.ts:pay` | ✅ |
-| **D2.b VERIFY Σ VM paid = Σ received, every period** | — | ❌ |
+| D2.b VERIFY Σ VM paid = Σ received, every period | `src/engine/audit/ownership.ts:o9` | ⚠️ |
 | D3 margin is held, not consumed; the poster gets it back | `src/engine/ledger/accounts.ts:setAccountLien` · `src/engine/simulation/stages/derivative-lifecycle.ts:releaseInitialMargin` | ✅ |
 | D4 a margin call must be met or the position is closed out | `src/engine/simulation/stages/overdraft-sweep.ts:runOverdraftSweep` | ⚠️ |
 | D4.a meeting it may force a sale | `src/engine/simulation/stages/prime-brokerage.ts:runPrimeBrokerageCloseSweep` | ⚠️ |
@@ -190,19 +190,16 @@ Adjacent to **§3 step 33** (seniority is decorative) but not the same defect: 3
 — small (one `addClaim` at the right seniority instead of a `pay`), and it changes recovery for
 every defaulted issuer that had a swap or wrote protection.
 
-### ❌ A4 / D2.b — THE ZERO-SUM IS NEVER MEASURED, AND HALF THE BOOK HAS NO MARK
+### ✅ A4 / ⚠️ D2.b — EVERY CLASS MARKS, AND THE MARKS ARE SUMMED
 
-Two VERIFY nodes, one absence. The audit reads `state.derivativesBook` twice —
-`audit/ownership.ts:260` (O8, keys resolve) and `:292` (O5, both parties alive) — and neither
-sums a mark. Σ marks = 0 does hold by construction wherever a mark exists, because
-`settleDerivativeClass`'s `settleMark` pays one delta between the contract's own two parties; it
-is unverified, and for `IRS` and `CDS` it is vacuous, since both profiles set
-`markToMarketUSDToA: () => null`. A swap has no value between its weekly nets, so the largest
-class in the book contributes nothing to the invariant that defines the layer.
-
-The missing marks are **Already §3 step 17**. The missing measurement is
-**a measurement, for §3 step 38**: A4 and D2.b are the layer's own audit family and nothing
-produces either number.
+2026-09-05 (§9.17-iii). `IRS` and `CDS` mark now — a swap as the discounted remaining fixed-leg
+difference at par (`irs.ts:markToMarketUSDToA`), protection as the spread move on a risky
+annuity (`cds.ts:markToMarketUSDToA`) — and every contract carries `settledMarkLocal` from strike,
+so `O9` (`audit/ownership.ts:o9`: Σ settled marks across parties = 0, no contract faces itself,
+every contract carries a mark) is no longer vacuous on half the book: A4 is measured. D2.b — Σ
+variation margin paid = Σ received — holds by construction (each mark delta is one instruction
+between the contract's two parties through `settleMark`) and is not separately summed; that sum is
+§3 step 38's measurement.
 
 ### ✅ D1 / ⚠️ F2 / ⚠️ D5 — MARGIN IS THE REFERENCE'S OWN MOVE, AT STRIKE
 
@@ -317,6 +314,6 @@ against the contracts every week. What the poster's own NAV read does with that 
 ### Also marked, briefly
 
 - **C2.a / C4 ❌** — no CCP, so nothing concentrates and no waterfall exists — C2–C5 above.
-- **D2 ⚠️** — variation margin flows for the two classes that carry a mark and cannot for IRS and CDS — A4/D2.b.
+- **D2 ✅** — variation margin flows for every class (§9.17-iii gave IRS and CDS their marks) — A4/D2.b.
 - **F1 ⚠️** — `O5` checks both parties are alive for the one book (§9.13-BOOK d4a: it read a firm party by a `ticker` it no longer carried, so every firm party counted dead — it reads the entity id now); the player's legacy positions have no `b` at all — `../instruments/derivative.md` D1.a.
 - **F4 ⚠️** — the commodity future cash-settles to `evolveCommodity`'s formula spot — 37-COMMODITY.

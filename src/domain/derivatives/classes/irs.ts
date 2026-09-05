@@ -8,6 +8,7 @@
  */
 
 import { DerivativeClassProfile } from '../profile';
+import { annuityFactor } from '../../pricing';
 
 export type SwapTenorKey = 's2' | 's5' | 's10';
 export const SWAP_TENOR_YEARS: Record<SwapTenorKey, number> = { s2: 2, s5: 5, s10: 10 };
@@ -46,14 +47,24 @@ export const IRS_PROFILE: DerivativeClassProfile = {
     const usdToB = (c.notional * (c.strike - m.overnightRateAnnual(c.regionId))) / 52;
     return { usdToB, reason: 'swap settlement' };
   },
-  markToMarketUSDToA: () => null,
-  eventTermination: () => null,
-  // Replacement value: the remaining weekly nets at TODAY's par — the same leg arithmetic the
-  // live contract pays, summed to maturity, so close-out and carry can never disagree (§1.4).
-  closeOutUSDToB: (c, m) => {
+  /**
+   * §3.17-iii — THE SWAP HAS A MARK. Its value to the payer of fixed is what the remaining fixed
+   * leg is worth against today's par: the weekly difference (par − strike) on the notional over
+   * the weeks left, DISCOUNTED at the par rate (the annuity a par swap's own rate prices — the
+   * undiscounted close-out this replaces overstated a ten-year swap's value by the whole curve).
+   * The lifecycle settles the CHANGE each week as variation margin, and at maturity nothing is
+   * left to value, so the marks telescope to zero while the weekly nets carried the cash. A
+   * tenor with no par print this week does not mark.
+   */
+  markToMarketUSDToA: (c, m) => {
     const par = m.parRateAnnual(c.regionId, c.termKey);
-    if (!Number.isFinite(par)) return 0;
+    if (!Number.isFinite(par)) return null;
     const remainingWeeks = Math.max(0, c.maturityWeek - m.week);
-    return (c.notional * (c.strike - par) / 52) * remainingWeeks;
+    if (remainingWeeks === 0) return 0;
+    return (c.notional * (par - c.strike) / 52) * annuityFactor(par / 52, remainingWeeks);
   },
+  markReasonLive: 'swap variation margin',
+  markReasonFinal: 'swap settled',
+  eventTermination: () => null,
+  closeOutUSDToB: () => 0, // a mark class: the lifecycle closes out at the mark
 };

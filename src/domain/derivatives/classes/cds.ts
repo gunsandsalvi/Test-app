@@ -10,6 +10,7 @@
 
 import { DerivativeClassProfile } from '../profile';
 import { issuerReferenceOf } from '../contract';
+import { annuityFactor } from '../../pricing';
 
 /**
  * The standard tenor. Five years is where single-name CDS liquidity actually sits, and a tenor
@@ -61,21 +62,33 @@ export const CDS_PROFILE: DerivativeClassProfile = {
     usdToB: (c.notional * (c.strike / 10000)) / 52,
     reason: 'CDS premium',
   }),
-  markToMarketUSDToA: () => null,
+  /**
+   * §3.17-iii — PROTECTION HAS A MARK. Its value to the buyer is the spread it is paying against
+   * the spread the name clears at today, on the notional, over the weeks left — a RISKY annuity:
+   * discounted at the overnight rate and survival-weighted at the hazard the cleared spread
+   * implies (`spread / (1 − recovery)`), because a premium leg the name does not survive to pay
+   * is worth nothing. The lifecycle settles the change weekly; a name with no print does not mark.
+   */
+  markToMarketUSDToA: (c, m) => {
+    const current = m.cdsSpreadBps(issuerReferenceOf(c));
+    if (!Number.isFinite(current)) return null;
+    const remainingWeeks = Math.max(0, c.maturityWeek - m.week);
+    if (remainingWeeks === 0) return 0;
+    const recovery = Math.max(0, Math.min(1, m.recoveryRate(c.regionId)));
+    const hazardWeekly = (Math.max(0, current) / 10000) / Math.max(1e-9, 1 - recovery) / 52;
+    const rateWeekly = m.overnightRateAnnual(c.regionId) / 52;
+    return (c.notional * (current - c.strike) / 10000 / 52) * annuityFactor(rateWeekly + hazardWeekly, remainingWeeks);
+  },
+  markReasonLive: 'CDS variation margin',
+  markReasonFinal: 'CDS settled',
   /** A defaulted reference entity terminates the contract: the seller pays par less what the
-   *  workout actually recovers (G5, §7.192), which is what makes buying protection worth it. */
+   *  workout actually recovers (G5, §7.192), which is what makes buying protection worth it —
+   *  §3.17-iii: less what variation margin has already paid the buyer on the way. */
   eventTermination: (c, m) => {
     if (!m.isIssuerDefaulted(issuerReferenceOf(c))) return null;
     const recovery = Math.max(0, Math.min(1, m.recoveryRate(c.regionId)));
-    const payoutLocal = c.notional * Math.max(0, 1 - recovery);
-    return payoutLocal > 0 ? { usdToB: -payoutLocal, reason: 'CDS credit event settled' } : { usdToB: 0, reason: 'CDS credit event settled' };
+    const payoutLocal = c.notional * Math.max(0, 1 - recovery) - (c.settledMarkLocal ?? 0);
+    return { usdToB: -payoutLocal, reason: 'CDS credit event settled' };
   },
-  // Replacement value to the buyer: the spread move since striking, over the remaining life —
-  // the premium it would now save (or newly pay) replacing the contract at the current print.
-  closeOutUSDToB: (c, m) => {
-    const current = m.cdsSpreadBps(issuerReferenceOf(c));
-    if (!Number.isFinite(current)) return 0;
-    const remainingYears = Math.max(0, c.maturityWeek - m.week) / 52;
-    return -(((current - c.strike) / 10000) * c.notional * remainingYears);
-  },
+  closeOutUSDToB: () => 0, // a mark class: the lifecycle closes out at the mark
 };

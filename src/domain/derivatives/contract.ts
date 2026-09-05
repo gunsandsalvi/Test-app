@@ -120,7 +120,8 @@ export interface DerivativeContract {
   units?: number;
   /**
    * Mark-to-market already SETTLED as variation margin, cumulative USD to A (§7.241: each week
-   * pays the CHANGE in the mark, never the whole mark). Only mark-leg classes carry it.
+   * pays the CHANGE in the mark, never the whole mark). §3.17-iii: every class marks, so every
+   * contract carries it from strike (0); absent only on a row nothing has marked.
    */
   settledMarkLocal?: number;
   /**
