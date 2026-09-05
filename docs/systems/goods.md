@@ -215,21 +215,32 @@ follows, and the shortfall caps output).
 
 ### ❌ E2 / E2.c — FINISHED STOCK IS MARKED TO MARKET, IN BOTH DIRECTIONS
 
-`goods-ledger.ts:110` and `:123` both write `valueLocal = heldUnits * unitPriceLocal`, and
-`05-unit-bidding.ts:1839` passes `results[plan.regionId].clearedPriceLocal` — **this week's cleared
-price**. There is no cost basis on finished goods anywhere: not a lot chain, not a weighted
-average, not a field. So the stock is revalued up when the market rises (E2.c's exact FORBID —
-profit the firm has not earned), revalued down when it falls, and neither move is a P&L event
-anybody books (E3). The one write-down that does exist is the warehousing charge
-(`front-core.ts:598`, `outNewValue = outValue − outValue × CARRY_RATE_WEEKLY`), and stage 05
-overwrites it the following week with units × the new price.
+*It used to read:* both writes of the finished-stock record set `valueLocal = heldUnits ×
+unitPriceLocal` at **this week's cleared price**, so the stock was revalued up when the market rose
+(E2.c's exact FORBID — profit the firm has not earned), revalued down when it fell, and neither
+move was a P&L event anybody booked (E3). There was no cost basis on finished goods anywhere: not
+a lot chain, not a weighted average, not a field.
 
-This is the second half of §3 step 13's `goods-ledger.ts:123` finding — step 13 records that the
-price is **discarded**; this records that before it is discarded it has already **replaced the
-cost**. **Already §3 step 13** for E1, and the lower-of-cost-and-NRV rule (E2, E2.a, E3) is the
-mechanism step 13's item 2 says is new. Note for whoever takes 13: E5's FIFO machinery already
-exists for input lots (`engine2/lots.ts`), so the missing piece is a cost basis on *output*, not a
-new flow convention.
+**THE COST BASIS EXISTS NOW (§9.13-INV-v-a/v-b).** A firm's finished goods are a row of kind
+`FINISHED_GOOD` on its own register book, and the row's lots are the batches, each at what that
+week's line cost to make it. A delivery draws them first-in-first-out and returns what those units
+cost. Every read of *what the stock is worth* — the filed balance sheet, the estate's inventory,
+the supplier-distress signal, the production throttle's warehouse ratio, the storage fee's base and
+the firm's own screen — is that cost. The old record survives beside it as a cache whose units
+`O17` holds to the rows; §3's `13-INV-vii` deletes it.
+
+**WHAT IS STILL ❌, and it is the node itself.** There is no CARRYING RULE. Cost is recorded, but
+nothing compares it to net realisable value, so nothing is ever written DOWN when the market falls
+below cost (E2), nothing is prevented from being written UP (E2.c is satisfied only because the
+register is never marked at all), and there is still no holding-loss line (E3). **E2.a** — a
+write-down is not reversed beyond original cost, and an unrealised holding GAIN is never
+recognised — is the same absence seen from the other side: with no write-down there is nothing to
+reverse, and the asymmetry the rule exists to impose has nothing to act on. That rule is §3's
+`13-INV-vi`, and it is the mechanism step 13's item 2 says is new. **E1** — a stock is units and
+its value is units × a price — is satisfied for the first time on the register side, where the
+price is what the units COST; it stays ⚠️ only while the old record survives beside it as a
+second answer, which `13-INV-vii` deletes. E5's FIFO was never the missing piece and now serves
+both sides: the input lots' draw and the finished batches'.
 
 ### ❌ G1 / G1.a — THERE IS NO PPI. ONE INDEX WEARS BOTH NAMES
 

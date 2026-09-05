@@ -11,7 +11,7 @@
  */
 
 import { commissionPlant, retirePlant, scrapPlant, writePlantRows, plantVintagesOf } from '../engine/ledger/plant-ledger';
-import { spoilOutputStock, writeFinishedRows } from '../engine/ledger/goods-ledger';
+import { spoilOutputStock, writeFinishedRows, finishedCostLocal } from '../engine/ledger/goods-ledger';
 import type { PrimarySettlement } from '../engine/simulation/stages/context';
 import { PATIENCE_MEDIAN_WEEKS } from '../domain/preferences';
 import { equityInstrumentId } from '../domain/instrument-keys';
@@ -2202,7 +2202,7 @@ export function makeStage08BackKernel(d: BackKernelDeps): (comp: Company, row: n
         cash.usd,
         newTotalDebt,
         currentTreasuryHoldingsLocal,
-        Object.values(mergedOutputInventoryBySubUnit).reduce((s, inv) => s + (inv?.valueLocal ?? 0), 0),
+        finishedCostLocal(v2, comp.id), // §3.13-INV-v-b: the filed stock is what it cost
         newMaintenanceCapex,
         newGrowthCapex,
         filedFiveYearSpreadBps,

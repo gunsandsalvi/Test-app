@@ -10,12 +10,13 @@
  */
 
 import type { PrimarySettlement } from './context';
+import { finishedCostLocal, finishedStockOf } from '../../ledger/goods-ledger';
 import {
   GameState, Company, NewsItem, RegionId,
 } from '../../../types';
 import { currencyOfId } from '../../../engine2/world';
 import { buildEntityIndex } from '../../ledger/entity-index';
-import { isActiveCompany, getOutputInventoryLocal, banksOf } from '../../../domain/company';
+import { isActiveCompany, banksOf } from '../../../domain/company';
 import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } from './shared-helpers';
 import { openCorporateSweepBooks, settleCorporateSweepBooks } from './money-market-fund';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
@@ -129,7 +130,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     if (!supplier) return;
     const invUSDByCategory = new Map<string, number>();
     categories.forEach((category) => {
-      invUSDByCategory.set(category, getOutputInventoryLocal(supplier, category));
+      invUSDByCategory.set(category, finishedCostLocal(ensureV2(state), supplier.id, category));
     });
     supplierShockStats.set(supplierId, { annualRevenue: supplier.annualRevenue, invUSDByCategory });
   });
@@ -147,10 +148,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const carryingCostByTicker = new Map<Ticker, number>();
   prevActiveFirms.forEach(c => {
     let total = 0;
-    Object.entries(c.outputInventoryBySubUnit).forEach(([su, inv]) => {
+    finishedStockOf(ensureV2(state), c.id).forEach(({ subUnitId, costLocal }) => {
       // §3.13-INV-ii-b: the distribution sector is paid the STORAGE FEE. It was paid the fee
       // AND the spoilage — money to a party for a good going off in its owner's warehouse.
-      total += (inv as { valueLocal: number }).valueLocal * (annualStorageFeeRateOf(su) / 52);
+      // §3.13-INV-v-b: on what the stock COST, which is what it is carried at — charging a
+      // storage fee on a market mark while the asset stands at cost is two conventions again.
+      total += costLocal * (annualStorageFeeRateOf(subUnitId) / 52);
     });
     if (total > 0) carryingCostByTicker.set(c.ticker, total);
   });

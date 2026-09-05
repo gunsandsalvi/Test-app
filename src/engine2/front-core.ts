@@ -26,6 +26,7 @@
  */
 
 import { defect } from '../domain/defect';
+import { finishedCostLocal } from '../engine/ledger/goods-ledger';
 import { plantVintagesOf } from '../engine/ledger/plant-ledger';
 import { exitIdleLines } from '../domain/company-week/product-lines';
 import { patienceWeeksOf } from '../domain/preferences';
@@ -470,7 +471,8 @@ export function buildFrontSeam(companies: Company[], inp: FrontSeamInputs): Fron
       if (!inv) continue;
       S.outSub[atOut] = SUBUNIT_INDEX.get(su) ?? -1;
       S.outUnits[atOut] = inv.unitsHeld;
-      S.outValue[atOut] = inv.valueLocal;
+      // §3.13-INV-v-b: the fee's base is what the stock COST, off its register row.
+      S.outValue[atOut] = finishedCostLocal(v2, comp.id, su);
       atOut++;
     }
     const update = companyUpdates[comp.ticker];

@@ -405,11 +405,15 @@ written from here):
     earned), DOWN when it falls, and neither move is an event anybody books (E3 has no writer at
     all). Seven slices, in this order, because each one is load-bearing for the next:
 
-    v-b. **THE READERS TAKE THE BASIS.** The rows carry the cost and `writeFinishedRows` hands back
-       the week's COGS; nothing reads either yet. The filed balance sheet's finished-goods line,
-       the estate's inventory and the firm's own P&L take them, and `goods.md` F5 — *revenue on
-       delivery; COGS is the units that left* — stops pointing at the input draw, which is expensed
-       in the week it is DRAWN whatever was made or sold.
+    v-c. **THE P&L EXPENSES WHAT IT SOLD, NOT WHAT IT DREW** (`goods.md` F5: *revenue on delivery;
+       COGS is the units that left*). The input draw is expensed in the week it is DRAWN, whatever
+       was made or sold — and since §9.13-INV-v-a the same inputs are ALSO capitalised into the
+       finished batch's cost, which §9.13-INV-v-b then puts on the filed balance sheet. One cost,
+       counted in two places (rule 4), and it is a live double count rather than a latent one:
+       a firm's earnings are charged for inputs its stock is simultaneously carrying. Either the
+       draw stops being an expense and `writeFinishedRows`'s returned COGS becomes one, or the
+       batch stops capitalising it — the first is the accounting and the second is not. This moves
+       earnings, which is what step 13 says the class must do.
     vi. **LOWER OF COST AND NET REALISABLE VALUE** (`goods.md` E2/E2.a/E2.c/E3, the user's *"apply
        real world facts"*). Cost until the market falls below it, then written down to market, and
        **the write-down is a charge to income in the period it happens** — E3's missing writer.
@@ -1219,6 +1223,25 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**13-INV-v-b — THE READERS TAKE THE BASIS, AND THE STOCK IS WORTH WHAT IT COST.** Every read of
+  *what a firm's finished stock is worth* now answers with the register's cost:
+  `goods-ledger.ts:finishedCostLocal` replaces `company.ts:getOutputInventoryLocal`, which summed
+  the record's `valueLocal` — units × whatever price the week last marked them at — and is deleted.
+  The consumers were never only reporting: the filed balance sheet's finished-goods line, the
+  estate's inventory, the supplier-distress signal stage 08 builds, the production throttle's
+  warehouse ratio in the goods auction, the storage fee's base in BOTH of the places that charge it
+  (the core's seam and the distribution sector's revenue — charging a fee on a market mark while
+  the asset stands at cost is the two-conventions defect again), and the firm's own line screen.
+  All of them were asking what the stock is WORTH and being told what it would FETCH.
+  **It moves the numbers, and it exposes one.** Step 13 says it must: a warehouse is now carried at
+  what it cost rather than at what this week's auction says it would fetch. And putting the cost on
+  the balance sheet made a latent double count live — the inputs inside that cost were already
+  expensed by the P&L in the week they were drawn (`goods.md` F5). Named, not papered over: it is
+  §3's `13-INV-v-c`, inserted next, and it is the reason that slice moves earnings.
+  Atlas: goods E2/E2.c re-argued against what now exists — the cost basis they said existed
+  nowhere, and the carrying rule that is still the ❌ — with E1 and E2.a re-stated from the
+  register's side. Gates green; no run (rule 11).
 
 **13-INV-v-a — FINISHED STOCK IS LOTS AT WHAT IT COST TO MAKE.** A firm's finished goods are a row
   of kind `FINISHED_GOOD` on its own register book now, the sub-unit its instrument, and the row's

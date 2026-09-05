@@ -380,3 +380,22 @@ export function writeFinishedRows(
   }
   return { cogsLocal };
 }
+
+/**
+ * §3.13-INV-v-b — WHAT A FIRM'S FINISHED STOCK IS WORTH: what it COST to make, off its own rows.
+ *
+ * This replaces `company.ts:getOutputInventoryLocal`, which summed the record's `valueLocal` —
+ * units × whatever price the week last marked them at. Every consumer of that number was
+ * therefore asking "what is this stock worth" and being told what it would FETCH, including the
+ * ones deciding whether to keep producing, what a supplier's distress looks like, and what an
+ * estate has to sell. They are answered at cost now, which is what the asset is carried at.
+ */
+export function finishedCostLocal(v2: V2World, companyId: string, subUnitId?: string): number {
+  if (subUnitId !== undefined) {
+    const r = finishedRowOf(v2, companyId, subUnitId);
+    return r < 0 ? 0 : v2.holdings.qtyLocal[r];
+  }
+  let total = 0;
+  for (const row of finishedStockOf(v2, companyId)) total += row.costLocal;
+  return total;
+}

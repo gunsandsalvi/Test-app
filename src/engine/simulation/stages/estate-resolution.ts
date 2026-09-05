@@ -25,7 +25,7 @@ import { bankParty, bankSecuritiesParty, ccpParty, companyParty, companyPartyOf 
 import { currencyOf } from '../../../domain/geography';
 import { bookHeadOf, instrumentIdAt, rowUnits } from '../../../engine2/holdings';
 import { closeEmptyPositions } from '../../ledger/holdings-ledger';
-import { scrapOutputUnitsTo, scrapInputUnits, scrapGoods, reclassifyInputLotsAsStock } from '../../ledger/goods-ledger';
+import { scrapOutputUnitsTo, scrapInputUnits, scrapGoods, reclassifyInputLotsAsStock, finishedCostLocal } from '../../ledger/goods-ledger';
 import { totalInputValueLocal, materializeInputInventory } from '../../../engine2/lots';
 import { closeOutDerivativesOfParty } from './derivative-lifecycle';
 import { retireLadderFace, rebuildLadder } from '../../ledger/tranche-ledger';
@@ -37,7 +37,7 @@ import {
   realisedDebtRecoveryRate,
   estateWeekOf,
 } from '../../../domain/estate';
-import { getOutputInventoryLocal, isActiveCompany } from '../../../domain/company';
+import { isActiveCompany } from '../../../domain/company';
 import { bumpRegister } from './register-index';
 import { EntityIndex, buildEntityIndex, companyOfParty } from '../../ledger/entity-index';
 import { BankingSector } from '../../../domain/banking';
@@ -208,7 +208,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     estate.assets.receivablesLocal = receivablesBySellerLocal.get(estate.ticker) ?? 0;
     // The inventory is the REAL rows too: the finished stock and the
     // input lots (consignments the receiver took delivery of land here), read each week.
-    estate.assets.inventoryLocal = comp ? Math.max(0, getOutputInventoryLocal(comp)) + totalInputValueLocal(ctx.v2, comp.id) : 0;
+    estate.assets.inventoryLocal = comp ? Math.max(0, finishedCostLocal(ctx.v2, comp.id)) + totalInputValueLocal(ctx.v2, comp.id) : 0;
 
     // §3.15b-i: the week's record opens here, and everything below writes into it.
     const thisWeek = estateWeekOf(estate, week);
@@ -718,7 +718,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
       cashLocal: Math.max(0, cashOf(ctx.v2, comp)),
       receivablesLocal: Math.max(0, comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE * 0.6),
       // The finished stock and the input lots — the rows the workout sells and re-reads weekly.
-      inventoryLocal: Math.max(0, getOutputInventoryLocal(comp)) + totalInputValueLocal(ctx.v2, comp.id),
+      inventoryLocal: Math.max(0, finishedCostLocal(ctx.v2, comp.id)) + totalInputValueLocal(ctx.v2, comp.id),
       ppeLocal: netPpeLocal,
     },
     claims,

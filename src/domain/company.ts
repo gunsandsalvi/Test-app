@@ -558,7 +558,7 @@ export interface Company {
   // Output (finished-goods) inventory, keyed by sub-unit — a company producing multiple
   // product lines (e.g. semiconductors + consumer_devices + enterprise_software at once) holds
   // a genuinely separate inventory for each; a single shared scalar here was silently
-  // overwritten by whichever line's weekly bidding pass ran last. See getOutputInventoryLocal /
+  // overwritten by whichever line's weekly bidding pass ran last. See goods-ledger.ts:finishedCostLocal /
   // getOutputInventoryUnits below for the aggregate reads most call sites actually want.
   /** §7.345 — units sold last week by line (stage 08 carries it from the week's update) and the
    *  sales this management EXPECTS by line (owner: stage 05, where production is decided). */
@@ -739,12 +739,6 @@ const TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH = 0.6;
 export function corporateTreasuryTargetLocal(cashLocal: number, annualRevenueLocal: number, riskAversion = 1): number {
   const investableLocal = Math.max(0, cashLocal - annualRevenueLocal * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE * riskAversion);
   return investableLocal * TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH;
-}
-
-export function getOutputInventoryLocal(comp: Company, subUnitId?: string): number {
-  const inv = comp.outputInventoryBySubUnit;
-  if (subUnitId) return inv[subUnitId]?.valueLocal ?? 0;
-  return Object.values(inv).reduce((s, entry) => s + (entry?.valueLocal ?? 0), 0);
 }
 
 export function getOutputInventoryUnits(comp: Company, subUnitId?: string): number {

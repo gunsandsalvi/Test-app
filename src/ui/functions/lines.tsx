@@ -4,6 +4,8 @@
  */
 
 import { FunctionModule } from '../fn';
+import { ensureV2 } from '../../engine2/world';
+import { finishedCostLocal } from '../../engine/ledger/goods-ledger';
 import { Card, Hint, KV, Link, Table, T } from '../ui';
 import { money, pctLevel, count, num } from '../format';
 import { companyOf, regionOf } from '../world';
@@ -25,7 +27,7 @@ export const lines: FunctionModule = {
     const expected: Partial<Record<string, number>> = c.expectedSalesUnitsBySubUnit ?? {};
     const inv = c.outputInventoryBySubUnit;
     const rows = [...ls].sort((a, b) => b.revenueShare - a.revenueShare);
-    const stockLocal = Object.values(inv).reduce((a, v) => a + (v?.valueLocal ?? 0), 0);
+    const stockLocal = finishedCostLocal(ensureV2(world.state), c.id); // §3.13-INV-v-b: at cost
     return (<>
       <Card style={{ padding: '2px 0' }}>
         <KV k="lines" hint={rows.map((l) => words(l.industry)).filter((v, i, a) => a.indexOf(v) === i).join(' · ')} v={count(rows.length)} />

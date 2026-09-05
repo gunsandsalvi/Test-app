@@ -41,10 +41,10 @@ import { channelMarginRate, shelfPriceLocal, DISTRIBUTION_SUBUNIT_ID } from '../
 import { subUnitSpecOf } from '../../../domain/industry-registry';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities, capitalMixOf, INDUSTRY_REGISTRY, isCapitalGood } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
-import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryLocal, fullStaffingCapHeads, banksOf } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryUnits, fullStaffingCapHeads, banksOf } from '../../../domain/company';
 import { WeeklyStepContext, CompanyWeekUpdate } from './context';
 import { revHistLen, revHistAt, rowOf, V2World, ensureV2, partyKeyOf } from '../../../engine2/world';
-import { deliverGoods, receiveInputLot, settleOutputInventory, setOutputStock, consumeGoods } from '../../ledger/goods-ledger';
+import { deliverGoods, receiveInputLot, settleOutputInventory, setOutputStock, consumeGoods, finishedCostLocal } from '../../ledger/goods-ledger';
 import { contractRows, relinkChain, formContractRow, endOfWeekCompact, ageContractWeek, restrikeContract, setContractBacklog, applyContractDeposit, setContractShortWeeks, type ReadonlyContractTable } from '../../../engine2/contracts';
 import { random, beginEntityScope, endEntityScope } from '../../rng';
 import { capacityMixShares } from '../../../domain/sme-pool';
@@ -941,7 +941,7 @@ function buildRegionSupplyPlans(
     }
     const line = lineByCo!.get(comp)!;
     const warehouseCapacityLocal = comp.annualRevenue * 0.15;
-    const currentInvLocal = getOutputInventoryLocal(comp, subUnitId);
+    const currentInvLocal = finishedCostLocal(v2, comp.id, subUnitId); // §3.13-INV-v-b: at cost
     // A hard on/off switch here (full production, then a sudden drop to 30% once inventory
     // crosses one threshold) is a bang-bang controller with no hysteresis — it doesn't damp
     // toward equilibrium, it oscillates around the threshold forever (backlog clears -> snap
