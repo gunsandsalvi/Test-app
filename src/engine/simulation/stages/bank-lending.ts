@@ -1,4 +1,5 @@
 import { levelPaymentFactor } from '../../../domain/pricing';
+import type { Ticker } from '../../../domain/ids';
 import { openingCashOf, stashSeedHouseholdLine, seedHouseholdLineOf, seedBankBookLocalOf } from '../../ledger/accounts';
 /**
  * G2 — itemized bank lending and endogenous money.
@@ -212,12 +213,74 @@ interface WeeklyLendingResult {
  * engine2/tranches.ts) — one ledger, so the weekly sync that mirrored the ladders into loan
  * rows (and drifted between syncs: O4 lived on that drift) is gone with the rows.
  */
+/**
+ * §3.20c-ii — THE BORROWER SHOPS. A pool's week of demand used to be split across the region's
+ * banks by each bank's share of the pool's EXISTING loans, so a bank that quoted wide lost no
+ * volume to one that quoted tight and a bank running its book off handed its share to nobody.
+ * Now the region plans the week once: every bank that is lending quotes each pool its all-in
+ * rate (its own hurdle through the one loan price), the pool's demand at a quote is its own
+ * hurdle test against that quote (`appetite`), and the banks are walked KEENEST FIRST — each
+ * takes what the pool still wants at its price, up to the capital headroom it has left across
+ * every pool. A wide quote is a lost loan; the price of credit is the keenest bank's; what no
+ * bank's headroom covers at any quote the pool wanted is declined. Housing already shops this
+ * way (`currentMortgageRateAnnual`); the business book now does the same.
+ */
+export function planSmeShopping(
+  offers: readonly { bank: Company; sheet: BankingSector }[],
+  reg: Region,
+  regionId: RegionId
+): { grantedByBankTicker: Map<Ticker, Map<string, number>>; declinedLocal: number } {
+  const policyRate = reg.policyRate;
+  const grantedByBankTicker = new Map<Ticker, Map<string, number>>();
+  let declinedLocal = 0;
+  const lenders = offers
+    .filter(({ sheet }) => !bankRunsOffItsBook(sheet))
+    .map(({ bank, sheet }) => ({
+      bank,
+      hurdle: bankRequiredReturnAnnual(bank, reg),
+      headroomLocal: Math.max(0, sheet.bankEquityLocal / BANK_MIN_CAPITAL_RATIO
+        - ((sheet.businessLoans || []).reduce((a, l) => a + l.principalLocal, 0) + householdBookRwaLocal(sheet.householdLoans))),
+    }));
+  (reg.smePools || []).forEach((seg) => {
+    const ebitdaLocal = Math.max(0, seg.annualRevenueLocal * seg.marginPct);
+    const ceilingLocal = ebitdaLocal * SME_SERVICEABLE_LEVERAGE;
+    const weekDemandLocal = Math.max(0, ceilingLocal - (seg.debtLocal || 0)) * SME_WEEKLY_DEMAND_TAKEUP;
+    if (weekDemandLocal <= 0) return;
+    const poolReturnAnnual = Math.max(0.001, seg.marginPct);
+    const quotes = lenders.map((l) => {
+      const allInRateAnnual = policyRate + quoteLoanMarginBps({
+        annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: l.hurdle,
+        recoveryRate: creditRecoveryRate(reg),
+      }) / 10000;
+      // The borrower's own hurdle: it does not borrow at 12% to earn 9%.
+      const appetite = Math.max(0, Math.min(1, (poolReturnAnnual - allInRateAnnual) / poolReturnAnnual));
+      return { lender: l, allInRateAnnual, appetite };
+    }).sort((a, b) => a.allInRateAnnual - b.allInRateAnnual || (a.lender.bank.ticker < b.lender.bank.ticker ? -1 : 1));
+    let takenLocal = 0;
+    quotes.forEach((q) => {
+      const wantLocal = Math.max(0, weekDemandLocal * q.appetite - takenLocal);
+      const grantLocal = Math.min(wantLocal, q.lender.headroomLocal);
+      if (grantLocal <= 0) return;
+      q.lender.headroomLocal -= grantLocal;
+      takenLocal += grantLocal;
+      let byPool = grantedByBankTicker.get(q.lender.bank.ticker);
+      if (!byPool) { byPool = new Map(); grantedByBankTicker.set(q.lender.bank.ticker, byPool); }
+      byPool.set(seg.industry, (byPool.get(seg.industry) ?? 0) + grantLocal);
+    });
+    const wantedLocal = weekDemandLocal * (quotes[0]?.appetite ?? 0);
+    declinedLocal += Math.max(0, wantedLocal - takenLocal);
+  });
+  return { grantedByBankTicker, declinedLocal };
+}
+
 export function runBankWeeklyLending(
   bank: Company,
   sheet: BankingSector,
   reg: Region,
   regionId: RegionId,
-  nextWeek: number
+  nextWeek: number,
+  /** §3.20c-ii: what the region's shopping plan sent this bank, per industry. */
+  shoppedByIndustry: ReadonlyMap<string, number>
 ): WeeklyLendingResult {
   const policyRate = reg.policyRate;
   // G3c: every price this bank quotes below rides on ITS OWN cost of equity.
@@ -245,39 +308,16 @@ export function runBankWeeklyLending(
     return { ...l, principalLocal: l.principalLocal - lossLocal };
   });
 
-  // ---- SME origination: priced, capital-gated. Demand is a slow reach toward the pool's
-  // serviceable ceiling; supply is whatever keeps the bank above its regulatory floor. ----
-  let declinedOriginationLocal = 0;
+  // ---- SME origination: priced, capital-gated, and SHOPPED (§3.20c-ii) — the region's plan
+  // decided which bank writes what at whose quote; this books what came to this bank. The
+  // declined demand is the plan's, counted once by the caller. §3.20c-i's run-off is the
+  // plan's too: a bank whose book loses money quoted nothing. ----
+  const declinedOriginationLocal = 0;
   const smeOriginationBySegment = new Map<string, number>();
-  const equityLocal = sheet.bankEquityLocal;
   (reg.smePools || []).forEach((seg) => {
     const poolId = smePoolId(regionId, seg.industry);
     const poolLoan = loans.find((l) => l.borrowerId === poolId && l.borrowerKind === 'SME_POOL');
-    const ebitdaLocal = Math.max(0, seg.annualRevenueLocal * seg.marginPct);
-    const ceilingLocal = ebitdaLocal * SME_SERVICEABLE_LEVERAGE;
-    // this bank's share of the pool's demand ≈ its share of the pool's existing loans
-    const bankPoolLocal = poolLoan?.principalLocal ?? 0;
-    const totalPoolDebtLocal = seg.debtLocal || 1;
-    const bankShare = totalPoolDebtLocal > 0 ? Math.min(1, bankPoolLocal / totalPoolDebtLocal) : 0;
-    // The BORROWER's own hurdle — the price half of the demand curve, and the transmission
-    // channel G1b item 2 says is missing. A pool does not borrow at 12% to earn 9%: demand
-    // scales with how far the all-in cost sits below the return the pool actually makes on
-    // what it sells (its own measured EBITDA margin). Without this term the schedule was a
-    // pure quantity target and a +300bp hike moved origination 0.5% — priced but inert.
-    const allInRateAnnual = policyRate + quoteLoanMarginBps({
-      annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle,
-      recoveryRate: creditRecoveryRate(reg),
-    }) / 10000;
-    const poolReturnAnnual = Math.max(0.001, seg.marginPct);
-    const appetite = Math.max(0, Math.min(1, (poolReturnAnnual - allInRateAnnual) / poolReturnAnnual));
-    const demandLocal = Math.max(0, (ceilingLocal - totalPoolDebtLocal) * SME_WEEKLY_DEMAND_TAKEUP * appetite * (bankShare || 0.25));
-    if (demandLocal <= 0) return;
-
-    const currentRwaLocal = loans.reduce((a, l) => a + l.principalLocal, 0) + householdBookRwaLocal(sheet.householdLoans);
-    const headroomLocal = Math.max(0, equityLocal / BANK_MIN_CAPITAL_RATIO - currentRwaLocal);
-    // §3.20c-i: a bank whose book loses money writes nothing new — it runs the book off.
-    const grantedLocal = bankRunsOffItsBook(sheet) ? 0 : Math.min(demandLocal, headroomLocal);
-    declinedOriginationLocal += demandLocal - grantedLocal;
+    const grantedLocal = shoppedByIndustry.get(seg.industry) ?? 0;
     if (grantedLocal <= 0) return;
 
     smeOriginationBySegment.set(seg.industry, (smeOriginationBySegment.get(seg.industry) ?? 0) + grantedLocal);

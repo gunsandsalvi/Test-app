@@ -113,8 +113,8 @@ checked by `scripts/check-atlas.sh`.
 | C1.b the borrower's expected loss — PD and LGD | `src/engine/simulation/stages/shared-helpers.ts:computeAnnualDefaultProbability` | ✅ |
 | C1.c the capital consumed, times its required return | `src/engine/simulation/stages/bank-lending.ts:bankRequiredReturnAnnual` | ✅ |
 | C1.d an operating cost of making the loan | `src/domain/banking.ts:MORTGAGE_OPERATING_COST_BPS` | ⚠️ |
-| C2 the borrower accepts or refuses, and can go elsewhere | `src/engine/simulation/stages/bank-lending.ts:appetite` | ⚠️ |
-| C2.a so the rate is a negotiation, not a schedule | `src/engine/simulation/stages/bank-lending.ts:currentMortgageRateAnnual` | ⚠️ |
+| C2 the borrower accepts or refuses, and can go elsewhere | `src/engine/simulation/stages/bank-lending.ts:planSmeShopping` | ✅ |
+| C2.a so the rate is a negotiation, not a schedule | `src/engine/simulation/stages/bank-lending.ts:currentMortgageRateAnnual` · `src/engine/simulation/stages/bank-lending.ts:planSmeShopping` | ✅ |
 | C3 the bank can decline | `src/engine/simulation/stages/bank-lending.ts:declinedOriginationLocal` | ✅ |
 | C3.a VERIFY declined volume is visible | `src/engine/simulation/stages/context.ts:g2DeclinedOriginationLocal` | ⚠️ |
 | C4 FORBID one PD model per borrower | `src/engine/simulation/stages/shared-helpers.ts:computeAnnualDefaultProbability` | ✅ |
@@ -223,17 +223,16 @@ does not exist and the node it points at — `banks-funding-and-liquidity.md` B2
 same reason. Full statement of the finding, including the second inconsistent rate on the
 central-bank loan, is on that tree's B2 row. **§3 step 37-COSTOFCAPITAL** (recorded once, there).
 
-### ⚠️ C2 / C2.a — THE BORROWER HAS A PRICE RESPONSE BUT NOT A CHOICE
+### ✅ C2 / C2.a — THE BORROWER HAS A PRICE RESPONSE AND A CHOICE
 
 The SME schedule has a real demand curve in price: `appetite = (poolReturnAnnual - allInRateAnnual)
-/ poolReturnAnnual` (`bank-lending.ts:270`), which is the borrower refusing when the loan costs more
-than the project earns — genuinely C2's first half, and the comment records that without it a +300bp
-hike moved origination 0.5%. What is missing is "elsewhere": the pool's demand is split across banks
-by `bankShare ≈ its share of the pool's existing loans`, so a bank that quotes wide loses no volume
-to a bank that quotes tight. Housing is the exception and shows what the rest should look like —
-`currentMortgageRateAnnual` takes `bestMortgageRateAnnual`, the KEENEST quote in the region, because
-a household shops. The business book should shop the same way. Small; **§3 step 20c-ii** (the
-run-off branch of 20c landed as §9.20c-i).
+/ poolReturnAnnual`, the borrower refusing when the loan costs more than the project earns. *2026-09-05
+(§9.20c-ii):* and "elsewhere" exists. `planSmeShopping` plans each region's week once: every lending
+bank quotes each pool its all-in rate, the banks are walked keenest first, each takes what the pool
+still wants at its price up to the capital headroom it has left across every pool, and what no
+headroom covers at a quote the pool wanted is declined. A wide quote is a lost loan, a bank running
+its book off (§9.20c-i) quotes nothing and hands its share to the next bank, and the price of
+credit is the keenest bank's — the way `currentMortgageRateAnnual` already shops housing.
 
 ### ⚠️ A4 / A5 / E3 / E4 — PRESENT AS PARAMETERS, ABSENT AS EVENTS
 

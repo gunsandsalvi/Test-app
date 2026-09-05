@@ -43,7 +43,7 @@ import { runRegionalRepoSession } from './repo-clearing';
 import { bankSovereignValueRecord, bankSovereignPositions, bankSovereignBookLocal } from '../../sovereign-register';
 import { maturingAt, repoInterestToMaturityLocal } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
-import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, repayCentralBankLoanLocal, CENTRAL_BANK_LOAN_PENALTY_BPS, facilityMarginBpsFor } from './bank-lending';
+import { runBankWeeklyLending, planSmeShopping, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, repayCentralBankLoanLocal, CENTRAL_BANK_LOAN_PENALTY_BPS, facilityMarginBpsFor } from './bank-lending';
 import { issuerSpreadAtOnCurve } from '../../credit-price';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { businessLoanBookOf, consumerLoanBookOf, loanBooksOf } from '../../../domain/banking';
@@ -205,6 +205,14 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       return { borrowPrincipalLocal, borrowInterestLocal, lendPrincipalLocal, lendInterestLocal };
     };
 
+    // §3.20c-ii: the pools shop the region's banks once, keenest quote first; each bank then
+    // books what came to it. What no bank's headroom covered at a quote the pool wanted is the
+    // region's declined origination.
+    const smePlan = planSmeShopping(
+      banks.map((bank) => ({ bank, sheet: bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, bank.bankMarketShare ?? 1 / banks.length) })),
+      reg, regionId
+    );
+    ctx.g2DeclinedOriginationLocal[regionId] = (ctx.g2DeclinedOriginationLocal[regionId] ?? 0) + smePlan.declinedLocal;
     const newSheets: { bank: Company; sheet: BankingSector }[] = banks.map((bank) => {
       const share = bank.bankMarketShare ?? 1 / banks.length;
       const prevSheet = bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, share);
@@ -327,7 +335,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       if ((sheet.dividendWeeklyLocal ?? 0) > 0) payHoldersCash(ctx, bank.id, 'EQUITY', sheet.dividendWeeklyLocal!);
       // The itemized book's own week — facility reconciliation, real interest accrual
       // basis, real SME write-offs, and priced origination under the real capital constraint.
-      const lending = runBankWeeklyLending(bank, sheet, reg, regionId, ctx.nextWeek);
+      const lending = runBankWeeklyLending(bank, sheet, reg, regionId, ctx.nextWeek, smePlan.grantedByBankTicker.get(bank.ticker) ?? new Map());
       // A loan creates a deposit — the pool's new money is written by this bank's own
       // credit (no reserve moves) and lands on the pool's cash and this bank's smeDepositsLocal
       // line at settlement, in the same week the loan appeared on the book above.

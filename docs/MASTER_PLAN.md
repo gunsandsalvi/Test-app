@@ -549,14 +549,6 @@ written from here):
 
 ### PART III — NOTHING IS BOUNDED (rule 6)
 
-20c-ii. **The borrower shops.** (20c's run-off branch is §9.20c-i.) The SME pool's demand is split
-    across banks by each bank's share of the pool's EXISTING loans (`bank-lending.ts`,
-    `bankShare`), so a bank that quotes wide loses no volume to one that quotes tight, and a
-    bank running its book off hands its share to nobody. Housing already shops
-    (`currentMortgageRateAnnual` takes the region's keenest quote). The business book shops the
-    same way: the pool's week of demand goes to the banks in order of their all-in quote, each
-    taking what its headroom allows, so a wide quote is a lost loan and the price of credit is the
-    keenest bank's. Closes `banks-lending.md` C2/C2.a.
 20d. **Management is a state that decides.** `management-review` reviews; it does not decide.
     Capital-allocation policy (target leverage, payout versus reinvestment), growth-versus-margin
     orientation, risk appetite, product-line entry and exit, acquisition intent, guidance — each a
@@ -1516,6 +1508,19 @@ A finished step leaves §3 and lands here as ONE ENTRY, newest first (rule 16 sa
 changed, why, and the measured numbers. The long-form record it was compressed from is `docs/LOG_ARCHIVE.md` — reasoning, not
 governance. Violation counts are 4 weeks / `SHOCKS=0` unless the line says otherwise, and after
 rule 11 they are step 38's to move, not a step's.
+
+**20c-ii — THE BORROWER SHOPS.** The SME pool's week of demand was split across the region's
+  banks by each bank's share of the pool's EXISTING loans, so a wide quote lost no volume to a
+  tight one and a bank running its book off (20c-i) handed its share to nobody. Now
+  `bank-lending.ts:planSmeShopping` plans each region's week once, before the banks' own passes:
+  every lending bank quotes each pool its all-in rate (its own hurdle through the one loan
+  price), the pool's demand at a quote is its own hurdle test, the banks are walked keenest
+  first, each taking what the pool still wants at its price up to the capital headroom it has
+  left across every pool; what no headroom covers at a quote the pool wanted is the region's
+  declined origination (counted once). `runBankWeeklyLending` books what came to the bank; the
+  `bankShare ≈ existing share` split and its 0.25 fallback are gone. Test: keenest first, wide
+  quote lost, remainder passes down, run-off quotes nothing. `banks-lending.md` C2 ✅ C2.a ✅.
+  Gates green; no run.
 
 **20c-i — A SOLVENT BANK ANSWERS ITS OWN MARGIN BY RUNNING THE BOOK OFF.** Of the three responses
   the step named, one was missing and two were not: the deposit rate already pays only the
